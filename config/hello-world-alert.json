@@ -1,0 +1,41 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"HelloWorldAlert\"}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "webhook",
+  "groupLabels": {
+    "alertname": "HelloWorldAlert"
+  },
+  "commonLabels": {
+    "alertname": "HelloWorldAlert",
+    "severity": "info",
+    "environment": "test"
+  },
+  "commonAnnotations": {
+    "summary": "Hello World Test Alert",
+    "description": "This is a test alert to verify the webhook is working correctly"
+  },
+  "externalURL": "http://alertmanager:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HelloWorldAlert",
+        "severity": "info",
+        "instance": "test-server:8080",
+        "environment": "test",
+        "team": "platform"
+      },
+      "annotations": {
+        "summary": "Hello World Test Alert",
+        "description": "This is a test alert to verify the webhook is working correctly. You should see this processed by the Celery worker and stored in MariaDB.",
+        "runbook_url": "https://docs.example.com/runbooks/hello-world"
+      },
+      "startsAt": "2026-01-09T21:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus:9090/graph?g0.expr=up",
+      "fingerprint": "hello-world-test-12345"
+    }
+  ]
+}

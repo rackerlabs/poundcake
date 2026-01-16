@@ -1,0 +1,470 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # SHARED INFRASTRUCTURE
+  # ============================================================================
+  
+  # MariaDB - Shared database for PoundCake AND StackStorm
+  mariadb:
+    image: mariadb:10.11
+    container_name: poundcake-mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      # Create both databases
+      MYSQL_DATABASE: poundcake
+      MYSQL_USER: poundcake
+      MYSQL_PASSWORD: poundcake
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./docker/mariadb-init:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - poundcake
+
+  # Redis - Celery broker for PoundCake
+  redis:
+    image: redis:7-alpine
+    container_name: poundcake-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - poundcake
+
+  # RabbitMQ - Message broker for StackStorm
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: stackstorm-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: stackstorm
+      RABBITMQ_DEFAULT_PASS: stackstorm
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - poundcake
+
+  # ============================================================================
+  # STACKSTORM SERVICES
+  # ============================================================================
+
+  # StackStorm API
+  st2api:
+    image: stackstorm/stackstorm:latest
+    container_name: stackstorm-api
+    environment:
+      # Authentication - REQUIRED for htpasswd setup
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
+      
+      ST2_AUTH_URL: http://st2auth:9100
+      ST2_API_URL: http://st2api:9101
+      ST2_STREAM_URL: http://st2stream:9102
+      
+      # Database (MariaDB)
+      ST2_DATABASE: mysql
+      ST2_DATABASE_HOST: mariadb
+      ST2_DATABASE_PORT: 3306
+      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      
+      # RabbitMQ
+      ST2_RABBITMQ_HOST: rabbitmq
+      ST2_RABBITMQ_PORT: 5672
+      ST2_RABBITMQ_USERNAME: stackstorm
+      ST2_RABBITMQ_PASSWORD: stackstorm
+    ports:
+      - "9101:9101"  # ST2 API
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - st2-packs:/opt/stackstorm/packs
+      - st2-virtualenvs:/opt/stackstorm/virtualenvs
+      - st2-configs:/opt/stackstorm/configs
+    networks:
+      - poundcake
+    command: /bin/bash -c "st2-setup-db && /opt/stackstorm/st2/bin/st2api --config-file=/etc/st2/st2.conf"
+
+  # StackStorm Auth
+  st2auth:
+    image: stackstorm/stackstorm:latest
+    container_name: stackstorm-auth
+    environment:
+      # Authentication - REQUIRED for htpasswd setup
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
+      
+      ST2_AUTH_URL: http://st2auth:9100
+      ST2_API_URL: http://st2api:9101
+      
+      # Database
+      ST2_DATABASE: mysql
+      ST2_DATABASE_HOST: mariadb
+      ST2_DATABASE_PORT: 3306
+      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      
+      # RabbitMQ
+      ST2_RABBITMQ_HOST: rabbitmq
+      ST2_RABBITMQ_USERNAME: stackstorm
+      ST2_RABBITMQ_PASSWORD: stackstorm
+    ports:
+      - "9100:9100"
+    depends_on:
+      - mariadb
+      - rabbitmq
+    volumes:
+      - st2-packs:/opt/stackstorm/packs
+    networks:
+      - poundcake
+    command: /opt/stackstorm/st2/bin/st2auth --config-file=/etc/st2/st2.conf
+
+  # StackStorm Stream
+  st2stream:
+    image: stackstorm/stackstorm:latest
+    container_name: stackstorm-stream
+    environment:
+      # Authentication - REQUIRED for htpasswd setup
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
+      
+      ST2_AUTH_URL: http://st2auth:9100
+      ST2_API_URL: http://st2api:9101
+      ST2_STREAM_URL: http://st2stream:9102
+      
+      # Database
+      ST2_DATABASE: mysql
+      ST2_DATABASE_HOST: mariadb
+      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      
+      # RabbitMQ
+      ST2_RABBITMQ_HOST: rabbitmq
+      ST2_RABBITMQ_USERNAME: stackstorm
+      ST2_RABBITMQ_PASSWORD: stackstorm
+    ports:
+      - "9102:9102"
+    depends_on:
+      - mariadb
+      - rabbitmq
+    networks:
+      - poundcake
+    command: /opt/stackstorm/st2/bin/st2stream --config-file=/etc/st2/st2.conf
+
+  # StackStorm Rules Engine
+  st2rulesengine:
+    image: stackstorm/stackstorm:latest
+    container_name: stackstorm-rulesengine
+    environment:
+      # Authentication - REQUIRED for htpasswd setup
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
+      
+      ST2_AUTH_URL: http://st2auth:9100
+      ST2_API_URL: http://st2api:9101
+      
+      # Database
+      ST2_DATABASE: mysql
+      ST2_DATABASE_HOST: mariadb
+      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      
+      # RabbitMQ
+      ST2_RABBITMQ_HOST: rabbitmq
+      ST2_RABBITMQ_USERNAME: stackstorm
+      ST2_RABBITMQ_PASSWORD: stackstorm
+    depends_on:
+      - mariadb
+      - rabbitmq
+    volumes:
+      - st2-packs:/opt/stackstorm/packs
+    networks:
+      - poundcake
+    command: /opt/stackstorm/st2/bin/st2rulesengine --config-file=/etc/st2/st2.conf
+
+  # StackStorm Action Runner (worker processes)
+  st2actionrunner:
+    image: stackstorm/stackstorm:latest
+    container_name: stackstorm-actionrunner
+    environment:
+      # Authentication - REQUIRED for htpasswd setup
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
+      
+      ST2_AUTH_URL: http://st2auth:9100
+      ST2_API_URL: http://st2api:9101
+      
+      # Database
+      ST2_DATABASE: mysql
+      ST2_DATABASE_HOST: mariadb
+      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      
+      # RabbitMQ
+      ST2_RABBITMQ_HOST: rabbitmq
+      ST2_RABBITMQ_USERNAME: stackstorm
+      ST2_RABBITMQ_PASSWORD: stackstorm
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - st2api
+    volumes:
+      - st2-packs:/opt/stackstorm/packs
+      - st2-virtualenvs:/opt/stackstorm/virtualenvs
+    networks:
+      - poundcake
+    command: /opt/stackstorm/st2/bin/st2actionrunner --config-file=/etc/st2/st2.conf
+
+  # StackStorm Scheduler
+  st2scheduler:
+    image: stackstorm/stackstorm:latest
+    container_name: stackstorm-scheduler
+    environment:
+      # Authentication - REQUIRED for htpasswd setup
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
+      
+      ST2_AUTH_URL: http://st2auth:9100
+      ST2_API_URL: http://st2api:9101
+      
+      # Database
+      ST2_DATABASE: mysql
+      ST2_DATABASE_HOST: mariadb
+      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      
+      # RabbitMQ
+      ST2_RABBITMQ_HOST: rabbitmq
+      ST2_RABBITMQ_USERNAME: stackstorm
+      ST2_RABBITMQ_PASSWORD: stackstorm
+    depends_on:
+      - mariadb
+      - rabbitmq
+    networks:
+      - poundcake
+    command: /opt/stackstorm/st2/bin/st2scheduler --config-file=/etc/st2/st2.conf
+
+  # StackStorm Notifier
+  st2notifier:
+    image: stackstorm/stackstorm:latest
+    container_name: stackstorm-notifier
+    environment:
+      # Authentication - REQUIRED for htpasswd setup
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
+      
+      ST2_AUTH_URL: http://st2auth:9100
+      ST2_API_URL: http://st2api:9101
+      
+      # Database
+      ST2_DATABASE: mysql
+      ST2_DATABASE_HOST: mariadb
+      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      
+      # RabbitMQ
+      ST2_RABBITMQ_HOST: rabbitmq
+      ST2_RABBITMQ_USERNAME: stackstorm
+      ST2_RABBITMQ_PASSWORD: stackstorm
+    depends_on:
+      - mariadb
+      - rabbitmq
+    networks:
+      - poundcake
+    command: /opt/stackstorm/st2/bin/st2notifier --config-file=/etc/st2/st2.conf
+
+  # ============================================================================
+  # POUNDCAKE SERVICES
+  # ============================================================================
+
+  # PoundCake API - FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-api
+    environment:
+      # Database
+      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+      
+      # Celery (results stored in MariaDB via db+ backend)
+      CELERY_BROKER_URL: redis://redis:6379/0
+      
+      # StackStorm (containerized!)
+      ST2_API_URL: http://st2api:9101/v1
+      ST2_API_KEY: ${ST2_API_KEY:-}
+      
+      # App settings
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      st2api:
+        condition: service_started
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    networks:
+      - poundcake
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker - Processes alerts and triggers StackStorm
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-celery
+    environment:
+      # Database
+      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+      
+      # Celery (results stored in MariaDB via db+ backend)
+      CELERY_BROKER_URL: redis://redis:6379/0
+      
+      # StackStorm (containerized!)
+      ST2_API_URL: http://st2api:9101/v1
+      ST2_API_KEY: ${ST2_API_KEY:-}
+      
+      # Worker settings
+      LOG_LEVEL: INFO
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      st2api:
+        condition: service_started
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    networks:
+      - poundcake
+    command: celery -A api.tasks.tasks worker --loglevel=info --concurrency=4
+
+  # Flower - Celery monitoring UI
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-flower
+    environment:
+      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+      CELERY_BROKER_URL: redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery
+      - mariadb
+    networks:
+      - poundcake
+    command: celery -A api.tasks.tasks flower --port=5555
+
+  # PoundCake UI - Management web interface
+  ui:
+    build:
+      context: .
+      dockerfile: src/ui/Dockerfile
+    container_name: poundcake-ui
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    networks:
+      - poundcake
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mariadb_data:
+    driver: local
+  st2-packs:
+    driver: local
+  st2-virtualenvs:
+    driver: local
+  st2-configs:
+    driver: local
+
+networks:
+  poundcake:
+    driver: bridge
+
+# ============================================================================
+# CONTAINERIZED STACKSTORM + POUNDCAKE (with CLI and UI)
+# ============================================================================
+#
+# This complete stack includes:
+#
+# INFRASTRUCTURE:
+#   ✓ MariaDB (shared by PoundCake and StackStorm)
+#   ✓ Redis (Celery broker)
+#   ✓ RabbitMQ (StackStorm message queue)
+#
+# STACKSTORM (Containerized):
+#   ✓ st2api (REST API) → :9101
+#   ✓ st2auth (Authentication) → :9100
+#   ✓ st2stream (Event stream) → :9102
+#   ✓ st2rulesengine (Rules processing)
+#   ✓ st2actionrunner (Action execution)
+#   ✓ st2scheduler (Scheduled tasks)
+#   ✓ st2notifier (Notifications)
+#
+# POUNDCAKE:
+#   ✓ api (FastAPI webhook receiver) → :8000
+#   ✓ celery (Background workers)
+#   ✓ flower (Celery monitoring) → :5555
+#   ✓ ui (Management web interface) → :8080
+#   ✓ CLI (pcake command - install with pip)
+#
+# NETWORK:
+#   • All services on same Docker network
+#   • PoundCake calls ST2 via: http://st2api:9101/v1
+#   • ST2 and PoundCake share MariaDB
+#
+# STARTUP:
+#   docker-compose up -d
+#
+# MANAGEMENT:
+#   • PoundCake UI: http://localhost:8080
+#   • PoundCake API: http://localhost:8000
+#   • ST2 Web UI: http://localhost:9101 (when configured)
+#   • RabbitMQ UI: http://localhost:15672 (stackstorm/stackstorm)
+#   • Flower UI: http://localhost:5555
+#   • CLI: pcake --help (after pip install -e .)
+#
+# ============================================================================

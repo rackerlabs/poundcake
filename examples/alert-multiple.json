@@ -1,0 +1,78 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"DiskSpaceLow\"}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "poundcake",
+  "groupLabels": {
+    "alertname": "DiskSpaceLow"
+  },
+  "commonLabels": {
+    "alertname": "DiskSpaceLow",
+    "severity": "warning",
+    "team": "infrastructure"
+  },
+  "commonAnnotations": {
+    "summary": "Multiple servers running low on disk space"
+  },
+  "externalURL": "http://alertmanager:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "DiskSpaceLow",
+        "severity": "warning",
+        "instance": "server-01",
+        "device": "/dev/sda1",
+        "mountpoint": "/",
+        "team": "infrastructure"
+      },
+      "annotations": {
+        "summary": "Disk space low on server-01",
+        "description": "Disk /dev/sda1 on server-01 is 85% full"
+      },
+      "startsAt": "2026-01-16T16:00:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus:9090/graph",
+      "fingerprint": "disk-server01-sda1"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "DiskSpaceLow",
+        "severity": "warning",
+        "instance": "server-02",
+        "device": "/dev/sdb1",
+        "mountpoint": "/data",
+        "team": "infrastructure"
+      },
+      "annotations": {
+        "summary": "Disk space low on server-02",
+        "description": "Disk /dev/sdb1 on server-02 is 92% full"
+      },
+      "startsAt": "2026-01-16T16:05:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus:9090/graph",
+      "fingerprint": "disk-server02-sdb1"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "DiskSpaceLow",
+        "severity": "warning",
+        "instance": "server-03",
+        "device": "/dev/sda2",
+        "mountpoint": "/var",
+        "team": "infrastructure"
+      },
+      "annotations": {
+        "summary": "Disk space low on server-03",
+        "description": "Disk /dev/sda2 on server-03 is 88% full"
+      },
+      "startsAt": "2026-01-16T16:10:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus:9090/graph",
+      "fingerprint": "disk-server03-sda2"
+    }
+  ]
+}

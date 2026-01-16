@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  # MariaDB - Database (can be shared with StackStorm)
+  mariadb:
+    image: mariadb:10.11
+    container_name: poundcake-mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: poundcake
+      MYSQL_USER: poundcake
+      MYSQL_PASSWORD: poundcake
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-upoundcake", "-ppoundcake"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - poundcake
+
+  # Redis - Celery broker and result backend
+  redis:
+    image: redis:7-alpine
+    container_name: poundcake-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - poundcake
+
+  # PoundCake API - FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-api
+    environment:
+      # Database
+      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+      
+      # Celery
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      
+      # StackStorm
+      ST2_API_URL: ${ST2_API_URL:-http://host.docker.internal:9101/v1}
+      ST2_API_KEY: ${ST2_API_KEY:-}
+      
+      # App settings
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    networks:
+      - poundcake
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker - Processes alerts and triggers StackStorm
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-celery
+    environment:
+      # Database
+      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+      
+      # Celery
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      
+      # StackStorm
+      ST2_API_URL: ${ST2_API_URL:-http://host.docker.internal:9101/v1}
+      ST2_API_KEY: ${ST2_API_KEY:-}
+      
+      # Worker settings
+      LOG_LEVEL: INFO
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    networks:
+      - poundcake
+    command: celery -A app.tasks.tasks_simple worker --loglevel=info --concurrency=4
+
+  # Flower - Celery monitoring UI (optional)
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-flower
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery
+    networks:
+      - poundcake
+    command: celery -A app.tasks.tasks_simple flower --port=5555
+
+volumes:
+  mariadb_data:
+    driver: local
+
+networks:
+  poundcake:
+    driver: bridge
+
+# ============================================================================
+# SIMPLIFIED ARCHITECTURE
+# ============================================================================
+#
+# This stack provides:
+#   ✓ FastAPI API (webhook receiver)
+#   ✓ MariaDB (database, can be shared with StackStorm)
+#   ✓ Redis (Celery broker)
+#   ✓ Celery Worker (async processing)
+#   ✓ Flower (Celery monitoring)
+#
+# PoundCake's Role:
+#   1. Receive Alertmanager webhooks
+#   2. Generate request_id for tracking
+#   3. Store alert data in database
+#   4. Queue Celery task
+#   5. Celery task triggers StackStorm
+#   6. Store link: request_id ↔ st2_execution_id
+#
+# Database Tables (ONLY 3):
+#   • poundcake_api_calls       - Webhook tracking
+#   • poundcake_alerts           - Alert data
+#   • poundcake_st2_execution_link - Links to ST2
+#
+# StackStorm's Role (separate install):
+#   • Define workflows (ActionChains, Mistral, Orquesta)
+#   • Define actions (python, shell, http, etc.)
+#   • Execute remediation
+#   • Store results in execution_db
+#
+# NO MORE:
+#   ❌ actions table
+#   ❌ custom_action_buckets table
+#   ❌ custom_action_bucket_steps table
+#   ❌ Complex extension tables
+#
+# Integration:
+#   - Celery task calls ST2 API
+#   - Passes request_id in parameters
+#   - ST2 executes workflow
+#   - We store the link
+#
+# Queries:
+#   SELECT * FROM poundcake_st2_execution_link 
+#   WHERE request_id = 'abc-123';
+#
+#   -- Join with ST2's execution_db for full details
+#   SELECT * FROM execution_db e
+#   JOIN poundcake_st2_execution_link link 
+#     ON e.id = link.st2_execution_id
+#   WHERE link.request_id = 'abc-123';
+#
+# ============================================================================
