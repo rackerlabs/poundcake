@@ -313,6 +313,9 @@ services:
       # Database
       DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
       
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      
       # Celery (results stored in MariaDB via db+ backend)
       CELERY_BROKER_URL: redis://redis:6379/0
       
@@ -347,6 +350,9 @@ services:
     environment:
       # Database
       DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
       
       # Celery (results stored in MariaDB via db+ backend)
       CELERY_BROKER_URL: redis://redis:6379/0
