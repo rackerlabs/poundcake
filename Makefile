@@ -20,15 +20,15 @@ dev-install:
 	pip install -e ".[dev]"
 
 test:
-	pytest tests/ -v --cov=app --cov-report=html
+	pytest tests/ -v --cov=api --cov-report=html
 
 lint:
-	ruff check src tests
-	mypy src
+	ruff check api tests
+	mypy api
 
 format:
-	black src tests
-	ruff check --fix src tests
+	black api tests
+	ruff check --fix api tests
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
@@ -50,17 +50,17 @@ docker-build:
 	docker-compose build
 
 db-init:
-	python -c "from app.core.database import init_db; init_db()"
+	python -c "from api.core.database import init_db; init_db()"
 
 # Development shortcuts
 dev: docker-up
 	@echo "Services started. API: http://localhost:8000, Flower: http://localhost:5555"
 
 run-api:
-	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 run-worker:
-	celery -A app.tasks.celery_app:celery_app worker --loglevel=info
+	celery -A api.tasks.celery_app:celery_app worker --loglevel=info
 
 run-flower:
-	celery -A app.tasks.celery_app:celery_app flower --port=5555
+	celery -A api.tasks.celery_app:celery_app flower --port=5555
