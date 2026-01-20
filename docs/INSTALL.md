@@ -1,284 +1,400 @@
 # Installation Guide
 
-## Using pyproject.toml
+PoundCake is deployed to Kubernetes using Helm. This guide covers installation and configuration.
 
-PoundCake API uses pyproject.toml for dependency management and project configuration.
+## Prerequisites
 
-## Quick Install
+- Kubernetes 1.24+
+- Helm 3.x
+- MySQL/MariaDB database (external or provisioned separately)
+- StackStorm instance (can be deployed via Helm)
 
-### Production
+## Quick Start
 
-```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Upgrade pip and install build tools
-pip install --upgrade pip setuptools wheel
-
-# Install the application
-pip install .
-```
-
-### Development
+### 1. Install StackStorm (if not already installed)
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# Use the provided install script
+cd bin
+./install-stackstorm.sh
 
-# Upgrade pip and install build tools
-pip install --upgrade pip setuptools wheel
-
-# Install in editable mode with dev dependencies
-pip install -e ".[dev]"
+# Or install via Helm manually
+helm repo add stackstorm https://helm.stackstorm.com
+helm install stackstorm stackstorm/stackstorm-ha \
+  --namespace stackstorm \
+  --create-namespace
 ```
 
-## Why the Upgrade Command?
-
-The command `pip install --upgrade pip setuptools wheel` is important because:
-
-1. **pip** - Package installer needs to be latest version
-2. **setuptools** - Build backend specified in pyproject.toml
-3. **wheel** - Build format for Python packages
-
-Without these, you may see errors like:
-- "Cannot import 'setuptools.build_backend'"
-- "No module named 'setuptools'"
-- Build failures
-
-## What Gets Installed
-
-### Production Dependencies
-```
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-sqlalchemy>=2.0.25
-alembic>=1.13.1
-pymysql>=2.9.9
-celery[redis]>=5.3.6
-redis>=5.0.1
-pydantic>=2.6.0
-pydantic-settings>=2.1.0
-python-json-logger>=2.0.7
-```
-
-### Development Dependencies (with [dev])
-All production dependencies plus:
-```
-pytest>=7.4.4
-pytest-asyncio>=0.23.3
-pytest-cov>=4.1.0
-httpx>=0.26.0
-black>=24.1.1
-ruff>=0.1.14
-mypy>=1.8.0
-```
-
-## System Requirements
-
-### Python Version
-Requires Python 3.11 or higher
-
-Check version:
-```bash
-python3 --version
-```
-
-### System Dependencies
-
-#### Ubuntu/Debian
-```bash
-sudo apt-get update
-sudo apt-get install -y python3.11 python3.11-venv python3-dev default-libmysqlclient-dev gcc
-```
-
-#### CentOS/RHEL
-```bash
-sudo yum install -y python311 python311-devel mysql+pymysql-devel gcc
-```
-
-#### macOS
-```bash
-brew install python@3.11 mysql+pymysql
-```
-
-## Complete Setup Example
+### 2. Install PoundCake
 
 ```bash
-# 1. Install system dependencies (Ubuntu example)
-sudo apt-get update
-sudo apt-get install -y python3.11 python3.11-venv default-libmysqlclient-dev gcc
-
-# 2. Create virtual environment
-python3.11 -m venv venv
-source venv/bin/activate
-
-# 3. Upgrade pip and install build tools
-pip install --upgrade pip setuptools wheel
-
-# 4. Install application with dev dependencies
-pip install -e ".[dev]"
-
-# 5. Verify installation
-python -c "import fastapi, celery, sqlalchemy; print('Installation successful')"
+# Install from OCI registry
+helm install poundcake oci://ghcr.io/aedan/poundcake \
+  --namespace poundcake \
+  --create-namespace \
+  --set database.url="mysql+pymysql://user:pass@mysql:3306/poundcake" \
+  --set redis.enabled=true \
+  --set stackstorm.apiKey=your-st2-api-key
 ```
 
-## Docker Installation
-
-Docker handles dependencies automatically via the Dockerfile:
+Or use a values file:
 
 ```bash
-# Build image
-docker-compose build
-
-# Start services
-docker-compose up -d
+helm install poundcake oci://ghcr.io/aedan/poundcake \
+  --namespace poundcake \
+  --create-namespace \
+  -f my-values.yaml
 ```
 
-No manual pip installation needed when using Docker.
+### 3. Verify Installation
 
-## Troubleshooting
-
-### Error: "Cannot import 'setuptools.build_backend'"
-
-**Solution:** Upgrade pip and install setuptools
 ```bash
-pip install --upgrade pip setuptools wheel
-pip install .
+# Check pods are running
+kubectl get pods -n poundcake
+
+# Check service
+kubectl get svc -n poundcake
+
+# View logs
+kubectl logs -n poundcake -l app.kubernetes.io/name=poundcake
 ```
 
-### Error: "No module named 'setuptools'"
+### 4. Access the UI
 
-**Solution:** Install setuptools explicitly
 ```bash
-pip install setuptools>=61.0
-pip install .
+# Port forward
+kubectl port-forward svc/poundcake 8080:8080 -n poundcake
+
+# Open browser
+open http://localhost:8080
 ```
 
-### Error: pymysql compilation fails
+## Database Setup
 
-**Solution:** Install MariaDB development libraries
+PoundCake requires MySQL/MariaDB for persistent storage.
+
+### Option 1: External Database
+
+Use an existing MySQL/MariaDB instance:
+
+```yaml
+# values.yaml
+database:
+  url: "mysql+pymysql://poundcake:password@mysql.database.svc:3306/poundcake"
+```
+
+Or use a secret:
+
 ```bash
-# Ubuntu/Debian
-sudo apt-get install default-libmysqlclient-dev python3-dev
+# Create secret
+kubectl create secret generic poundcake-db \
+  --namespace poundcake \
+  --from-literal=database-url="mysql+pymysql://user:pass@mysql:3306/poundcake"
 
-# CentOS/RHEL
-sudo yum install mysql+pymysql-devel python3-devel
-
-# macOS
-brew install mysql+pymysql
+# Reference in values
+database:
+  existingSecret: poundcake-db
+  secretKey: database-url
 ```
 
-### Error: Permission denied
+### Option 2: Deploy MySQL with Bitnami Chart
 
-**Solution:** Always use virtual environment (never use sudo)
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install .
+# Add Bitnami repo
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+# Install MySQL
+helm install mysql bitnami/mysql \
+  --namespace poundcake \
+  --set auth.database=poundcake \
+  --set auth.username=poundcake \
+  --set auth.password=poundcake-password
+
+# Use in PoundCake
+helm install poundcake oci://ghcr.io/aedan/poundcake \
+  --namespace poundcake \
+  --set database.url="mysql+pymysql://poundcake:poundcake-password@mysql:3306/poundcake"
 ```
 
-## Verifying Installation
+### Database Schema
 
-### Test Script
+PoundCake automatically creates tables on startup:
 
-Save as `test_install.py`:
+- `poundcake_api_calls` - Request tracking with request_id
+- `poundcake_alerts` - Alert data from Alertmanager
+- `poundcake_st2_execution_link` - Links to StackStorm executions
+- `poundcake_mappings` - Alert-to-action mappings
+- `poundcake_task_executions` - Celery task tracking
 
-```python
-#!/usr/bin/env python3
-"""Verify PoundCake API installation."""
+## StackStorm Configuration
 
-import sys
+### Authentication Options
 
-def test_imports():
-    """Test all critical imports."""
-    try:
-        print("Testing imports...")
-        
-        import fastapi
-        print(f"  fastapi: {fastapi.__version__}")
-        
-        import uvicorn
-        print(f"  uvicorn: {uvicorn.__version__}")
-        
-        import sqlalchemy
-        print(f"  sqlalchemy: {sqlalchemy.__version__}")
-        
-        import celery
-        print(f"  celery: {celery.__version__}")
-        
-        import redis
-        print(f"  redis: {redis.__version__}")
-        
-        import pydantic
-        print(f"  pydantic: {pydantic.__version__}")
-        
-        print("\nAll imports successful!")
-        return True
-        
-    except ImportError as e:
-        print(f"\nError: {e}")
-        return False
+**Option 1: API Key (Recommended)**
 
-if __name__ == "__main__":
-    success = test_imports()
-    sys.exit(0 if success else 1)
+```yaml
+stackstorm:
+  url: "http://stackstorm-st2api.stackstorm.svc:9101"
+  apiKey: "your-api-key"
 ```
 
-Run it:
+**Option 2: Admin Credentials for Auto-Generation**
+
+```yaml
+stackstorm:
+  url: "http://stackstorm-st2api.stackstorm.svc:9101"
+  authUrl: "http://stackstorm-st2auth.stackstorm.svc:9100"
+  adminUser: "st2admin"
+  adminPasswordSecret: "stackstorm-admin"
+  adminPasswordSecretKey: "password"
+```
+
+**Option 3: Existing Secret**
+
 ```bash
-python test_install.py
+kubectl create secret generic stackstorm-creds \
+  --namespace poundcake \
+  --from-literal=api-key="your-api-key"
 ```
 
-## Editable Install vs Regular Install
-
-### Regular Install: `pip install .`
-- Installs package into site-packages
-- Changes to source code not reflected until reinstall
-- Use for production
-
-### Editable Install: `pip install -e .`
-- Creates link to source code
-- Changes to source code immediately reflected
-- Use for development
-
-## Updating Dependencies
-
-### View Installed Packages
-```bash
-pip list
+```yaml
+stackstorm:
+  existingSecret: stackstorm-creds
+  secretKeys:
+    apiKey: "api-key"
 ```
 
-### Check for Updates
-```bash
-pip list --outdated
+## Redis Configuration
+
+Redis is required for Celery task processing.
+
+### Deploy Redis with Chart (Default)
+
+```yaml
+redis:
+  enabled: true
+  deploy: true
+  password: "redis-password"
+  persistence:
+    enabled: true
+    size: 1Gi
 ```
 
-### Update All Packages
-```bash
-pip install --upgrade .
+### Use External Redis
+
+```yaml
+redis:
+  enabled: true
+  deploy: false
+  external:
+    url: "redis://my-redis:6379/0"
+    password: "redis-password"
 ```
 
-### Update Specific Package
-Edit pyproject.toml, then:
+## Authentication
+
+Enable authentication to protect the UI and API:
+
+```yaml
+auth:
+  enabled: true
+  sessionTimeout: 86400  # 24 hours
+```
+
+Retrieve the generated admin password:
+
 ```bash
-pip install --upgrade .
+kubectl get secret poundcake-admin -n poundcake \
+  -o jsonpath='{.data.password}' | base64 -d && echo
+```
+
+## Horizontal Scaling
+
+For high availability deployments:
+
+```yaml
+replicaCount: 3
+
+redis:
+  enabled: true  # Required for distributed state
+
+celery:
+  enabled: true
+  replicaCount: 2
+  concurrency: 4
+```
+
+## Ingress Configuration
+
+Expose PoundCake via Ingress:
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: poundcake.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: poundcake-tls
+      hosts:
+        - poundcake.example.com
+```
+
+## Prometheus Integration
+
+### Enable ServiceMonitor
+
+```yaml
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+```
+
+### Configure Prometheus CRD Management
+
+```yaml
+prometheus:
+  url: "http://prometheus-server.prometheus.svc:9090"
+  useCrds: true
+  crdNamespace: prometheus
+  crdLabels:
+    release: kube-prometheus-stack
+```
+
+## Git Integration (GitOps)
+
+Enable Git integration for rule management with PR workflow:
+
+```yaml
+git:
+  enabled: true
+  repoUrl: "https://github.com/yourorg/prometheus-rules.git"
+  branch: main
+  provider: github
+  token: "github-token"
+  userName: PoundCake
+  userEmail: poundcake@example.com
+```
+
+## Complete Example values.yaml
+
+```yaml
+replicaCount: 2
+
+database:
+  url: "mysql+pymysql://poundcake:password@mysql:3306/poundcake"
+
+redis:
+  enabled: true
+  deploy: true
+  password: "redis-password"
+  persistence:
+    enabled: true
+
+celery:
+  enabled: true
+  replicaCount: 2
+  concurrency: 4
+
+stackstorm:
+  url: "http://stackstorm-st2api.stackstorm.svc:9101"
+  authUrl: "http://stackstorm-st2auth.stackstorm.svc:9100"
+  adminPasswordSecret: "stackstorm-admin"
+
+prometheus:
+  url: "http://prometheus-server.prometheus.svc:9090"
+  useCrds: true
+  crdNamespace: monitoring
+  crdLabels:
+    release: kube-prometheus-stack
+
+auth:
+  enabled: true
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: poundcake.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+```
+
+## Alertmanager Configuration
+
+Configure Alertmanager to send webhooks to PoundCake:
+
+```yaml
+receivers:
+  - name: poundcake
+    webhook_configs:
+      - url: http://poundcake.poundcake.svc.cluster.local:8080/api/v1/webhook
+        send_resolved: true
+```
+
+## Upgrading
+
+```bash
+# Upgrade to latest version
+helm upgrade poundcake oci://ghcr.io/aedan/poundcake \
+  --namespace poundcake \
+  -f my-values.yaml
+
+# Upgrade to specific version
+helm upgrade poundcake oci://ghcr.io/aedan/poundcake \
+  --namespace poundcake \
+  --version 1.2.0 \
+  -f my-values.yaml
 ```
 
 ## Uninstalling
 
 ```bash
-pip uninstall poundcake-api
+helm uninstall poundcake --namespace poundcake
+kubectl delete namespace poundcake
 ```
 
-## Next Steps
+## Troubleshooting
 
-After installation:
+### Pods not starting
 
-1. Configure environment variables in `.env`
-2. Start services with `docker-compose up -d`
-3. Test API: `curl http://localhost:8000/api/v1/health`
-4. View docs: `http://localhost:8000/docs`
+```bash
+# Check pod status
+kubectl describe pod -n poundcake -l app.kubernetes.io/name=poundcake
 
-See README.md for complete documentation.
+# Check logs
+kubectl logs -n poundcake -l app.kubernetes.io/name=poundcake --tail=100
+```
+
+### Database connection issues
+
+```bash
+# Verify database URL is set
+kubectl get deployment poundcake -n poundcake -o jsonpath='{.spec.template.spec.containers[0].env}' | jq
+
+# Test database connectivity
+kubectl run mysql-client --rm -it --image=mysql:8 --restart=Never -- \
+  mysql -h mysql -u poundcake -ppassword -e "SELECT 1"
+```
+
+### StackStorm connection issues
+
+```bash
+# Test StackStorm API
+kubectl run curl --rm -it --image=curlimages/curl --restart=Never -- \
+  curl -H "St2-Api-Key: your-key" http://stackstorm-st2api.stackstorm.svc:9101/v1/actions
+```
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more detailed troubleshooting steps.

@@ -3,18 +3,11 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "poundcake"
-version = "1.3.0"
-description = "Lightweight tracking layer for Alertmanager webhooks with StackStorm integration, including CLI and UI"
-readme = "README.md"
+name = "poundcake-api"
+version = "0.1.0"
+description = "FastAPI application for processing Alertmanager webhooks with Celery"
 requires-python = ">=3.11"
-license = {text = "MIT"}
-authors = [
-    {name = "Chris Breu"},
-    {name = "Jake Briggs"}
-]
 dependencies = [
-    # Core API dependencies
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "sqlalchemy>=2.0.25",
@@ -29,14 +22,6 @@ dependencies = [
     "pydantic>=2.6.0",
     "pydantic-settings>=2.1.0",
     "python-json-logger>=2.0.7",
-    # CLI dependencies
-    "click>=8.1.0",
-    "pyyaml>=6.0",
-    # Additional features
-    "structlog>=23.2.0",
-    "prometheus-client>=0.19.0",
-    "kubernetes>=28.1.0",
-    "GitPython>=3.1.0",
     "python-multipart>=0.0.6",
 ]
 
@@ -49,16 +34,13 @@ dev = [
     "black>=24.1.1",
     "ruff>=0.1.14",
     "mypy>=1.8.0",
-    "types-PyYAML>=6.0.0",
-    "types-redis>=4.6.0",
+    "types-PyYAML>=6.0.12",
+    "types-requests>=2.31.0",
 ]
 
-[project.scripts]
-pcake = "cli.main:main"
-
 [tool.setuptools.packages.find]
-where = ["src"]
-include = ["api", "api.*", "cli", "cli.*", "ui", "ui.*"]
+where = ["."]
+include = ["api*"]
 
 [tool.black]
 line-length = 100
@@ -72,6 +54,53 @@ target-version = "py311"
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "api.api.*",
+    "api.main",
+]
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "api.tasks.*",
+    "api.services.*",
+]
+# Ignore SQLAlchemy Column assignment issues
+warn_return_any = false
+# Allow Celery task decorators without full type annotations
+disallow_untyped_defs = false
+# Disable problematic error codes for SQLAlchemy ORM code
+disable_error_code = ["assignment", "arg-type", "call-overload", "misc", "var-annotated", "dict-item", "type-var", "return-value", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = ["api.core.logging", "api.core.middleware"]
+# Ignore pythonjsonlogger and SQLAlchemy type issues
+disable_error_code = ["assignment", "no-any-return"]
+
+[[tool.mypy.overrides]]
+module = [
+    "api.api.health",
+    "api.api.routes",
+    "api.api.auth",
+    "api.api.v1.*",
+]
+# Ignore SQLAlchemy and Celery type issues in API modules
+disable_error_code = ["assignment", "arg-type", "call-overload", "var-annotated", "return-value"]
+
+[[tool.mypy.overrides]]
+module = [
+    "kubernetes",
+    "kubernetes.*",
+    "git",
+    "git.*",
+    "celery",
+    "celery.*",
+    "api.models.models_simple",
+    "api.tasks.tasks_simple",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

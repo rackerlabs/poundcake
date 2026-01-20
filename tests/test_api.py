@@ -1,7 +1,7 @@
 """Example tests for the API."""
-import pytest
+
 from fastapi.testclient import TestClient
-from app.main import app
+from api.main import app
 
 client = TestClient(app)
 
@@ -37,14 +37,14 @@ def test_webhook_missing_alerts():
         "commonLabels": {},
         "commonAnnotations": {},
         "externalURL": "http://test",
-        "alerts": []
+        "alerts": [],
     }
-    
+
     response = client.post("/api/v1/webhook", json=payload)
-    assert response.status_code == 200
+    assert response.status_code == 202
     data = response.json()
     assert data["status"] == "no_alerts"
-    assert "request_id" in response.headers.get("X-Request-ID", "")
+    assert "request_id" in data
 
 
 def test_request_id_header():
@@ -52,7 +52,7 @@ def test_request_id_header():
     response = client.get("/")
     # GET requests don't generate request IDs by default
     # but non-GET requests do
-    
+
     payload = {
         "version": "4",
         "groupKey": "test",
@@ -63,9 +63,9 @@ def test_request_id_header():
         "commonLabels": {},
         "commonAnnotations": {},
         "externalURL": "http://test",
-        "alerts": []
+        "alerts": [],
     }
-    
+
     response = client.post("/api/v1/webhook", json=payload)
     assert "X-Request-ID" in response.headers
     assert len(response.headers["X-Request-ID"]) > 0

@@ -1,0 +1,63 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+{{- if .Values.ui.enabled }}
+
+The UI is deployed as a separate container and accessible via its own service.
+{{- end }}
+
+To access the application:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "poundcake.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "poundcake.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else if contains "ClusterIP" .Values.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "poundcake.fullname" . }} 8080:{{ .Values.service.port }}
+  echo "Visit http://127.0.0.1:8080 to access the UI"
+{{- end }}
+
+Configure Alertmanager to send webhooks to:
+  http://{{ include "poundcake.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/api/v1/webhook
+
+COMPONENTS DEPLOYED:
+  - API Server: {{ include "poundcake.fullname" . }}
+{{- if .Values.ui.enabled }}
+  - UI: {{ include "poundcake.fullname" . }}-ui
+{{- end }}
+{{- if .Values.celery.enabled }}
+  - Celery Workers: {{ include "poundcake.fullname" . }}-celery ({{ .Values.celery.replicaCount }} replica(s))
+{{- end }}
+{{- if and .Values.redis.enabled .Values.redis.deploy }}
+  - Redis: {{ include "poundcake.fullname" . }}-redis
+{{- end }}
+
+{{- if not (or .Values.database.url .Values.database.existingSecret) }}
+
+WARNING: No database configured!
+  PoundCake requires MySQL/MariaDB for persistent storage.
+  Set database.url or database.existingSecret in your values.
+
+{{- end }}
+
+{{- if .Values.auth.enabled }}
+
+AUTHENTICATION ENABLED:
+  Username: admin
+
+  To retrieve the admin password, run:
+    kubectl get secret {{ include "poundcake.fullname" . }}-admin -n {{ .Release.Namespace }} -o jsonpath='{.data.password}' | base64 -d && echo
+
+{{- end }}
+
+For more information:
+  https://github.com/aedan/poundcake

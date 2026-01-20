@@ -365,7 +365,7 @@ sudo st2ctl start
 cd poundcake-api
 
 # Initialize database (creates 3 tables only)
-python src/app/scripts/init_simple_database.py
+python api/scripts/init_simple_database.py
 
 # Start services
 docker-compose up -d

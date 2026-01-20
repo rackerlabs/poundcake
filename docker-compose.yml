@@ -69,10 +69,6 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-api
     environment:
-      # Authentication - REQUIRED for htpasswd setup
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
-      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       ST2_STREAM_URL: http://st2stream:9102
@@ -110,10 +106,6 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-auth
     environment:
-      # Authentication - REQUIRED for htpasswd setup
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
-      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -145,10 +137,6 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-stream
     environment:
-      # Authentication - REQUIRED for htpasswd setup
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
-      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       ST2_STREAM_URL: http://st2stream:9102
@@ -178,10 +166,6 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-rulesengine
     environment:
-      # Authentication - REQUIRED for htpasswd setup
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
-      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -210,10 +194,6 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-actionrunner
     environment:
-      # Authentication - REQUIRED for htpasswd setup
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
-      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -244,10 +224,6 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-scheduler
     environment:
-      # Authentication - REQUIRED for htpasswd setup
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
-      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -274,10 +250,6 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-notifier
     environment:
-      # Authentication - REQUIRED for htpasswd setup
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe123}
-      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -313,11 +285,9 @@ services:
       # Database
       DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
       
-      # Redis
-      REDIS_URL: redis://redis:6379/0
-      
-      # Celery (results stored in MariaDB via db+ backend)
+      # Celery
       CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       
       # StackStorm (containerized!)
       ST2_API_URL: http://st2api:9101/v1
@@ -335,7 +305,7 @@ services:
       st2api:
         condition: service_started
     volumes:
-      - ./src:/app/src
+      - ./api:/app/api
       - ./logs:/app/logs
     networks:
       - poundcake
@@ -350,17 +320,15 @@ services:
     environment:
       # Database
       DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
-      
-      # Redis
-      REDIS_URL: redis://redis:6379/0
-      
-      # Celery (results stored in MariaDB via db+ backend)
+
+      # Celery
       CELERY_BROKER_URL: redis://redis:6379/0
-      
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+
       # StackStorm (containerized!)
       ST2_API_URL: http://st2api:9101/v1
       ST2_API_KEY: ${ST2_API_KEY:-}
-      
+
       # Worker settings
       LOG_LEVEL: INFO
     depends_on:
@@ -371,7 +339,7 @@ services:
       st2api:
         condition: service_started
     volumes:
-      - ./src:/app/src
+      - ./api:/app/api
       - ./logs:/app/logs
     networks:
       - poundcake
@@ -384,37 +352,16 @@ services:
       dockerfile: Dockerfile
     container_name: poundcake-flower
     environment:
-      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
       CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     ports:
       - "5555:5555"
     depends_on:
       - redis
       - celery
-      - mariadb
     networks:
       - poundcake
     command: celery -A api.tasks.tasks flower --port=5555
-
-  # PoundCake UI - Management web interface
-  ui:
-    build:
-      context: .
-      dockerfile: src/ui/Dockerfile
-    container_name: poundcake-ui
-    environment:
-      API_URL: http://api:8000
-    ports:
-      - "8080:80"
-    depends_on:
-      - api
-    networks:
-      - poundcake
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 volumes:
   mariadb_data:
@@ -431,7 +378,7 @@ networks:
     driver: bridge
 
 # ============================================================================
-# CONTAINERIZED STACKSTORM + POUNDCAKE (with CLI and UI)
+# CONTAINERIZED STACKSTORM + POUNDCAKE
 # ============================================================================
 #
 # This complete stack includes:
@@ -454,8 +401,6 @@ networks:
 #   ✓ api (FastAPI webhook receiver) → :8000
 #   ✓ celery (Background workers)
 #   ✓ flower (Celery monitoring) → :5555
-#   ✓ ui (Management web interface) → :8080
-#   ✓ CLI (pcake command - install with pip)
 #
 # NETWORK:
 #   • All services on same Docker network
@@ -466,11 +411,9 @@ networks:
 #   docker-compose up -d
 #
 # MANAGEMENT:
-#   • PoundCake UI: http://localhost:8080
-#   • PoundCake API: http://localhost:8000
 #   • ST2 Web UI: http://localhost:9101 (when configured)
 #   • RabbitMQ UI: http://localhost:15672 (stackstorm/stackstorm)
 #   • Flower UI: http://localhost:5555
-#   • CLI: pcake --help (after pip install -e .)
+#   • PoundCake API: http://localhost:8000
 #
 # ============================================================================
