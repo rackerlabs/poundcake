@@ -40,9 +40,11 @@ spec:
               containerPort: {{ .Values.config.port }}
               protocol: TCP
           env:
-            - name: POUNDCAKE_HOST
+            # Note: Using SERVER_HOST/SERVER_PORT to avoid collision with
+            # Kubernetes auto-generated service env vars (POUNDCAKE_PORT, etc.)
+            - name: POUNDCAKE_SERVER_HOST
               value: {{ .Values.config.host | quote }}
-            - name: POUNDCAKE_PORT
+            - name: POUNDCAKE_SERVER_PORT
               value: {{ .Values.config.port | quote }}
             - name: POUNDCAKE_DEBUG
               value: {{ .Values.config.debug | quote }}
