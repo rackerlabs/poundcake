@@ -40,7 +40,8 @@ ST2_API_URL = os.getenv(
     os.getenv("ST2_API_URL", "http://localhost:9101/v1"),
 )
 ST2_API_KEY = os.getenv(
-    "POUNDCAKE_STACKSTORM_API_KEY", os.getenv("ST2_API_KEY", "")
+    "POUNDCAKE_STACKSTORM_API_KEY",
+    os.getenv("ST2_API_KEY", ""),
 )
 
 
