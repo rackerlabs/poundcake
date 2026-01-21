@@ -39,7 +39,7 @@ spec:
           command:
             - celery
             - -A
-            - app.tasks.celery_app
+            - api.tasks.celery_app
             - worker
             - --loglevel={{ .Values.config.logLevel | lower }}
             - --concurrency={{ .Values.celery.concurrency }}
