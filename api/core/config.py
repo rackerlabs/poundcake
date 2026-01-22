@@ -29,12 +29,14 @@ class Settings(BaseSettings):
     # Application Settings
     # ==========================================================================
     app_name: str = "PoundCake"
-    app_version: str = "1.0.0"
+    app_version: str = "1.0.3"
     debug: bool = False
 
     # API Server
-    host: str = "0.0.0.0"
-    port: int = 8000
+    # Note: Using server_host/server_port to avoid collision with Kubernetes
+    # auto-generated service environment variables (POUNDCAKE_PORT, etc.)
+    server_host: str = "0.0.0.0"
+    server_port: int = 8000
     workers: int = 4
 
     # ==========================================================================

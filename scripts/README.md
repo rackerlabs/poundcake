@@ -33,6 +33,58 @@ chmod +x scripts/quickstart.sh
 
 ---
 
+## Development Scripts
+
+### setup-dev-env.sh
+**Set up local development environment**
+
+Creates a Python virtualenv with all development dependencies for local testing.
+
+```bash
+./scripts/setup-dev-env.sh
+```
+
+**What it does:**
+1. Checks Python 3.11+ is installed
+2. Creates virtualenv at `./venv/`
+3. Installs all runtime dependencies
+4. Installs all dev dependencies (pytest, black, ruff, mypy)
+5. Installs package in editable mode
+
+**Use this when:**
+- Setting up local development for the first time
+- Dependencies have been updated
+- Your virtualenv is broken/corrupted
+
+---
+
+### test-local.sh
+**Run all pre-push tests locally**
+
+Runs the same checks that GitHub Actions runs on push to prevent CI failures.
+
+```bash
+./scripts/test-local.sh
+```
+
+**What it tests:**
+1. Ruff linting (`ruff check api tests`)
+2. Black formatting (`black --check api tests`)
+3. MyPy type checking (`mypy api`)
+4. Pytest with coverage (`pytest tests/ -v --cov=api`)
+
+**Tip:** Always run this before `git push` to catch issues early!
+
+**Quick fixes if tests fail:**
+```bash
+source venv/bin/activate
+black api tests              # Auto-format code
+ruff check --fix api tests   # Auto-fix linting issues
+./scripts/test-local.sh      # Test again
+```
+
+---
+
 ## Testing Scripts
 
 ### test-webhook.sh
@@ -88,6 +140,8 @@ chmod +x scripts/test-webhook.sh
 
 ## Recommended Setup Flow
 
+### For Docker/Production Testing:
+
 1. **First time setup:**
    ```bash
    ./scripts/quickstart.sh
@@ -102,6 +156,39 @@ chmod +x scripts/test-webhook.sh
    ```bash
    docker-compose ps
    docker-compose logs -f
+   ```
+
+### For Local Development:
+
+1. **Setup dev environment:**
+   ```bash
+   ./scripts/setup-dev-env.sh
+   source venv/bin/activate
+   ```
+
+2. **Make your changes:**
+   ```bash
+   # Edit code...
+   vim api/...
+   ```
+
+3. **Test before pushing:**
+   ```bash
+   ./scripts/test-local.sh
+   ```
+
+4. **Fix issues if needed:**
+   ```bash
+   black api tests
+   ruff check --fix api tests
+   ./scripts/test-local.sh
+   ```
+
+5. **Commit and push:**
+   ```bash
+   git add .
+   git commit -m "your changes"
+   git push
    ```
 
 ---

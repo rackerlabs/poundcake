@@ -232,7 +232,7 @@ This will:
 docker ps
 
 # Expected output: 5 containers running
-# - poundcake-api-postgres-1
+# - poundcake-api-mariadb-1
 # - poundcake-api-redis-1
 # - poundcake-api-api-1
 # - poundcake-api-worker-1 (x2)
@@ -244,7 +244,7 @@ curl http://localhost:8000/api/v1/health
 # Expected output:
 # {
 # "status": "healthy",
-# "version": "0.1.0",
+# "version": "1.0.2",
 # "database": "healthy",
 # "redis": "healthy",
 # "celery": "healthy (2 workers)",
@@ -473,7 +473,7 @@ docker stats
 
 # Enter a container shell
 docker-compose exec api bash
-docker-compose exec mariadb psql -U mariadb -d poundcake
+docker-compose exec mariadb mysql -u poundcake -p poundcake
 ```
 
 ---

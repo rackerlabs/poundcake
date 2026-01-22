@@ -509,7 +509,7 @@ docker-compose exec mariadb mariadb -upoundcake -ppoundcake -e "SHOW DATABASES;"
 docker-compose logs worker
 
 # Check Celery connection
-docker-compose exec worker celery -A app.tasks.celery_app:celery_app inspect active
+docker-compose exec worker celery -A api.tasks.celery_app inspect active
 ```
 
 ### Wrong fingerprint?

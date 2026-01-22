@@ -132,3 +132,102 @@ Get the Celery result backend URL
 {{- "redis://localhost:6379/0" }}
 {{- end }}
 {{- end }}
+
+{{/*
+MariaDB Operator helpers
+*/}}
+
+{{/*
+Get the MariaDB instance name
+*/}}
+{{- define "poundcake.mariadbName" -}}
+{{- if .Values.mariadbOperator.server.name }}
+{{- .Values.mariadbOperator.server.name }}
+{{- else }}
+{{- include "poundcake.fullname" . }}-mariadb
+{{- end }}
+{{- end }}
+
+{{/*
+Get the MariaDB namespace
+*/}}
+{{- define "poundcake.mariadbNamespace" -}}
+{{- if .Values.mariadbOperator.namespace }}
+{{- .Values.mariadbOperator.namespace }}
+{{- else }}
+{{- .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{/*
+Get the MariaDB root password secret name
+*/}}
+{{- define "poundcake.mariadbRootSecretName" -}}
+{{- if .Values.mariadbOperator.server.rootPasswordSecret }}
+{{- .Values.mariadbOperator.server.rootPasswordSecret }}
+{{- else }}
+{{- include "poundcake.mariadbName" . }}-root
+{{- end }}
+{{- end }}
+
+{{/*
+Get the MariaDB user password secret name
+*/}}
+{{- define "poundcake.mariadbUserSecretName" -}}
+{{- if .Values.mariadbOperator.user.passwordSecret }}
+{{- .Values.mariadbOperator.user.passwordSecret }}
+{{- else }}
+{{- include "poundcake.fullname" . }}-mariadb-user
+{{- end }}
+{{- end }}
+
+{{/*
+Get the MariaDB database name
+*/}}
+{{- define "poundcake.mariadbDatabaseName" -}}
+{{- .Values.mariadbOperator.database.name | default "poundcake" }}
+{{- end }}
+
+{{/*
+Get the MariaDB username
+*/}}
+{{- define "poundcake.mariadbUsername" -}}
+{{- .Values.mariadbOperator.user.name | default "poundcake" }}
+{{- end }}
+
+{{/*
+Get the MariaDB service host
+*/}}
+{{- define "poundcake.mariadbHost" -}}
+{{- $namespace := include "poundcake.mariadbNamespace" . }}
+{{- $name := include "poundcake.mariadbName" . }}
+{{- printf "%s.%s.svc.cluster.local" $name $namespace }}
+{{- end }}
+
+{{/*
+Check if MariaDB Operator CRDs are available
+*/}}
+{{- define "poundcake.mariadbOperatorAvailable" -}}
+{{- if .Capabilities.APIVersions.Has "k8s.mariadb.com/v1alpha1" }}
+{{- true }}
+{{- else }}
+{{- false }}
+{{- end }}
+{{- end }}
+
+{{/*
+Get the database URL - prioritizes explicit config over operator
+*/}}
+{{- define "poundcake.databaseUrl" -}}
+{{- if .Values.database.url }}
+{{- .Values.database.url }}
+{{- else if .Values.database.existingSecret }}
+{{- /* Will be loaded from secret */ -}}
+{{- else if .Values.mariadbOperator.enabled }}
+{{- $host := include "poundcake.mariadbHost" . }}
+{{- $db := include "poundcake.mariadbDatabaseName" . }}
+{{- $user := include "poundcake.mariadbUsername" . }}
+{{- /* Password will be injected from secret, this is just for reference */ -}}
+{{- printf "mysql+pymysql://%s:$(MARIADB_PASSWORD)@%s:3306/%s" $user $host $db }}
+{{- end }}
+{{- end }}

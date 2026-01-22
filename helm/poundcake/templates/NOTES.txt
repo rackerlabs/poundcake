@@ -41,11 +41,34 @@ COMPONENTS DEPLOYED:
   - Redis: {{ include "poundcake.fullname" . }}-redis
 {{- end }}
 
-{{- if not (or .Values.database.url .Values.database.existingSecret) }}
+{{- if not (or .Values.database.url .Values.database.existingSecret .Values.mariadbOperator.enabled) }}
 
 WARNING: No database configured!
   PoundCake requires MySQL/MariaDB for persistent storage.
   Set database.url or database.existingSecret in your values.
+  Alternatively, enable mariadbOperator.enabled to auto-provision MariaDB.
+
+{{- end }}
+
+{{- if .Values.mariadbOperator.enabled }}
+
+MARIADB OPERATOR INTEGRATION:
+  MariaDB will be provisioned automatically using the mariadb-operator.
+
+  MariaDB Instance: {{ include "poundcake.mariadbName" . }}
+  Namespace: {{ include "poundcake.mariadbNamespace" . }}
+  Database: {{ include "poundcake.mariadbDatabaseName" . }}
+  Username: {{ include "poundcake.mariadbUsername" . }}
+
+  To check MariaDB status:
+    kubectl get mariadb {{ include "poundcake.mariadbName" . }} -n {{ include "poundcake.mariadbNamespace" . }}
+
+  To retrieve the user password:
+    kubectl get secret {{ include "poundcake.mariadbUserSecretName" . }} -n {{ include "poundcake.mariadbNamespace" . }} -o jsonpath='{.data.password}' | base64 -d && echo
+
+  To connect to MariaDB:
+    kubectl run mysql-client --rm -it --image=mariadb:11 --restart=Never -n {{ include "poundcake.mariadbNamespace" . }} -- \
+      mysql -h {{ include "poundcake.mariadbName" . }} -u {{ include "poundcake.mariadbUsername" . }} -p{{ include "poundcake.mariadbDatabaseName" . }}
 
 {{- end }}
 

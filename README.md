@@ -16,6 +16,7 @@ An extensible auto-remediation framework that bridges Prometheus Alertmanager wi
 - **Complete Audit Trail**: Track from alert to workflow to execution with request_id
 - **Prometheus Metrics**: Built-in metrics at `/metrics` endpoint
 - **Horizontal Scaling**: Distributed locking with Redis for multi-instance deployments
+- **MariaDB Operator Integration**: Optional automatic database provisioning via mariadb-operator CRDs
 
 ## Architecture
 
@@ -56,7 +57,7 @@ The application consists of separate containers, each built and published indepe
 - Kubernetes cluster
 - Helm 3.x
 - StackStorm instance (can be deployed via Helm)
-- MySQL/MariaDB database
+- MySQL/MariaDB database (or use MariaDB Operator for auto-provisioning)
 - Redis (can be deployed with chart)
 
 ### 1. Install StackStorm
@@ -84,6 +85,13 @@ helm install poundcake ./helm/poundcake \
   --namespace poundcake \
   --create-namespace \
   --set database.url="mysql+pymysql://user:pass@mysql:3306/poundcake" \
+  --set stackstorm.apiKey=your-st2-api-key
+
+# Or use MariaDB Operator for automatic database provisioning
+helm install poundcake oci://ghcr.io/aedan/poundcake \
+  --namespace poundcake \
+  --create-namespace \
+  --set mariadbOperator.enabled=true \
   --set stackstorm.apiKey=your-st2-api-key
 ```
 

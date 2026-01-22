@@ -24,13 +24,25 @@ from api.models.models import Alert, ST2ExecutionLink
 # Initialize Celery
 celery_app = Celery(
     "poundcake",
-    broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-    backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
+    broker=os.getenv(
+        "POUNDCAKE_CELERY_BROKER_URL",
+        os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+    ),
+    backend=os.getenv(
+        "POUNDCAKE_CELERY_RESULT_BACKEND",
+        os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
+    ),
 )
 
 # StackStorm configuration
-ST2_API_URL = os.getenv("ST2_API_URL", "http://localhost:9101/v1")
-ST2_API_KEY = os.getenv("ST2_API_KEY", "")
+ST2_API_URL = os.getenv(
+    "POUNDCAKE_STACKSTORM_URL",
+    os.getenv("ST2_API_URL", "http://localhost:9101/v1"),
+)
+ST2_API_KEY = os.getenv(
+    "POUNDCAKE_STACKSTORM_API_KEY",
+    os.getenv("ST2_API_KEY", ""),
+)
 
 
 def determine_st2_workflow(alert_data: Dict[str, Any]) -> str:

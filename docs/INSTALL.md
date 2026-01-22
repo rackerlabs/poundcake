@@ -6,8 +6,9 @@ PoundCake is deployed to Kubernetes using Helm. This guide covers installation a
 
 - Kubernetes 1.24+
 - Helm 3.x
-- MySQL/MariaDB database (external or provisioned separately)
+- MySQL/MariaDB database (external, Bitnami chart, or via MariaDB Operator)
 - StackStorm instance (can be deployed via Helm)
+- (Optional) [MariaDB Operator](https://github.com/mariadb-operator/mariadb-operator) for automatic database provisioning
 
 ## Quick Start
 
@@ -114,6 +115,160 @@ helm install mysql bitnami/mysql \
 helm install poundcake oci://ghcr.io/aedan/poundcake \
   --namespace poundcake \
   --set database.url="mysql+pymysql://poundcake:poundcake-password@mysql:3306/poundcake"
+```
+
+### Option 3: MariaDB Operator (Recommended for Production)
+
+The MariaDB Operator provides a Kubernetes-native way to deploy and manage MariaDB instances. When enabled, PoundCake automatically creates all required database resources.
+
+#### Step 1: Install the MariaDB Operator
+
+```bash
+# Add the MariaDB Operator Helm repository
+helm repo add mariadb-operator https://mariadb-operator.github.io/mariadb-operator
+helm repo update
+
+# Install the operator
+helm install mariadb-operator mariadb-operator/mariadb-operator \
+  --namespace mariadb-operator \
+  --create-namespace
+```
+
+#### Step 2: Enable MariaDB Operator in PoundCake
+
+```yaml
+# values.yaml
+mariadbOperator:
+  enabled: true
+  server:
+    storage:
+      size: 10Gi
+      storageClassName: ""  # Use default storage class
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  database:
+    name: poundcake
+  user:
+    name: poundcake
+    maxUserConnections: 20
+```
+
+Or via command line:
+
+```bash
+helm install poundcake oci://ghcr.io/aedan/poundcake \
+  --namespace poundcake \
+  --create-namespace \
+  --set mariadbOperator.enabled=true \
+  --set mariadbOperator.server.storage.size=10Gi \
+  --set stackstorm.apiKey=your-st2-api-key
+```
+
+#### What Gets Created
+
+When `mariadbOperator.enabled=true`, PoundCake creates:
+
+| Resource | Name | Description |
+|----------|------|-------------|
+| `MariaDB` | `<release>-mariadb` | MariaDB server instance |
+| `Database` | `<release>-db` | Database named `poundcake` |
+| `User` | `<release>-user` | Database user with auto-generated password |
+| `Grant` | `<release>-grant` | ALL PRIVILEGES on the database |
+| `Secret` | `<release>-mariadb-root` | Root password (auto-generated) |
+| `Secret` | `<release>-mariadb-user` | User password (auto-generated) |
+
+#### Verify MariaDB Status
+
+```bash
+# Check MariaDB instance status
+kubectl get mariadb -n poundcake
+
+# Check all MariaDB resources
+kubectl get mariadb,database,user,grant -n poundcake
+
+# View MariaDB pod logs
+kubectl logs -n poundcake -l app.kubernetes.io/instance=poundcake-mariadb
+```
+
+#### Retrieve Generated Credentials
+
+```bash
+# Get user password
+kubectl get secret poundcake-mariadb-user -n poundcake \
+  -o jsonpath='{.data.password}' | base64 -d && echo
+
+# Get root password
+kubectl get secret poundcake-mariadb-root -n poundcake \
+  -o jsonpath='{.data.password}' | base64 -d && echo
+```
+
+#### Connect to MariaDB
+
+```bash
+# Interactive MySQL client
+kubectl run mysql-client --rm -it --image=mariadb:11 --restart=Never -n poundcake -- \
+  mysql -h poundcake-mariadb -u poundcake -p poundcake
+```
+
+#### Advanced Configuration
+
+**Custom Passwords (instead of auto-generated):**
+
+```yaml
+mariadbOperator:
+  enabled: true
+  server:
+    rootPassword: "my-secure-root-password"
+  user:
+    password: "my-secure-user-password"
+```
+
+**Use Existing Secrets:**
+
+```bash
+# Create secrets first
+kubectl create secret generic my-mariadb-root \
+  --namespace poundcake \
+  --from-literal=password="root-password"
+
+kubectl create secret generic my-mariadb-user \
+  --namespace poundcake \
+  --from-literal=password="user-password"
+```
+
+```yaml
+mariadbOperator:
+  enabled: true
+  server:
+    rootPasswordSecret: my-mariadb-root
+    rootPasswordSecretKey: password
+  user:
+    passwordSecret: my-mariadb-user
+    passwordSecretKey: password
+```
+
+**High Availability with Galera:**
+
+```yaml
+mariadbOperator:
+  enabled: true
+  server:
+    replicas: 3  # Enables Galera cluster
+    storage:
+      size: 20Gi
+```
+
+**Deploy to Different Namespace:**
+
+```yaml
+mariadbOperator:
+  enabled: true
+  namespace: databases  # MariaDB resources created here
 ```
 
 ### Database Schema

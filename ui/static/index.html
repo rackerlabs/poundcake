@@ -90,6 +90,7 @@
         .kv-pair { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; }
         .kv-pair input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
         .kv-pair button { padding: 4px 8px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .version-display { font-size: 12px; color: rgba(255,255,255,0.8); margin-right: 15px; padding: 4px 10px; background: rgba(255,255,255,0.1); border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -100,7 +101,10 @@
                     <h1>PoundCake - Remediation Management</h1>
                     <div class="header-stats" id="header-stats"></div>
                 </div>
-                <button class="btn" onclick="logout()" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Logout</button>
+                <div style="display: flex; align-items: center;">
+                    <span class="version-display">v1.0.1</span>
+                    <button class="btn" onclick="logout()" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Logout</button>
+                </div>
             </div>
         </div>
     </header>
@@ -763,8 +767,10 @@
                                  rule.state === 'pending' ? 'status-running' : 'status-success';
                 const canEdit = settings.prometheus_use_crds || settings.git_enabled;
                 const editBtn = canEdit ?
-                    `<button class="btn btn-primary btn-sm" onclick='editPrometheusRule(${JSON.stringify(rule)})'>Edit</button>
-                     <button class="btn btn-danger btn-sm" onclick='deletePrometheusRule("${rule.name}", "${rule.group}", "${rule.file}")'>Delete</button>` :
+                    `<div style="display: flex; gap: 4px; white-space: nowrap;">
+                        <button class="btn btn-primary btn-sm" onclick='editPrometheusRule(${JSON.stringify(rule)})'>Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick='deletePrometheusRule("${rule.name}", "${rule.group}", "${rule.file}")'>Delete</button>
+                    </div>` :
                     '<span style="color: #999; font-size: 11px;">No backend</span>';
 
                 tbody.innerHTML += `

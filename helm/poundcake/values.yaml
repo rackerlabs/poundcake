@@ -351,6 +351,69 @@ database:
   existingSecret: ""
   secretKey: "database-url"
 
+# MariaDB Operator integration
+# When enabled, PoundCake will create MariaDB resources using the mariadb-operator CRDs
+# Requires mariadb-operator to be installed: https://github.com/mariadb-operator/mariadb-operator
+mariadbOperator:
+  # Enable MariaDB Operator integration
+  # When true, the chart will check for the operator and create MariaDB CRDs
+  enabled: false
+
+  # Namespace to deploy MariaDB resources (defaults to release namespace)
+  namespace: ""
+
+  # MariaDB server configuration
+  server:
+    # Name of the MariaDB instance (defaults to release name)
+    name: ""
+    # MariaDB version
+    image:
+      repository: mariadb
+      tag: "11.4"
+      pullPolicy: IfNotPresent
+    # Root password (auto-generated if not provided)
+    rootPassword: ""
+    # Use existing secret for root password
+    rootPasswordSecret: ""
+    rootPasswordSecretKey: "password"
+    # Storage configuration
+    storage:
+      size: 10Gi
+      storageClassName: ""
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Number of replicas (1 for standalone, 3+ for Galera)
+    replicas: 1
+
+  # Database configuration
+  database:
+    # Database name to create
+    name: poundcake
+
+  # User configuration
+  user:
+    # Username to create
+    name: poundcake
+    # Password (auto-generated if not provided)
+    password: ""
+    # Use existing secret for user password
+    passwordSecret: ""
+    passwordSecretKey: "password"
+    # Max connections for this user
+    maxUserConnections: 20
+
+  # Grant configuration
+  grants:
+    # Privileges to grant (default: full access to the database)
+    privileges:
+      - "ALL PRIVILEGES"
+
 # Celery worker configuration for async task processing
 celery:
   # Enable Celery workers (required for async alert processing)

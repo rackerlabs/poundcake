@@ -1,0 +1,34 @@
+{{- if .Values.mariadbOperator.enabled }}
+{{- if .Capabilities.APIVersions.Has "k8s.mariadb.com/v1alpha1" }}
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: User
+metadata:
+  name: {{ include "poundcake.fullname" . }}-user
+  namespace: {{ include "poundcake.mariadbNamespace" . }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  # Reference to the MariaDB instance
+  mariaDbRef:
+    name: {{ include "poundcake.mariadbName" . }}
+    waitForIt: true
+
+  # Username
+  name: {{ include "poundcake.mariadbUsername" . }}
+
+  # Password from secret
+  passwordSecretKeyRef:
+    name: {{ include "poundcake.mariadbUserSecretName" . }}
+    key: {{ .Values.mariadbOperator.user.passwordSecretKey | default "password" }}
+
+  # Max connections for this user
+  maxUserConnections: {{ .Values.mariadbOperator.user.maxUserConnections | default 20 }}
+
+  # Host from which the user can connect (% = any host)
+  host: "%"
+
+  # Retry configuration
+  retryInterval: 5s
+{{- end }}
+{{- end }}
