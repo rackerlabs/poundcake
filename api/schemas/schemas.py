@@ -84,6 +84,16 @@ class AlertResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class HealthResponse(BaseModel):
+    """Health check response."""
+
+    status: str
+    version: str
+    database: str
+    stackstorm: str
+    timestamp: datetime
+
+
 class StatsResponse(BaseModel):
     """Statistics response."""
 
