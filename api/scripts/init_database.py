@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from api.core.database import Base, engine
 from api.models.models import (
     Recipe,
-    Oven,   # noqa: F401 - Required for Base.metadata.create_all()
+    Oven,  # noqa: F401 - Required for Base.metadata.create_all()
     Alert,  # noqa: F401 - Required for Base.metadata.create_all()
 )
 from api.core.logging import setup_logging, get_logger
