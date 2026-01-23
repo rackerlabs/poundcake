@@ -1,118 +1,85 @@
 # PoundCake
 
-An extensible auto-remediation framework that bridges Prometheus Alertmanager with StackStorm. PoundCake receives alerts from Alertmanager and automatically executes remediation actions through StackStorm.
+Auto-remediation framework that bridges Prometheus Alertmanager with StackStorm.
 
-## Features
+## Overview
 
-- **Webhook Receiver**: Receives alerts from Prometheus Alertmanager with unique request_id tracking
-- **Database Migrations**: Alembic-powered schema management for safe upgrades
-- **StackStorm Integration**: Executes remediation actions via StackStorm API
-- **Prometheus Rule Management**: Edit and manage Prometheus alert rules via CRDs and GitOps
-- **PromQL Query Builder**: Visual builder with Basic, Advanced, and Raw modes
-- **Management UI**: Web interface with Dashboard, Alert Status, Mappings, and more
-- **Database-Backed Mappings**: Alert-to-action mappings stored in MySQL/MariaDB
-- **Async Processing**: Background processing with FastAPI BackgroundTasks
-- **Authentication**: Optional session-based authentication with Kubernetes secret integration
-- **Command-Line Interface**: Powerful CLI (`pcake`) for managing alerts and rules
-- **Complete Audit Trail**: Track from alert to workflow to execution with request_id
-- **Prometheus Metrics**: Built-in metrics at `/metrics` endpoint
-- **Horizontal Scaling**: Stateless design for multi-instance deployments
-- **MariaDB Operator Integration**: Optional automatic database provisioning via mariadb-operator CRDs
+PoundCake receives alerts from Prometheus Alertmanager and automatically executes remediation workflows through StackStorm. It provides fast webhook response, complete audit trails, and stateless design for horizontal scaling.
 
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────────────────────────────┐     ┌─────────────┐
-│ Alertmanager│────▶│           PoundCake                 │────▶│  StackStorm │
-│             │     │  ┌─────────┐  ┌─────────┐           │     │     API     │
-└─────────────┘     │  │ FastAPI │  │  Celery │           │     └─────────────┘
-                    │  │  (API)  │  │ Workers │           │            │
-                    │  └────┬────┘  └────┬────┘           │            ▼
-                    │       │            │                │     ┌─────────────┐
-                    │  ┌────┴────┐       │                │     │   Target    │
-                    │  │   UI    │       │                │     │   Systems   │
-                    │  │ (nginx) │       │                │     └─────────────┘
-                    │  └─────────┘       │                │
-                    │       ▼            ▼                │
-                    │  ┌─────────┐  ┌─────────┐           │
-                    │  │  MySQL  │  │  Redis  │           │
-                    │  │MariaDB  │  │ (broker)│           │
-                    │  └─────────┘  └─────────┘           │
-                    └─────────────────────────────────────┘
+Alertmanager --> PoundCake API --> StackStorm --> Target Systems
+                      |
+                   Database
 ```
 
-### Containers
+### Components
 
-The application consists of separate containers, each built and published independently via GitHub workflows:
-
-| Container | Image | Description |
-|-----------|-------|-------------|
-| API | `ghcr.io/aedan/poundcake` | FastAPI backend |
-| UI | `ghcr.io/aedan/poundcake-ui` | Nginx-served frontend |
-| Celery | `ghcr.io/aedan/poundcake` | Background task workers (same image as API) |
+- **FastAPI Application**: Webhook receiver with background processing
+- **Database (MySQL/MariaDB)**: Stores recipes, alerts, and execution tracking
+- **StackStorm**: Executes remediation workflows
+- **Redis**: Required for StackStorm coordination
+- **RabbitMQ**: Required for StackStorm task distribution
 
 ## Quick Start
 
-### Prerequisites
-
-- Kubernetes cluster
-- Helm 3.x
-- StackStorm instance (can be deployed via Helm)
-- MySQL/MariaDB database (or use MariaDB Operator for auto-provisioning)
-- Redis (can be deployed with chart)
-
-### 1. Install StackStorm
-
-PoundCake requires a running StackStorm instance. Use the provided install script:
+### Docker Compose
 
 ```bash
-cd bin
-./install-stackstorm.sh
+# Clone repository
+git clone https://github.com/yourorg/poundcake.git
+cd poundcake
+
+# Start all services
+docker-compose up -d
+
+# Check health
+curl http://localhost:8000/api/v1/health
 ```
 
-### 2. Install PoundCake
+Services:
+- PoundCake API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+- RabbitMQ Management: http://localhost:15672 (stackstorm/stackstorm)
+
+### Kubernetes/Helm
 
 ```bash
-# Install from OCI registry
-helm install poundcake oci://ghcr.io/aedan/poundcake \
+# Add helm repository
+helm repo add poundcake https://yourorg.github.io/poundcake
+
+# Install with external StackStorm
+helm install poundcake poundcake/poundcake \
   --namespace poundcake \
   --create-namespace \
   --set database.url="mysql+pymysql://user:pass@mysql:3306/poundcake" \
-  --set stackstorm.url=http://stackstorm-st2api.stackstorm.svc.cluster.local:9101 \
-  --set stackstorm.apiKey=your-st2-api-key
+  --set stackstorm.url="http://st2api.stackstorm.svc:9101" \
+  --set stackstorm.apiKey="your-api-key"
 
-# Or install from local chart (for development)
-helm install poundcake ./helm/poundcake \
+# Or with embedded Redis and RabbitMQ
+helm install poundcake poundcake/poundcake \
   --namespace poundcake \
   --create-namespace \
-  --set database.url="mysql+pymysql://user:pass@mysql:3306/poundcake" \
-  --set stackstorm.apiKey=your-st2-api-key
-
-# Or use MariaDB Operator for automatic database provisioning
-helm install poundcake oci://ghcr.io/aedan/poundcake \
-  --namespace poundcake \
-  --create-namespace \
-  --set mariadbOperator.enabled=true \
-  --set stackstorm.apiKey=your-st2-api-key
+  --set stackstorm.redis.enabled=true \
+  --set stackstorm.rabbitmq.enabled=true \
+  --set database.url="mysql+pymysql://user:pass@mysql:3306/poundcake"
 ```
 
-### 3. Configure Alertmanager
+## Features
 
-Add PoundCake as a webhook receiver:
+- **Fast Response**: Webhook returns 202 immediately, processes in background
+- **Database Migrations**: Alembic-powered schema management for safe upgrades
+- **Complete Audit Trail**: Track alerts from webhook to execution via req_id
+- **Stateless Design**: No Redis/Celery dependency for PoundCake, scales horizontally
+- **Recipe Matching**: Flexible alert-to-workflow mapping with patterns and defaults
+- **Health Checks**: Built-in endpoints for Kubernetes liveness/readiness probes
+- **Prometheus Metrics**: Metrics endpoint at `/metrics`
+- **API Documentation**: Interactive docs at `/docs`
 
-```yaml
-receivers:
-  - name: poundcake
-    webhook_configs:
-      - url: http://poundcake.poundcake.svc.cluster.local:8080/api/v1/webhook
-        send_resolved: true
-```
+## Database Setup
 
-## Database Migrations
-
-PoundCake uses **Alembic** for database schema management. Migrations run automatically on application startup.
-
-### Quick Start
+PoundCake uses Alembic for database schema management.
 
 ```bash
 # Run migrations (creates all tables)
@@ -121,257 +88,315 @@ python scripts/migrate.py upgrade
 # Check current version
 python scripts/migrate.py current
 
-# View migration history
-python scripts/migrate.py history
+# Create new migration
+python scripts/migrate.py create "description"
 ```
 
-### Creating Migrations
+See [docs/DATABASE_MIGRATIONS.md](docs/DATABASE_MIGRATIONS.md) for details.
 
-When you modify models:
+## Configuration
+
+### Environment Variables
 
 ```bash
-# Auto-generate migration from model changes
-python scripts/migrate.py create "add priority column"
+# Database (required)
+DATABASE_URL=mysql+pymysql://user:pass@host:3306/dbname
 
-# Review generated migration
-cat alembic/versions/2026_01_23_*_add_priority_column.py
+# StackStorm (required)
+ST2_API_URL=http://st2api:9101/v1
+ST2_API_KEY=your-api-key
 
-# Apply migration
-python scripts/migrate.py upgrade
+# Application
+LOG_LEVEL=INFO
+DEBUG=false
 ```
 
-### Production Deployments
+### Creating Recipes
+
+Recipes map alerts to StackStorm workflows:
 
 ```bash
-# Backup database first
-mysqldump -u poundcake -p poundcake > backup.sql
-
-# Run migration
-python scripts/migrate.py upgrade
-
-# Verify
-python scripts/migrate.py current
-```
-
-See **DATABASE_MIGRATIONS.md** for complete documentation.
-
-## Database Schema
-
-PoundCake uses MySQL/MariaDB for persistent storage:
-
-### poundcake_api_calls
-Tracks all webhook requests with unique request_id
-```sql
-id, request_id (unique), method, path, headers, body,
-status_code, created_at, completed_at
-```
-
-### poundcake_alerts
-Stores Alertmanager alert data
-```sql
-id, api_call_id, fingerprint, alert_name, severity,
-instance, labels, annotations, processing_status, created_at
-```
-
-### poundcake_st2_execution_link
-Links PoundCake requests to StackStorm executions
-```sql
-id, request_id, alert_id, st2_execution_id,
-st2_rule_ref, st2_action_ref, created_at
-```
-
-### poundcake_mappings
-Database-backed alert-to-action mappings
-```sql
-id, alert_name, handler, config (JSON), description,
-enabled, created_at, updated_at
+# Create recipe
+curl -X POST http://localhost:8000/api/recipes/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "HostDown",
+    "description": "Remediate host down alerts",
+    "st2_workflow_ref": "remediation.host_down_workflow"
+  }'
 ```
 
 ## API Endpoints
 
 ### Core Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/webhook` | POST | Receive Alertmanager webhooks |
-| `/api/v1/status/{request_id}` | GET | Get status including ST2 executions |
-| `/api/v1/alerts` | GET | List alerts |
-| `/api/v1/health` | GET | Health check |
-| `/api/v1/ready` | GET | Readiness check |
+- `POST /api/v1/webhook` - Receive Alertmanager webhooks
+- `GET /api/v1/alerts` - Query alerts with filters
+- `POST /api/v1/alerts/process` - Execute recipes for alerts
+- `GET /api/v1/executions/{req_id}` - Get execution history
 
-### Mappings API
+### Recipe Management
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/mappings` | GET | List all mappings |
-| `/api/mappings/{alert_name}` | GET | Get specific mapping |
-| `/api/mappings` | POST | Create mapping |
-| `/api/mappings/{alert_name}` | PUT | Update mapping |
-| `/api/mappings/{alert_name}` | DELETE | Delete mapping |
-| `/api/mappings/export` | GET | Export mappings as YAML |
-| `/api/mappings/import` | POST | Import mappings from YAML |
+- `POST /api/recipes/` - Create recipe
+- `GET /api/recipes/` - List recipes
+- `GET /api/recipes/{id}` - Get recipe by ID
+- `PUT /api/recipes/{id}` - Update recipe
+- `DELETE /api/recipes/{id}` - Delete recipe
 
-### StackStorm API
+### Health & Stats
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/stackstorm/packs` | GET | List available packs |
-| `/api/stackstorm/actions` | GET | List actions |
-| `/api/stackstorm/actions/{ref}` | GET | Get action details |
-| `/api/stackstorm/executions` | GET | List executions |
+- `GET /api/v1/health` - Health check
+- `GET /api/v1/health/ready` - Kubernetes readiness
+- `GET /api/v1/health/live` - Kubernetes liveness
+- `GET /api/v1/stats` - System statistics
+- `GET /metrics` - Prometheus metrics
 
-### Prometheus API
+See [docs/API_ENDPOINTS.md](docs/API_ENDPOINTS.md) for complete API documentation.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/prometheus/rules` | GET | List alert rules |
-| `/api/prometheus/metrics` | GET | List available metrics |
-| `/api/prometheus/labels` | GET | List label names |
-| `/api/prometheus/label-values/{name}` | GET | List label values |
-| `/api/prometheus/health` | GET | Prometheus health check |
+## Workflow
 
-### Legacy Endpoints (UI Compatibility)
+### 1. Alert Reception
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/alerts` | GET | List alerts (UI format) |
-| `/alerts/stats` | GET | Alert statistics |
-| `/alerts/{fingerprint}` | GET | Alert details |
-| `/remediations` | GET | Remediation history |
-| `/health` | GET | Health check |
-| `/ready` | GET | Readiness check |
-| `/metrics` | GET | Prometheus metrics |
-
-## Management UI
-
-The web UI is deployed as a separate container (`ghcr.io/aedan/poundcake-ui`) and communicates with the API service.
-
-### UI Tabs
-
-1. **Dashboard** - System status, health indicators, recent activity
-2. **Alert Status** - Real-time alert tracking with filtering
-3. **Prometheus Rules** - View/edit rules with PromQL Query Builder
-4. **Mappings** - Create and edit alert-to-action mappings
-5. **StackStorm Actions** - Browse available actions by pack
-6. **Execution History** - View past remediations
-7. **Health** - Component health checks
-
-### Accessing the UI
-
-```bash
-# Port forward the UI service
-kubectl port-forward svc/poundcake-ui 8080:80 -n poundcake
-
-# Open in browser
-open http://localhost:8080
+```
+Alertmanager sends webhook
+    |
+PreHeatMiddleware generates req_id
+    |
+Return 202 Accepted immediately (under 10ms)
+    |
+Background task processes alert
 ```
 
-The UI connects to the API service automatically within the cluster.
+### 2. Alert Processing
 
-## Command-Line Interface (CLI)
-
-```bash
-# Configure API endpoint
-export POUNDCAKE_URL=http://poundcake.example.com:8080
-
-# List alerts
-pcake alerts list
-pcake alerts list --status remediating
-
-# Watch alerts in real-time
-pcake alerts watch --watch
-
-# Manage Prometheus rules
-pcake rules list
-pcake rules create my-alerts app-alerts HighMemory \
-  --expr 'memory_usage > 90' \
-  --for 5m \
-  --severity critical
-
-# Output formats
-pcake --format json alerts list
-pcake --format yaml rules get my-alerts app-alerts HighMemory
+```
+POST /api/v1/alerts/process
+    |
+Query alerts WHERE processing_status = "new"
+    |
+For each alert:
+  - Match to recipe (exact, pattern, or default)
+  - Create oven (execution tracking)
+  - Call StackStorm API
+  - Store execution ID
 ```
 
-## Configuration
+### 3. Execution Tracking
 
-### Environment Variables
+```sql
+-- Get complete audit trail
+SELECT * FROM poundcake_alerts 
+WHERE req_id = 'abc-123';
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `POUNDCAKE_DATABASE_URL` | MySQL connection URL | Required |
-| `POUNDCAKE_CELERY_BROKER_URL` | Redis broker URL | `redis://localhost:6379/0` |
-| `POUNDCAKE_STACKSTORM_URL` | StackStorm API URL | Required |
-| `POUNDCAKE_STACKSTORM_API_KEY` | StackStorm API key | Required |
-| `POUNDCAKE_PROMETHEUS_URL` | Prometheus API URL | `http://localhost:9090` |
-| `POUNDCAKE_AUTH_ENABLED` | Enable authentication | `false` |
-| `POUNDCAKE_METRICS_ENABLED` | Enable /metrics endpoint | `true` |
-| `POUNDCAKE_LOG_LEVEL` | Logging level | `INFO` |
-
-### Helm Values
-
-See [helm/poundcake/values.yaml](helm/poundcake/values.yaml) for all configuration options.
-
-Key sections:
-- `database` - MySQL/MariaDB connection settings
-- `redis` - Redis for Celery broker
-- `stackstorm` - StackStorm connection and authentication
-- `prometheus` - Prometheus integration and CRD settings
-- `auth` - Authentication configuration
-- `git` - GitOps integration for rule management
-
-## Horizontal Scaling
-
-For production deployments with multiple replicas:
-
-```bash
-helm install poundcake oci://ghcr.io/aedan/poundcake \
-  --namespace poundcake \
-  --create-namespace \
-  --set replicaCount=3 \
-  --set redis.enabled=true \
-  --set redis.password=my-redis-password \
-  --set database.url="mysql+pymysql://user:pass@mysql:3306/poundcake"
+SELECT * FROM poundcake_ovens 
+WHERE req_id = 'abc-123';
 ```
 
-## Authentication
-
-Enable authentication to protect the UI and API:
+## Testing
 
 ```bash
-helm install poundcake oci://ghcr.io/aedan/poundcake \
-  --set auth.enabled=true
+# Run tests
+pytest tests/
 
-# Retrieve the generated admin password
-kubectl get secret poundcake-admin -n poundcake \
-  -o jsonpath='{.data.password}' | base64 -d && echo
+# Test specific file
+pytest tests/test_api.py
+
+# With coverage
+pytest --cov=api tests/
 ```
 
 ## Documentation
 
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete architecture guide
-- **[STACKSTORM_INTEGRATION.md](docs/STACKSTORM_INTEGRATION.md)** - ST2 integration details
-- **[INSTALL.md](docs/INSTALL.md)** - Detailed installation guide
-- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues
-- **[SAMPLE_PAYLOADS.md](docs/SAMPLE_PAYLOADS.md)** - Example webhooks
+- [API Endpoints](docs/API_ENDPOINTS.md) - Complete API reference
+- [Architecture](docs/ARCHITECTURE.md) - System design and data flow
+- [Database Migrations](docs/DATABASE_MIGRATIONS.md) - Alembic migration guide
+- [Alembic Quick Reference](docs/ALEMBIC_QUICKREF.md) - Common migration commands
+- [CLI Documentation](docs/CLI.md) - Command-line interface
+- [StackStorm Integration](docs/STACKSTORM_INTEGRATION.md) - Integration details
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
-## Prometheus Metrics
+## Development
 
-Available at `/metrics`:
+### Local Setup
 
-- `poundcake_alerts_received_total` - Total alerts received
-- `poundcake_alerts_processed_total` - Total alerts processed
-- `poundcake_remediations_executed_total` - Total remediations executed
-- `poundcake_remediation_duration_seconds` - Remediation duration histogram
-- `poundcake_st2_executions_total` - StackStorm executions
-- `poundcake_http_requests_total` - HTTP request counts
-- `poundcake_active_tasks` - Currently processing tasks
+```bash
+# Install dependencies
+pip install -e ".[dev]"
+
+# Run migrations
+python scripts/migrate.py upgrade
+
+# Start development server
+uvicorn api.main:app --reload
+
+# Run tests
+pytest
+```
+
+### Project Structure
+
+```
+poundcake/
+├── api/                    # Application code
+│   ├── api/               # Route handlers
+│   ├── core/              # Core functionality (config, database, logging)
+│   ├── models/            # SQLAlchemy models
+│   ├── schemas/           # Pydantic schemas
+│   └── services/          # Business logic
+├── alembic/               # Database migrations
+│   └── versions/          # Migration scripts
+├── docs/                  # Documentation
+├── helm/                  # Helm chart
+│   └── poundcake/
+├── scripts/               # Management scripts
+├── tests/                 # Test files
+├── docker-compose.yml     # Docker Compose configuration
+├── Dockerfile             # Container image
+└── README.md
+```
+
+## Requirements
+
+### Runtime Requirements
+
+- Python 3.11+
+- MySQL/MariaDB 10.11+
+- StackStorm (with Redis and RabbitMQ)
+
+### StackStorm Requirements
+
+StackStorm requires:
+- Redis for coordination and locking
+- RabbitMQ for task distribution
+- MySQL/MariaDB for data storage
+
+## Configuration Examples
+
+### Alertmanager Configuration
+
+```yaml
+receivers:
+  - name: poundcake
+    webhook_configs:
+      - url: http://poundcake.poundcake.svc:8000/api/v1/webhook
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+
+route:
+  receiver: poundcake
+  group_by: ['alertname', 'instance']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+```
+
+### StackStorm Workflow Example
+
+```yaml
+# packs/remediation/actions/workflows/host_down.yaml
+version: 1.0
+
+description: Remediate host down alerts
+
+input:
+  - alert_name
+  - instance
+  - req_id
+
+tasks:
+  check_host:
+    action: core.remote
+    input:
+      hosts: <% ctx().instance %>
+      cmd: "ping -c 3 <% ctx().instance %>"
+    next:
+      - when: <% succeeded() %>
+        do: log_success
+      - when: <% failed() %>
+        do: restart_services
+
+  restart_services:
+    action: core.remote
+    input:
+      hosts: <% ctx().instance %>
+      cmd: "systemctl restart myservice"
+    next:
+      - do: log_complete
+
+  log_success:
+    action: core.local
+    input:
+      cmd: "echo 'Host is up'"
+
+  log_complete:
+    action: core.local
+    input:
+      cmd: "echo 'Remediation complete'"
+```
+
+## Upgrading
+
+### Database Schema Upgrades
+
+```bash
+# Backup database first
+mysqldump -u poundcake -p poundcake > backup.sql
+
+# Test on staging
+python scripts/migrate.py upgrade
+
+# Apply to production
+python scripts/migrate.py upgrade
+```
+
+### Application Upgrades
+
+```bash
+# Docker Compose
+docker-compose pull
+docker-compose up -d
+
+# Kubernetes
+helm upgrade poundcake poundcake/poundcake --version <new-version>
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue**: Webhook returns 500 error
+**Solution**: Check database connectivity and StackStorm API availability
+
+**Issue**: Alerts not processing
+**Solution**: Call `POST /api/v1/alerts/process` or check processing_status
+
+**Issue**: StackStorm executions failing
+**Solution**: Verify Redis and RabbitMQ are running and accessible
+
+**Issue**: Database connection errors
+**Solution**: Check DATABASE_URL and network connectivity
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more solutions.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `pytest`
+5. Submit a pull request
 
 ## License
 
-MIT
+[Your License Here]
 
 ## Support
 
-- GitHub: https://github.com/aedan/poundcake
-- Documentation: See `docs/` directory
+- Issues: https://github.com/yourorg/poundcake/issues
+- Documentation: https://github.com/yourorg/poundcake/tree/main/docs
+
+---
+
+**Version:** 0.0.1
+**Last Updated:** January 23, 2026
