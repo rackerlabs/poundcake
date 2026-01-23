@@ -67,44 +67,30 @@ class AlertResponse(BaseModel):
     """Response for alert queries."""
 
     id: int
+    req_id: str
     fingerprint: str
-    status: str
+    alert_status: str          # firing or resolved (from Alertmanager)
+    processing_status: str     # new, processing, complete, failed (internal)
     alert_name: str
     severity: Optional[str]
     instance: Optional[str]
+    prometheus: Optional[str]
     labels: Dict[str, Any]
-    processing_status: str
-    task_id: Optional[str]
+    counter: int
+    ticket_number: Optional[str]
     created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class TaskStatusResponse(BaseModel):
-    """Response for task status queries."""
-
-    task_id: str
-    status: str
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-
-
-class HealthResponse(BaseModel):
-    """Health check response."""
-
-    status: str
-    version: str
-    database: str
-    redis: str
-    celery: str
-    timestamp: datetime
 
 
 class StatsResponse(BaseModel):
     """Statistics response."""
 
-    total_api_calls: int
     total_alerts: int
-    alerts_by_status: Dict[str, int]
-    alerts_by_processing_status: Dict[str, int]
+    total_recipes: int
+    total_executions: int
+    alerts_by_processing_status: Dict[str, int]  # new, processing, complete, failed
+    alerts_by_alert_status: Dict[str, int]       # firing, resolved
+    executions_by_status: Dict[str, int]         # new, processing, complete
     recent_alerts: int

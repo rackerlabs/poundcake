@@ -10,9 +10,9 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from api.core.config import settings
 from api.core.metrics import init_app_info
 from api.core.logging import setup_logging, get_logger
-from api.core.middleware import RequestIDMiddleware
+from api.core.middleware import PreHeatMiddleware
 from api.core.database import init_db
-from api.api import routes, health, mappings, stackstorm, prometheus
+from api.api import routes, health, recipes, stackstorm, prometheus
 from api.api.auth import (
     create_session,
     destroy_session,
@@ -69,13 +69,13 @@ app.add_middleware(
     allow_headers=settings.cors_allow_headers,
 )
 
-# Add Request ID middleware
-app.add_middleware(RequestIDMiddleware)
+# Add Request ID middleware (pre_heat function)
+app.add_middleware(PreHeatMiddleware)
 
 # Include API routers
 app.include_router(routes.router, prefix="/api/v1", tags=["alerts"])
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
-app.include_router(mappings.router, tags=["mappings"])
+app.include_router(recipes.router, tags=["recipes"])
 app.include_router(stackstorm.router, tags=["stackstorm"])
 app.include_router(prometheus.router, tags=["prometheus"])
 

@@ -28,20 +28,6 @@ services:
     networks:
       - poundcake
 
-  # Redis - Celery broker for PoundCake
-  redis:
-    image: redis:7-alpine
-    container_name: poundcake-redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - poundcake
-
   # RabbitMQ - Message broker for StackStorm
   rabbitmq:
     image: rabbitmq:3.12-management
@@ -272,10 +258,10 @@ services:
     command: /opt/stackstorm/st2/bin/st2notifier --config-file=/etc/st2/st2.conf
 
   # ============================================================================
-  # POUNDCAKE SERVICES
+  # POUNDCAKE SERVICE
   # ============================================================================
 
-  # PoundCake API - FastAPI application
+  # PoundCake API - FastAPI application (NO CELERY, NO REDIS!)
   api:
     build:
       context: .
@@ -284,10 +270,6 @@ services:
     environment:
       # Database
       DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
-      
-      # Celery
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
       
       # StackStorm (containerized!)
       ST2_API_URL: http://st2api:9101/v1
@@ -300,8 +282,6 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       st2api:
         condition: service_started
     volumes:
@@ -310,58 +290,6 @@ services:
     networks:
       - poundcake
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-
-  # Celery Worker - Processes alerts and triggers StackStorm
-  celery:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: poundcake-celery
-    environment:
-      # Database
-      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
-
-      # Celery
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
-
-      # StackStorm (containerized!)
-      ST2_API_URL: http://st2api:9101/v1
-      ST2_API_KEY: ${ST2_API_KEY:-}
-
-      # Worker settings
-      LOG_LEVEL: INFO
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      st2api:
-        condition: service_started
-    volumes:
-      - ./api:/app/api
-      - ./logs:/app/logs
-    networks:
-      - poundcake
-    command: celery -A api.tasks.tasks worker --loglevel=info --concurrency=4
-
-  # Flower - Celery monitoring UI
-  flower:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: poundcake-flower
-    environment:
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
-    ports:
-      - "5555:5555"
-    depends_on:
-      - redis
-      - celery
-    networks:
-      - poundcake
-    command: celery -A api.tasks.tasks flower --port=5555
 
 volumes:
   mariadb_data:
@@ -378,15 +306,14 @@ networks:
     driver: bridge
 
 # ============================================================================
-# CONTAINERIZED STACKSTORM + POUNDCAKE
+# REFACTORED POUNDCAKE v2.0 - NO REDIS/CELERY!
 # ============================================================================
 #
-# This complete stack includes:
+# This refactored stack includes:
 #
 # INFRASTRUCTURE:
 #   ✓ MariaDB (shared by PoundCake and StackStorm)
-#   ✓ Redis (Celery broker)
-#   ✓ RabbitMQ (StackStorm message queue)
+#   ✓ RabbitMQ (StackStorm message queue ONLY)
 #
 # STACKSTORM (Containerized):
 #   ✓ st2api (REST API) → :9101
@@ -397,10 +324,17 @@ networks:
 #   ✓ st2scheduler (Scheduled tasks)
 #   ✓ st2notifier (Notifications)
 #
-# POUNDCAKE:
+# POUNDCAKE v2.0:
 #   ✓ api (FastAPI webhook receiver) → :8000
-#   ✓ celery (Background workers)
-#   ✓ flower (Celery monitoring) → :5555
+#   ✗ NO Redis
+#   ✗ NO Celery workers
+#   ✗ NO Flower monitoring
+#
+# KEY CHANGES:
+#   • Synchronous alert processing (no Celery)
+#   • Recipe/Oven/Alert database schema
+#   • pre_heat middleware for req_id injection
+#   • Direct StackStorm API calls
 #
 # NETWORK:
 #   • All services on same Docker network
@@ -411,9 +345,8 @@ networks:
 #   docker-compose up -d
 #
 # MANAGEMENT:
-#   • ST2 Web UI: http://localhost:9101 (when configured)
 #   • RabbitMQ UI: http://localhost:15672 (stackstorm/stackstorm)
-#   • Flower UI: http://localhost:5555
 #   • PoundCake API: http://localhost:8000
+#   • PoundCake Docs: http://localhost:8000/docs
 #
 # ============================================================================

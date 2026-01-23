@@ -5,17 +5,18 @@ An extensible auto-remediation framework that bridges Prometheus Alertmanager wi
 ## Features
 
 - **Webhook Receiver**: Receives alerts from Prometheus Alertmanager with unique request_id tracking
+- **Database Migrations**: Alembic-powered schema management for safe upgrades
 - **StackStorm Integration**: Executes remediation actions via StackStorm API
 - **Prometheus Rule Management**: Edit and manage Prometheus alert rules via CRDs and GitOps
 - **PromQL Query Builder**: Visual builder with Basic, Advanced, and Raw modes
 - **Management UI**: Web interface with Dashboard, Alert Status, Mappings, and more
 - **Database-Backed Mappings**: Alert-to-action mappings stored in MySQL/MariaDB
-- **Async Processing**: Celery + Redis for background task processing
+- **Async Processing**: Background processing with FastAPI BackgroundTasks
 - **Authentication**: Optional session-based authentication with Kubernetes secret integration
 - **Command-Line Interface**: Powerful CLI (`pcake`) for managing alerts and rules
 - **Complete Audit Trail**: Track from alert to workflow to execution with request_id
 - **Prometheus Metrics**: Built-in metrics at `/metrics` endpoint
-- **Horizontal Scaling**: Distributed locking with Redis for multi-instance deployments
+- **Horizontal Scaling**: Stateless design for multi-instance deployments
 - **MariaDB Operator Integration**: Optional automatic database provisioning via mariadb-operator CRDs
 
 ## Architecture
@@ -106,6 +107,53 @@ receivers:
       - url: http://poundcake.poundcake.svc.cluster.local:8080/api/v1/webhook
         send_resolved: true
 ```
+
+## Database Migrations
+
+PoundCake uses **Alembic** for database schema management. Migrations run automatically on application startup.
+
+### Quick Start
+
+```bash
+# Run migrations (creates all tables)
+python scripts/migrate.py upgrade
+
+# Check current version
+python scripts/migrate.py current
+
+# View migration history
+python scripts/migrate.py history
+```
+
+### Creating Migrations
+
+When you modify models:
+
+```bash
+# Auto-generate migration from model changes
+python scripts/migrate.py create "add priority column"
+
+# Review generated migration
+cat alembic/versions/2026_01_23_*_add_priority_column.py
+
+# Apply migration
+python scripts/migrate.py upgrade
+```
+
+### Production Deployments
+
+```bash
+# Backup database first
+mysqldump -u poundcake -p poundcake > backup.sql
+
+# Run migration
+python scripts/migrate.py upgrade
+
+# Verify
+python scripts/migrate.py current
+```
+
+See **DATABASE_MIGRATIONS.md** for complete documentation.
 
 ## Database Schema
 
