@@ -1,6 +1,5 @@
 """Tests for the PoundCake API."""
 
-import pytest
 from fastapi.testclient import TestClient
 from api.main import app
 

@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.core.database import Base, engine
-from api.models.models import Recipe, Oven, Alert
+from api.models.models import Recipe, Oven, Alert  # noqa: F401 - Required for Base.metadata.create_all()
 from api.core.logging import setup_logging, get_logger
 
 setup_logging()

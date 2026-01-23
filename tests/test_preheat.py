@@ -80,7 +80,7 @@ def test_preheat_case_1_new_alert(base_url):
     alerts = response.json()
     if alerts:
         alert = alerts[0]
-        print(f"✓ Alert created:")
+        print("✓ Alert created:")
         print(f"  - ID: {alert['id']}")
         print(f"  - Counter: {alert['counter']}")
         print(f"  - Alert Status: {alert['alert_status']}")
@@ -191,7 +191,7 @@ def test_preheat_case_3_completed_alert_fires_again(base_url):
     # Should have 2 alerts now (if first was completed)
     if len(alerts) > 1:
         new_alert = sorted(alerts, key=lambda x: x['created_at'])[-1]
-        print(f"New occurrence created:")
+        print("New occurrence created:")
         print(f"  - ID: {new_alert['id']} (different from {initial_id})")
         print(f"  - Counter: {new_alert['counter']} (incremented from {initial_counter})")
         print(f"  - Processing Status: {new_alert['processing_status']}")

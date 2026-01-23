@@ -8,7 +8,7 @@ from sqlalchemy import desc
 from api.core.database import get_db
 from api.core.middleware import get_req_id
 from api.core.logging import get_logger
-from api.models.models import Alert, Recipe, Oven
+from api.models.models import Alert, Oven
 from api.schemas.schemas import (
     AlertmanagerWebhook,
     WebhookResponse,

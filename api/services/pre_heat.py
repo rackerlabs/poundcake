@@ -54,7 +54,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
             # Case 1: No existing alert → Insert as new
             if not existing_alert:
                 logger.info(
-                    f"Pre-heat: No existing alert, creating new",
+                    "Pre-heat: No existing alert, creating new",
                     extra={"req_id": req_id, "fingerprint": alert_data.fingerprint}
                 )
                 
@@ -92,7 +92,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
             # → Insert as NEW alert (new occurrence of a completed alert)
             elif existing_alert.processing_status == "complete" and webhook_status == "firing":
                 logger.info(
-                    f"Pre-heat: Completed alert fired again, creating new occurrence",
+                    "Pre-heat: Completed alert fired again, creating new occurrence",
                     extra={
                         "req_id": req_id,
                         "fingerprint": alert_data.fingerprint,
@@ -135,7 +135,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
             # → Update counter
             elif existing_alert.processing_status != "complete" and webhook_status == "firing":
                 logger.info(
-                    f"Pre-heat: Alert still processing, updating counter",
+                    "Pre-heat: Alert still processing, updating counter",
                     extra={
                         "req_id": req_id,
                         "fingerprint": alert_data.fingerprint,
@@ -158,7 +158,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
             # → Update alert_status to "resolved"
             elif existing_alert.processing_status != "complete" and webhook_status == "resolved":
                 logger.info(
-                    f"Pre-heat: Alert resolved, updating alert_status",
+                    "Pre-heat: Alert resolved, updating alert_status",
                     extra={
                         "req_id": req_id,
                         "fingerprint": alert_data.fingerprint,
@@ -174,7 +174,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
                 processed_alerts.append(existing_alert)
                 
                 logger.info(
-                    f"Pre-heat: Updated alert_status to resolved",
+                    "Pre-heat: Updated alert_status to resolved",
                     extra={"req_id": req_id, "fingerprint": alert_data.fingerprint}
                 )
             
@@ -182,7 +182,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
             # → No action (alert already complete and now resolved)
             else:
                 logger.info(
-                    f"Pre-heat: Alert complete and resolved, no action",
+                    "Pre-heat: Alert complete and resolved, no action",
                     extra={
                         "req_id": req_id,
                         "fingerprint": alert_data.fingerprint,
