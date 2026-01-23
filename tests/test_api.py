@@ -1,5 +1,6 @@
 """Tests for the PoundCake API."""
 
+import pytest
 from fastapi.testclient import TestClient
 from api.main import app
 
@@ -68,16 +69,8 @@ def test_request_id_generation():
     assert len(data["request_id"]) > 0
 
 
-def test_stats_endpoint():
-    """Test statistics endpoint."""
-    response = client.get("/api/v1/stats")
-    assert response.status_code == 200
-    data = response.json()
-    assert "total_alerts" in data
-    assert "total_recipes" in data
-    assert "total_executions" in data
+# Integration tests requiring database are in tests/test_preheat.py
+# These tests are run with a test database fixture
 
-
-# Note: Full integration tests require database setup
-# These are basic smoke tests to verify the API structure
+# Note: These are basic smoke tests to verify the API structure
 

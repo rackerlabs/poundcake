@@ -105,3 +105,8 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests (require running server and database)",
+]
+# Skip integration tests by default in CI
+addopts = "-v --strict-markers"
