@@ -22,8 +22,8 @@ router = APIRouter()
 
 @router.post("/webhook", response_model=WebhookResponse, status_code=202)
 async def receive_alertmanager_webhook(
-    webhook: AlertmanagerWebhook, 
-    request: Request, 
+    webhook: AlertmanagerWebhook,
+    request: Request,
     background_tasks: BackgroundTasks,
 ) -> WebhookResponse:
     """
@@ -34,7 +34,7 @@ async def receive_alertmanager_webhook(
     2. PreHeatMiddleware generates req_id
     3. PoundCake responds with 202 and req_id
     4. Payload is dispatched to pre_heat for background processing
-    
+
     Note: This endpoint does NOT trigger recipe execution.
     Use POST /api/v1/alerts/process to trigger processing.
     """
@@ -70,24 +70,23 @@ async def receive_alertmanager_webhook(
 
 def _process_webhook_background(webhook: AlertmanagerWebhook, req_id: str):
     """Background task to process webhook after 202 response is sent.
-    
+
     This function creates its own database session to avoid issues with
     the request-scoped session being closed.
     """
     from api.core.database import SessionLocal
-    
+
     db = SessionLocal()
     try:
         pre_heat(webhook, req_id, db)
         logger.info(
-            f"Background processing complete for req_id: {req_id}",
-            extra={"req_id": req_id}
+            f"Background processing complete for req_id: {req_id}", extra={"req_id": req_id}
         )
     except Exception as e:
         logger.error(
             f"Background processing failed for req_id {req_id}: {e}",
             exc_info=True,
-            extra={"req_id": req_id}
+            extra={"req_id": req_id},
         )
     finally:
         db.close()
@@ -106,12 +105,12 @@ def get_alerts(
     db: Session = Depends(get_db),
 ) -> List[AlertResponse]:
     """Get alerts with optional filtering.
-    
+
     This consolidated endpoint replaces:
     - GET /alerts/{req_id}
     - GET /alerts/{fingerprint}
     - GET /alerts/{name}
-    
+
     Use query parameters to filter results.
     """
 
@@ -148,23 +147,23 @@ async def process_alerts(
     db: Session = Depends(get_db),
 ) -> dict:
     """Process alerts by executing their recipes.
-    
+
     This endpoint:
     1. Queries alerts based on filters
     2. Determines appropriate recipe for each alert
     3. Creates ovens and executes recipes (using alert's original req_id)
     4. Returns 202 Accepted
-    
-    Note: This endpoint does NOT generate a new req_id. It uses the req_id 
+
+    Note: This endpoint does NOT generate a new req_id. It uses the req_id
     from each alert (which was set when the webhook was received).
-    
+
     Args:
         fingerprints: Optional list of specific alert fingerprints to process
         processing_status: Process alerts with this status (default: "new")
     """
     # Build query
     query = db.query(Alert)
-    
+
     if fingerprints:
         query = query.filter(Alert.fingerprint.in_(fingerprints))
     elif processing_status:
@@ -172,34 +171,31 @@ async def process_alerts(
     else:
         # Default to processing only "new" alerts
         query = query.filter(Alert.processing_status == "new")
-    
+
     alerts = query.all()
-    
+
     if not alerts:
-        return {
-            "status": "no_alerts",
-            "message": "No alerts found matching criteria"
-        }
-    
+        return {"status": "no_alerts", "message": "No alerts found matching criteria"}
+
     processed_count = 0
     execution_ids = []
     processed_req_ids = set()  # Track unique req_ids processed
-    
+
     for alert in alerts:
         try:
             # Use the req_id from the alert (set during webhook ingestion)
             alert_req_id = alert.req_id
             processed_req_ids.add(alert_req_id)
-            
+
             # Determine recipe
             recipe = determine_recipe(alert.alert_name, db)
             if not recipe:
                 logger.warning(
                     f"No recipe found for alert: {alert.alert_name}",
-                    extra={"req_id": alert_req_id, "fingerprint": alert.fingerprint}
+                    extra={"req_id": alert_req_id, "fingerprint": alert.fingerprint},
                 )
                 continue
-            
+
             # Create oven (using alert's req_id)
             oven = Oven(
                 req_id=alert_req_id,  # Use alert's original req_id
@@ -210,63 +206,61 @@ async def process_alerts(
             db.add(oven)
             db.commit()
             db.refresh(oven)
-            
+
             # Execute recipe (using alert's req_id)
             success = execute_recipe(oven, recipe, alert, alert_req_id, db)
-            
+
             if success:
                 alert.processing_status = "processing"
                 db.commit()
                 processed_count += 1
                 if oven.action_id:
                     execution_ids.append(oven.action_id)
-        
+
         except Exception as e:
             logger.error(
                 f"Error processing alert {alert.fingerprint}: {e}",
                 exc_info=True,
-                extra={"req_id": alert.req_id}
+                extra={"req_id": alert.req_id},
             )
             continue
-    
+
     return {
         "status": "accepted",
         "req_ids": list(processed_req_ids),  # Return the alert req_ids, not a new one
         "alerts_processed": processed_count,
         "execution_ids": execution_ids,
-        "message": f"Processed {processed_count} of {len(alerts)} alerts"
+        "message": f"Processed {processed_count} of {len(alerts)} alerts",
     }
 
 
 @router.get("/executions/{req_id}")
 def get_executions_by_request(req_id: str, db: Session = Depends(get_db)):
     """Get all executions (ovens) for a specific request ID.
-    
+
     This provides a complete audit trail of all recipe executions
     that were triggered by a specific webhook request.
     """
     ovens = db.query(Oven).filter(Oven.req_id == req_id).all()
-    
+
     if not ovens:
         raise HTTPException(status_code=404, detail="No executions found for this request ID")
-    
+
     results = []
     for oven in ovens:
-        results.append({
-            "oven_id": oven.id,
-            "req_id": oven.req_id,
-            "status": oven.status,
-            "recipe_name": oven.recipe.name if oven.recipe else None,
-            "st2_workflow": oven.recipe.st2_workflow_ref if oven.recipe else None,
-            "st2_execution_id": oven.action_id,
-            "alert_name": oven.alert.alert_name if oven.alert else None,
-            "started_at": oven.started_at,
-            "ended_at": oven.ended_at,
-            "action_result": oven.action_result,
-        })
-    
-    return {
-        "req_id": req_id,
-        "total_executions": len(results),
-        "executions": results
-    }
+        results.append(
+            {
+                "oven_id": oven.id,
+                "req_id": oven.req_id,
+                "status": oven.status,
+                "recipe_name": oven.recipe.name if oven.recipe else None,
+                "st2_workflow": oven.recipe.st2_workflow_ref if oven.recipe else None,
+                "st2_execution_id": oven.action_id,
+                "alert_name": oven.alert.alert_name if oven.alert else None,
+                "started_at": oven.started_at,
+                "ended_at": oven.ended_at,
+                "action_result": oven.action_result,
+            }
+        )
+
+    return {"req_id": req_id, "total_executions": len(results), "executions": results}

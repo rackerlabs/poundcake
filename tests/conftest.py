@@ -7,7 +7,7 @@ import os
 @pytest.fixture
 def base_url():
     """Provide base URL for integration tests.
-    
+
     Integration tests are skipped unless POUNDCAKE_TEST_URL is set.
     """
     url = os.getenv("POUNDCAKE_TEST_URL")

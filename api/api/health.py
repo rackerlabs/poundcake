@@ -39,7 +39,7 @@ def health_check(db: Session = Depends(get_db)) -> HealthResponse:
         response = requests.get(
             f"{st2_api_url}/actions",
             timeout=5,
-            headers={"St2-Api-Key": os.getenv("ST2_API_KEY", "")}
+            headers={"St2-Api-Key": os.getenv("ST2_API_KEY", "")},
         )
         if response.status_code == 200:
             st2_status = "healthy"
@@ -69,15 +69,15 @@ def readiness_check(db: Session = Depends(get_db)) -> Dict[str, Any]:
     try:
         # Check if database is ready
         db.execute(text("SELECT 1"))
-        
+
         # Check if StackStorm is ready
         st2_api_url = os.getenv("ST2_API_URL", "http://localhost:9101/v1")
         response = requests.get(
             f"{st2_api_url}/actions",
             timeout=5,
-            headers={"St2-Api-Key": os.getenv("ST2_API_KEY", "")}
+            headers={"St2-Api-Key": os.getenv("ST2_API_KEY", "")},
         )
-        
+
         if response.status_code != 200:
             return {"status": "not_ready", "error": "StackStorm API not ready"}
 
@@ -110,9 +110,7 @@ def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
 
     # Alerts by alert status (firing/resolved)
     alerts_by_alert_status = dict(
-        db.query(Alert.alert_status, func.count(Alert.id))
-        .group_by(Alert.alert_status)
-        .all()
+        db.query(Alert.alert_status, func.count(Alert.id)).group_by(Alert.alert_status).all()
     )
 
     # Executions by status

@@ -69,8 +69,8 @@ class AlertResponse(BaseModel):
     id: int
     req_id: str
     fingerprint: str
-    alert_status: str          # firing or resolved (from Alertmanager)
-    processing_status: str     # new, processing, complete, failed (internal)
+    alert_status: str  # firing or resolved (from Alertmanager)
+    processing_status: str  # new, processing, complete, failed (internal)
     alert_name: str
     severity: Optional[str]
     instance: Optional[str]
@@ -101,6 +101,6 @@ class StatsResponse(BaseModel):
     total_recipes: int
     total_executions: int
     alerts_by_processing_status: Dict[str, int]  # new, processing, complete, failed
-    alerts_by_alert_status: Dict[str, int]       # firing, resolved
-    executions_by_status: Dict[str, int]         # new, processing, complete
+    alerts_by_alert_status: Dict[str, int]  # firing, resolved
+    executions_by_status: Dict[str, int]  # new, processing, complete
     recent_alerts: int

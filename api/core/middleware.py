@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 class PreHeatMiddleware(BaseHTTPMiddleware):
     """Pre-heat middleware to inject req_id for ALL HTTP verbs.
-    
+
     This middleware performs the "pre_heat" function by:
     - Generating a unique req_id (UUID) for every incoming request
     - Injecting it into the request state for use in route handlers

@@ -72,4 +72,3 @@ def test_request_id_generation():
 # These tests are run with a test database fixture
 
 # Note: These are basic smoke tests to verify the API structure
-

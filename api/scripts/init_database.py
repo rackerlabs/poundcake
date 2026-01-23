@@ -7,7 +7,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.core.database import Base, engine
-from api.models.models import Recipe, Oven, Alert  # noqa: F401 - Required for Base.metadata.create_all()
+from api.models.models import (
+    Recipe,
+    Oven,
+    Alert,
+)  # noqa: F401 - Required for Base.metadata.create_all()
 from api.core.logging import setup_logging, get_logger
 
 setup_logging()
@@ -20,11 +24,11 @@ def init_database():
         logger.info("Creating database tables...")
         Base.metadata.create_all(bind=engine)
         logger.info("✓ Database tables created successfully")
-        
+
         # Print table info
         tables = Base.metadata.tables.keys()
         logger.info(f"Created tables: {', '.join(tables)}")
-        
+
     except Exception as e:
         logger.error(f"✗ Failed to create database tables: {e}", exc_info=True)
         sys.exit(1)
@@ -34,18 +38,18 @@ def seed_default_recipes():
     """Seed database with default recipes."""
     from sqlalchemy.orm import Session
     from api.core.database import SessionLocal
-    
+
     db: Session = SessionLocal()
-    
+
     try:
         # Check if recipes already exist
         existing_count = db.query(Recipe).count()
         if existing_count > 0:
             logger.info(f"Database already has {existing_count} recipes, skipping seed")
             return
-        
+
         logger.info("Seeding default recipes...")
-        
+
         # Default recipes
         default_recipes = [
             {
@@ -73,14 +77,14 @@ def seed_default_recipes():
                 "task_list": None,
             },
         ]
-        
+
         for recipe_data in default_recipes:
             recipe = Recipe(**recipe_data)
             db.add(recipe)
-        
+
         db.commit()
         logger.info(f"✓ Seeded {len(default_recipes)} default recipes")
-        
+
     except Exception as e:
         logger.error(f"✗ Failed to seed recipes: {e}", exc_info=True)
         db.rollback()
@@ -92,13 +96,13 @@ if __name__ == "__main__":
     logger.info("=" * 60)
     logger.info("PoundCake v2.0 Database Initialization")
     logger.info("=" * 60)
-    
+
     # Initialize tables
     init_database()
-    
+
     # Seed default recipes
     seed_default_recipes()
-    
+
     logger.info("=" * 60)
     logger.info("Database initialization complete!")
     logger.info("=" * 60)

@@ -219,9 +219,7 @@ async def legacy_alerts(
         result = []
         for alert in alerts:
             # Count executions (ovens)
-            exec_count = (
-                db.query(Oven).filter(Oven.alert_id == alert.id).count()
-            )
+            exec_count = db.query(Oven).filter(Oven.alert_id == alert.id).count()
 
             result.append(
                 {
@@ -347,23 +345,18 @@ async def legacy_remediations(
     db: Session = next(get_db())
     try:
         # Get recent executions (ovens) with alert info
-        executions = (
-            db.query(Oven)
-            .order_by(Oven.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        executions = db.query(Oven).order_by(Oven.created_at.desc()).limit(limit).all()
 
         result = []
         for oven in executions:
-            alert = db.query(Alert).filter(Alert.id == oven.alert_id).first() if oven.alert_id else None
+            alert = (
+                db.query(Alert).filter(Alert.id == oven.alert_id).first() if oven.alert_id else None
+            )
             result.append(
                 {
                     "alert_name": alert.alert_name if alert else "unknown",
                     "action_name": oven.recipe.st2_workflow_ref if oven.recipe else "unknown",
-                    "status": (
-                        "success" if oven.status == "complete" else "running"
-                    ),
+                    "status": ("success" if oven.status == "complete" else "running"),
                     "started_at": oven.started_at.isoformat() if oven.started_at else None,
                     "execution_id": oven.action_id,
                     "error": None,  # Error tracking can be added if needed

@@ -51,7 +51,7 @@ class RecipeResponse(BaseModel):
 @router.post("/", response_model=RecipeResponse, status_code=201)
 def create_recipe(recipe_data: RecipeCreate, db: Session = Depends(get_db)) -> Recipe:
     """Create a new recipe.
-    
+
     Example:
     ```json
     {
@@ -67,8 +67,10 @@ def create_recipe(recipe_data: RecipeCreate, db: Session = Depends(get_db)) -> R
     # Check if recipe with same name already exists
     existing = db.query(Recipe).filter(Recipe.name == recipe_data.name).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"Recipe with name '{recipe_data.name}' already exists")
-    
+        raise HTTPException(
+            status_code=400, detail=f"Recipe with name '{recipe_data.name}' already exists"
+        )
+
     # Create new recipe
     recipe = Recipe(
         name=recipe_data.name,
@@ -78,11 +80,11 @@ def create_recipe(recipe_data: RecipeCreate, db: Session = Depends(get_db)) -> R
         time_to_complete=recipe_data.time_to_complete,
         time_to_clear=recipe_data.time_to_clear,
     )
-    
+
     db.add(recipe)
     db.commit()
     db.refresh(recipe)
-    
+
     logger.info(f"Created recipe: {recipe.name}")
     return recipe
 
@@ -102,10 +104,10 @@ def list_recipes(
 def get_recipe(recipe_id: int, db: Session = Depends(get_db)) -> Recipe:
     """Get a specific recipe by ID."""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
-    
+
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     return recipe
 
 
@@ -113,10 +115,10 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)) -> Recipe:
 def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)) -> Recipe:
     """Get a specific recipe by name."""
     recipe = db.query(Recipe).filter(Recipe.name == recipe_name).first()
-    
+
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     return recipe
 
 
@@ -126,41 +128,40 @@ def update_recipe(
 ) -> Recipe:
     """Update an existing recipe."""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
-    
+
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     # Update fields if provided
     if recipe_data.name is not None:
         # Check if new name conflicts with existing recipe
-        existing = db.query(Recipe).filter(
-            Recipe.name == recipe_data.name, Recipe.id != recipe_id
-        ).first()
+        existing = (
+            db.query(Recipe).filter(Recipe.name == recipe_data.name, Recipe.id != recipe_id).first()
+        )
         if existing:
             raise HTTPException(
-                status_code=400, 
-                detail=f"Recipe with name '{recipe_data.name}' already exists"
+                status_code=400, detail=f"Recipe with name '{recipe_data.name}' already exists"
             )
         recipe.name = recipe_data.name
-    
+
     if recipe_data.description is not None:
         recipe.description = recipe_data.description
-    
+
     if recipe_data.task_list is not None:
         recipe.task_list = recipe_data.task_list
-    
+
     if recipe_data.st2_workflow_ref is not None:
         recipe.st2_workflow_ref = recipe_data.st2_workflow_ref
-    
+
     if recipe_data.time_to_complete is not None:
         recipe.time_to_complete = recipe_data.time_to_complete
-    
+
     if recipe_data.time_to_clear is not None:
         recipe.time_to_clear = recipe_data.time_to_clear
-    
+
     db.commit()
     db.refresh(recipe)
-    
+
     logger.info(f"Updated recipe: {recipe.name}")
     return recipe
 
@@ -169,12 +170,12 @@ def update_recipe(
 def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
     """Delete a recipe."""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
-    
+
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     logger.info(f"Deleting recipe: {recipe.name}")
     db.delete(recipe)
     db.commit()
-    
+
     return None
