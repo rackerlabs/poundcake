@@ -206,7 +206,7 @@ async def legacy_alerts(
     """
     from sqlalchemy.orm import Session
     from api.core.database import get_db
-    from api.models.models import Alert, ST2ExecutionLink
+    from api.models.models import Alert, Oven
 
     db: Session = next(get_db())
     try:
@@ -218,9 +218,9 @@ async def legacy_alerts(
         # Format for UI compatibility
         result = []
         for alert in alerts:
-            # Count executions
+            # Count executions (ovens)
             exec_count = (
-                db.query(ST2ExecutionLink).filter(ST2ExecutionLink.alert_id == alert.id).count()
+                db.query(Oven).filter(Oven.alert_id == alert.id).count()
             )
 
             result.append(
@@ -293,7 +293,7 @@ async def legacy_alert_detail(
     """Legacy single alert endpoint for UI."""
     from sqlalchemy.orm import Session
     from api.core.database import get_db
-    from api.models.models import Alert, ST2ExecutionLink
+    from api.models.models import Alert, Oven
 
     db: Session = next(get_db())
     try:
@@ -301,19 +301,19 @@ async def legacy_alert_detail(
         if not alert:
             raise HTTPException(status_code=404, detail="Alert not found")
 
-        # Get execution history
-        executions = db.query(ST2ExecutionLink).filter(ST2ExecutionLink.alert_id == alert.id).all()
+        # Get execution history (ovens)
+        executions = db.query(Oven).filter(Oven.alert_id == alert.id).all()
 
         remediation_attempts = [
             {
-                "action_name": exec.st2_action_ref or "unknown",
-                "stackstorm_action": exec.st2_action_ref,
-                "status": "success" if alert.processing_status == "completed" else "failed",
-                "started_at": exec.created_at.isoformat() if exec.created_at else None,
-                "execution_id": exec.st2_execution_id,
-                "error": alert.error_message,
+                "action_name": oven.recipe.st2_workflow_ref if oven.recipe else "unknown",
+                "stackstorm_action": oven.recipe.st2_workflow_ref if oven.recipe else None,
+                "status": "success" if oven.status == "complete" else "failed",
+                "started_at": oven.started_at.isoformat() if oven.started_at else None,
+                "execution_id": oven.action_id,
+                "error": None,  # Error tracking can be added to Oven model if needed
             }
-            for exec in executions
+            for oven in executions
         ]
 
         return {
@@ -342,33 +342,31 @@ async def legacy_remediations(
     """Legacy remediations endpoint for execution history."""
     from sqlalchemy.orm import Session
     from api.core.database import get_db
-    from api.models.models import Alert, ST2ExecutionLink
+    from api.models.models import Alert, Oven
 
     db: Session = next(get_db())
     try:
-        # Get recent executions with alert info
+        # Get recent executions (ovens) with alert info
         executions = (
-            db.query(ST2ExecutionLink)
-            .order_by(ST2ExecutionLink.created_at.desc())
+            db.query(Oven)
+            .order_by(Oven.created_at.desc())
             .limit(limit)
             .all()
         )
 
         result = []
-        for exec in executions:
-            alert = db.query(Alert).filter(Alert.id == exec.alert_id).first()
+        for oven in executions:
+            alert = db.query(Alert).filter(Alert.id == oven.alert_id).first() if oven.alert_id else None
             result.append(
                 {
                     "alert_name": alert.alert_name if alert else "unknown",
-                    "action_name": exec.st2_action_ref or "unknown",
+                    "action_name": oven.recipe.st2_workflow_ref if oven.recipe else "unknown",
                     "status": (
-                        "success"
-                        if (alert and alert.processing_status == "completed")
-                        else "running"
+                        "success" if oven.status == "complete" else "running"
                     ),
-                    "started_at": exec.created_at.isoformat() if exec.created_at else None,
-                    "execution_id": exec.st2_execution_id,
-                    "error": alert.error_message if alert else None,
+                    "started_at": oven.started_at.isoformat() if oven.started_at else None,
+                    "execution_id": oven.action_id,
+                    "error": None,  # Error tracking can be added if needed
                 }
             )
 
