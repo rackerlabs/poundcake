@@ -7,7 +7,7 @@ services:
   
   # MariaDB - Shared database for PoundCake AND StackStorm
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:11.6
     container_name: poundcake-mariadb
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
@@ -29,7 +29,7 @@ services:
 
   # RabbitMQ - Message broker for StackStorm
   rabbitmq:
-    image: rabbitmq:3.12-management
+    image: rabbitmq:3.13-management
     container_name: stackstorm-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: stackstorm
@@ -47,7 +47,7 @@ services:
 
   # Redis - Coordination and locking for StackStorm
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: stackstorm-redis
     command: redis-server --appendonly yes
     ports:
@@ -68,7 +68,7 @@ services:
 
   # StackStorm API
   st2api:
-    image: stackstorm/stackstorm:latest
+    image: stackstorm/stackstorm:3.8
     container_name: stackstorm-api
     environment:
       # Authentication
@@ -122,7 +122,7 @@ services:
 
   # StackStorm Auth
   st2auth:
-    image: stackstorm/stackstorm:latest
+    image: stackstorm/stackstorm:3.8
     container_name: stackstorm-auth
     environment:
       # Authentication
@@ -165,7 +165,7 @@ services:
 
   # StackStorm Stream
   st2stream:
-    image: stackstorm/stackstorm:latest
+    image: stackstorm/stackstorm:3.8
     container_name: stackstorm-stream
     environment:
       # Authentication
@@ -203,7 +203,7 @@ services:
 
   # StackStorm Rules Engine
   st2rulesengine:
-    image: stackstorm/stackstorm:latest
+    image: stackstorm/stackstorm:3.8
     container_name: stackstorm-rulesengine
     environment:
       # Authentication
@@ -240,7 +240,7 @@ services:
 
   # StackStorm Action Runner
   st2actionrunner:
-    image: stackstorm/stackstorm:latest
+    image: stackstorm/stackstorm:3.8
     container_name: stackstorm-actionrunner
     environment:
       # Authentication
@@ -279,7 +279,7 @@ services:
 
   # StackStorm Scheduler
   st2scheduler:
-    image: stackstorm/stackstorm:latest
+    image: stackstorm/stackstorm:3.8
     container_name: stackstorm-scheduler
     environment:
       # Authentication
@@ -314,7 +314,7 @@ services:
 
   # StackStorm Notifier
   st2notifier:
-    image: stackstorm/stackstorm:latest
+    image: stackstorm/stackstorm:3.8
     container_name: stackstorm-notifier
     environment:
       # Authentication
