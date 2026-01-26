@@ -79,6 +79,7 @@ disable_error_code = ["assignment", "no-any-return"]
 module = [
     "api.api.health",
     "api.api.routes",
+    "api.api.recipes",
     "api.api.auth",
     "api.api.v1.*",
 ]

@@ -18,7 +18,7 @@ setup_logging()
 logger = get_logger(__name__)
 
 
-def init_database():
+def init_database() -> None:
     """Initialize database tables."""
     try:
         logger.info("Creating database tables...")
@@ -34,7 +34,7 @@ def init_database():
         sys.exit(1)
 
 
-def seed_default_recipes():
+def seed_default_recipes() -> None:
     """Seed database with default recipes."""
     from sqlalchemy.orm import Session
     from api.core.database import SessionLocal
