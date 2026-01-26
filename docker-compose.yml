@@ -71,6 +71,10 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-api
     environment:
+      # Authentication
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
+      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       ST2_STREAM_URL: http://st2stream:9102
@@ -121,6 +125,10 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-auth
     environment:
+      # Authentication
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
+      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -160,6 +168,10 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-stream
     environment:
+      # Authentication
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
+      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       ST2_STREAM_URL: http://st2stream:9102
@@ -194,6 +206,10 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-rulesengine
     environment:
+      # Authentication
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
+      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -227,6 +243,10 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-actionrunner
     environment:
+      # Authentication
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
+      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -262,6 +282,10 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-scheduler
     environment:
+      # Authentication
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
+      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
@@ -293,6 +317,10 @@ services:
     image: stackstorm/stackstorm:latest
     container_name: stackstorm-notifier
     environment:
+      # Authentication
+      ST2_USER: ${ST2_USER:-st2admin}
+      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
+      
       ST2_AUTH_URL: http://st2auth:9100
       ST2_API_URL: http://st2api:9101
       
