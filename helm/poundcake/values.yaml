@@ -143,12 +143,59 @@ stackstorm:
   autoDiscover: true
   discoverAcrossNamespaces: true
   # Admin credentials for auto API key generation
-  # By default, uses the stackstorm-admin secret created by install-stackstorm.sh
-  # The secret should exist in the same namespace as PoundCake
   adminUser: "st2admin"
   adminPassword: ""
   adminPasswordSecret: "stackstorm-admin"
   adminPasswordSecretKey: "password"
+  
+  # Redis configuration (required for StackStorm coordination)
+  redis:
+    enabled: true
+    # Use external Redis or deploy subchart
+    external: false
+    # External Redis settings (if external: true)
+    host: "redis.default.svc.cluster.local"
+    port: 6379
+    password: ""
+    database: 0
+    # Subchart settings (if external: false)
+    # Uses bitnami/redis chart
+    auth:
+      enabled: false
+    architecture: standalone
+    master:
+      persistence:
+        enabled: true
+        size: 8Gi
+    replica:
+      replicaCount: 0
+  
+  # RabbitMQ configuration (required for StackStorm task distribution)
+  rabbitmq:
+    enabled: true
+    # Use external RabbitMQ or deploy subchart
+    external: false
+    # External RabbitMQ settings (if external: true)
+    host: "rabbitmq.default.svc.cluster.local"
+    port: 5672
+    username: "stackstorm"
+    password: "stackstorm"
+    vhost: "/"
+    # Subchart settings (if external: false)
+    # Uses bitnami/rabbitmq chart
+    auth:
+      username: stackstorm
+      password: stackstorm
+    persistence:
+      enabled: true
+      size: 8Gi
+    service:
+      type: ClusterIP
+      port: 5672
+    # Management UI
+    management:
+      enabled: true
+      port: 15672
 
 # Alert-to-action mappings
 # These will be mounted as ConfigMap

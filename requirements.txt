@@ -11,12 +11,7 @@ alembic>=1.13.1
 pymysql>=1.1.0
 cryptography>=41.0.0
 
-# Celery & Task Queue
-celery[redis]>=5.3.6
-flower>=2.0.1
-redis>=5.0.1
-
-# HTTP clients (required for tasks.py to call StackStorm API)
+# HTTP clients
 requests>=2.31.0
 httpx>=0.26.0
 

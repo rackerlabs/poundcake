@@ -2,8 +2,7 @@
 
 from typing import Generator
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from api.core.config import settings
 
 # Create engine
@@ -39,5 +38,24 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Initialize database tables."""
-    Base.metadata.create_all(bind=engine)
+    """Initialize database using Alembic migrations.
+
+    This function runs Alembic migrations to ensure the database schema
+    is up to date. It's safe to call multiple times.
+    """
+    from alembic.config import Config
+    from alembic import command
+    import os
+
+    # Get the directory containing this file
+    current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    alembic_ini_path = os.path.join(current_dir, "alembic.ini")
+
+    # Create Alembic config
+    alembic_cfg = Config(alembic_ini_path)
+
+    # Override database URL from settings
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+
+    # Run migrations to head (latest version)
+    command.upgrade(alembic_cfg, "head")

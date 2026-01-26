@@ -1,4 +1,4 @@
-"""Example tests for the API."""
+"""Tests for the PoundCake API."""
 
 from fastapi.testclient import TestClient
 from api.main import app
@@ -21,8 +21,7 @@ def test_health_endpoint():
     data = response.json()
     assert "status" in data
     assert "database" in data
-    assert "redis" in data
-    assert "celery" in data
+    assert "stackstorm" in data
 
 
 def test_webhook_missing_alerts():
@@ -47,12 +46,8 @@ def test_webhook_missing_alerts():
     assert "request_id" in data
 
 
-def test_request_id_header():
-    """Test that request ID is added to responses."""
-    response = client.get("/")
-    # GET requests don't generate request IDs by default
-    # but non-GET requests do
-
+def test_request_id_generation():
+    """Test that request ID is generated for webhook requests."""
     payload = {
         "version": "4",
         "groupKey": "test",
@@ -67,9 +62,13 @@ def test_request_id_header():
     }
 
     response = client.post("/api/v1/webhook", json=payload)
-    assert "X-Request-ID" in response.headers
-    assert len(response.headers["X-Request-ID"]) > 0
+    assert response.status_code == 202
+    data = response.json()
+    assert "request_id" in data
+    assert len(data["request_id"]) > 0
 
 
-# Note: Full integration tests would require database and Redis setup
-# These are basic smoke tests to verify the API structure
+# Integration tests requiring database are in tests/test_preheat.py
+# These tests are run with a test database fixture
+
+# Note: These are basic smoke tests to verify the API structure

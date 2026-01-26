@@ -1,544 +1,288 @@
-# Simplified Architecture: PoundCake + StackStorm
+# PoundCake Architecture v0.0.1
 
-## The Problem
+## Overview
 
-Our initial design was too complex:
-- We created `actions` table → StackStorm already has `action_db`
-- We created `custom_action_buckets` → StackStorm already has workflows
-- We created `custom_action_bucket_steps` → StackStorm workflows define steps
-- **We were duplicating StackStorm's workflow engine!**
+PoundCake is an auto-remediation framework that bridges Prometheus Alertmanager with StackStorm. It receives alerts from Alertmanager and automatically executes remediation workflows through StackStorm.
 
-## The Solution: Radically Simplified
+## Design Principles
 
-**PoundCake's ONLY job:**
-1. Receive Alertmanager webhooks
-2. Generate unique `request_id` for tracking
-3. Store alert data
-4. Trigger StackStorm (passing `request_id`)
-5. Track the link: `request_id` ↔ `st2_execution_id`
+1. **Fast Response**: Webhook returns 202 immediately, processes in background
+2. **Complete Audit Trail**: Track alerts from webhook to execution
+3. **Stateless Design**: No Redis/Celery dependency, scales horizontally
+4. **Schema Versioning**: Alembic migrations for safe upgrades
+5. **Clear Separation**: PoundCake handles routing, StackStorm handles execution
 
-**StackStorm's job:**
-1. Define ALL workflows (ActionChains, Mistral, Orquesta)
-2. Define ALL actions  
-3. Execute remediation
-4. Store results
+## Components
+
+### FastAPI Application
+- Webhook receiver with background processing
+- RESTful API for alerts and recipes management
+- Health checks and metrics endpoint
+- Alembic-based schema migrations
+
+### Database (MySQL/MariaDB)
+- Three main tables: recipes, alerts, ovens
+- Stores alert history and execution tracking
+- Managed via Alembic migrations
+
+### StackStorm Integration
+- Executes remediation workflows
+- Returns execution IDs for tracking
+- Requires Redis and RabbitMQ
 
 ## Database Schema
 
-### PoundCake Tables (Only 3!)
+### poundcake_recipes
 
-**1. `poundcake_api_calls`**
+Defines remediation workflows and their StackStorm mappings.
+
 ```sql
-id, request_id (unique), method, path, 
-headers, body, status_code, created_at
+CREATE TABLE poundcake_recipes (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(256) UNIQUE NOT NULL,
+    description TEXT,
+    task_list TEXT,  
+    st2_workflow_ref VARCHAR(256) NOT NULL,
+    time_to_complete DATETIME,
+    time_to_clear DATETIME,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME,
+    INDEX idx_recipe_name (name),
+    INDEX idx_recipe_st2_ref (st2_workflow_ref)
+);
 ```
-Tracks webhook requests with unique request_id.
 
-**2. `poundcake_alerts`**
+### poundcake_alerts
+
+Stores alert data from Alertmanager webhooks.
+
 ```sql
-id, api_call_id, fingerprint, alert_name, 
-severity, labels, st2_rule_matched, created_at
+CREATE TABLE poundcake_alerts (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    req_id VARCHAR(36) NOT NULL,
+    fingerprint VARCHAR(64) NOT NULL,
+    alert_status VARCHAR(20) NOT NULL,
+    processing_status VARCHAR(20) NOT NULL,
+    alert_name VARCHAR(256) NOT NULL,
+    severity VARCHAR(20),
+    instance VARCHAR(256),
+    prometheus VARCHAR(256),
+    labels JSON,
+    annotations JSON,
+    starts_at DATETIME,
+    ends_at DATETIME,
+    generator_url TEXT,
+    raw_data JSON,
+    counter INT NOT NULL DEFAULT 1,
+    ticket_number VARCHAR(100),
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME,
+    INDEX idx_alert_fingerprint (fingerprint),
+    INDEX idx_alert_name (alert_name),
+    INDEX idx_alert_processing_status (processing_status),
+    INDEX idx_alert_req_id (req_id)
+);
 ```
-Stores Alertmanager alert data.
 
-**3. `poundcake_st2_execution_link`**
+### poundcake_ovens
+
+Executes recipes and tracks StackStorm execution status.
+
 ```sql
-id, request_id, alert_id, st2_execution_id,
-st2_rule_ref, st2_action_ref, created_at
+CREATE TABLE poundcake_ovens (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    req_id VARCHAR(36) NOT NULL,
+    alert_id INT,
+    recipe_id INT NOT NULL,
+    action_id VARCHAR(100),
+    action_result JSON,
+    status VARCHAR(20) NOT NULL,
+    started_at DATETIME,
+    ended_at DATETIME,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME,
+    FOREIGN KEY (alert_id) REFERENCES poundcake_alerts(id),
+    FOREIGN KEY (recipe_id) REFERENCES poundcake_recipes(id),
+    INDEX idx_oven_req_id (req_id),
+    INDEX idx_oven_alert_id (alert_id),
+    INDEX idx_oven_recipe_id (recipe_id),
+    INDEX idx_oven_action_id (action_id),
+    INDEX idx_oven_status (status)
+);
 ```
-**This is the key table!** Links PoundCake request_id to StackStorm execution_id.
-
-### StackStorm Tables (ST2 Manages)
-
-- `action_db` - Actions (python, shell, http, etc.)
-- `execution_db` - Completed executions
-- `liveaction_db` - Running executions  
-- `rule_db` - Rules (trigger conditions)
-- `workflow_db` - Workflows/ActionChains
-- `trigger_db` - Trigger definitions
 
 ## Architecture Diagram
 
 ```
-┌────────────────────────────────────────────────┐
-│          MariaDB Database                      │
-├────────────────────────────────────────────────┤
-│                                                │
-│ PoundCake (3 tables):                          │
-│   ├─ poundcake_api_calls (request_id)         │
-│   ├─ poundcake_alerts                          │
-│   └─ poundcake_st2_execution_link ←──┐        │
-│                                       │        │
-│ StackStorm (managed by ST2):         │        │
-│   ├─ action_db                        │        │
-│   ├─ execution_db ←───────────────────┘        │
-│   ├─ rule_db                                   │
-│   └─ workflow_db                               │
-└────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                   Alertmanager                          │
+│              (Prometheus component)                     │
+└────────────────────┬────────────────────────────────────┘
+                     │ POST /api/v1/webhook
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                   PoundCake API                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  FastAPI Application                              │  │
+│  │  - Webhook receiver (202 immediate response)      │  │
+│  │  - Background processing (pre_heat)               │  │
+│  │  - Recipe/Alert/Oven management                   │  │
+│  │  - Health checks & metrics                        │  │
+│  └─────────────────┬─────────────────────────────────┘  │
+│                    │                                     │
+│  ┌─────────────────▼─────────────────────────────────┐  │
+│  │        MySQL/MariaDB Database                     │  │
+│  │  - poundcake_recipes (workflow definitions)       │  │
+│  │  - poundcake_alerts (alert history)               │  │
+│  │  - poundcake_ovens (execution tracking)           │  │
+│  └─────────────────┬─────────────────────────────────┘  │
+└────────────────────┼─────────────────────────────────────┘
+                     │ HTTP API call
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                    StackStorm                           │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  st2api (API Server)                              │  │
+│  │  - Receives execution requests                    │  │
+│  │  - Returns execution ID                           │  │
+│  └─────────────────┬─────────────────────────────────┘  │
+│                    │                                     │
+│  ┌─────────────────▼─────────────────────────────────┐  │
+│  │  Workflow Engines                                 │  │
+│  │  - Orquesta, Mistral, ActionChain                │  │
+│  │  - Execute remediation steps                      │  │
+│  └─────────────────┬─────────────────────────────────┘  │
+│                    │                                     │
+│  ┌─────────────────▼─────────────────────────────────┐  │
+│  │  Message Queue (RabbitMQ)                         │  │
+│  │  - Task distribution                              │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Redis                                            │  │
+│  │  - Coordination and locking                       │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              Target Systems                             │
+│         (remediation actions executed here)             │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ## Data Flow
 
-### Step 1: Alert Received
+### 1. Webhook Reception
+
 ```
-POST /api/v1/webhook (Alertmanager)
-  ↓
-PoundCake generates request_id: "abc-123"
-  ↓
-Create poundcake_api_calls (request_id: abc-123)
-Create poundcake_alerts (alert data)
+Alertmanager sends POST /api/v1/webhook
+                ↓
+PreHeatMiddleware generates req_id: "abc-123"
+                ↓
+Return 202 Accepted (request_id: "abc-123")
+                ↓
+Background Task: pre_heat()
+  - Parse alerts from payload
+  - Insert/update poundcake_alerts table
+  - Set processing_status = "new"
 ```
 
-### Step 2: Trigger StackStorm
+**Key Points:**
+- Response sent BEFORE processing (under 10ms)
+- Background task creates own DB session
+- Alert state tracked via processing_status
+
+### 2. Alert Processing
+
+```
+POST /api/v1/alerts/process
+                ↓
+Query alerts WHERE processing_status = "new"
+                ↓
+For each alert:
+  1. determine_recipe(alert_name) returns Recipe
+  2. Create Oven (req_id, alert_id, recipe_id)
+  3. execute_recipe(oven, recipe, alert)
+     - Call ST2 API with recipe.st2_workflow_ref
+     - Store ST2 execution_id in oven.action_id
+  4. Update alert.processing_status = "processing"
+                ↓
+Return 202 Accepted with req_ids and execution_ids
+```
+
+### 3. Recipe Execution
+
 ```python
 # PoundCake calls StackStorm API
-response = requests.post("http://st2api:9101/v1/executions", json={
-    "action": "remediation.host_down_workflow",  # ST2 workflow
-    "parameters": {
-        "alert_name": alert.alert_name,
-        "instance": alert.instance,
-        "poundcake_request_id": "abc-123"  # ← Pass our request_id
-    }
-})
-
-st2_execution_id = response.json()["id"]  # e.g., "5f9e8a7b..."
-```
-
-### Step 3: Store Link
-```python
-# Create simple link
-link = ST2ExecutionLink(
-    request_id="abc-123",
-    alert_id=42,
-    st2_execution_id="5f9e8a7b...",
-    st2_rule_ref="remediation.host_down_rule",
-    st2_action_ref="remediation.host_down_workflow"
-)
-db.add(link)
-db.commit()
-```
-
-### Step 4: StackStorm Executes
-```
-StackStorm:
-  ├─ Receives execution request
-  ├─ Queues via RabbitMQ
-  ├─ st2actionrunner executes workflow
-  ├─ Workflow runs multiple actions
-  ├─ Stores results in execution_db
-  └─ Status: succeeded/failed
-```
-
-### Step 5: Query Complete History
-```sql
-SELECT 
-    api.request_id,
-    alert.alert_name,
-    alert.severity,
-    link.st2_execution_id,
-    exec.action as st2_workflow,
-    exec.status,
-    exec.result,
-    exec.start_timestamp,
-    exec.end_timestamp
-FROM poundcake_api_calls api
-JOIN poundcake_alerts alert ON alert.api_call_id = api.id
-JOIN poundcake_st2_execution_link link ON link.alert_id = alert.id
-JOIN execution_db exec ON exec.id = link.st2_execution_id
-WHERE api.request_id = 'abc-123';
-```
-
-Output:
-```
-request_id | alert_name | st2_workflow              | status    | result
------------|------------|---------------------------|-----------|--------
-abc-123    | HostDown   | remediation.host_down_wf  | succeeded | {...}
-```
-
-## StackStorm Workflow Example
-
-Define workflows entirely in StackStorm:
-
-```yaml
-# /opt/stackstorm/packs/remediation/actions/workflows/host_down.yaml
-version: 1.0
-description: Host down remediation workflow
-
-input:
-  - alert_name
-  - instance  
-  - poundcake_request_id  # ← We pass this
-
-tasks:
-  ping_test:
-    action: network.ping
-    input:
-      target: <% ctx().instance %>
-      count: 5
-    next:
-      - when: <% failed() %>
-        do: notify_team
-  
-  notify_team:
-    action: slack.post_message
-    input:
-      channel: "#alerts"
-      message: |
-        Alert: <% ctx().alert_name %>
-        Instance: <% ctx().instance %>
-        PoundCake Request: <% ctx().poundcake_request_id %>
-        Ping test failed - host is down
-```
-
-Register in StackStorm:
-```bash
-st2 action create /opt/stackstorm/packs/remediation/actions/workflows/host_down.yaml
-```
-
-## Benefits
-
-### Simplicity
-- ✅ **Only 3 PoundCake tables** (was 7+)
-- ✅ **No workflow duplication**
-- ✅ **No action duplication**
-- ✅ **No maintenance of workflow engine**
-
-### Use StackStorm's Full Power
-- ✅ **ActionChains** - Simple sequential workflows
-- ✅ **Mistral workflows** - Complex workflows with branching
-- ✅ **Orquesta workflows** - Native ST2 workflow engine
-- ✅ **All ST2 action runners** - python, shell, http, ansible, etc.
-- ✅ **ST2 UI** - Visual workflow editor
-- ✅ **ST2 Pack Exchange** - 100+ community packs
-
-### Complete Audit Trail
-- ✅ **request_id tracks everything**
-- ✅ **Query across systems** via simple link table
-- ✅ **Full ST2 execution details** in execution_db
-- ✅ **Alert context** in poundcake_alerts
-
-### Operational Benefits
-- ✅ **One workflow system** (StackStorm)
-- ✅ **One UI** for workflows (ST2 web UI)
-- ✅ **Standard ST2 tools** (st2 CLI, API)
-- ✅ **Leverage ST2 community** (packs, workflows, actions)
-
-## Example Queries
-
-### Get Complete Remediation History
-```sql
-SELECT 
-    api.request_id,
-    api.created_at as webhook_received,
-    alert.alert_name,
-    alert.severity,
-    alert.instance,
-    link.st2_execution_id,
-    exec.action as st2_workflow,
-    exec.status as execution_status,
-    exec.start_timestamp as started,
-    exec.end_timestamp as completed,
-    TIMESTAMPDIFF(SECOND, exec.start_timestamp, exec.end_timestamp) as duration_sec
-FROM poundcake_api_calls api
-JOIN poundcake_alerts alert ON alert.api_call_id = api.id
-LEFT JOIN poundcake_st2_execution_link link ON link.alert_id = alert.id
-LEFT JOIN execution_db exec ON exec.id = link.st2_execution_id
-ORDER BY api.created_at DESC
-LIMIT 20;
-```
-
-### Get Workflow Success Rates
-```sql
-SELECT 
-    exec.action as workflow,
-    COUNT(*) as total_executions,
-    SUM(CASE WHEN exec.status = 'succeeded' THEN 1 ELSE 0 END) as succeeded,
-    SUM(CASE WHEN exec.status = 'failed' THEN 1 ELSE 0 END) as failed,
-    ROUND(AVG(TIMESTAMPDIFF(SECOND, exec.start_timestamp, exec.end_timestamp)), 2) as avg_duration_sec
-FROM execution_db exec
-JOIN poundcake_st2_execution_link link ON exec.id = link.st2_execution_id
-GROUP BY exec.action
-ORDER BY total_executions DESC;
-```
-
-### Get All Executions for Alert
-```sql
-SELECT 
-    alert.fingerprint,
-    alert.alert_name,
-    api.request_id,
-    link.st2_execution_id,
-    exec.action,
-    exec.status
-FROM poundcake_alerts alert
-JOIN poundcake_api_calls api ON alert.api_call_id = api.id
-LEFT JOIN poundcake_st2_execution_link link ON link.alert_id = alert.id
-LEFT JOIN execution_db exec ON exec.id = link.st2_execution_id
-WHERE alert.fingerprint = 'your-alert-fingerprint';
-```
-
-## Creating Workflows in StackStorm
-
-### Option 1: ActionChain (Simple)
-```yaml
-# /opt/stackstorm/packs/remediation/actions/chains/simple_restart.yaml
-chain:
-  - name: "notify_start"
-    ref: "slack.post_message"
-    parameters:
-      channel: "#alerts"
-      message: "Starting service restart for {{instance}}"
-  
-  - name: "restart_service"
-    ref: "linux.service"
-    parameters:
-      hosts: "{{instance}}"
-      service: "nginx"
-      action: "restart"
-  
-  - name: "notify_complete"
-    ref: "slack.post_message"
-    parameters:
-      channel: "#alerts"
-      message: "Service restart completed"
-```
-
-### Option 2: Orquesta Workflow (Complex)
-```yaml
-# /opt/stackstorm/packs/remediation/actions/workflows/advanced.yaml
-version: 1.0
-
-input:
-  - instance
-  - alert_name
-
-tasks:
-  check_health:
-    action: network.ping
-    input:
-      target: <% ctx().instance %>
-    next:
-      - when: <% succeeded() %>
-        do: service_healthy
-      - when: <% failed() %>
-        do: restart_service
-  
-  service_healthy:
-    action: slack.post_message
-    input:
-      message: "Host is healthy, no action needed"
-  
-  restart_service:
-    action: linux.service
-    input:
-      hosts: <% ctx().instance %>
-      action: restart
-    next:
-      - do: verify_restart
-  
-  verify_restart:
-    action: network.ping
-    input:
-      target: <% ctx().instance %>
-```
-
-## Setup Instructions
-
-### 1. Install StackStorm with MariaDB
-```bash
-# Install StackStorm
-curl -sSL https://packages.stackstorm.com/install.sh | bash
-
-# Configure for MariaDB
-sudo vi /etc/st2/st2.conf
-# Set: backend = mysql
-
-# Initialize ST2 database
-sudo st2-setup-db
-
-# Start services
-sudo st2ctl start
-```
-
-### 2. Initialize PoundCake (Simplified)
-```bash
-cd poundcake-api
-
-# Initialize database (creates 3 tables only)
-python api/scripts/init_simple_database.py
-
-# Start services
-docker-compose up -d
-```
-
-### 3. Create StackStorm Workflows
-```bash
-# Create pack directory
-sudo mkdir -p /opt/stackstorm/packs/remediation/actions/workflows
-
-# Create workflow YAML files
-# (See examples above)
-
-# Register with StackStorm
-st2 action create /opt/stackstorm/packs/remediation/actions/workflows/*.yaml
-
-# Verify
-st2 action list --pack remediation
-```
-
-### 4. Create StackStorm Rules
-```yaml
-# /opt/stackstorm/packs/remediation/rules/host_down.yaml
-name: host_down_rule
-pack: remediation
-enabled: true
-
-trigger:
-  type: core.st2.webhook
-  parameters:
-    url: poundcake_alert
-
-criteria:
-  trigger.body.alert_name:
-    pattern: "HostDown"
-
-action:
-  ref: remediation.host_down_workflow
-  parameters:
-    alert_name: "{{ trigger.body.alert_name }}"
-    instance: "{{ trigger.body.instance }}"
-    poundcake_request_id: "{{ trigger.body.request_id }}"
-```
-
-Register:
-```bash
-st2 rule create /opt/stackstorm/packs/remediation/rules/host_down.yaml
-```
-
-### 5. Configure PoundCake to Trigger ST2
-```python
-# In PoundCake webhook handler
-def process_alert(alert_data, request_id):
-    # Store alert
-    alert = Alert(...)
-    db.add(alert)
-    db.commit()
-    
-    # Trigger StackStorm
-    response = requests.post(
-        f"{ST2_API_URL}/webhooks/poundcake_alert",
-        json={
+response = requests.post(
+    f"{ST2_API_URL}/v1/executions",
+    json={
+        "action": recipe.st2_workflow_ref,
+        "parameters": {
             "alert_name": alert.alert_name,
-            "instance": alert.instance,
-            "severity": alert.severity,
-            "request_id": request_id  # ← Pass request_id
-        },
-        headers={"St2-Api-Key": ST2_API_KEY}
-    )
-    
-    # Store link
-    if response.status_code == 200:
-        st2_data = response.json()
-        link = ST2ExecutionLink(
-            request_id=request_id,
-            alert_id=alert.id,
-            st2_execution_id=st2_data["execution_id"]
-        )
-        db.add(link)
-        db.commit()
+            "req_id": req_id
+        }
+    }
+)
+
+st2_execution_id = response.json()["id"]
 ```
 
-## Comparison: Old vs New
+## Request ID Tracking
 
-### Old Architecture (Complex)
+The `req_id` flows through the entire system:
+
 ```
-PoundCake Tables:
-  ├─ poundcake_api_calls
-  ├─ poundcake_alerts
-  ├─ actions (duplicate of ST2)
-  ├─ custom_action_buckets (duplicate of ST2)
-  ├─ custom_action_bucket_steps (duplicate of ST2)
-  ├─ poundcake_st2_action_extensions
-  ├─ poundcake_st2_rule_extensions
-  └─ poundcake_st2_execution_extensions
-
-Total: 8 tables
+Webhook (generates req_id)
+    ↓
+Alert (stores req_id)
+    ↓
+Oven (uses alert's req_id)
+    ↓
+StackStorm execution (receives req_id in parameters)
 ```
 
-### New Architecture (Simple)
-```
-PoundCake Tables:
-  ├─ poundcake_api_calls
-  ├─ poundcake_alerts
-  └─ poundcake_st2_execution_link
+## Recipe Matching Logic
 
-Total: 3 tables
-```
-
-**Reduction: 8 → 3 tables (62% fewer!)**
-
-## Migration Path
-
-If you have the old complex architecture:
-
-```sql
--- Export data
-SELECT * FROM poundcake_st2_execution_extensions;
-
--- Drop old tables
-DROP TABLE IF EXISTS poundcake_st2_execution_extensions;
-DROP TABLE IF EXISTS poundcake_st2_rule_extensions;
-DROP TABLE IF EXISTS poundcake_st2_action_extensions;
-DROP TABLE IF EXISTS custom_action_bucket_steps;
-DROP TABLE IF EXISTS custom_action_buckets;
-DROP TABLE IF EXISTS actions;
-
--- Create new simple table
-CREATE TABLE poundcake_st2_execution_link (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  request_id VARCHAR(36) NOT NULL,
-  alert_id INT,
-  st2_execution_id VARCHAR(100) NOT NULL,
-  st2_rule_ref VARCHAR(200),
-  st2_action_ref VARCHAR(200),
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_request_id (request_id),
-  INDEX idx_st2_exec_id (st2_execution_id)
-);
-
--- Migrate data (if needed)
-INSERT INTO poundcake_st2_execution_link 
-  (request_id, alert_id, st2_execution_id)
-SELECT request_id, alert_id, st2_execution_id 
-FROM old_execution_extensions_backup;
+```python
+def determine_recipe(alert_name: str, db: Session):
+    # 1. Try exact match
+    # 2. Try pattern matching
+    # 3. Fallback to default recipe
 ```
 
-## Summary
+## Deployment Patterns
 
-**What We Removed:**
-- ❌ Actions table
-- ❌ Custom Action Buckets (CABs)
-- ❌ Action steps
-- ❌ Complex extension tables
+### Docker Compose
 
-**What We Kept:**
-- ✅ Webhook ingestion (PoundCake's job)
-- ✅ request_id tracking (our unique value)
-- ✅ Alert data storage
-- ✅ Simple link to ST2 executions
+Single-host deployment with all services.
 
-**What We Gained:**
-- ✅ 62% fewer tables (8 → 3)
-- ✅ No workflow duplication
-- ✅ Full ST2 power (ActionChains, Mistral, Orquesta)
-- ✅ ST2 UI for workflow management
-- ✅ ST2 Pack Exchange access
-- ✅ Much simpler maintenance
+### Kubernetes/Helm
 
-**PoundCake's Role:**
-Just a thin, tracking layer over StackStorm with request_id auditing.
+Production deployment with horizontal scaling.
 
-**StackStorm's Role:**
-Does ALL the workflow and action execution (what it's designed for).
+### Configuration
 
-This is the right architecture!
+```bash
+# Database
+DATABASE_URL=mysql+pymysql://user:pass@host/db
+
+# StackStorm
+ST2_API_URL=http://stackstorm-api:9101/v1
+ST2_API_KEY=your-api-key
+```
+
+## Version History
+
+### v0.0.1 (Current)
+- Alembic migrations for schema management
+- FastAPI BackgroundTasks (no Celery/Redis)
+- Recipe/Oven/Alert architecture
+- Background webhook processing
+- Complete audit trail via req_id
+
+---
+
+**Version:** 0.0.1  
+**Last Updated:** January 23, 2026
