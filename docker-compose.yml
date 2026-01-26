@@ -68,7 +68,7 @@ services:
 
   # StackStorm API
   st2api:
-    image: stackstorm/stackstorm:3.8
+    image: stackstorm/stackstorm:3.9.0
     container_name: stackstorm-api
     environment:
       # Authentication
@@ -122,7 +122,7 @@ services:
 
   # StackStorm Auth
   st2auth:
-    image: stackstorm/stackstorm:3.8
+    image: stackstorm/stackstorm:3.9.0
     container_name: stackstorm-auth
     environment:
       # Authentication
@@ -165,7 +165,7 @@ services:
 
   # StackStorm Stream
   st2stream:
-    image: stackstorm/stackstorm:3.8
+    image: stackstorm/stackstorm:3.9.0
     container_name: stackstorm-stream
     environment:
       # Authentication
@@ -203,7 +203,7 @@ services:
 
   # StackStorm Rules Engine
   st2rulesengine:
-    image: stackstorm/stackstorm:3.8
+    image: stackstorm/stackstorm:3.9.0
     container_name: stackstorm-rulesengine
     environment:
       # Authentication
@@ -240,7 +240,7 @@ services:
 
   # StackStorm Action Runner
   st2actionrunner:
-    image: stackstorm/stackstorm:3.8
+    image: stackstorm/stackstorm:3.9.0
     container_name: stackstorm-actionrunner
     environment:
       # Authentication
@@ -279,7 +279,7 @@ services:
 
   # StackStorm Scheduler
   st2scheduler:
-    image: stackstorm/stackstorm:3.8
+    image: stackstorm/stackstorm:3.9.0
     container_name: stackstorm-scheduler
     environment:
       # Authentication
@@ -314,7 +314,7 @@ services:
 
   # StackStorm Notifier
   st2notifier:
-    image: stackstorm/stackstorm:3.8
+    image: stackstorm/stackstorm:3.9.0
     container_name: stackstorm-notifier
     environment:
       # Authentication
