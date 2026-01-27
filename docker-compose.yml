@@ -387,6 +387,31 @@ services:
       - poundcake
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
+  # PoundCake Oven Scheduler - Scheduled alert crawler
+  oven:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-oven
+    environment:
+      # PoundCake API
+      POUNDCAKE_API_URL: http://api:8000
+      OVEN_CRAWLER_INTERVAL: ${OVEN_CRAWLER_INTERVAL:-60}
+      
+      # Logging
+      LOG_LEVEL: INFO
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./api:/app/api
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+    networks:
+      - poundcake
+    command: python scripts/oven_scheduler.py --interval ${OVEN_CRAWLER_INTERVAL:-60}
+    restart: unless-stopped
+
 volumes:
   mariadb_data:
     driver: local

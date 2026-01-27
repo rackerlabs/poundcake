@@ -91,12 +91,19 @@ def create_recipe(recipe_data: RecipeCreate, db: Session = Depends(get_db)) -> R
 
 @router.get("/", response_model=List[RecipeResponse])
 def list_recipes(
+    name: Optional[str] = Query(None, description="Filter by recipe name"),
     limit: int = Query(100, le=1000, description="Maximum number of recipes to return"),
     offset: int = Query(0, ge=0, description="Number of recipes to skip"),
     db: Session = Depends(get_db),
 ) -> List[Recipe]:
-    """List all recipes."""
-    recipes = db.query(Recipe).order_by(desc(Recipe.created_at)).offset(offset).limit(limit).all()
+    """List all recipes with optional filtering by name."""
+    query = db.query(Recipe)
+    
+    # Filter by name if provided
+    if name:
+        query = query.filter(Recipe.name == name)
+    
+    recipes = query.order_by(desc(Recipe.created_at)).offset(offset).limit(limit).all()
     return recipes
 
 

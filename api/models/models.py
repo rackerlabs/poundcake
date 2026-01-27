@@ -88,6 +88,9 @@ class Oven(Base):
     # Foreign keys
     alert_id = Column(Integer, ForeignKey("poundcake_alerts.id"), nullable=True)
     recipe_id = Column(Integer, ForeignKey("poundcake_recipes.id"), nullable=False)
+    
+    # Task tracking - which task from recipe.task_list this oven represents
+    task_id = Column(String(100), nullable=True, index=True)  # UUID from recipe.task_list
 
     # StackStorm execution tracking
     action_id = Column(String(100), nullable=True, index=True)  # ST2 execution ID
@@ -112,6 +115,7 @@ class Oven(Base):
         Index("idx_oven_status", "status"),
         Index("idx_oven_alert_id", "alert_id"),
         Index("idx_oven_action_id", "action_id"),
+        Index("idx_oven_task_id", "task_id"),
     )
 
     def __repr__(self) -> str:
@@ -147,8 +151,9 @@ class Alert(Base):
     # Alert status from Alertmanager (firing or resolved)
     alert_status = Column(String(20), nullable=False, index=True)  # firing, resolved
 
-    # Fields extracted from labels
+    # Fields extracted from labels and groupLabels
     alert_name = Column(String(200), nullable=False, index=True)  # labels.alertname
+    group_name = Column(String(200), nullable=True, index=True)  # groupLabels.alertname for recipe matching
     severity = Column(String(50), nullable=True, index=True)  # labels.severity (optional)
     instance = Column(String(200), nullable=True, index=True)  # labels.instance (optional)
     prometheus = Column(String(200), nullable=True)  # labels.prometheus (optional)
@@ -188,6 +193,7 @@ class Alert(Base):
         Index("idx_alerts_processing_status", "processing_status"),
         Index("idx_alerts_alert_status", "alert_status"),
         Index("idx_alerts_alert_name", "alert_name"),
+        Index("idx_alerts_group_name", "group_name"),
         Index("idx_alerts_severity", "severity"),
         Index("idx_alerts_created_at", "created_at"),
     )

@@ -33,6 +33,9 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
         List of Alert objects that were created or updated
     """
     processed_alerts = []
+    
+    # Extract group_name from groupLabels (used for recipe matching)
+    group_name = webhook_data.groupLabels.get("alertname")
 
     for alert_data in webhook_data.alerts:
         try:
@@ -62,6 +65,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
                     alert_status=webhook_status,
                     processing_status="new",
                     alert_name=alert_name,
+                    group_name=group_name,
                     severity=severity,
                     instance=instance,
                     prometheus=prometheus,
@@ -105,6 +109,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
                     alert_status=webhook_status,
                     processing_status="new",
                     alert_name=alert_name,
+                    group_name=group_name,
                     severity=severity,
                     instance=instance,
                     prometheus=prometheus,

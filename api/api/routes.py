@@ -1,20 +1,23 @@
 """API routes for webhook and alert management."""
 
+import os
+import requests
+from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, BackgroundTasks, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from api.core.database import get_db
 from api.core.middleware import get_req_id
 from api.core.logging import get_logger
-from api.models.models import Alert, Oven
+from api.models.models import Alert, Oven, Recipe
 from api.schemas.schemas import (
     AlertmanagerWebhook,
     WebhookResponse,
     AlertResponse,
 )
-from api.services import pre_heat, determine_recipe, execute_recipe
+from api.services import pre_heat
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -142,96 +145,388 @@ def get_alerts(
 @router.post("/alerts/process", status_code=202)
 async def process_alerts(
     request: Request,
-    fingerprints: Optional[List[str]] = Query(None, description="Specific fingerprints to process"),
-    processing_status: Optional[str] = Query("new", description="Process alerts with this status"),
+    alert_id: Optional[int] = Body(None, description="Specific alert ID to process (for oven service)"),
+    recipe_id: Optional[int] = Body(None, description="Specific recipe ID (for oven service)"),
+    task_id: Optional[str] = Body(None, description="Specific task UUID from recipe.task_list"),
+    fingerprints: Optional[List[str]] = Query(None, description="Specific fingerprints to process (bulk mode)"),
+    processing_status: Optional[str] = Query("new", description="Process alerts with this status (bulk mode)"),
     db: Session = Depends(get_db),
 ) -> dict:
     """Process alerts by executing their recipes.
 
-    This endpoint:
-    1. Queries alerts based on filters
-    2. Determines appropriate recipe for each alert
-    3. Creates ovens and executes recipes (using alert's original req_id)
-    4. Returns 202 Accepted
-
-    Note: This endpoint does NOT generate a new req_id. It uses the req_id
-    from each alert (which was set when the webhook was received).
+    Two modes of operation:
+    
+    1. BULK MODE (called manually or by external systems):
+       - Queries alerts based on filters (fingerprints or processing_status)
+       - For each alert, matches recipe by group_name
+       - Parses task_list and creates one oven per task
+       - Executes each task via StackStorm
+    
+    2. TASK MODE (called by oven service):
+       - Processes a specific alert_id + recipe_id + task_id combination
+       - Creates single oven entry for that task
+       - Executes the task via StackStorm
+       - Updates alert processing_status only on first task
 
     Args:
-        fingerprints: Optional list of specific alert fingerprints to process
-        processing_status: Process alerts with this status (default: "new")
+        alert_id: Specific alert to process (task mode)
+        recipe_id: Specific recipe to use (task mode)
+        task_id: Specific task UUID from recipe.task_list (task mode)
+        fingerprints: Optional list of fingerprints (bulk mode)
+        processing_status: Process alerts with this status (bulk mode)
+    """
+    
+    # Task mode: Process specific alert + recipe + task
+    if alert_id is not None and recipe_id is not None and task_id is not None:
+        return await _process_single_task(alert_id, recipe_id, task_id, db)
+    
+    # Bulk mode: Process multiple alerts
+    return await _process_alerts_bulk(fingerprints, processing_status, db)
+
+
+async def _process_single_task(
+    alert_id: int,
+    recipe_id: int, 
+    task_id: str,
+    db: Session
+) -> dict:
+    """Process a single task for a specific alert (called by oven service).
+    
+    Steps:
+    1. Get alert and recipe from database
+    2. Create oven entry with task_id and status='new'
+    3. Update alert.processing_status to 'processing' (if first task)
+    4. Call StackStorm API with task_id
+    5. Store execution_id in oven.action_id
+    6. Update oven.status to 'processing'
+    """
+    # Get alert
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
+    
+    # Get recipe
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found")
+    
+    req_id = alert.req_id
+    
+    logger.info(
+        f"Processing task {task_id} for alert {alert_id}",
+        extra={"req_id": req_id, "alert_id": alert_id, "recipe_id": recipe_id}
+    )
+    
+    # Create oven entry
+    oven = Oven(
+        req_id=req_id,
+        alert_id=alert_id,
+        recipe_id=recipe_id,
+        task_id=task_id,
+        status="new",
+    )
+    db.add(oven)
+    db.commit()
+    db.refresh(oven)
+    
+    # Update alert status to processing (if not already)
+    if alert.processing_status == "new":
+        alert.processing_status = "processing"
+        db.commit()
+    
+    # Execute task via StackStorm
+    success, execution_id, result = _execute_stackstorm_task(
+        recipe=recipe,
+        alert=alert,
+        task_id=task_id,
+        req_id=req_id
+    )
+    
+    # Update oven with results
+    oven.action_id = execution_id
+    oven.action_result = result
+    oven.status = "processing" if success else "failed"
+    oven.started_at = datetime.utcnow()
+    
+    if not success:
+        oven.ended_at = datetime.utcnow()
+        oven.status = "complete"
+    
+    db.commit()
+    
+    return {
+        "status": "accepted",
+        "req_id": req_id,
+        "alert_id": alert_id,
+        "recipe_id": recipe_id,
+        "task_id": task_id,
+        "oven_id": oven.id,
+        "execution_id": execution_id,
+        "success": success,
+    }
+
+
+async def _process_alerts_bulk(
+    fingerprints: Optional[List[str]],
+    processing_status: Optional[str],
+    db: Session
+) -> dict:
+    """Process multiple alerts in bulk mode.
+    
+    For each alert:
+    1. Match recipe by group_name
+    2. Parse task_list
+    3. Create one oven per task
+    4. Execute each task
     """
     # Build query
     query = db.query(Alert)
-
+    
     if fingerprints:
         query = query.filter(Alert.fingerprint.in_(fingerprints))
     elif processing_status:
         query = query.filter(Alert.processing_status == processing_status)
     else:
-        # Default to processing only "new" alerts
         query = query.filter(Alert.processing_status == "new")
-
+    
     alerts = query.all()
-
+    
     if not alerts:
         return {"status": "no_alerts", "message": "No alerts found matching criteria"}
-
+    
     processed_count = 0
+    tasks_triggered = 0
     execution_ids = []
-    processed_req_ids = set()  # Track unique req_ids processed
-
+    processed_req_ids = set()
+    
     for alert in alerts:
         try:
-            # Use the req_id from the alert (set during webhook ingestion)
             alert_req_id = alert.req_id
             processed_req_ids.add(alert_req_id)
-
-            # Determine recipe
-            recipe = determine_recipe(alert.alert_name, db)
+            
+            # Match recipe by group_name
+            recipe = _determine_recipe_by_group_name(alert.group_name, db)
             if not recipe:
                 logger.warning(
-                    f"No recipe found for alert: {alert.alert_name}",
-                    extra={"req_id": alert_req_id, "fingerprint": alert.fingerprint},
+                    f"No recipe found for group_name: {alert.group_name}",
+                    extra={"req_id": alert_req_id, "alert_id": alert.id}
                 )
                 continue
-
-            # Create oven (using alert's req_id)
-            oven = Oven(
-                req_id=alert_req_id,  # Use alert's original req_id
-                alert_id=alert.id,
-                recipe_id=recipe.id,
-                status="new",
+            
+            # Parse task_list
+            tasks = _parse_task_list(recipe.task_list)
+            if not tasks:
+                logger.warning(
+                    f"Recipe {recipe.id} has empty task_list",
+                    extra={"req_id": alert_req_id}
+                )
+                continue
+            
+            logger.info(
+                f"Processing alert {alert.id} with recipe {recipe.name} ({len(tasks)} tasks)",
+                extra={"req_id": alert_req_id}
             )
-            db.add(oven)
+            
+            # Update alert status
+            alert.processing_status = "processing"
             db.commit()
-            db.refresh(oven)
-
-            # Execute recipe (using alert's req_id)
-            success = execute_recipe(oven, recipe, alert, alert_req_id, db)
-
-            if success:
-                alert.processing_status = "processing"
-                db.commit()
-                processed_count += 1
-                if oven.action_id:
-                    execution_ids.append(oven.action_id)
-
+            
+            # Process each task
+            for task_id in tasks:
+                try:
+                    # Create oven
+                    oven = Oven(
+                        req_id=alert_req_id,
+                        alert_id=alert.id,
+                        recipe_id=recipe.id,
+                        task_id=task_id,
+                        status="new",
+                    )
+                    db.add(oven)
+                    db.commit()
+                    db.refresh(oven)
+                    
+                    # Execute via StackStorm
+                    success, execution_id, result = _execute_stackstorm_task(
+                        recipe=recipe,
+                        alert=alert,
+                        task_id=task_id,
+                        req_id=alert_req_id
+                    )
+                    
+                    # Update oven
+                    oven.action_id = execution_id
+                    oven.action_result = result
+                    oven.status = "processing" if success else "failed"
+                    oven.started_at = datetime.utcnow()
+                    
+                    if not success:
+                        oven.ended_at = datetime.utcnow()
+                        oven.status = "complete"
+                    
+                    db.commit()
+                    
+                    if success and execution_id:
+                        execution_ids.append(execution_id)
+                    
+                    tasks_triggered += 1
+                    
+                except Exception as e:
+                    logger.error(
+                        f"Error processing task {task_id}: {e}",
+                        exc_info=True,
+                        extra={"req_id": alert_req_id}
+                    )
+                    continue
+            
+            processed_count += 1
+            
         except Exception as e:
             logger.error(
-                f"Error processing alert {alert.fingerprint}: {e}",
+                f"Error processing alert {alert.id}: {e}",
                 exc_info=True,
-                extra={"req_id": alert.req_id},
+                extra={"req_id": alert.req_id}
             )
             continue
-
+    
     return {
         "status": "accepted",
-        "req_ids": list(processed_req_ids),  # Return the alert req_ids, not a new one
+        "req_ids": list(processed_req_ids),
         "alerts_processed": processed_count,
+        "tasks_triggered": tasks_triggered,
         "execution_ids": execution_ids,
-        "message": f"Processed {processed_count} of {len(alerts)} alerts",
+        "message": f"Processed {processed_count} alerts with {tasks_triggered} tasks",
     }
+
+
+def _determine_recipe_by_group_name(group_name: Optional[str], db: Session) -> Optional[Recipe]:
+    """Determine which recipe to use based on alert group_name.
+    
+    Matching logic:
+    1. Exact match on recipe.name = group_name
+    2. Pattern match (lowercase, underscore-normalized)
+    3. Fallback to "default" recipe
+    
+    Args:
+        group_name: Group name from alert (from groupLabels.alertname)
+        db: Database session
+        
+    Returns:
+        Recipe object if found, None otherwise
+    """
+    if not group_name:
+        # Try default recipe
+        return db.query(Recipe).filter(Recipe.name == "default").first()
+    
+    # Try exact match
+    recipe = db.query(Recipe).filter(Recipe.name == group_name).first()
+    if recipe:
+        return recipe
+    
+    # Try pattern matching
+    pattern = group_name.lower().replace(" ", "_")
+    recipe = db.query(Recipe).filter(Recipe.name.like(f"%{pattern}%")).first()
+    if recipe:
+        return recipe
+    
+    # Fallback to default
+    recipe = db.query(Recipe).filter(Recipe.name == "default").first()
+    return recipe
+
+
+def _parse_task_list(task_list_str: Optional[str]) -> List[str]:
+    """Parse comma-separated task_list into list of task UUIDs.
+    
+    Args:
+        task_list_str: Comma-separated string like "uuid1,uuid2,uuid3"
+        
+    Returns:
+        List of task UUID strings
+    """
+    if not task_list_str:
+        return []
+    
+    tasks = [task.strip() for task in task_list_str.split(",") if task.strip()]
+    return tasks
+
+
+def _execute_stackstorm_task(
+    recipe: Recipe,
+    alert: Alert,
+    task_id: str,
+    req_id: str
+) -> tuple[bool, Optional[str], Optional[dict]]:
+    """Execute a single task via StackStorm API.
+    
+    Args:
+        recipe: Recipe containing st2_workflow_ref
+        alert: Alert data for parameters
+        task_id: Task UUID being executed
+        req_id: Request ID for tracking
+        
+    Returns:
+        Tuple of (success, execution_id, result_dict)
+    """
+    ST2_API_URL = os.getenv("ST2_API_URL", "http://localhost:9101/v1")
+    ST2_API_KEY = os.getenv("ST2_API_KEY", "")
+    
+    try:
+        # Prepare parameters for StackStorm
+        st2_params = {
+            "alert_name": alert.alert_name,
+            "group_name": alert.group_name,
+            "alert_fingerprint": alert.fingerprint,
+            "instance": alert.instance,
+            "severity": alert.severity,
+            "labels": alert.labels,
+            "annotations": alert.annotations,
+            "req_id": req_id,
+            "task_id": task_id,
+            "alert_data": alert.raw_data,
+        }
+        
+        logger.info(
+            f"Executing StackStorm workflow: {recipe.st2_workflow_ref} for task {task_id}",
+            extra={"req_id": req_id}
+        )
+        
+        # Call StackStorm API
+        response = requests.post(
+            f"{ST2_API_URL}/executions",
+            json={"action": recipe.st2_workflow_ref, "parameters": st2_params},
+            headers={"St2-Api-Key": ST2_API_KEY, "Content-Type": "application/json"},
+            timeout=30,
+        )
+        
+        if response.status_code in [200, 201]:
+            st2_data = response.json()
+            execution_id = st2_data.get("id")
+            
+            logger.info(
+                f"StackStorm execution started: {execution_id}",
+                extra={"req_id": req_id}
+            )
+            
+            return True, execution_id, st2_data
+        else:
+            logger.error(
+                f"StackStorm API error: {response.status_code} - {response.text}",
+                extra={"req_id": req_id}
+            )
+            
+            return False, None, {
+                "error": f"ST2 API returned {response.status_code}",
+                "response": response.text[:500]
+            }
+            
+    except Exception as e:
+        logger.error(
+            f"Error calling StackStorm API: {e}",
+            exc_info=True,
+            extra={"req_id": req_id}
+        )
+        
+        return False, None, {"error": str(e)}
 
 
 @router.get("/executions/{req_id}")

@@ -72,6 +72,7 @@ class AlertResponse(BaseModel):
     alert_status: str  # firing or resolved (from Alertmanager)
     processing_status: str  # new, processing, complete, failed (internal)
     alert_name: str
+    group_name: Optional[str]  # From groupLabels, used for recipe matching
     severity: Optional[str]
     instance: Optional[str]
     prometheus: Optional[str]
