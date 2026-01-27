@@ -1,382 +1,77 @@
 version: '3.8'
 
+# =============================================================================
+# PoundCake + StackStorm Integrated Stack
+# =============================================================================
+# This compose file integrates:
+# - PoundCake application (webhook processor)
+# - Official StackStorm st2-docker services
+# - Shared infrastructure (MongoDB, RabbitMQ, Redis)
+#
+# Based on: https://github.com/StackStorm/st2-docker
+# =============================================================================
+
 services:
-  # ============================================================================
-  # SHARED INFRASTRUCTURE
-  # ============================================================================
+  # ===========================================================================
+  # POUNDCAKE SERVICES
+  # ===========================================================================
   
-  # MariaDB - Shared database for PoundCake AND StackStorm
-  mariadb:
+  # MariaDB - PoundCake application database
+  poundcake-mariadb:
     image: mariadb:11.6
     container_name: poundcake-mariadb
+    restart: on-failure
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: poundcake
-      MYSQL_USER: poundcake
-      MYSQL_PASSWORD: poundcake
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-poundcake}
+      MYSQL_USER: ${MYSQL_USER:-poundcake}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-poundcake}
     volumes:
-      - mariadb_data:/var/lib/mysql
-      - ./docker/mariadb-init:/docker-entrypoint-initdb.d
+      - poundcake-mariadb-data:/var/lib/mysql
     ports:
-      - "3306:3306"
+      - "${POUNDCAKE_MARIADB_PORT:-3306}:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - poundcake
+      - private
 
-  # RabbitMQ - Message broker for StackStorm
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    container_name: stackstorm-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: stackstorm
-      RABBITMQ_DEFAULT_PASS: stackstorm
-    ports:
-      - "5672:5672"
-      - "15672:15672"  # Management UI
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - poundcake
-
-  # Redis - Coordination and locking for StackStorm
-  redis:
-    image: redis:7.4-alpine
-    container_name: stackstorm-redis
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - poundcake
-
-  # ============================================================================
-  # STACKSTORM SERVICES
-  # ============================================================================
-
-  # StackStorm API
-  st2api:
-    image: stackstorm/stackstorm:3.9.0
-    container_name: stackstorm-api
-    environment:
-      # Authentication
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
-      
-      ST2_AUTH_URL: http://st2auth:9100
-      ST2_API_URL: http://st2api:9101
-      ST2_STREAM_URL: http://st2stream:9102
-      
-      # Database (MariaDB)
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_PORT: 3306
-      ST2_DATABASE_NAME: stackstorm
-      ST2_DATABASE_USERNAME: stackstorm
-      ST2_DATABASE_PASSWORD: stackstorm
-      
-      # RabbitMQ
-      ST2_RABBITMQ_HOST: rabbitmq
-      ST2_RABBITMQ_PORT: 5672
-      ST2_RABBITMQ_USERNAME: stackstorm
-      ST2_RABBITMQ_PASSWORD: stackstorm
-      
-      # Redis
-      ST2_REDIS_HOST: redis
-      ST2_REDIS_PORT: 6379
-      ST2_REDIS_DB: 0
-    ports:
-      - "9101:9101"
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - st2-packs:/opt/stackstorm/packs
-      - st2-virtualenvs:/opt/stackstorm/virtualenvs
-      - st2-configs:/opt/stackstorm/configs
-    healthcheck:
-      test: ["CMD", "st2", "action", "list", "--limit=1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    networks:
-      - poundcake
-    command: /bin/bash -c "st2-setup-db && /opt/stackstorm/st2/bin/st2api --config-file=/etc/st2/st2.conf"
-
-  # StackStorm Auth
-  st2auth:
-    image: stackstorm/stackstorm:3.9.0
-    container_name: stackstorm-auth
-    environment:
-      # Authentication
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
-      
-      ST2_AUTH_URL: http://st2auth:9100
-      ST2_API_URL: http://st2api:9101
-      
-      # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_PORT: 3306
-      ST2_DATABASE_NAME: stackstorm
-      ST2_DATABASE_USERNAME: stackstorm
-      ST2_DATABASE_PASSWORD: stackstorm
-      
-      # RabbitMQ
-      ST2_RABBITMQ_HOST: rabbitmq
-      ST2_RABBITMQ_USERNAME: stackstorm
-      ST2_RABBITMQ_PASSWORD: stackstorm
-      
-      # Redis
-      ST2_REDIS_HOST: redis
-      ST2_REDIS_PORT: 6379
-    ports:
-      - "9100:9100"
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - st2-packs:/opt/stackstorm/packs
-    networks:
-      - poundcake
-    command: /opt/stackstorm/st2/bin/st2auth --config-file=/etc/st2/st2.conf
-
-  # StackStorm Stream
-  st2stream:
-    image: stackstorm/stackstorm:3.9.0
-    container_name: stackstorm-stream
-    environment:
-      # Authentication
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
-      
-      ST2_AUTH_URL: http://st2auth:9100
-      ST2_API_URL: http://st2api:9101
-      ST2_STREAM_URL: http://st2stream:9102
-      
-      # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
-      ST2_DATABASE_USERNAME: stackstorm
-      ST2_DATABASE_PASSWORD: stackstorm
-      
-      # RabbitMQ
-      ST2_RABBITMQ_HOST: rabbitmq
-      ST2_RABBITMQ_USERNAME: stackstorm
-      ST2_RABBITMQ_PASSWORD: stackstorm
-      
-      # Redis
-      ST2_REDIS_HOST: redis
-      ST2_REDIS_PORT: 6379
-    ports:
-      - "9102:9102"
-    depends_on:
-      - mariadb
-      - rabbitmq
-      - redis
-    networks:
-      - poundcake
-    command: /opt/stackstorm/st2/bin/st2stream --config-file=/etc/st2/st2.conf
-
-  # StackStorm Rules Engine
-  st2rulesengine:
-    image: stackstorm/stackstorm:3.9.0
-    container_name: stackstorm-rulesengine
-    environment:
-      # Authentication
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
-      
-      ST2_AUTH_URL: http://st2auth:9100
-      ST2_API_URL: http://st2api:9101
-      
-      # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
-      ST2_DATABASE_USERNAME: stackstorm
-      ST2_DATABASE_PASSWORD: stackstorm
-      
-      # RabbitMQ
-      ST2_RABBITMQ_HOST: rabbitmq
-      ST2_RABBITMQ_USERNAME: stackstorm
-      ST2_RABBITMQ_PASSWORD: stackstorm
-      
-      # Redis
-      ST2_REDIS_HOST: redis
-      ST2_REDIS_PORT: 6379
-    depends_on:
-      - mariadb
-      - rabbitmq
-      - redis
-    volumes:
-      - st2-packs:/opt/stackstorm/packs
-    networks:
-      - poundcake
-    command: /opt/stackstorm/st2/bin/st2rulesengine --config-file=/etc/st2/st2.conf
-
-  # StackStorm Action Runner
-  st2actionrunner:
-    image: stackstorm/stackstorm:3.9.0
-    container_name: stackstorm-actionrunner
-    environment:
-      # Authentication
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
-      
-      ST2_AUTH_URL: http://st2auth:9100
-      ST2_API_URL: http://st2api:9101
-      
-      # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
-      ST2_DATABASE_USERNAME: stackstorm
-      ST2_DATABASE_PASSWORD: stackstorm
-      
-      # RabbitMQ
-      ST2_RABBITMQ_HOST: rabbitmq
-      ST2_RABBITMQ_USERNAME: stackstorm
-      ST2_RABBITMQ_PASSWORD: stackstorm
-      
-      # Redis
-      ST2_REDIS_HOST: redis
-      ST2_REDIS_PORT: 6379
-    depends_on:
-      - mariadb
-      - rabbitmq
-      - redis
-      - st2api
-    volumes:
-      - st2-packs:/opt/stackstorm/packs
-      - st2-virtualenvs:/opt/stackstorm/virtualenvs
-    networks:
-      - poundcake
-    command: /opt/stackstorm/st2/bin/st2actionrunner --config-file=/etc/st2/st2.conf
-
-  # StackStorm Scheduler
-  st2scheduler:
-    image: stackstorm/stackstorm:3.9.0
-    container_name: stackstorm-scheduler
-    environment:
-      # Authentication
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
-      
-      ST2_AUTH_URL: http://st2auth:9100
-      ST2_API_URL: http://st2api:9101
-      
-      # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
-      ST2_DATABASE_USERNAME: stackstorm
-      ST2_DATABASE_PASSWORD: stackstorm
-      
-      # RabbitMQ
-      ST2_RABBITMQ_HOST: rabbitmq
-      ST2_RABBITMQ_USERNAME: stackstorm
-      ST2_RABBITMQ_PASSWORD: stackstorm
-      
-      # Redis
-      ST2_REDIS_HOST: redis
-      ST2_REDIS_PORT: 6379
-    depends_on:
-      - mariadb
-      - rabbitmq
-      - redis
-    networks:
-      - poundcake
-    command: /opt/stackstorm/st2/bin/st2scheduler --config-file=/etc/st2/st2.conf
-
-  # StackStorm Notifier
-  st2notifier:
-    image: stackstorm/stackstorm:3.9.0
-    container_name: stackstorm-notifier
-    environment:
-      # Authentication
-      ST2_USER: ${ST2_USER:-st2admin}
-      ST2_PASSWORD: ${ST2_PASSWORD:-Ch@ngeMe}
-      
-      ST2_AUTH_URL: http://st2auth:9100
-      ST2_API_URL: http://st2api:9101
-      
-      # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
-      ST2_DATABASE_USERNAME: stackstorm
-      ST2_DATABASE_PASSWORD: stackstorm
-      
-      # RabbitMQ
-      ST2_RABBITMQ_HOST: rabbitmq
-      ST2_RABBITMQ_USERNAME: stackstorm
-      ST2_RABBITMQ_PASSWORD: stackstorm
-      
-      # Redis
-      ST2_REDIS_HOST: redis
-      ST2_REDIS_PORT: 6379
-    depends_on:
-      - mariadb
-      - rabbitmq
-      - redis
-    networks:
-      - poundcake
-    command: /opt/stackstorm/st2/bin/st2notifier --config-file=/etc/st2/st2.conf
-
-  # ============================================================================
-  # POUNDCAKE SERVICE
-  # ============================================================================
-
-  # PoundCake API - FastAPI application
-  api:
+  # PoundCake API - Webhook receiver and alert processor
+  poundcake-api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: poundcake-api
-    environment:
-      # Database
-      DATABASE_URL: mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
-      
-      # StackStorm
-      ST2_API_URL: http://st2api:9101/v1
-      ST2_API_KEY: ${ST2_API_KEY:-}
-      
-      # App settings
-      LOG_LEVEL: INFO
-    ports:
-      - "8000:8000"
+    restart: on-failure
     depends_on:
-      mariadb:
+      poundcake-mariadb:
         condition: service_healthy
       st2api:
-        condition: service_healthy
+        condition: service_started
+    environment:
+      # PoundCake Database (MariaDB)
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-poundcake}:${MYSQL_PASSWORD:-poundcake}@poundcake-mariadb:3306/${MYSQL_DATABASE:-poundcake}
+      
+      # StackStorm Connection
+      STACKSTORM_URL: http://st2api:9101
+      STACKSTORM_AUTH_URL: http://st2auth:9100
+      STACKSTORM_API_KEY: ${ST2_API_KEY:-}
+      STACKSTORM_VERIFY_SSL: "false"
+      
+      # Application Settings
+      APP_NAME: ${POUNDCAKE_APP_NAME:-PoundCake}
+      DEBUG: ${POUNDCAKE_DEBUG:-false}
+      
+      # Redis (shared with StackStorm)
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${POUNDCAKE_API_PORT:-8000}:8000"
     volumes:
-      - ./api:/app/api
-      - ./logs:/app/logs
+      - ./api:/app/api:ro
+      - ./tests:/app/tests:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -385,20 +80,337 @@ services:
       start_period: 40s
     networks:
       - poundcake
+      - private
+      - public
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
+  # ===========================================================================
+  # STACKSTORM SERVICES (Official st2-docker)
+  # ===========================================================================
+  
+  # StackStorm Web UI
+  st2web:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2web:${ST2_VERSION:-3.9.0}
+    container_name: st2web
+    restart: on-failure
+    environment:
+      ST2_AUTH_URL: ${ST2_AUTH_URL:-http://st2auth:9100/}
+      ST2_API_URL: ${ST2_API_URL:-http://st2api:9101/}
+      ST2_STREAM_URL: ${ST2_STREAM_URL:-http://st2stream:9102/}
+      ST2WEB_HTTPS: ${ST2WEB_HTTPS:-0}
+    depends_on:
+      - st2auth
+      - st2api
+      - st2stream
+    healthcheck:
+      test: ["CMD", "/st2web-healthcheck.sh"]
+      interval: 30s
+      timeout: 1s
+      retries: 1
+    volumes:
+      - ./stackstorm/scripts/st2web-healthcheck.sh:/st2web-healthcheck.sh
+    ports:
+      - "${ST2_EXPOSE_HTTP:-127.0.0.1:80}:80"
+    networks:
+      - private
+      - public
+
+  # StackStorm Secret Generator
+  st2makesecrets:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2actionrunner:${ST2_VERSION:-3.9.0}
+    container_name: st2makesecrets
+    restart: on-failure
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/scripts/makesecrets.sh:/makesecrets.sh
+      - stackstorm-keys:/etc/st2/keys:rw
+    command: /makesecrets.sh
+
+  # StackStorm API
+  st2api:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2api:${ST2_VERSION:-3.9.0}
+    container_name: st2api
+    restart: on-failure
+    depends_on:
+      - mongo
+      - rabbitmq
+      - redis
+      - st2makesecrets
+    networks:
+      - private
+    environment:
+      ST2_AUTH_URL: ${ST2_AUTH_URL:-http://st2auth:9100/}
+      ST2_API_URL: ${ST2_API_URL:-http://st2api:9101/}
+      ST2_STREAM_URL: ${ST2_STREAM_URL:-http://st2stream:9102/}
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+      - stackstorm-keys:/etc/st2/keys:ro
+      - stackstorm-packs-configs:/opt/stackstorm/configs:rw
+      - stackstorm-packs:/opt/stackstorm/packs:rw
+      - ${ST2_PACKS_DEV:-./stackstorm/packs.dev}:/opt/stackstorm/packs.dev:rw
+    ports:
+      - "9101:9101"
+
+  # StackStorm Stream
+  st2stream:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2stream:${ST2_VERSION:-3.9.0}
+    container_name: st2stream
+    restart: on-failure
+    depends_on:
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+    ports:
+      - "9102:9102"
+
+  # StackStorm Scheduler
+  st2scheduler:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2scheduler:${ST2_VERSION:-3.9.0}
+    container_name: st2scheduler
+    restart: on-failure
+    depends_on:
+      - redis
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+
+  # StackStorm Workflow Engine
+  st2workflowengine:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2workflowengine:${ST2_VERSION:-3.9.0}
+    container_name: st2workflowengine
+    restart: on-failure
+    depends_on:
+      - redis
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+      - stackstorm-keys:/etc/st2/keys:ro
+
+  # StackStorm Authentication
+  st2auth:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2auth:${ST2_VERSION:-3.9.0}
+    container_name: st2auth
+    restart: on-failure
+    depends_on:
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+      - ./stackstorm/files/htpasswd:/etc/st2/htpasswd:ro
+    ports:
+      - "9100:9100"
+
+  # StackStorm Action Runner
+  st2actionrunner:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2actionrunner:${ST2_VERSION:-3.9.0}
+    container_name: st2actionrunner
+    restart: on-failure
+    depends_on:
+      - redis
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+      - stackstorm-packs-configs:/opt/stackstorm/configs:rw
+      - stackstorm-packs:/opt/stackstorm/packs:rw
+      - ${ST2_PACKS_DEV:-./stackstorm/packs.dev}:/opt/stackstorm/packs.dev:rw
+      - stackstorm-virtualenvs:/opt/stackstorm/virtualenvs:rw
+      - stackstorm-ssh:/home/stanley/.ssh
+      - stackstorm-keys:/etc/st2/keys:ro
+
+  # StackStorm Garbage Collector
+  st2garbagecollector:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2garbagecollector:${ST2_VERSION:-3.9.0}
+    container_name: st2garbagecollector
+    restart: on-failure
+    depends_on:
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+
+  # StackStorm Notifier
+  st2notifier:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2notifier:${ST2_VERSION:-3.9.0}
+    container_name: st2notifier
+    restart: on-failure
+    depends_on:
+      - redis
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+
+  # StackStorm Rules Engine
+  st2rulesengine:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2rulesengine:${ST2_VERSION:-3.9.0}
+    container_name: st2rulesengine
+    restart: on-failure
+    depends_on:
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+
+  # StackStorm Sensor Container
+  st2sensorcontainer:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2sensorcontainer:${ST2_VERSION:-3.9.0}
+    container_name: st2sensorcontainer
+    restart: on-failure
+    depends_on:
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+      - stackstorm-virtualenvs:/opt/stackstorm/virtualenvs:ro
+      - stackstorm-packs:/opt/stackstorm/packs:ro
+      - stackstorm-packs-configs:/opt/stackstorm/configs:ro
+      - ${ST2_PACKS_DEV:-./stackstorm/packs.dev}:/opt/stackstorm/packs.dev:ro
+
+  # StackStorm Timers Engine
+  st2timersengine:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2timersengine:${ST2_VERSION:-3.9.0}
+    container_name: st2timersengine
+    restart: on-failure
+    depends_on:
+      - st2api
+    networks:
+      - private
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+
+  # StackStorm CLI Client
+  st2client:
+    image: ${ST2_IMAGE_REPO:-stackstorm/}st2actionrunner:${ST2_VERSION:-3.9.0}
+    container_name: st2client
+    restart: on-failure
+    depends_on:
+      - st2auth
+      - st2api
+      - st2stream
+    command: /st2client-startup.sh
+    networks:
+      - private
+    environment:
+      ST2CLIENT: 1
+      ST2_AUTH_URL: ${ST2_AUTH_URL:-http://st2auth:9100/}
+      ST2_API_URL: ${ST2_API_URL:-http://st2api:9101/}
+      ST2_STREAM_URL: ${ST2_STREAM_URL:-http://st2stream:9102/}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./stackstorm/files/st2.docker.conf:/etc/st2/st2.docker.conf:ro
+      - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
+      - stackstorm-keys:/etc/st2/keys:ro
+      - stackstorm-packs-configs:/opt/stackstorm/configs:rw
+      - stackstorm-packs:/opt/stackstorm/packs:rw
+      - ${ST2_PACKS_DEV:-./stackstorm/packs.dev}:/opt/stackstorm/packs.dev:rw
+      - ./stackstorm/files/st2-cli.conf:/root/.st2/config
+      - ./stackstorm/scripts/st2client-startup.sh:/st2client-startup.sh
+
+  # ===========================================================================
+  # SHARED INFRASTRUCTURE
+  # ===========================================================================
+  
+  # MongoDB - StackStorm workflow database (REQUIRED)
+  mongo:
+    image: mongo:4.4
+    container_name: stackstorm-mongo
+    restart: on-failure
+    networks:
+      - private
+    volumes:
+      - stackstorm-mongodb:/data/db
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+
+  # RabbitMQ - Message broker for StackStorm
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: stackstorm-rabbitmq
+    restart: on-failure
+    networks:
+      - private
+    volumes:
+      - stackstorm-rabbitmq:/var/lib/rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+
+  # Redis - Shared coordination backend
+  redis:
+    image: redis:7.2-alpine
+    container_name: stackstorm-redis
+    restart: on-failure
+    command: redis-server --appendonly yes
+    networks:
+      - private
+      - poundcake
+    volumes:
+      - stackstorm-redis:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
 volumes:
-  mariadb_data:
+  # PoundCake
+  poundcake-mariadb-data:
     driver: local
-  redis_data:
+  
+  # StackStorm (from official st2-docker)
+  stackstorm-mongodb:
     driver: local
-  st2-packs:
+  stackstorm-rabbitmq:
     driver: local
-  st2-virtualenvs:
+  stackstorm-redis:
     driver: local
-  st2-configs:
+  stackstorm-packs:
+    driver: local
+  stackstorm-packs-configs:
+    driver: local
+  stackstorm-keys:
+    driver: local
+  stackstorm-virtualenvs:
+    driver: local
+  stackstorm-ssh:
     driver: local
 
+# =============================================================================
+# NETWORKS
+# =============================================================================
 networks:
+  # PoundCake network - connects PoundCake API to its database and Redis
   poundcake:
+    driver: bridge
+  
+  # StackStorm private network - internal services
+  private:
+    driver: bridge
+  
+  # Public network - exposed services (Web UI, API)
+  public:
     driver: bridge

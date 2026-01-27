@@ -461,6 +461,67 @@ mariadbOperator:
     privileges:
       - "ALL PRIVILEGES"
 
+# MongoDB configuration for StackStorm
+# StackStorm REQUIRES MongoDB for workflow executions, rules, and triggers
+mongodb:
+  # Enable MongoDB deployment
+  # When false, you must provide an external MongoDB connection
+  enabled: true
+  
+  # MongoDB connection details (used when enabled=false)
+  # Format: mongodb://username:password@host:port/database
+  url: ""
+  
+  # Reference to existing secret containing MongoDB URL
+  existingSecret: ""
+  secretKey: "mongodb-url"
+  
+  # MongoDB server configuration (used when enabled=true)
+  server:
+    # MongoDB version
+    image:
+      repository: mongo
+      tag: "4.4"
+      pullPolicy: IfNotPresent
+    
+    # Root credentials
+    rootUsername: stackstorm
+    rootPassword: stackstorm
+    
+    # Use existing secret for root password
+    rootPasswordSecret: ""
+    rootPasswordSecretKey: "password"
+    
+    # Storage configuration
+    storage:
+      size: 20Gi
+      storageClassName: ""
+    
+    # Resource limits
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    
+    # Port
+    port: 27017
+  
+  # Database configuration
+  database:
+    # Database name for StackStorm
+    name: st2
+  
+  # StackStorm MongoDB user
+  user:
+    username: stackstorm
+    password: stackstorm
+    # Use existing secret for user password
+    passwordSecret: ""
+    passwordSecretKey: "password"
+
 # Celery worker configuration for async task processing
 celery:
   # Enable Celery workers (required for async alert processing)
