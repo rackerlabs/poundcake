@@ -31,10 +31,11 @@ services:
     ports:
       - "${POUNDCAKE_MARIADB_PORT:-3306}:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks:
       - poundcake
       - private
@@ -99,9 +100,12 @@ services:
       ST2_STREAM_URL: ${ST2_STREAM_URL:-http://st2stream:9102/}
       ST2WEB_HTTPS: ${ST2WEB_HTTPS:-0}
     depends_on:
-      - st2auth
-      - st2api
-      - st2stream
+      st2auth:
+        condition: service_healthy
+      st2api:
+        condition: service_healthy
+      st2stream:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "/st2web-healthcheck.sh"]
       interval: 30s
@@ -152,6 +156,12 @@ services:
       - ${ST2_PACKS_DEV:-./stackstorm/packs.dev}:/opt/stackstorm/packs.dev:rw
     ports:
       - "9101:9101"
+    healthcheck:
+      test: ["CMD-SHELL", "st2 --version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # StackStorm Stream
   st2stream:
@@ -167,6 +177,12 @@ services:
       - ./stackstorm/files/st2.user.conf:/etc/st2/st2.user.conf:ro
     ports:
       - "9102:9102"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9102/v1/stream || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # StackStorm Scheduler
   st2scheduler:
@@ -212,6 +228,12 @@ services:
       - ./stackstorm/files/htpasswd:/etc/st2/htpasswd:ro
     ports:
       - "9100:9100"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9100/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # StackStorm Action Runner
   st2actionrunner:
