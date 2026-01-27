@@ -62,13 +62,35 @@ services:
     networks:
       - poundcake
 
+  # MongoDB - Primary database for StackStorm
+  mongodb:
+    image: mongo:7.0.28
+    container_name: stackstorm-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: stackstorm
+      MONGO_INITDB_ROOT_PASSWORD: stackstorm
+      MONGO_INITDB_DATABASE: st2
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - poundcake
+
   # ============================================================================
   # STACKSTORM SERVICES
   # ============================================================================
 
   # StackStorm API
   st2api:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-api
     environment:
       # Authentication
@@ -79,11 +101,17 @@ services:
       ST2_API_URL: http://st2api:9101
       ST2_STREAM_URL: http://st2stream:9102
       
-      # Database (MariaDB)
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_PORT: 3306
-      ST2_DATABASE_NAME: stackstorm
+      # Database (MongoDB - Primary database for StackStorm)
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_PORT: 27017
+      ST2_DATABASE_NAME: st2
+      ST2_DATABASE_USERNAME: stackstorm
+      ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_PORT: 27017
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
       
@@ -100,7 +128,7 @@ services:
     ports:
       - "9101:9101"
     depends_on:
-      mariadb:
+      mongodb:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -122,7 +150,7 @@ services:
 
   # StackStorm Auth
   st2auth:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-auth
     environment:
       # Authentication
@@ -133,10 +161,10 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_PORT: 3306
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_PORT: 27017
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
       
@@ -151,7 +179,7 @@ services:
     ports:
       - "9100:9100"
     depends_on:
-      mariadb:
+      mongodb:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -165,7 +193,7 @@ services:
 
   # StackStorm Stream
   st2stream:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-stream
     environment:
       # Authentication
@@ -177,9 +205,9 @@ services:
       ST2_STREAM_URL: http://st2stream:9102
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
       
@@ -194,7 +222,7 @@ services:
     ports:
       - "9102:9102"
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
     networks:
@@ -203,7 +231,7 @@ services:
 
   # StackStorm Rules Engine
   st2rulesengine:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-rulesengine
     environment:
       # Authentication
@@ -214,9 +242,9 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
       
@@ -229,7 +257,7 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
     volumes:
@@ -240,7 +268,7 @@ services:
 
   # StackStorm Action Runner
   st2actionrunner:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-actionrunner
     environment:
       # Authentication
@@ -251,9 +279,9 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
       
@@ -266,7 +294,7 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
       - st2api
@@ -279,7 +307,7 @@ services:
 
   # StackStorm Scheduler
   st2scheduler:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-scheduler
     environment:
       # Authentication
@@ -290,9 +318,9 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
       
@@ -305,7 +333,7 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
     networks:
@@ -314,7 +342,7 @@ services:
 
   # StackStorm Notifier
   st2notifier:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-notifier
     environment:
       # Authentication
@@ -325,9 +353,9 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE: mongodb
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
       
@@ -340,7 +368,7 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
     networks:
@@ -370,7 +398,7 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      mariadb:
+      mongodb:
         condition: service_healthy
       st2api:
         condition: service_healthy
@@ -414,6 +442,10 @@ services:
 
 volumes:
   mariadb_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  mongodb_config:
     driver: local
   redis_data:
     driver: local

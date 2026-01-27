@@ -196,6 +196,48 @@ stackstorm:
     management:
       enabled: true
       port: 15672
+  
+  # MongoDB configuration (required for StackStorm primary database)
+  mongodb:
+    enabled: true
+    # Use external MongoDB or deploy subchart
+    external: false
+    # External MongoDB settings (if external: true)
+    host: "mongodb.default.svc.cluster.local"
+    port: 27017
+    database: "st2"
+    username: "stackstorm"
+    password: "stackstorm"
+    # Authentication database (usually admin for root user)
+    authDatabase: "admin"
+    # Connection options
+    replicaSet: ""
+    # Docker image settings
+    imageTag: "7.0.28"  # MongoDB 7.0.28 (latest 7.x, fully supported by StackStorm 3.9.0)
+    # Subchart settings (if external: false)
+    # Uses bitnami/mongodb chart
+    auth:
+      enabled: true
+      rootPassword: "stackstorm"
+      username: "stackstorm"
+      password: "stackstorm"
+      database: "st2"
+    architecture: standalone
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+    service:
+      type: ClusterIP
+      port: 27017
+    # Resource limits for MongoDB
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
 
 # Alert-to-action mappings
 # These will be mounted as ConfigMap
@@ -460,6 +502,55 @@ mariadbOperator:
     # Privileges to grant (default: full access to the database)
     privileges:
       - "ALL PRIVILEGES"
+
+# MongoDB configuration (required for StackStorm)
+mongodb:
+  # Enable MongoDB deployment
+  enabled: true
+  
+  # Use external MongoDB or deploy as part of the chart
+  external: false
+  
+  # External MongoDB settings (if external: true)
+  host: "mongodb.default.svc.cluster.local"
+  port: 27017
+  database: "stackstorm"
+  username: "stackstorm"
+  password: ""
+  # Reference to existing secret containing MongoDB credentials
+  existingSecret: ""
+  usernameKey: "mongodb-username"
+  passwordKey: "mongodb-password"
+  
+  # MongoDB deployment settings (if external: false)
+  image:
+    repository: mongo
+    tag: "6.0"
+    pullPolicy: IfNotPresent
+  
+  # Storage configuration
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: ""
+  
+  # Resource limits
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  # MongoDB root credentials
+  rootUsername: "stackstorm"
+  rootPassword: ""  # Auto-generated if not provided
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 27017
 
 # Celery worker configuration for async task processing
 celery:

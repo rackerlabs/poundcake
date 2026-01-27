@@ -1,0 +1,18 @@
+{{- if and .Values.stackstorm.mongodb.enabled (not .Values.stackstorm.mongodb.external) .Values.stackstorm.mongodb.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "poundcake.fullname" . }}-mongodb-data
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.stackstorm.mongodb.persistence.storageClassName }}
+  storageClassName: {{ .Values.stackstorm.mongodb.persistence.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.stackstorm.mongodb.persistence.size }}
+{{- end }}
