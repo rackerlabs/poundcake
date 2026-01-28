@@ -18,7 +18,7 @@ services:
       - mariadb_data:/var/lib/mysql
       - ./docker/mariadb-init:/docker-entrypoint-initdb.d
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"  # Bind to localhost only for security
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
       interval: 10s
@@ -35,8 +35,8 @@ services:
       RABBITMQ_DEFAULT_USER: stackstorm
       RABBITMQ_DEFAULT_PASS: stackstorm
     ports:
-      - "5672:5672"
-      - "15672:15672"  # Management UI
+      - "127.0.0.1:5672:5672"   # Bind to localhost only for security
+      - "127.0.0.1:15672:15672"  # Management UI - localhost only
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -51,7 +51,7 @@ services:
     container_name: stackstorm-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # Bind to localhost only for security
     volumes:
       - redis_data:/data
     healthcheck:
@@ -71,7 +71,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: stackstorm
       MONGO_INITDB_DATABASE: st2
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"  # Bind to localhost only for security
     volumes:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
@@ -126,7 +126,7 @@ services:
       ST2_REDIS_PORT: 6379
       ST2_REDIS_DB: 0
     ports:
-      - "9101:9101"
+      - "127.0.0.1:9101:9101"  # ST2 API - localhost only for security
     depends_on:
       mongodb:
         condition: service_healthy
@@ -177,7 +177,7 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"  # ST2 Auth - localhost only for security
     depends_on:
       mongodb:
         condition: service_healthy
@@ -220,7 +220,7 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     ports:
-      - "9102:9102"
+      - "127.0.0.1:9102:9102"  # ST2 Stream - localhost only for security
     depends_on:
       - mongodb
       - rabbitmq
@@ -396,7 +396,7 @@ services:
       # App settings
       LOG_LEVEL: INFO
     ports:
-      - "8000:8000"
+      - "8000:8000"  # API - Exposed for webhooks. Use reverse proxy in production.
     depends_on:
       mongodb:
         condition: service_healthy
