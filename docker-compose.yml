@@ -133,6 +133,7 @@ services:
       - st2-packs:/opt/stackstorm/packs
       - st2-virtualenvs:/opt/stackstorm/virtualenvs
       - st2-configs:/opt/stackstorm/configs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     healthcheck:
       test: ["CMD", "st2", "action", "list", "--limit=1"]
       interval: 30s
@@ -182,6 +183,7 @@ services:
         condition: service_healthy
     volumes:
       - st2-packs:/opt/stackstorm/packs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2auth --config-file=/etc/st2/st2.conf
@@ -220,6 +222,8 @@ services:
       - mongodb
       - rabbitmq
       - redis
+    volumes:
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2stream --config-file=/etc/st2/st2.conf
@@ -257,6 +261,7 @@ services:
       - redis
     volumes:
       - st2-packs:/opt/stackstorm/packs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2rulesengine --config-file=/etc/st2/st2.conf
@@ -296,6 +301,7 @@ services:
     volumes:
       - st2-packs:/opt/stackstorm/packs
       - st2-virtualenvs:/opt/stackstorm/virtualenvs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2actionrunner --config-file=/etc/st2/st2.conf
@@ -331,6 +337,8 @@ services:
       - mongodb
       - rabbitmq
       - redis
+    volumes:
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2scheduler --config-file=/etc/st2/st2.conf
@@ -366,6 +374,8 @@ services:
       - mongodb
       - rabbitmq
       - redis
+    volumes:
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2notifier --config-file=/etc/st2/st2.conf
