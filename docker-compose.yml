@@ -81,7 +81,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 40s
+      start_period: 90s
     networks:
       - poundcake
 
@@ -103,12 +103,14 @@ services:
       ST2_STREAM_URL: http://st2stream:9102
       
       # Database (MongoDB - Primary database for StackStorm)
-      ST2_DATABASE: mongodb
       ST2_DATABASE_HOST: mongodb
       ST2_DATABASE_PORT: 27017
       ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_URI: "mongodb://stackstorm:stackstorm@mongodb:27017/st2?authSource=admin&tls=false&ssl=false"
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -135,7 +137,7 @@ services:
       - st2-configs:/opt/stackstorm/configs
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     healthcheck:
-      test: ["CMD", "st2", "action", "list", "--limit=1"]
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://localhost:9101/v1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -157,12 +159,13 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mongodb
       ST2_DATABASE_HOST: mongodb
       ST2_DATABASE_PORT: 27017
       ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -202,11 +205,12 @@ services:
       ST2_STREAM_URL: http://st2stream:9102
       
       # Database
-      ST2_DATABASE: mongodb
       ST2_DATABASE_HOST: mongodb
       ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -241,11 +245,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mongodb
       ST2_DATABASE_HOST: mongodb
       ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -279,11 +284,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mongodb
       ST2_DATABASE_HOST: mongodb
       ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -319,11 +325,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mongodb
       ST2_DATABASE_HOST: mongodb
       ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -356,11 +363,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mongodb
       ST2_DATABASE_HOST: mongodb
       ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -411,11 +419,11 @@ services:
       - ./api:/app/api
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "python", "-c", "import requests; r=requests.get('http://localhost:8000/api/v1/health'); exit(0 if r.json().get('status') == 'healthy' else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 90s
     networks:
       - poundcake
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload

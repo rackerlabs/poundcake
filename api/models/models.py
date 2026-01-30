@@ -30,7 +30,7 @@ class Recipe(Base):
     - Timing constraints for execution and cleanup
     """
 
-    __tablename__ = "poundcake_recipes"
+    __tablename__ = "recipes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(256), unique=True, nullable=False, index=True)
@@ -78,7 +78,7 @@ class Oven(Base):
     - Manages execution lifecycle (new -> processing -> complete)
     """
 
-    __tablename__ = "poundcake_ovens"
+    __tablename__ = "ovens"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
@@ -86,8 +86,8 @@ class Oven(Base):
     req_id = Column(String(36), nullable=False, index=True)
 
     # Foreign keys
-    alert_id = Column(Integer, ForeignKey("poundcake_alerts.id"), nullable=True)
-    recipe_id = Column(Integer, ForeignKey("poundcake_recipes.id"), nullable=False)
+    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
     
     # Task tracking - which task from recipe.task_list this oven represents
     task_id = Column(String(100), nullable=True, index=True)  # UUID from recipe.task_list
@@ -138,7 +138,7 @@ class Alert(Base):
     - Optional ticket system integration
     """
 
-    __tablename__ = "poundcake_alerts"
+    __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 

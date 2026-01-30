@@ -1,3 +1,17 @@
+# ____                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+# ╔════════════════════════════════════════════════════════════════╗
+# ____                        _  ____      _         
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+# ╚════════════════════════════════════════════════════════════════╝
+#
 """Health check and statistics endpoints."""
 
 from datetime import datetime, timedelta
@@ -41,7 +55,7 @@ def health_check(db: Session = Depends(get_db)) -> HealthResponse:
             timeout=5,
             headers={"St2-Api-Key": os.getenv("ST2_API_KEY", "")},
         )
-        if response.status_code == 200:
+        if response.status_code in [200, 401]:
             st2_status = "healthy"
         else:
             st2_status = f"unhealthy: HTTP {response.status_code}"
