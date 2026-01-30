@@ -101,6 +101,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
     volumes:
       - mongo_data:/data/db
+      - ./docker/mongodb-init:/docker-entrypoint-initdb.d
     ports:
       - "127.0.0.1:27017:27017"
     networks:
