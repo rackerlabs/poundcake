@@ -1,24 +1,18 @@
-"""Pytest configuration and fixtures for PoundCake tests."""
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+"""Pytest configuration and fixtures."""
 
 import pytest
 import os
 
 
-@pytest.fixture
-def base_url():
-    """Provide base URL for integration tests.
-
-    Integration tests are skipped unless POUNDCAKE_TEST_URL is set.
-    """
-    url = os.getenv("POUNDCAKE_TEST_URL")
-    if not url:
-        pytest.skip("Integration tests require POUNDCAKE_TEST_URL environment variable")
-    return url
-
-
-# Mark all tests in test_preheat.py as integration tests
-def pytest_collection_modifyitems(items):
-    """Add integration marker to tests that require running server."""
-    for item in items:
-        if "test_preheat" in item.nodeid:
-            item.add_marker(pytest.mark.integration)
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_env():
+    """Set up test environment variables."""
+    os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+    os.environ["ST2_API_URL"] = "http://localhost:9101/v1"
+    os.environ["TESTING"] = "true"

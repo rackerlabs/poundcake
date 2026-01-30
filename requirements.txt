@@ -1,33 +1,59 @@
-# Core FastAPI dependencies
+#  ___                        _  ____      _         
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+# PoundCake API Requirements
+
+# Web Framework
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
-pydantic>=2.10.0
-pydantic-settings>=2.7.0
-python-multipart>=0.0.18
+python-multipart>=0.0.9
 
 # Database
-sqlalchemy>=2.0.36
-alembic>=1.14.0
-pymysql>=1.1.1
-cryptography>=44.0.0
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+pymysql>=1.1.0
+cryptography>=41.0.0
 
-# HTTP clients
+# Data Validation
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+
+# HTTP Client
 requests>=2.32.0
-httpx>=0.28.0
+httpx>=0.27.0
 
-# Logging
-python-json-logger>=3.2.0
+# Authentication & Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+itsdangerous>=2.2.0
 
-# Metrics
+# Monitoring & Metrics
 prometheus-client>=0.21.0
+starlette-prometheus>=0.10.0
 
-# YAML parsing
-PyYAML>=6.0.2
+# Git Integration
+gitpython>=3.1.43
 
-# Development dependencies (optional, install with: pip install -r requirements-dev.txt)
-# pytest>=8.3.0
-# pytest-asyncio>=0.24.0
-# pytest-cov>=6.0.0
-# black>=24.10.0
-# ruff>=0.8.0
-# mypy>=1.13.0
+# Kubernetes Client (for CRD management)
+kubernetes>=31.0.0
+
+# Utilities
+python-dateutil>=2.9.0
+pytz>=2024.1
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-cov>=6.0.0
+pytest-mock>=3.14.0
+
+# Development Tools (optional, comment out for production)
+black>=24.10.0
+ruff>=0.7.0
+mypy>=1.11.0
+
+# JSON Logging
+python-json-logger>=2.0.7

@@ -1,5 +1,9 @@
-version: '3.8'
-
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 services:
   # ============================================================================
   # SHARED INFRASTRUCTURE
@@ -18,12 +22,13 @@ services:
       - mariadb_data:/var/lib/mysql
       - ./docker/mariadb-init:/docker-entrypoint-initdb.d
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"  # Bind to localhost only for security
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks:
       - poundcake
 
@@ -35,8 +40,8 @@ services:
       RABBITMQ_DEFAULT_USER: stackstorm
       RABBITMQ_DEFAULT_PASS: stackstorm
     ports:
-      - "5672:5672"
-      - "15672:15672"  # Management UI
+      - "127.0.0.1:5672:5672"   # Bind to localhost only for security
+      - "127.0.0.1:15672:15672"  # Management UI - localhost only
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -51,7 +56,7 @@ services:
     container_name: stackstorm-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # Bind to localhost only for security
     volumes:
       - redis_data:/data
     healthcheck:
@@ -62,13 +67,35 @@ services:
     networks:
       - poundcake
 
+  # MongoDB - Primary database for StackStorm
+  mongodb:
+    image: mongo:7.0.28
+    container_name: stackstorm-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: stackstorm
+      MONGO_INITDB_ROOT_PASSWORD: stackstorm
+      MONGO_INITDB_DATABASE: st2
+    ports:
+      - "127.0.0.1:27017:27017"  # Bind to localhost only for security
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    networks:
+      - poundcake
+
   # ============================================================================
   # STACKSTORM SERVICES
   # ============================================================================
 
   # StackStorm API
   st2api:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-api
     environment:
       # Authentication
@@ -79,13 +106,15 @@ services:
       ST2_API_URL: http://st2api:9101
       ST2_STREAM_URL: http://st2stream:9102
       
-      # Database (MariaDB)
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_PORT: 3306
-      ST2_DATABASE_NAME: stackstorm
+      # Database (MongoDB - Primary database for StackStorm)
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_PORT: 27017
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_URI: "mongodb://stackstorm:stackstorm@mongodb:27017/st2?authSource=admin&tls=false&ssl=false"
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -98,9 +127,9 @@ services:
       ST2_REDIS_PORT: 6379
       ST2_REDIS_DB: 0
     ports:
-      - "9101:9101"
+      - "127.0.0.1:9101:9101"  # ST2 API - localhost only for security
     depends_on:
-      mariadb:
+      mongodb:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -110,19 +139,20 @@ services:
       - st2-packs:/opt/stackstorm/packs
       - st2-virtualenvs:/opt/stackstorm/virtualenvs
       - st2-configs:/opt/stackstorm/configs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     healthcheck:
-      test: ["CMD", "st2", "action", "list", "--limit=1"]
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://localhost:9101/v1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
     networks:
       - poundcake
-    command: /bin/bash -c "st2-setup-db && /opt/stackstorm/st2/bin/st2api --config-file=/etc/st2/st2.conf"
+    command: /opt/stackstorm/st2/bin/st2api --config-file=/etc/st2/st2.conf
 
   # StackStorm Auth
   st2auth:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-auth
     environment:
       # Authentication
@@ -133,12 +163,13 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_PORT: 3306
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_PORT: 27017
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -149,9 +180,9 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"  # ST2 Auth - localhost only for security
     depends_on:
-      mariadb:
+      mongodb:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -159,13 +190,14 @@ services:
         condition: service_healthy
     volumes:
       - st2-packs:/opt/stackstorm/packs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2auth --config-file=/etc/st2/st2.conf
 
   # StackStorm Stream
   st2stream:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-stream
     environment:
       # Authentication
@@ -177,11 +209,12 @@ services:
       ST2_STREAM_URL: http://st2stream:9102
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -192,18 +225,20 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     ports:
-      - "9102:9102"
+      - "127.0.0.1:9102:9102"  # ST2 Stream - localhost only for security
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
+    volumes:
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2stream --config-file=/etc/st2/st2.conf
 
   # StackStorm Rules Engine
   st2rulesengine:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-rulesengine
     environment:
       # Authentication
@@ -214,11 +249,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -229,18 +265,19 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
     volumes:
       - st2-packs:/opt/stackstorm/packs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2rulesengine --config-file=/etc/st2/st2.conf
 
   # StackStorm Action Runner
   st2actionrunner:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-actionrunner
     environment:
       # Authentication
@@ -251,11 +288,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -266,20 +304,21 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
       - st2api
     volumes:
       - st2-packs:/opt/stackstorm/packs
       - st2-virtualenvs:/opt/stackstorm/virtualenvs
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2actionrunner --config-file=/etc/st2/st2.conf
 
   # StackStorm Scheduler
   st2scheduler:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-scheduler
     environment:
       # Authentication
@@ -290,11 +329,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -305,16 +345,18 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
+    volumes:
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2scheduler --config-file=/etc/st2/st2.conf
 
   # StackStorm Notifier
   st2notifier:
-    image: stackstorm/stackstorm:3.9.0
+    image: stackstorm/st2:3.9.0
     container_name: stackstorm-notifier
     environment:
       # Authentication
@@ -325,11 +367,12 @@ services:
       ST2_API_URL: http://st2api:9101
       
       # Database
-      ST2_DATABASE: mysql
-      ST2_DATABASE_HOST: mariadb
-      ST2_DATABASE_NAME: stackstorm
+      ST2_DATABASE_HOST: mongodb
+      ST2_DATABASE_NAME: st2
       ST2_DATABASE_USERNAME: stackstorm
       ST2_DATABASE_PASSWORD: stackstorm
+      ST2_DATABASE_SSL: "false"
+      ST2_DATABASE_TLS: "false"
       
       # RabbitMQ
       ST2_RABBITMQ_HOST: rabbitmq
@@ -340,9 +383,11 @@ services:
       ST2_REDIS_HOST: redis
       ST2_REDIS_PORT: 6379
     depends_on:
-      - mariadb
+      - mongodb
       - rabbitmq
       - redis
+    volumes:
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2notifier --config-file=/etc/st2/st2.conf
@@ -368,27 +413,58 @@ services:
       # App settings
       LOG_LEVEL: INFO
     ports:
-      - "8000:8000"
+      - "8000:8000"  # API - Exposed for webhooks. Use reverse proxy in production.
     depends_on:
-      mariadb:
+      mongodb:
         condition: service_healthy
       st2api:
         condition: service_healthy
     volumes:
       - ./api:/app/api
+      - ./tests:/app/tests
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "python", "-c", "import requests; r=requests.get('http://localhost:8000/api/v1/health'); exit(0 if r.json().get('status') == 'healthy' else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 90s
     networks:
       - poundcake
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
+  # PoundCake Oven Scheduler - Scheduled alert crawler
+  oven:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-oven
+    environment:
+      # PoundCake API
+      POUNDCAKE_API_URL: http://api:8000
+      OVEN_CRAWLER_INTERVAL: ${OVEN_CRAWLER_INTERVAL:-60}
+      
+      # Logging
+      LOG_LEVEL: INFO
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./api:/app/api
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+    networks:
+      - poundcake
+    command: python scripts/oven_scheduler.py --interval ${OVEN_CRAWLER_INTERVAL:-60}
+    restart: unless-stopped
+
 volumes:
   mariadb_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  mongodb_config:
     driver: local
   redis_data:
     driver: local

@@ -1,3 +1,9 @@
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 """Pydantic schemas for request/response validation."""
 
 from datetime import datetime
@@ -72,6 +78,7 @@ class AlertResponse(BaseModel):
     alert_status: str  # firing or resolved (from Alertmanager)
     processing_status: str  # new, processing, complete, failed (internal)
     alert_name: str
+    group_name: Optional[str]  # From groupLabels, used for recipe matching
     severity: Optional[str]
     instance: Optional[str]
     prometheus: Optional[str]

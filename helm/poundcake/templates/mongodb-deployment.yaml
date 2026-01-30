@@ -1,0 +1,96 @@
+# ____                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+# ╔════════════════════════════════════════════════════════════════╗
+# ____                        _  ____      _         
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+# ╚════════════════════════════════════════════════════════════════╝
+
+{{- if and .Values.stackstorm.mongodb.enabled (not .Values.stackstorm.mongodb.external) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "poundcake.fullname" . }}-mongodb
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "poundcake.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mongodb
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+      - name: mongodb
+        image: "mongo:{{ .Values.stackstorm.mongodb.imageTag | default "7.0.28" }}"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: mongodb
+          containerPort: 27017
+          protocol: TCP
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: {{ .Values.stackstorm.mongodb.auth.username | quote }}
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "poundcake.fullname" . }}-mongodb-secret
+              key: mongodb-root-password
+        - name: MONGO_INITDB_DATABASE
+          value: {{ .Values.stackstorm.mongodb.auth.database | quote }}
+        volumeMounts:
+        - name: mongodb-data
+          mountPath: /data/db
+        - name: mongodb-config
+          mountPath: /data/configdb
+        {{- if .Values.stackstorm.mongodb.resources }}
+        resources:
+          {{- toYaml .Values.stackstorm.mongodb.resources | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+      volumes:
+      - name: mongodb-data
+        {{- if .Values.stackstorm.mongodb.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "poundcake.fullname" . }}-mongodb-data
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: mongodb-config
+        emptyDir: {}
+{{- end }}

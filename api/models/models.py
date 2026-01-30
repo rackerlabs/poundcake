@@ -1,15 +1,10 @@
-"""Refactored SQLAlchemy models - PoundCake v2.0 with Recipe/Oven architecture.
-
-NEW ARCHITECTURE:
-- Recipe: Defines PoundCake-specific tasks that map to StackStorm actions/workflows
-- Oven: Executes recipes and tracks execution status
-- Alerts: Stores and tracks alert auto-remediation status
-
-NO MORE:
-- Celery/Redis for async processing
-- Complex task execution tracking
-- Multiple execution link tables
-"""
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+"""Database Module  management for PoundCake."""
 
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Text, Integer, JSON, ForeignKey, Index
@@ -30,7 +25,7 @@ class Recipe(Base):
     - Timing constraints for execution and cleanup
     """
 
-    __tablename__ = "poundcake_recipes"
+    __tablename__ = "recipes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(256), unique=True, nullable=False, index=True)
@@ -78,7 +73,7 @@ class Oven(Base):
     - Manages execution lifecycle (new -> processing -> complete)
     """
 
-    __tablename__ = "poundcake_ovens"
+    __tablename__ = "ovens"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
@@ -86,8 +81,11 @@ class Oven(Base):
     req_id = Column(String(36), nullable=False, index=True)
 
     # Foreign keys
-    alert_id = Column(Integer, ForeignKey("poundcake_alerts.id"), nullable=True)
-    recipe_id = Column(Integer, ForeignKey("poundcake_recipes.id"), nullable=False)
+    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
+
+    # Task tracking - which task from recipe.task_list this oven represents
+    task_id = Column(String(100), nullable=True, index=True)  # UUID from recipe.task_list
 
     # StackStorm execution tracking
     action_id = Column(String(100), nullable=True, index=True)  # ST2 execution ID
@@ -112,6 +110,7 @@ class Oven(Base):
         Index("idx_oven_status", "status"),
         Index("idx_oven_alert_id", "alert_id"),
         Index("idx_oven_action_id", "action_id"),
+        Index("idx_oven_task_id", "task_id"),
     )
 
     def __repr__(self) -> str:
@@ -134,7 +133,7 @@ class Alert(Base):
     - Optional ticket system integration
     """
 
-    __tablename__ = "poundcake_alerts"
+    __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
@@ -147,8 +146,11 @@ class Alert(Base):
     # Alert status from Alertmanager (firing or resolved)
     alert_status = Column(String(20), nullable=False, index=True)  # firing, resolved
 
-    # Fields extracted from labels
+    # Fields extracted from labels and groupLabels
     alert_name = Column(String(200), nullable=False, index=True)  # labels.alertname
+    group_name = Column(
+        String(200), nullable=True, index=True
+    )  # groupLabels.alertname for recipe matching
     severity = Column(String(50), nullable=True, index=True)  # labels.severity (optional)
     instance = Column(String(200), nullable=True, index=True)  # labels.instance (optional)
     prometheus = Column(String(200), nullable=True)  # labels.prometheus (optional)
@@ -188,6 +190,7 @@ class Alert(Base):
         Index("idx_alerts_processing_status", "processing_status"),
         Index("idx_alerts_alert_status", "alert_status"),
         Index("idx_alerts_alert_name", "alert_name"),
+        Index("idx_alerts_group_name", "group_name"),
         Index("idx_alerts_severity", "severity"),
         Index("idx_alerts_created_at", "created_at"),
     )

@@ -1,3 +1,9 @@
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 """Pre-heat service for alert ingestion and management."""
 
 from datetime import datetime
@@ -34,6 +40,9 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
     """
     processed_alerts = []
 
+    # Extract group_name from groupLabels (used for recipe matching)
+    group_name = webhook_data.groupLabels.get("alertname")
+
     for alert_data in webhook_data.alerts:
         try:
             # Query for existing alert with this fingerprint
@@ -62,6 +71,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
                     alert_status=webhook_status,
                     processing_status="new",
                     alert_name=alert_name,
+                    group_name=group_name,
                     severity=severity,
                     instance=instance,
                     prometheus=prometheus,
@@ -105,6 +115,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
                     alert_status=webhook_status,
                     processing_status="new",
                     alert_name=alert_name,
+                    group_name=group_name,
                     severity=severity,
                     instance=instance,
                     prometheus=prometheus,

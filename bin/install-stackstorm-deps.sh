@@ -1,6 +1,11 @@
 #!/bin/bash
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 # Install StackStorm Dependencies (MongoDB, RabbitMQ, Redis)
-# Uses official images instead of Bitnami
 
 NAMESPACE="${STACKSTORM_NAMESPACE:-stackstorm}"
 
@@ -50,7 +55,7 @@ spec:
     spec:
       containers:
       - name: mongodb
-        image: mongo:6.0
+        image: mongo:7.0.28
         ports:
         - containerPort: 27017
         env:

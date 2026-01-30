@@ -1,7 +1,10 @@
-"""Authentication and session management for PoundCake.
-
-Ported from poundcake/src/poundcake/auth.py with adaptations for the merged repo.
-"""
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+"""Authentication and session management for PoundCake."""
 
 import logging
 import secrets

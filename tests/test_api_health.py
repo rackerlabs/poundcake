@@ -1,0 +1,91 @@
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+"""Basic API health tests for PoundCake."""
+
+import pytest
+from unittest.mock import patch, MagicMock, Mock
+from fastapi.testclient import TestClient
+from api.main import app
+
+
+@pytest.fixture
+def client():
+    """Create test client."""
+    return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def mock_database():
+    """Mock database connection for all tests."""
+    with patch("api.core.database.SessionLocal") as mock_session:
+        mock_db = MagicMock()
+        mock_session.return_value.__enter__.return_value = mock_db
+        mock_session.return_value.__exit__.return_value = None
+        mock_db.execute.return_value = None
+        yield mock_db
+
+
+@pytest.fixture(autouse=True)
+def mock_stackstorm():
+    """Mock StackStorm API calls for all tests."""
+    with patch("requests.get") as mock_get:
+        mock_response = Mock()
+        mock_response.status_code = 401  # 401 means API is responding
+        mock_response.json.return_value = {}
+        mock_get.return_value = mock_response
+        yield mock_get
+
+
+def test_health_endpoint(client):
+    """Test health endpoint returns healthy status."""
+    response = client.get("/api/v1/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert "status" in data
+    assert data["status"] == "healthy"
+    assert "database" in data
+    assert "stackstorm" in data
+    assert "version" in data
+
+
+def test_health_endpoint_structure(client):
+    """Test health endpoint returns expected structure."""
+    response = client.get("/api/v1/health")
+    data = response.json()
+
+    # Check all required fields
+    required_fields = ["status", "version", "database", "stackstorm", "timestamp"]
+    for field in required_fields:
+        assert field in data, f"Missing field: {field}"
+
+
+def test_root_endpoint(client):
+    """Test root endpoint returns API info."""
+    response = client.get("/")
+    assert response.status_code == 200
+
+
+def test_openapi_endpoint(client):
+    """Test OpenAPI schema is available."""
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    data = response.json()
+    assert "openapi" in data
+    assert "info" in data
+    assert data["info"]["title"] == "PoundCake"
+
+
+def test_ready_endpoint(client):
+    """Test readiness endpoint."""
+    response = client.get("/api/v1/health/ready")
+    assert response.status_code == 200
+
+
+def test_live_endpoint(client):
+    """Test liveness endpoint."""
+    response = client.get("/api/v1/health/live")
+    assert response.status_code == 200

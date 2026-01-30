@@ -1,3 +1,9 @@
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 FROM python:3.11-slim
 
 # Set working directory
@@ -19,6 +25,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source
 COPY api/ ./api/
+
+# Copy Alembic configuration and migrations
+COPY alembic.ini .
+COPY alembic/ ./alembic/
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && \

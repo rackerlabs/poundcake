@@ -1,3 +1,9 @@
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 """Application configuration - merged from poundcake and poundcake-api."""
 
 import os
@@ -42,7 +48,7 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Database Settings (from poundcake-api)
     # ==========================================================================
-    database_url: str = "mysql+pymysql://poundcake:poundcake@localhost:3306/poundcake"
+    database_url: str = "mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake"
     database_echo: bool = False
 
     # ==========================================================================

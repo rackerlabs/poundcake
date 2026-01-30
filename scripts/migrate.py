@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 """Database migration management script for PoundCake.
 
 This script provides commands for managing database migrations using Alembic.
@@ -19,16 +25,16 @@ def get_alembic_config():
     """Get Alembic configuration."""
     current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     alembic_ini = os.path.join(current_dir, "alembic.ini")
-    
+
     config = Config(alembic_ini)
-    config.set_main_option('sqlalchemy.url', settings.database_url)
-    
+    config.set_main_option("sqlalchemy.url", settings.database_url)
+
     return config
 
 
 def upgrade(revision="head"):
     """Upgrade database to a specific revision.
-    
+
     Args:
         revision: Target revision (default: "head" for latest)
     """
@@ -40,7 +46,7 @@ def upgrade(revision="head"):
 
 def downgrade(revision="-1"):
     """Downgrade database to a specific revision.
-    
+
     Args:
         revision: Target revision (default: "-1" for one step back)
     """
@@ -66,7 +72,7 @@ def history():
 
 def create_migration(message):
     """Create a new migration.
-    
+
     Args:
         message: Migration message/description
     """
@@ -78,9 +84,9 @@ def create_migration(message):
 
 def stamp(revision="head"):
     """Stamp database with a specific revision without running migrations.
-    
+
     Useful for marking an existing database as being at a specific version.
-    
+
     Args:
         revision: Target revision to stamp (default: "head")
     """
@@ -127,24 +133,24 @@ def main():
     if len(sys.argv) < 2:
         show_help()
         sys.exit(1)
-    
+
     command_name = sys.argv[1].lower()
-    
+
     try:
         if command_name == "upgrade":
             revision = sys.argv[2] if len(sys.argv) > 2 else "head"
             upgrade(revision)
-        
+
         elif command_name == "downgrade":
             revision = sys.argv[2] if len(sys.argv) > 2 else "-1"
             downgrade(revision)
-        
+
         elif command_name == "current":
             current()
-        
+
         elif command_name == "history":
             history()
-        
+
         elif command_name == "create":
             if len(sys.argv) < 3:
                 print("Error: Migration message required")
@@ -152,19 +158,19 @@ def main():
                 sys.exit(1)
             message = " ".join(sys.argv[2:])
             create_migration(message)
-        
+
         elif command_name == "stamp":
             revision = sys.argv[2] if len(sys.argv) > 2 else "head"
             stamp(revision)
-        
+
         elif command_name in ["help", "-h", "--help"]:
             show_help()
-        
+
         else:
             print(f"Error: Unknown command: {command_name}")
             show_help()
             sys.exit(1)
-    
+
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
