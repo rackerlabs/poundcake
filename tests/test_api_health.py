@@ -1,10 +1,8 @@
-# ╔════════════════════════════════════════════════════════════════╗
-#  ____                        _  ____      _         
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# ╚════════════════════════════════════════════════════════════════╝
 #
 """Basic API health tests for PoundCake."""
 
@@ -58,7 +56,7 @@ def test_health_endpoint_structure(client):
     """Test health endpoint returns expected structure."""
     response = client.get("/api/v1/health")
     data = response.json()
-    
+
     # Check all required fields
     required_fields = ["status", "version", "database", "stackstorm", "timestamp"]
     for field in required_fields:

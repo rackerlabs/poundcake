@@ -1,16 +1,8 @@
-# ____                        _  ____      _
+#  ___                        _  ____      _
 # |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-#
-# ╔════════════════════════════════════════════════════════════════╗
-# ____                        _  ____      _         
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
-# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
-# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
-# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# ╚════════════════════════════════════════════════════════════════╝
 #
 """Recipe management API routes."""
 
@@ -112,11 +104,11 @@ def list_recipes(
 ) -> List[Recipe]:
     """List all recipes with optional filtering by name."""
     query = db.query(Recipe)
-    
+
     # Filter by name if provided
     if name:
         query = query.filter(Recipe.name == name)
-    
+
     recipes = query.order_by(desc(Recipe.created_at)).offset(offset).limit(limit).all()
     return recipes
 

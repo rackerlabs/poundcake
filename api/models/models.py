@@ -1,15 +1,10 @@
-"""Refactored SQLAlchemy models - PoundCake v2.0 with Recipe/Oven architecture.
-
-NEW ARCHITECTURE:
-- Recipe: Defines PoundCake-specific tasks that map to StackStorm actions/workflows
-- Oven: Executes recipes and tracks execution status
-- Alerts: Stores and tracks alert auto-remediation status
-
-NO MORE:
-- Celery/Redis for async processing
-- Complex task execution tracking
-- Multiple execution link tables
-"""
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+"""Database Module  management for PoundCake."""
 
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Text, Integer, JSON, ForeignKey, Index
@@ -88,7 +83,7 @@ class Oven(Base):
     # Foreign keys
     alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
-    
+
     # Task tracking - which task from recipe.task_list this oven represents
     task_id = Column(String(100), nullable=True, index=True)  # UUID from recipe.task_list
 
@@ -153,7 +148,9 @@ class Alert(Base):
 
     # Fields extracted from labels and groupLabels
     alert_name = Column(String(200), nullable=False, index=True)  # labels.alertname
-    group_name = Column(String(200), nullable=True, index=True)  # groupLabels.alertname for recipe matching
+    group_name = Column(
+        String(200), nullable=True, index=True
+    )  # groupLabels.alertname for recipe matching
     severity = Column(String(50), nullable=True, index=True)  # labels.severity (optional)
     instance = Column(String(200), nullable=True, index=True)  # labels.instance (optional)
     prometheus = Column(String(200), nullable=True)  # labels.prometheus (optional)

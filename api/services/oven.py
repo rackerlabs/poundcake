@@ -1,3 +1,9 @@
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 """Oven service - scheduled crawler for processing alerts.
 
 This service runs as a scheduled background task that:
@@ -102,7 +108,9 @@ class OvenService:
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.error(f"Failed to fetch new alerts: {response.status_code} - {response.text}")
+                logger.error(
+                    f"Failed to fetch new alerts: {response.status_code} - {response.text}"
+                )
                 return []
 
         except Exception as e:
@@ -279,7 +287,9 @@ class OvenService:
                 return {"success": False, "error": response.text}
 
         except Exception as e:
-            logger.error(f"Oven: Error triggering task: {e}", exc_info=True, extra={"req_id": req_id})
+            logger.error(
+                f"Oven: Error triggering task: {e}", exc_info=True, extra={"req_id": req_id}
+            )
             return {"success": False, "error": str(e)}
 
 
@@ -310,4 +320,3 @@ def run_oven_crawler_loop(interval_seconds: int = 60):
             logger.error(f"Oven crawler: Unexpected error: {e}", exc_info=True)
 
         time.sleep(interval_seconds)
-

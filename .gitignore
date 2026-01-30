@@ -94,3 +94,60 @@ Thumbs.db
 # Alembic
 alembic/versions/*.py
 !alembic/versions/__init__.py
+
+# Testing
+coverage.xml
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+*.cover
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/*.log
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Temporary
+*.tmp
+*.bak
+*.backup

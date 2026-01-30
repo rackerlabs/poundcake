@@ -1,16 +1,8 @@
-# ____                        _  ____      _
+#  ___                        _  ____      _
 # |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-#
-# ╔════════════════════════════════════════════════════════════════╗
-# ____                        _  ____      _         
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
-# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
-# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
-# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# ╚════════════════════════════════════════════════════════════════╝
 #
 """Pre-heat service for alert ingestion and management."""
 
@@ -47,7 +39,7 @@ def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> Lis
         List of Alert objects that were created or updated
     """
     processed_alerts = []
-    
+
     # Extract group_name from groupLabels (used for recipe matching)
     group_name = webhook_data.groupLabels.get("alertname")
 
