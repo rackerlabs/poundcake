@@ -8,7 +8,6 @@
 #
 """Test database models."""
 
-import pytest
 from api.models.models import Alert, Recipe, Oven
 
 
