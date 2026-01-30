@@ -162,7 +162,7 @@ services:
       stackstorm-redis:
         condition: service_healthy
     volumes:
-      - ./docker/st2/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     ports:
       - "127.0.0.1:9101:9101"
     networks:
@@ -182,7 +182,7 @@ services:
       stackstorm-mongodb:
         condition: service_healthy
     volumes:
-      - ./docker/st2/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     ports:
       - "127.0.0.1:9100:9100"
     networks:
@@ -197,7 +197,7 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     ports:
       - "127.0.0.1:9102:9102"
     networks:
@@ -212,7 +212,7 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2actionrunner --config-file /etc/st2/st2.conf
@@ -225,7 +225,7 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2scheduler --config-file /etc/st2/st2.conf
@@ -238,7 +238,7 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2rulesengine --config-file /etc/st2/st2.conf
@@ -251,7 +251,7 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2notifier --config-file /etc/st2/st2.conf
