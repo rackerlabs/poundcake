@@ -416,6 +416,7 @@ services:
         condition: service_healthy
     volumes:
       - ./api:/app/api
+      - ./tests:/app/tests
       - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; r=requests.get('http://localhost:8000/api/v1/health'); exit(0 if r.json().get('status') == 'healthy' else 1)"]
@@ -445,6 +446,7 @@ services:
         condition: service_healthy
     volumes:
       - ./api:/app/api
+      - ./tests:/app/tests
       - ./scripts:/app/scripts
       - ./logs:/app/logs
     networks:

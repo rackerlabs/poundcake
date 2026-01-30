@@ -54,3 +54,6 @@ pytest-mock>=3.14.0
 black>=24.10.0
 ruff>=0.7.0
 mypy>=1.11.0
+
+# JSON Logging
+python-json-logger>=2.0.7
