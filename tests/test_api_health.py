@@ -9,7 +9,7 @@
 """Basic API health tests for PoundCake."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 from fastapi.testclient import TestClient
 from api.main import app
 
@@ -20,26 +20,29 @@ def client():
     return TestClient(app)
 
 
-@pytest.fixture
-def mock_health_checks():
-    """Mock database and StackStorm health checks."""
-    with patch("api.api.health.get_db") as mock_db, \
-         patch("api.api.health.requests.get") as mock_st2:
-        
-        # Mock database connection
-        mock_session = MagicMock()
-        mock_db.return_value.__enter__.return_value = mock_session
-        mock_session.execute.return_value = None
-        
-        # Mock StackStorm API check (returns 401 which we treat as healthy)
-        mock_response = MagicMock()
-        mock_response.status_code = 401
-        mock_st2.return_value = mock_response
-        
-        yield
+@pytest.fixture(autouse=True)
+def mock_database():
+    """Mock database connection for all tests."""
+    with patch("api.core.database.SessionLocal") as mock_session:
+        mock_db = MagicMock()
+        mock_session.return_value.__enter__.return_value = mock_db
+        mock_session.return_value.__exit__.return_value = None
+        mock_db.execute.return_value = None
+        yield mock_db
 
 
-def test_health_endpoint(client, mock_health_checks):
+@pytest.fixture(autouse=True)
+def mock_stackstorm():
+    """Mock StackStorm API calls for all tests."""
+    with patch("requests.get") as mock_get:
+        mock_response = Mock()
+        mock_response.status_code = 401  # 401 means API is responding
+        mock_response.json.return_value = {}
+        mock_get.return_value = mock_response
+        yield mock_get
+
+
+def test_health_endpoint(client):
     """Test health endpoint returns healthy status."""
     response = client.get("/api/v1/health")
     assert response.status_code == 200
@@ -51,7 +54,7 @@ def test_health_endpoint(client, mock_health_checks):
     assert "version" in data
 
 
-def test_health_endpoint_structure(client, mock_health_checks):
+def test_health_endpoint_structure(client):
     """Test health endpoint returns expected structure."""
     response = client.get("/api/v1/health")
     data = response.json()
@@ -78,7 +81,7 @@ def test_openapi_endpoint(client):
     assert data["info"]["title"] == "PoundCake"
 
 
-def test_ready_endpoint(client, mock_health_checks):
+def test_ready_endpoint(client):
     """Test readiness endpoint."""
     response = client.get("/api/v1/health/ready")
     assert response.status_code == 200
