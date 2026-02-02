@@ -81,7 +81,7 @@ echo "✓ Services started"
 echo ""
 echo "Step 4: Waiting for services to initialize and API key generation..."
 echo "Services need 60-90 seconds to fully initialize..."
-echo "The st2-init service will automatically generate and configure the API key."
+echo "The st2client service will automatically generate and configure the API key."
 echo ""
 
 WAIT_TIME=75

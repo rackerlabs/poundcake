@@ -244,14 +244,18 @@ services:
     command: /opt/stackstorm/st2/bin/st2notifier --config-file /etc/st2/st2.conf
     restart: unless-stopped
 
-  st2-init:
-    image: curlimages/curl:latest
-    container_name: st2-init
+  st2client:
+    image: stackstorm/st2:3.9.0
+    container_name: st2client
     depends_on:
       - stackstorm-api
       - stackstorm-auth
       - api
+    environment:
+      ST2_AUTH_URL: http://stackstorm-auth:9100
+      ST2_API_URL: http://stackstorm-api:9101
     volumes:
+      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
       - ./docker/st2-init/generate-apikey.sh:/generate-apikey.sh:ro
       - .:/poundcake
     networks:

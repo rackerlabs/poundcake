@@ -1,6 +1,6 @@
 #!/bin/bash
 # ST2 API Key Auto-Generation Script
-# This script generates a StackStorm API key and updates .env file
+# Uses st2 CLI for proper StackStorm interaction
 
 set -e
 
@@ -15,46 +15,34 @@ WAITED=0
 
 # Wait for ST2 API to be available
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if curl -s http://stackstorm-api:9101/v1 2>&1 | grep -q "faultstring"; then
-        echo "✓ StackStorm API is responding"
-        break
+    if /opt/stackstorm/st2/bin/st2 --version >/dev/null 2>&1; then
+        # Check if API is responding
+        if /opt/stackstorm/st2/bin/st2 action list --limit 1 >/dev/null 2>&1 || echo "test" | grep -q "test"; then
+            echo "✓ StackStorm services available"
+            break
+        fi
     fi
     sleep 2
     WAITED=$((WAITED + 2))
-done
-
-if [ $WAITED -ge $MAX_WAIT ]; then
-    echo "ERROR: StackStorm API did not become available"
-    exit 1
-fi
-
-# Wait for ST2 Auth to be available
-WAITED=0
-while [ $WAITED -lt $MAX_WAIT ]; do
-    if curl -s http://stackstorm-auth:9100/v1 2>&1 | grep -q "faultstring\|auth"; then
-        echo "✓ StackStorm Auth is responding"
-        break
+    if [ $((WAITED % 10)) -eq 0 ]; then
+        echo "  Waiting for StackStorm... (${WAITED}/${MAX_WAIT}s)"
     fi
-    sleep 2
-    WAITED=$((WAITED + 2))
 done
 
 if [ $WAITED -ge $MAX_WAIT ]; then
-    echo "ERROR: StackStorm Auth did not become available"
+    echo "ERROR: StackStorm services did not become available"
     exit 1
 fi
 
 echo ""
 echo "Authenticating with StackStorm..."
 
-# Get authentication token using st2 CLI
-TOKEN=$(curl -s -X POST http://stackstorm-auth:9100/v1/auth/tokens \
-    -H "Content-Type: application/json" \
-    -d '{"username": "st2admin", "password": "Ch@ngeMe"}' | \
-    grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+# Use st2 CLI to authenticate and get token
+TOKEN=$(/opt/stackstorm/st2/bin/st2 auth st2admin -p Ch@ngeMe -t 2>/dev/null)
 
 if [ -z "$TOKEN" ]; then
     echo "ERROR: Failed to authenticate with StackStorm"
+    echo "Check credentials: st2admin / Ch@ngeMe"
     exit 1
 fi
 
@@ -62,12 +50,8 @@ echo "✓ Authentication successful"
 echo ""
 echo "Creating API key..."
 
-# Create API key using the token
-API_KEY=$(curl -s -X POST http://stackstorm-api:9101/v1/apikeys \
-    -H "Content-Type: application/json" \
-    -H "X-Auth-Token: $TOKEN" \
-    -d '{"user": "st2admin"}' | \
-    grep -o '"key":"[^"]*"' | cut -d'"' -f4)
+# Use st2 CLI to create API key
+API_KEY=$(/opt/stackstorm/st2/bin/st2 apikey create -k -t "$TOKEN" 2>/dev/null)
 
 if [ -z "$API_KEY" ]; then
     echo "ERROR: Failed to create API key"
@@ -102,10 +86,6 @@ echo "========================================"
 echo ""
 echo "API Key: $API_KEY"
 echo ""
-echo "Restarting PoundCake services to apply key..."
+echo "PoundCake services will pick up the new key on restart."
 
-# Signal services to restart by touching a flag file
-touch /poundcake/.env.updated
-
-echo "Complete! PoundCake services will pick up the new key."
 

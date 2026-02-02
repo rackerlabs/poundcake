@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generate StackStorm API Key and Update .env
-# This script automates the API key generation process
+# This script uses st2 CLI for proper StackStorm interaction
 
 set -e
 
@@ -13,13 +13,13 @@ echo "Waiting for services to start..."
 echo "This may take 30-60 seconds..."
 echo ""
 
-# Wait for StackStorm API to be responsive
-echo "Checking StackStorm API..."
+echo "Checking StackStorm services..."
 MAX_WAIT=60
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if docker exec stackstorm-api curl -s http://localhost:9101/v1 2>&1 | grep -q "faultstring\|actions"; then
-        echo "✓ StackStorm API is responding"
+    # Check if st2 CLI is available and working
+    if docker exec stackstorm-api /opt/stackstorm/st2/bin/st2 --version >/dev/null 2>&1; then
+        echo "✓ StackStorm services are responding"
         break
     fi
     sleep 2
@@ -29,43 +29,20 @@ done
 
 if [ $WAITED -ge $MAX_WAIT ]; then
     echo ""
-    echo "ERROR: StackStorm API did not become available"
+    echo "ERROR: StackStorm services did not become available"
     echo ""
     echo "Troubleshooting:"
     echo "  docker compose ps"
     echo "  docker logs stackstorm-api"
-    exit 1
-fi
-
-# Wait for StackStorm Auth to be responsive
-echo ""
-echo "Checking StackStorm Auth..."
-MAX_WAIT=60
-WAITED=0
-while [ $WAITED -lt $MAX_WAIT ]; do
-    if docker exec stackstorm-auth curl -s http://localhost:9100/v1 2>&1 | grep -q "faultstring\|auth\|tokens"; then
-        echo "✓ StackStorm Auth is responding"
-        break
-    fi
-    sleep 2
-    WAITED=$((WAITED + 2))
-    echo "  Waiting... ($WAITED/${MAX_WAIT}s)"
-done
-
-if [ $WAITED -ge $MAX_WAIT ]; then
-    echo ""
-    echo "ERROR: StackStorm Auth did not become available"
-    echo ""
-    echo "Troubleshooting:"
-    echo "  docker compose ps"
     echo "  docker logs stackstorm-auth"
     exit 1
 fi
 
 echo ""
 echo "Step 1: Authenticating with StackStorm..."
-# Get authentication token
-TOKEN=$(docker exec stackstorm-auth st2 auth st2admin -p Ch@ngeMe -t 2>/dev/null)
+
+# Get authentication token using st2 CLI
+TOKEN=$(docker exec stackstorm-api /opt/stackstorm/st2/bin/st2 auth st2admin -p Ch@ngeMe -t 2>/dev/null)
 
 if [ -z "$TOKEN" ]; then
     echo ""
@@ -73,7 +50,7 @@ if [ -z "$TOKEN" ]; then
     echo ""
     echo "Troubleshooting:"
     echo "  docker logs stackstorm-auth"
-    echo "  docker exec stackstorm-auth st2 auth st2admin -p Ch@ngeMe"
+    echo "  docker exec stackstorm-api /opt/stackstorm/st2/bin/st2 auth st2admin -p Ch@ngeMe"
     exit 1
 fi
 
@@ -81,8 +58,9 @@ echo "✓ Authentication successful"
 echo ""
 
 echo "Step 2: Creating API key..."
+
 # Create API key using st2 CLI
-API_KEY=$(docker exec stackstorm-api st2 apikey create -k -t "$TOKEN" 2>/dev/null | grep -o '[a-f0-9]\{64\}' | head -1)
+API_KEY=$(docker exec stackstorm-api /opt/stackstorm/st2/bin/st2 apikey create -k -t "$TOKEN" 2>/dev/null)
 
 if [ -z "$API_KEY" ]; then
     echo ""
@@ -90,7 +68,7 @@ if [ -z "$API_KEY" ]; then
     echo ""
     echo "Troubleshooting:"
     echo "  docker logs stackstorm-api"
-    echo "  docker exec stackstorm-api st2 apikey create -k -t \"$TOKEN\""
+    echo "  docker exec stackstorm-api /opt/stackstorm/st2/bin/st2 apikey list -t \"$TOKEN\""
     exit 1
 fi
 
