@@ -164,11 +164,6 @@ services:
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2api --config-file /etc/st2/st2.conf
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9101/v1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
 
   stackstorm-auth:
