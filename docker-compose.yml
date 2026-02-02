@@ -43,10 +43,11 @@ services:
     networks:
       - poundcake
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   oven:
@@ -259,6 +260,23 @@ services:
     command: /opt/stackstorm/st2/bin/st2notifier --config-file /etc/st2/st2.conf
     restart: unless-stopped
 
+  st2-init:
+    image: curlimages/curl:latest
+    container_name: st2-init
+    depends_on:
+      stackstorm-api:
+        condition: service_healthy
+      stackstorm-auth:
+        condition: service_started
+    volumes:
+      - ./docker/st2-init/generate-apikey.sh:/generate-apikey.sh:ro
+      - st2_keys:/st2-keys
+    networks:
+      - poundcake
+    command: sh /generate-apikey.sh
+    profiles:
+      - init
+
 networks:
   poundcake:
     driver: bridge
@@ -268,3 +286,4 @@ volumes:
   mongo_data:
   rabbitmq_data:
   redis_data:
+  st2_keys:
