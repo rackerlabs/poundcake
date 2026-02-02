@@ -79,29 +79,20 @@ docker compose up -d
 echo "✓ Services started"
 
 echo ""
-echo "Step 4: Waiting for initialization..."
+echo "Step 4: Waiting for services to initialize and API key generation..."
 echo "Services need 60-90 seconds to fully initialize..."
+echo "The st2-init service will automatically generate and configure the API key."
 echo ""
 
-WAIT_TIME=60
+WAIT_TIME=75
 for i in $(seq $WAIT_TIME -1 1); do
     printf "\rWaiting... %2ds remaining" $i
     sleep 1
 done
-printf "\r✓ Wait complete                   \n"
+printf "\r✓ Initialization complete              \n"
 
 echo ""
-echo "Step 5: Setting up StackStorm API key..."
-
-if [ -x "$SCRIPT_DIR/setup-apikey.sh" ]; then
-    "$SCRIPT_DIR/setup-apikey.sh"
-else
-    echo "ERROR: setup-apikey.sh not found or not executable"
-    exit 1
-fi
-
-echo ""
-echo "Step 6: Verifying deployment..."
+echo "Step 5: Verifying deployment..."
 
 # Check services
 echo ""

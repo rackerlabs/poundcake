@@ -250,14 +250,14 @@ services:
     depends_on:
       - stackstorm-api
       - stackstorm-auth
+      - api
     volumes:
       - ./docker/st2-init/generate-apikey.sh:/generate-apikey.sh:ro
-      - st2_keys:/st2-keys
+      - .:/poundcake
     networks:
       - poundcake
     command: sh /generate-apikey.sh
-    profiles:
-      - init
+    restart: "no"
 
 networks:
   poundcake:
@@ -268,4 +268,3 @@ volumes:
   mongo_data:
   rabbitmq_data:
   redis_data:
-  st2_keys:

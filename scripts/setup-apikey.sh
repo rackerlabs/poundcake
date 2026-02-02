@@ -18,7 +18,7 @@ echo "Checking StackStorm API..."
 MAX_WAIT=60
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if docker exec stackstorm-api curl -sf http://localhost:9101/v1 2>&1 | grep -q "401\|actions"; then
+    if docker exec stackstorm-api curl -s http://localhost:9101/v1 2>&1 | grep -q "faultstring\|actions"; then
         echo "✓ StackStorm API is responding"
         break
     fi
@@ -43,7 +43,7 @@ echo "Checking StackStorm Auth..."
 MAX_WAIT=60
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if docker exec stackstorm-auth curl -sf http://localhost:9100/v1 2>&1 | grep -q "auth\|tokens"; then
+    if docker exec stackstorm-auth curl -s http://localhost:9100/v1 2>&1 | grep -q "faultstring\|auth\|tokens"; then
         echo "✓ StackStorm Auth is responding"
         break
     fi
