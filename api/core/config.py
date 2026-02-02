@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     metrics_path: str = "/metrics"
 
     cors_origins: list[str] = ["*"]
-    allowed_origins: list[str] = ["*"]  # Alias for main.py compatibility
+    allowed_origins: list[str] = ["*"] # Alias for main.py compatibility
     cors_allow_credentials: bool = True
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     # Authentication & Identification
     # ==========================================================================
     instance_id: str = Field(default_factory=lambda: os.getenv("HOSTNAME", "poundcake-0"))
-
+    
     auth_enabled: bool = True
     auth_secret_name: str = "poundcake-admin"
     auth_secret_namespace: str = "poundcake"
@@ -139,16 +139,13 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
 
-
 def load_yaml_config(path: Path) -> dict[str, Any]:
     with open(path) as f:
         return yaml.safe_load(f) or {}
-
 
 def load_all_mappings(mappings_path: Path) -> dict[str, Any]:
     mappings: dict[str, Any] = {}

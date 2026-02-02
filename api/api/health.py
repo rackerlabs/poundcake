@@ -22,7 +22,6 @@ from api.services.stackstorm_service import get_stackstorm_client
 router = APIRouter()
 settings = get_settings()
 
-
 @router.get("/health", response_model=HealthResponse)
 async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
     """Health check using the existing StackStorm client health_check method."""
@@ -48,7 +47,6 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
         timestamp=datetime.now(timezone.utc),
     )
 
-
 @router.get("/stats", response_model=StatsResponse)
 def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
@@ -57,21 +55,13 @@ def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
     total_executions = db.query(func.count(Oven.id)).scalar() or 0
 
     # Grouping queries
-    alerts_by_status = dict(
-        db.query(Alert.processing_status, func.count(Alert.id))
-        .group_by(Alert.processing_status)
-        .all()
-    )
-
+    alerts_by_status = dict(db.query(Alert.processing_status, func.count(Alert.id)).group_by(Alert.processing_status).all())
+    
     # Mapping Alert.alert_status (firing/resolved)
-    alerts_by_alert = dict(
-        db.query(Alert.alert_status, func.count(Alert.id)).group_by(Alert.alert_status).all()
-    )
-
+    alerts_by_alert = dict(db.query(Alert.alert_status, func.count(Alert.id)).group_by(Alert.alert_status).all())
+    
     # Mapping Oven.processing_status
-    executions_by_status = dict(
-        db.query(Oven.processing_status, func.count(Oven.id)).group_by(Oven.processing_status).all()
-    )
+    executions_by_status = dict(db.query(Oven.processing_status, func.count(Oven.id)).group_by(Oven.processing_status).all())
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     recent = db.query(func.count(Alert.id)).filter(Alert.created_at >= cutoff).scalar() or 0
@@ -83,5 +73,5 @@ def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
         alerts_by_processing_status=alerts_by_status,
         alerts_by_alert_status=alerts_by_alert,
         executions_by_status=executions_by_status,
-        recent_alerts=recent,
+        recent_alerts=recent
     )

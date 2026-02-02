@@ -28,7 +28,6 @@ from api.api.auth import router as auth_router
 logging.basicConfig(level=getattr(logging, settings.log_level.upper()))
 logger = logging.getLogger(__name__)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # init_db() is removed from here
@@ -36,13 +35,12 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Powering down PoundCake...")
 
-
 app = FastAPI(
     title="PoundCake API",
     version=settings.app_version,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
-    redoc_url="/redoc" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None
 )
 
 # --- Middleware Registration ---
@@ -56,7 +54,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # --- Kubernetes / Prometheus Internal Metrics ---
 @app.get("/metrics")
 async def metrics():
@@ -64,7 +61,6 @@ async def metrics():
     if not settings.metrics_enabled:
         raise HTTPException(status_code=404, detail="Metrics disabled")
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
 
 # --- Route Registration ---
 
@@ -85,14 +81,15 @@ app.include_router(ovens_router, prefix="/api/v1/ovens", tags=["executor"])
 # 5. Alert Ingestion (webhook)
 app.include_router(alerts_router, prefix="/api/v1/alerts", tags=["ingestion"])
 
-
 @app.get("/")
 async def root():
     return {"status": "online", "component": "poundcake-api"}
 
-
 # Local development entrypoint
 if __name__ == "__main__":
     uvicorn.run(
-        "api.main:app", host=settings.server_host, port=settings.server_port, reload=settings.debug
+        "api.main:app",
+        host=settings.server_host,
+        port=settings.server_port,
+        reload=settings.debug
     )

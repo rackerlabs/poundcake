@@ -27,14 +27,13 @@ from api.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-
 class OvenService:
     """Oven service for scheduled alert processing via API calls only."""
 
     def __init__(self, base_url: Optional[str] = None):
         """Initialize oven service with PoundCake API base URL."""
         # Ensure we don't have trailing slashes
-        self.base_url = (base_url or os.getenv("POUNDCAKE_API_URL", "http://api:8000")).rstrip("/")
+        self.base_url = (base_url or os.getenv("POUNDCAKE_API_URL", "http://api:8000")).rstrip('/')
         self.api_base = f"{self.base_url}/api/v1"
 
     def crawl_and_process_alerts(self) -> Dict[str, Any]:
@@ -88,7 +87,7 @@ class OvenService:
                 data = response.json()
                 # Handle both direct list or wrapped object response
                 return data if isinstance(data, list) else data.get("alerts", [])
-
+            
             logger.error(f"Failed to fetch new alerts: {response.status_code}")
             return []
         except Exception as e:
@@ -128,13 +127,13 @@ class OvenService:
                     "recipe_id": recipe_id,
                     "task_id": task_id,
                 },
-                headers={"X-Request-ID": req_id},  # Pass req_id in headers for tracing
+                headers={"X-Request-ID": req_id}, # Pass req_id in headers for tracing
                 timeout=60,
             )
 
             if response.status_code in [200, 201, 202]:
                 return response.json()
-
+            
             return {"success": False, "error": response.text}
         except Exception as e:
             return {"success": False, "error": str(e)}

@@ -13,17 +13,15 @@ import time
 import requests
 from datetime import datetime, timezone
 
-POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
+POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip('/')
 API_URL = f"{POUNDCAKE_API_URL}/api/v1"
-ST2_API_URL = os.getenv("ST2_API_URL", "http://stackstorm-api:9101/v1").rstrip("/")
+ST2_API_URL = os.getenv("ST2_API_URL", "http://stackstorm-api:9101/v1").rstrip('/')
 ST2_API_KEY = os.getenv("ST2_API_KEY", "")
 TIMER_INTERVAL = int(os.getenv("TIMER_INTERVAL", "10"))
-
 
 def log(message: str, req_id: str = "SYSTEM"):
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] [req_id: {req_id}] timer: {message}", flush=True)
-
 
 def monitor_ovens():
     headers = {"Content-Type": "application/json"}
@@ -32,9 +30,7 @@ def monitor_ovens():
 
     try:
         # 1. Get ovens currently in flight
-        resp = requests.get(
-            f"{API_URL}/ovens", params={"processing_status": "processing"}, timeout=10
-        )
+        resp = requests.get(f"{API_URL}/ovens", params={"processing_status": "processing"}, timeout=10)
         ovens = resp.json()
 
         for oven in ovens:
@@ -45,9 +41,7 @@ def monitor_ovens():
             headers["X-Request-ID"] = req_id
 
             # 2. Check ST2 Status
-            st2_resp = requests.get(
-                f"{ST2_API_URL}/executions/{action_id}", headers=headers, timeout=10
-            )
+            st2_resp = requests.get(f"{ST2_API_URL}/executions/{action_id}", headers=headers, timeout=10)
             if st2_resp.status_code == 200:
                 st2_status = st2_resp.json().get("status")
 
@@ -58,16 +52,12 @@ def monitor_ovens():
                         f"{API_URL}/ovens/{oven.get('id')}",
                         json={"processing_status": new_status, "st2_status": st2_status},
                         headers=headers,
-                        timeout=10,
+                        timeout=10
                     )
-                    log(
-                        f"Oven {oven.get('id')} marked {new_status} (ST2: {st2_status})",
-                        req_id=req_id,
-                    )
+                    log(f"Oven {oven.get('id')} marked {new_status} (ST2: {st2_status})", req_id=req_id)
 
     except Exception as e:
         log(f"Error in monitor loop: {str(e)}")
-
 
 if __name__ == "__main__":
     while True:

@@ -8,20 +8,16 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text, Integer, JSON, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
-
 # We use the explicit MariaDB/MySQL JSON type to ensure the dialect handles serialization properly
-from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON
+from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON 
 from api.core.database import Base
-
 
 def get_utc_now():
     """Helper for timezone-aware UTC, as utcnow is deprecated."""
     return datetime.now(timezone.utc)
 
-
 class Recipe(Base):
     """Recipe - matches alert.group_name to define response workflow."""
-
     __tablename__ = "recipes"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -35,10 +31,8 @@ class Recipe(Base):
     ingredients = relationship("Ingredient", back_populates="recipe", cascade="all, delete-orphan")
     ovens = relationship("Oven", back_populates="recipe")
 
-
 class Ingredient(Base):
     """Ingredient - individual task in a recipe."""
-
     __tablename__ = "ingredients"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -61,12 +55,12 @@ class Ingredient(Base):
     recipe = relationship("Recipe", back_populates="ingredients")
     ovens = relationship("Oven", back_populates="ingredient")
 
-    __table_args__ = (Index("idx_recipe_order", "recipe_id", "task_order"),)
-
+    __table_args__ = (
+        Index("idx_recipe_order", "recipe_id", "task_order"),
+    )
 
 class Oven(Base):
     """Oven - tracks individual ingredient execution."""
-
     __tablename__ = "ovens"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -93,12 +87,12 @@ class Oven(Base):
     ingredient = relationship("Ingredient", back_populates="ovens")
     alert = relationship("Alert", back_populates="ovens")
 
-    __table_args__ = (Index("idx_oven_task_order", "recipe_id", "task_order"),)
-
+    __table_args__ = (
+        Index("idx_oven_task_order", "recipe_id", "task_order"),
+    )
 
 class Alert(Base):
     """Alert - stores and tracks alert auto-remediation status."""
-
     __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, index=True)

@@ -11,23 +11,23 @@ import time
 import requests
 import logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Config: No ST2 keys required here!
 API_BASE_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000/api/v1")
 POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 
-
 def run_executor():
     logger.info("Oven Executor started. Target API: %s", API_BASE_URL)
-
+    
     while True:
         try:
             # 1. Fetch next 'new' oven task
-            resp = requests.get(
-                f"{API_BASE_URL}/ovens", params={"processing_status": "new", "limit": 1}
-            )
+            resp = requests.get(f"{API_BASE_URL}/ovens", params={"processing_status": "new", "limit": 1})
             resp.raise_for_status()
             tasks = resp.json()
 
@@ -36,12 +36,12 @@ def run_executor():
                 continue
 
             task = tasks[0]
-            oven_id = task["id"]
-            req_id = task["req_id"]
-
+            oven_id = task['id']
+            req_id = task['req_id']
+            
             # Logic: Pull action_ref from the task (usually stored in the database record)
             # You might need to adjust based on how your Ingredient/Oven relation returns st2_action
-            action_ref = task.get("st2_action") or task.get("ingredient", {}).get("st2_action")
+            action_ref = task.get('st2_action') or task.get('ingredient', {}).get('st2_action')
 
             if not action_ref:
                 logger.error("[%s] No action_ref found for Oven ID %s", req_id, oven_id)
@@ -52,20 +52,26 @@ def run_executor():
             logger.info("[%s] Triggering %s via API bridge", req_id, action_ref)
             bridge_resp = requests.post(
                 f"{API_BASE_URL}/stackstorm/execute",
-                json={"action": action_ref, "parameters": {"req_id": req_id}},
+                json={
+                    "action": action_ref,
+                    "parameters": {"req_id": req_id}
+                },
                 headers={"X-Request-ID": req_id},
-                timeout=30,
+                timeout=30
             )
 
             if bridge_resp.status_code == 200:
                 st2_data = bridge_resp.json()
-                st2_id = st2_data.get("id")
-
+                st2_id = st2_data.get('id')
+                
                 # 3. Update task status
                 requests.patch(
                     f"{API_BASE_URL}/ovens/{oven_id}",
-                    json={"processing_status": "processing", "action_id": st2_id},
-                    headers={"X-Request-ID": req_id},
+                    json={
+                        "processing_status": "processing", 
+                        "action_id": st2_id
+                    },
+                    headers={"X-Request-ID": req_id}
                 )
                 logger.info("[%s] Action started. ST2 ID: %s", req_id, st2_id)
             else:
@@ -74,7 +80,6 @@ def run_executor():
         except Exception as e:
             logger.error("Executor loop encountered an error: %s", str(e))
             time.sleep(POLL_INTERVAL)
-
 
 if __name__ == "__main__":
     run_executor()

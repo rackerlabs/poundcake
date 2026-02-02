@@ -149,11 +149,9 @@ services:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-api
     environment:
-      ST2_AUTH_URL: http://stackstorm-auth:9100
-      ST2_API_URL: http://stackstorm-api:9101
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
-      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
+      # These are used by the entrypoint script to template st2.conf
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
     depends_on:
       stackstorm-mongodb:
         condition: service_healthy
@@ -162,111 +160,120 @@ services:
       stackstorm-redis:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     ports:
       - "127.0.0.1:9101:9101"
     networks:
       - poundcake
-    command: /opt/stackstorm/st2/bin/st2api --config-file /etc/st2/st2.conf
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2api", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-auth:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-auth
     environment:
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
     depends_on:
       stackstorm-mongodb:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
       - ./docker/st2-config/htpasswd:/etc/st2/htpasswd:ro
     ports:
       - "127.0.0.1:9100:9100"
     networks:
       - poundcake
-    command: /opt/stackstorm/st2/bin/st2auth --config-file /etc/st2/st2.conf
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2auth", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-stream:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-stream
     environment:
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
-      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
     depends_on:
       - stackstorm-api
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
-    command: /opt/stackstorm/st2/bin/st2stream --config-file /etc/st2/st2.conf
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2stream", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-actionrunner:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-actionrunner
     environment:
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
-      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
     depends_on:
       - stackstorm-api
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
-    command: /opt/stackstorm/st2/bin/st2actionrunner --config-file /etc/st2/st2.conf
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2actionrunner", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-scheduler:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-scheduler
     environment:
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
-      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
     depends_on:
       - stackstorm-api
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
-    command: /opt/stackstorm/st2/bin/st2scheduler --config-file /etc/st2/st2.conf
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2scheduler", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-rulesengine:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-rulesengine
     environment:
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
-      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
     depends_on:
       - stackstorm-api
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
-    command: /opt/stackstorm/st2/bin/st2rulesengine --config-file /etc/st2/st2.conf
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2rulesengine", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-notifier:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-notifier
     environment:
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
-      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
     depends_on:
       - stackstorm-api
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
-    command: /opt/stackstorm/st2/bin/st2notifier --config-file /etc/st2/st2.conf
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2notifier", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   st2client:
@@ -277,18 +284,19 @@ services:
       - stackstorm-auth
       - api
     environment:
-      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
-      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
-      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
       ST2_AUTH_URL: http://stackstorm-auth:9100
       ST2_API_URL: http://stackstorm-api:9101
     volumes:
-      - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
       - ./docker/st2-init/generate-apikey.sh:/generate-apikey.sh:ro
       - .:/poundcake
     networks:
       - poundcake
-    command: sh /generate-apikey.sh
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["sh", "/generate-apikey.sh"]
     restart: "no"
 
 networks:
