@@ -186,8 +186,7 @@ services:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-stream
     depends_on:
-      stackstorm-api:
-        condition: service_healthy
+      - stackstorm-api
     volumes:
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     ports:
@@ -201,8 +200,7 @@ services:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-actionrunner
     depends_on:
-      stackstorm-api:
-        condition: service_healthy
+      - stackstorm-api
     volumes:
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
@@ -214,8 +212,7 @@ services:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-scheduler
     depends_on:
-      stackstorm-api:
-        condition: service_healthy
+      - stackstorm-api
     volumes:
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
@@ -227,8 +224,7 @@ services:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-rulesengine
     depends_on:
-      stackstorm-api:
-        condition: service_healthy
+      - stackstorm-api
     volumes:
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
@@ -240,8 +236,7 @@ services:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-notifier
     depends_on:
-      stackstorm-api:
-        condition: service_healthy
+      - stackstorm-api
     volumes:
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
     networks:
@@ -253,10 +248,8 @@ services:
     image: curlimages/curl:latest
     container_name: st2-init
     depends_on:
-      stackstorm-api:
-        condition: service_healthy
-      stackstorm-auth:
-        condition: service_started
+      - stackstorm-api
+      - stackstorm-auth
     volumes:
       - ./docker/st2-init/generate-apikey.sh:/generate-apikey.sh:ro
       - st2_keys:/st2-keys
