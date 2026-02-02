@@ -42,12 +42,6 @@ services:
       - "8000:8000"
     networks:
       - poundcake
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     restart: unless-stopped
 
   oven:
@@ -62,14 +56,14 @@ services:
       ST2_API_KEY: ${ST2_API_KEY:-}
       LOG_LEVEL: INFO
     depends_on:
-      api:
-        condition: service_healthy
+      - api
+      - mariadb
     volumes:
-      - ./scripts:/app/scripts
+      - ./oven:/app/oven
       - ./logs:/app/logs
     networks:
       - poundcake
-    command: python scripts/oven.py
+    command: python oven/oven.py
     restart: unless-stopped
 
   timer:
@@ -84,14 +78,14 @@ services:
       ST2_API_KEY: ${ST2_API_KEY:-}
       LOG_LEVEL: INFO
     depends_on:
-      api:
-        condition: service_healthy
+      - api
+      - mariadb
     volumes:
-      - ./scripts:/app/scripts
+      - ./timer:/app/timer
       - ./logs:/app/logs
     networks:
       - poundcake
-    command: python scripts/timer.py
+    command: python timer/timer.py
     restart: unless-stopped
 
   stackstorm-mongodb:
