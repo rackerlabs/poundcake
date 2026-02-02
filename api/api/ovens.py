@@ -12,9 +12,10 @@ from datetime import datetime, timezone
 
 from api.core.database import get_db
 from api.models.models import Alert, Oven, Recipe, Ingredient
-from api.schemas.schemas import OvenResponse, OvenBase
+from api.schemas.schemas import OvenResponse, OvenUpdate
 
 router = APIRouter()
+
 
 @router.post("/ovens/bake/{alert_id}")
 async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
@@ -24,11 +25,10 @@ async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Alert not found")
 
     # Match group_name to Recipe
-    recipe = db.query(Recipe).filter(
-        Recipe.name == alert.group_name, 
-        Recipe.enabled == True
-    ).first()
-    
+    recipe = (
+        db.query(Recipe).filter(Recipe.name == alert.group_name, Recipe.enabled == True).first()
+    )
+
     if not recipe:
         # Close alert if no recipe exists
         alert.processing_status = "complete"
@@ -47,21 +47,22 @@ async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
             task_order=ing.task_order,
             processing_status="new",
             is_blocking=ing.is_blocking,
-            expected_duration=ing.expected_time_to_completion
+            expected_duration=ing.expected_time_to_completion,
         )
         db.add(new_oven)
 
     # Move alert to processing so Oven Service doesn't bake it again
     alert.processing_status = "processing"
     db.commit()
-    
+
     return {"status": "baked", "ovens_created": len(ingredients)}
+
 
 @router.get("/ovens", response_model=List[OvenResponse])
 async def list_ovens(
     processing_status: Optional[str] = None,
     req_id: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Used by oven.py to find executable tasks and Timer to monitor status."""
     query = db.query(Oven)
@@ -69,15 +70,12 @@ async def list_ovens(
         query = query.filter(Oven.processing_status == processing_status)
     if req_id:
         query = query.filter(Oven.req_id == req_id)
-        
+
     return query.all()
 
+
 @router.put("/ovens/{oven_id}", response_model=OvenResponse)
-async def update_oven(
-    oven_id: int, 
-    payload: OvenBase, 
-    db: Session = Depends(get_db)
-):
+async def update_oven(oven_id: int, payload: OvenUpdate, db: Session = Depends(get_db)):
     """Updates oven status/action_id from oven.py or results from Timer."""
     oven = db.query(Oven).filter(Oven.id == oven_id).first()
     if not oven:

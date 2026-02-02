@@ -12,11 +12,12 @@ from api.services.stackstorm_service import StackStormActionManager, get_action_
 
 router = APIRouter()
 
+
 @router.post("/execute")
 async def trigger_st2_execution(
     request_data: Dict[str, Any],
     x_request_id: str = Header(None),
-    manager: StackStormActionManager = Depends(get_action_manager)
+    manager: StackStormActionManager = Depends(get_action_manager),
 ):
     """
     Bridge endpoint for Oven Executor.
@@ -24,7 +25,7 @@ async def trigger_st2_execution(
     """
     action_ref = request_data.get("action")
     parameters = request_data.get("parameters", {})
-    
+
     # Inject the Request ID for cross-system tracing
     if x_request_id:
         parameters["req_id"] = x_request_id
@@ -35,10 +36,7 @@ async def trigger_st2_execution(
     try:
         # Utilize the existing async StackStormClient inside the manager
         # We call the client directly for the specific execution
-        result = await manager._client.execute_action(
-            action_ref=action_ref,
-            parameters=parameters
-        )
+        result = await manager._client.execute_action(action_ref=action_ref, parameters=parameters)
         return result
     except Exception as e:
         # This catches StackStormError or connectivity issues

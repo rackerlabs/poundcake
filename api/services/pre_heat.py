@@ -13,17 +13,19 @@ from api.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 def pre_heat(payload: dict, db: Session) -> dict:
     """
     Intake Handler: Solely responsible for Alert table management.
     """
     fingerprint = payload.get("fingerprint")
     alert_status = payload.get("status")  # firing or resolved
-    
-    existing = db.query(Alert).filter(
-        Alert.fingerprint == fingerprint,
-        Alert.processing_status != "complete"
-    ).first()
+
+    existing = (
+        db.query(Alert)
+        .filter(Alert.fingerprint == fingerprint, Alert.processing_status != "complete")
+        .first()
+    )
 
     if alert_status == "firing":
         if not existing:
@@ -31,11 +33,11 @@ def pre_heat(payload: dict, db: Session) -> dict:
             new_alert = Alert(
                 fingerprint=fingerprint,
                 alert_name=payload.get("labels", {}).get("alertname", "Unknown"),
-                group_name=payload.get("labels", {}).get("alertname"), # Recipe Match Key
+                group_name=payload.get("labels", {}).get("alertname"),  # Recipe Match Key
                 state="firing",
                 processing_status="new",
                 counter=1,
-                req_id=fingerprint # Trace ID
+                req_id=fingerprint,  # Trace ID
             )
             db.add(new_alert)
             db.commit()
@@ -50,5 +52,5 @@ def pre_heat(payload: dict, db: Session) -> dict:
         existing.state = "resolved"
         db.commit()
         return {"status": "state_updated", "alert_id": existing.id}
-            
+
     return {"status": "ignored"}
