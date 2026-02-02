@@ -184,6 +184,7 @@ services:
         condition: service_healthy
     volumes:
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
+      - ./docker/st2-config/htpasswd:/etc/st2/htpasswd:ro
     ports:
       - "127.0.0.1:9100:9100"
     networks:
