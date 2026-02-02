@@ -17,13 +17,13 @@ from api.services.prometheus_rule_manager import get_prometheus_rule_manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/prometheus", tags=["prometheus"])
+# REMOVED hardcoded prefix to allow main.py to handle /api/v1 nesting
+router = APIRouter(tags=["prometheus"])
 
 
 # =============================================================================
 # Rule Endpoints
 # =============================================================================
-
 
 @router.get("/rules")
 async def list_rules(
@@ -59,7 +59,6 @@ async def list_rule_groups(
 # Metric/Label Discovery Endpoints
 # =============================================================================
 
-
 @router.get("/metrics")
 async def list_metrics(
     request: Request,
@@ -81,11 +80,7 @@ async def list_labels(
     metric: str | None = None,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """List all available label names.
-
-    Args:
-        metric: Optional metric name to get labels for a specific metric
-    """
+    """List all available label names."""
     client = get_prometheus_client()
     try:
         labels = await client.get_label_names(metric=metric)
@@ -102,12 +97,7 @@ async def list_label_values(
     metric: str | None = None,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """List all values for a specific label.
-
-    Args:
-        label_name: The label name to get values for
-        metric: Optional metric name to filter values
-    """
+    """List all values for a specific label."""
     client = get_prometheus_client()
     try:
         values = await client.get_label_values(label_name, metric=metric)
@@ -120,7 +110,6 @@ async def list_label_values(
 # =============================================================================
 # Health & Management Endpoints
 # =============================================================================
-
 
 @router.get("/health")
 async def prometheus_health(
@@ -142,10 +131,7 @@ async def reload_prometheus(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """Reload Prometheus configuration.
-
-    Note: Requires Prometheus to be started with --web.enable-lifecycle flag.
-    """
+    """Reload Prometheus configuration."""
     client = get_prometheus_client()
     try:
         result = await client.reload_config()
@@ -163,7 +149,6 @@ async def reload_prometheus(
 # Rule CRUD Endpoints
 # =============================================================================
 
-
 @router.post("/rules")
 async def create_rule(
     request: Request,
@@ -172,47 +157,19 @@ async def create_rule(
     file_name: str,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """Create a new Prometheus alert rule.
-
-    Creates a rule using CRD mode (PrometheusRule CRDs) and/or Git mode
-    depending on configuration. CRD mode provides immediate effect,
-    while Git mode provides persistence and audit trail via PRs.
-
-    Args:
-        rule_name: Name of the alert rule
-        group_name: Name of the rule group
-        file_name: Name of the YAML file or CRD name
-
-    Request body should contain the rule configuration:
-    ```json
-    {
-        "alert": "HighMemoryUsage",
-        "expr": "memory_usage > 90",
-        "for": "5m",
-        "labels": {"severity": "critical"},
-        "annotations": {"summary": "High memory usage detected"}
-    }
-    ```
-    """
+    """Create a new Prometheus alert rule."""
     rule_manager = get_prometheus_rule_manager()
-
     try:
-        # Parse request body as rule data
         rule_data: dict[str, Any] = await request.json()
-
         result = await rule_manager.create_rule(
             rule_name=rule_name,
             group_name=group_name,
             file_name=file_name,
             rule_data=rule_data,
         )
-
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
-
         return result
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error("Failed to create rule: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -226,38 +183,19 @@ async def update_rule(
     file_name: str,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """Update a Prometheus alert rule.
-
-    Updates a rule using CRD mode (PrometheusRule CRDs) and/or Git mode
-    depending on configuration. CRD mode provides immediate effect,
-    while Git mode provides persistence and audit trail via PRs.
-
-    Args:
-        rule_name: Name of the alert rule (path parameter)
-        group_name: Name of the rule group
-        file_name: Name of the YAML file or CRD name
-
-    Request body should contain the updated rule configuration.
-    """
+    """Update a Prometheus alert rule."""
     rule_manager = get_prometheus_rule_manager()
-
     try:
-        # Parse request body as rule data
         rule_data: dict[str, Any] = await request.json()
-
         result = await rule_manager.update_rule(
             rule_name=rule_name,
             group_name=group_name,
             file_name=file_name,
             rule_data=rule_data,
         )
-
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
-
         return result
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error("Failed to update rule: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -271,32 +209,17 @@ async def delete_rule(
     file_name: str,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """Delete a Prometheus alert rule.
-
-    Deletes a rule using CRD mode (PrometheusRule CRDs) and/or Git mode
-    depending on configuration. CRD mode provides immediate effect,
-    while Git mode creates a PR for the deletion.
-
-    Args:
-        rule_name: Name of the alert rule (path parameter)
-        group_name: Name of the rule group
-        file_name: Name of the YAML file or CRD name
-    """
+    """Delete a Prometheus alert rule."""
     rule_manager = get_prometheus_rule_manager()
-
     try:
         result = await rule_manager.delete_rule(
             rule_name=rule_name,
             group_name=group_name,
             file_name=file_name,
         )
-
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
-
         return result
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error("Failed to delete rule: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))

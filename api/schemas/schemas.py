@@ -4,110 +4,79 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Pydantic schemas for request/response validation."""
+"""Pydantic schemas for PoundCake API."""
 
-from datetime import datetime
-from typing import Optional, Any, Dict, List
 from pydantic import BaseModel, ConfigDict
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 
-
-# Alertmanager webhook schemas
-class AlertLabels(BaseModel):
-    """Alert labels from Alertmanager."""
-
-    alertname: str
-    severity: Optional[str] = None
-    instance: Optional[str] = None
-
-    model_config = ConfigDict(extra="allow")
-
-
-class AlertAnnotations(BaseModel):
-    """Alert annotations from Alertmanager."""
-
-    summary: Optional[str] = None
-    description: Optional[str] = None
-
-    model_config = ConfigDict(extra="allow")
-
-
-class AlertData(BaseModel):
-    """Single alert from Alertmanager webhook."""
-
-    status: str  # firing or resolved
-    labels: AlertLabels
-    annotations: Optional[AlertAnnotations] = None
-    startsAt: datetime
-    endsAt: Optional[datetime] = None
-    generatorURL: Optional[str] = None
-    fingerprint: str
-
-
-class AlertmanagerWebhook(BaseModel):
-    """Alertmanager webhook payload."""
-
-    version: str
-    groupKey: str
-    truncatedAlerts: int = 0
-    status: str
-    receiver: str
-    groupLabels: Dict[str, Any]
-    commonLabels: Dict[str, Any]
-    commonAnnotations: Dict[str, Any]
-    externalURL: str
-    alerts: List[AlertData]
-
-
-# Response schemas
-class WebhookResponse(BaseModel):
-    """Response for webhook endpoint."""
-
-    status: str
-    request_id: str
-    alerts_received: int
-    task_ids: List[str]
-    message: str
-
-
-class AlertResponse(BaseModel):
-    """Response for alert queries."""
-
-    id: int
-    req_id: str
-    fingerprint: str
-    alert_status: str  # firing or resolved (from Alertmanager)
-    processing_status: str  # new, processing, complete, failed (internal)
-    alert_name: str
-    group_name: Optional[str]  # From groupLabels, used for recipe matching
-    severity: Optional[str]
-    instance: Optional[str]
-    prometheus: Optional[str]
-    labels: Dict[str, Any]
-    counter: int
-    ticket_number: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
+# --- Health & Stats ---
 class HealthResponse(BaseModel):
-    """Health check response."""
-
     status: str
     version: str
     database: str
     stackstorm: str
     timestamp: datetime
 
-
 class StatsResponse(BaseModel):
-    """Statistics response."""
-
     total_alerts: int
     total_recipes: int
     total_executions: int
-    alerts_by_processing_status: Dict[str, int]  # new, processing, complete, failed
-    alerts_by_alert_status: Dict[str, int]  # firing, resolved
-    executions_by_status: Dict[str, int]  # new, processing, complete
+    alerts_by_processing_status: Dict[str, int]
+    alerts_by_alert_status: Dict[str, int]
+    executions_by_status: Dict[str, int]
     recent_alerts: int
+
+# --- Ingredients (ST2 Action Mapping) ---
+class IngredientBase(BaseModel):
+    name: str
+    st2_action: str
+    description: Optional[str] = None
+
+class IngredientResponse(IngredientBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+# --- Recipes (Alert to Ingredient Mapping) ---
+class RecipeBase(BaseModel):
+    alert_name: str
+    ingredient_id: int
+    is_active: bool = True
+
+class RecipeResponse(RecipeBase):
+    id: int
+    ingredient: IngredientResponse
+    model_config = ConfigDict(from_attributes=True)
+
+# --- Oven (Execution Tracking) ---
+class OvenBase(BaseModel):
+    req_id: str
+    processing_status: str = "new"
+
+class OvenResponse(OvenBase):
+    id: int
+    recipe_id: int
+    # These fields are populated as the worker proxies through the API
+    action_id: Optional[str] = None  # ST2 Execution ID
+    st2_status: Optional[str] = None
+    created_at: datetime
+    
+    # We include the st2_action directly here so the worker 
+    # doesn't have to do complex joins
+    st2_action: Optional[str] = None 
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# --- Alerts ---
+class AlertBase(BaseModel):
+    alert_name: str
+    alert_status: str  # firing or resolved
+    labels: Dict[str, Any]
+    annotations: Dict[str, Any]
+    req_id: str
+
+class AlertResponse(AlertBase):
+    id: int
+    processing_status: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)

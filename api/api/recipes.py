@@ -7,15 +7,17 @@
 """API endpoints for recipe and ingredient management."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from pydantic import BaseModel
 
 from api.core.database import get_db
 from api.models.models import Recipe, Ingredient
+from api.schemas.schemas import RecipeResponse
 
 router = APIRouter()
 
+# --- Schemas ---
 
 class IngredientCreate(BaseModel):
     task_id: str
@@ -30,25 +32,25 @@ class IngredientCreate(BaseModel):
     retry_delay: int = 5
     on_failure: str = "stop"
 
-
 class RecipeCreate(BaseModel):
     name: str
     description: Optional[str] = None
     enabled: bool = True
     ingredients: List[IngredientCreate]
 
+# --- Recipe Endpoints ---
 
-@router.post("/api/recipes/")
+@router.post("/recipes/")
 async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
     """Create a new recipe with ingredients."""
     existing = db.query(Recipe).filter(Recipe.name == recipe.name).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
-    
+
     db_recipe = Recipe(name=recipe.name, description=recipe.description, enabled=recipe.enabled)
     db.add(db_recipe)
-    db.flush()
-    
+    db.flush()  # Get the ID before adding ingredients
+
     for ingredient_data in recipe.ingredients:
         db_ingredient = Ingredient(
             recipe_id=db_recipe.id,
@@ -65,30 +67,36 @@ async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
             on_failure=ingredient_data.on_failure
         )
         db.add(db_ingredient)
-    
+
     db.commit()
     db.refresh(db_recipe)
     return db_recipe
 
+@router.get("/recipes/", response_model=List[RecipeResponse])
+async def list_recipes(
+    name: Optional[str] = None,
+    enabled: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
+    """List recipes with optional filtering and nested ingredients."""
+    query = db.query(Recipe).options(joinedload(Recipe.ingredients))
 
-@router.get("/api/recipes/")
-async def list_recipes(enabled: Optional[bool] = None, db: Session = Depends(get_db)):
-    """List all recipes."""
-    query = db.query(Recipe)
+    if name is not None:
+        query = query.filter(Recipe.name == name)
     if enabled is not None:
         query = query.filter(Recipe.enabled == enabled)
+
     return query.all()
 
-
-@router.get("/api/recipes/{recipe_id}")
+@router.get("/recipes/{recipe_id}")
 async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
     """Get a recipe with all its ingredients."""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     ingredients = db.query(Ingredient).filter(Ingredient.recipe_id == recipe_id).order_by(Ingredient.task_order).all()
-    
+
     return {
         "id": recipe.id,
         "name": recipe.name,
@@ -99,16 +107,15 @@ async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
         "ingredients": ingredients
     }
 
-
-@router.get("/api/recipes/by-name/{recipe_name}")
+@router.get("/recipes/by-name/{recipe_name}")
 async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
     """Get a recipe by name (matches alert.group_name)."""
     recipe = db.query(Recipe).filter(Recipe.name == recipe_name).first()
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
-    
+
     ingredients = db.query(Ingredient).filter(Ingredient.recipe_id == recipe.id).order_by(Ingredient.task_order).all()
-    
+
     return {
         "id": recipe.id,
         "name": recipe.name,
@@ -117,14 +124,26 @@ async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
         "ingredients": ingredients
     }
 
-
-@router.delete("/api/recipes/{recipe_id}")
+@router.delete("/recipes/{recipe_id}")
 async def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
     """Delete a recipe and all its ingredients."""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     db.delete(recipe)
     db.commit()
     return {"message": f"Recipe '{recipe.name}' deleted"}
+
+# --- Ingredient Endpoints ---
+
+@router.get("/ingredients/{ingredient_id}")
+async def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)):
+    """
+    Fetch a single ingredient.
+    Crucial for oven-executor (oven.py) to resolve task details.
+    """
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    return ingredient

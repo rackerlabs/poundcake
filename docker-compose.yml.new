@@ -1,0 +1,41 @@
+services:
+  mariadb:
+    image: mariadb:10.11
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: poundcake
+      MYSQL_USER: poundcake
+      MYSQL_PASSWORD: poundcake
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: 
+      context: ./api
+      dockerfile: Dockerfile
+    entrypoint: ./scripts/entrypoint.sh
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      - POUNDCAKE_DATABASE_URL=mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+      - POUNDCAKE_LOG_LEVEL=DEBUG
+    ports:
+      - "8000:8000"
+
+  # Example worker using the same image but NOT running migrations
+  celery_worker:
+    build: ./api
+    command: celery -A api.core.celery_app worker --loglevel=info
+    depends_on:
+      - api # Ensure the API (and migrations) finishes first
+    environment:
+      - POUNDCAKE_DATABASE_URL=mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake
+
+volumes:
+  mariadb_data:

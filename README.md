@@ -1,26 +1,55 @@
 # PoundCake
 
-Auto-remediation framework that bridges Prometheus Alertmanager with StackStorm.
+An auto-remediation framework that bridges Prometheus Alertmanager with StackStorm through a task-based "Bakery" architecture.
 
 ## Overview
 
-PoundCake receives alerts from Prometheus Alertmanager and automatically executes remediation workflows through StackStorm. It provides fast webhook response, complete audit trails, and stateless design for horizontal scaling.
+PoundCake receives alerts from Prometheus Alertmanager and automatically executes remediation workflows through StackStorm. It is designed for high-throughput with a stateless API and background workers that handle task sequencing and monitoring.
 
 ## Architecture
 
-```
-Alertmanager --> PoundCake API --> StackStorm --> Target Systems
-                      |
-                   Database
-```
+```mermaid
+sequenceDiagram
+    participant AM as Alertmanager
+    participant API as PoundCake API
+    participant DB as MariaDB
+    participant OD as Oven Dispatcher
+    participant OE as Oven Executor
+    participant ST2 as StackStorm
+    participant T as Timer
+
+    Note over AM, API: Phase 1: Intake
+    AM->>API: POST /api/v1/webhook (with X-Request-ID)
+    API->>DB: Store Alert (status: new)
+    API-->>AM: 202 Accepted
+
+    Note over DB, OD: Phase 2: Dispatching
+    OD->>API: GET /api/v1/alerts?status=new
+    OD->>API: POST /api/v1/ovens/bake (with X-Request-ID)
+    API->>DB: Create Oven tasks based on Recipe
+
+    Note over DB, OE: Phase 3: Execution
+    OE->>API: GET /api/v1/ovens?status=new
+    OE->>API: GET /api/v1/ingredients/{id}
+    OE->>ST2: POST /executions (Start Action)
+    OE->>API: PUT /api/v1/ovens/{id} (status: processing)
+
+    Note over ST2, T: Phase 4: Monitoring
+    T->>API: GET /api/v1/ovens?status=processing
+    T->>ST2: GET /executions/{id}
+    ST2-->>T: Status: Succeeded
+    T->>API: PUT /api/v1/ovens/{id} (status: complete)
+
+    Note over API, DB: All logs correlated via X-Request-ID
 
 ### Components
 
-- **FastAPI Application**: Webhook receiver with background processing
-- **Database (MySQL/MariaDB)**: Stores recipes, alerts, and execution tracking
-- **StackStorm**: Executes remediation workflows
-- **Redis**: Required for StackStorm coordination
-- **RabbitMQ**: Required for StackStorm task distribution
+- **PoundCake API: Fast API entry point for webhooks, UI dashboard support, and state management.
+- **Oven Dispatcher: Background service that matches new alerts to recipes and "bakes" them into executable rows in the oven table.
+- **Oven Executor: Distributed worker that handles task dependencies (is_blocking logic) and triggers the actual StackStorm actions.
+- **Timer: Monitor service that polls StackStorm for completion, handles timeouts, and updates the final state of the tasks.
+- **StackStorm (st2): The automation engine that performs the remediation actions.
+- **MariaDB: Central state store for alerts, recipes, ingredients, and task tracking.
 
 ## Quick Start
 

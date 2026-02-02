@@ -1,12 +1,13 @@
 services:
+  # --- POUNDCAKE INFRASTRUCTURE ---
   mariadb:
     image: mariadb:11.6
     container_name: poundcake-mariadb
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: poundcake
-      MYSQL_USER: poundcake
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-poundcake}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-poundcake}
+      MYSQL_USER: ${DB_USER:-poundcake}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-poundcake}
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./docker/mariadb-init:/docker-entrypoint-initdb.d
@@ -15,25 +16,34 @@ services:
     networks:
       - poundcake
     healthcheck:
+      # Standard MariaDB healthcheck script
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
+  # --- POUNDCAKE SERVICES ---
   api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: poundcake-api
+    # Use the entrypoint script to run migrations ONLY in the API container
+    entrypoint: /app/api/scripts/entrypoint.sh
     environment:
-      DATABASE_URL: mysql+pymysql://poundcake:${MYSQL_PASSWORD:-poundcake}@mariadb:3306/poundcake
-      ST2_API_URL: http://st2api:9101/v1
-      ST2_API_KEY: ${ST2_API_KEY:-}
-      LOG_LEVEL: INFO
+      # Mapping to the POUNDCAKE_ prefix used in config.py
+      POUNDCAKE_DATABASE_URL: mysql+pymysql://${DB_USER:-poundcake}:${DB_PASSWORD:-poundcake}@mariadb:3306/${DB_NAME:-poundcake}
+      POUNDCAKE_STACKSTORM_URL: http://stackstorm-api:9101
+      POUNDCAKE_STACKSTORM_API_KEY: ${ST2_API_KEY}
+      POUNDCAKE_STACKSTORM_VERIFY_SSL: "False"
+      POUNDCAKE_LOG_LEVEL: DEBUG
+      POUNDCAKE_APP_VERSION: ${APP_VERSION:-1.0.0}
     depends_on:
       mariadb:
         condition: service_healthy
+      stackstorm-api:
+        condition: service_started
     volumes:
       - ./api:/app/api
       - ./tests:/app/tests
@@ -50,19 +60,17 @@ services:
       dockerfile: Dockerfile
     container_name: poundcake-oven
     environment:
-      POUNDCAKE_API_URL: http://api:8000
-      OVEN_INTERVAL: ${OVEN_INTERVAL:-5}
-      ST2_API_URL: http://st2api:9101/v1
-      ST2_API_KEY: ${ST2_API_KEY:-}
+      POUNDCAKE_API_URL: http://api:8000/api/v1
+      OVEN_POLL_INTERVAL: ${OVEN_INTERVAL:-5}
       LOG_LEVEL: INFO
     depends_on:
       - api
-      - mariadb
     volumes:
       - ./oven:/app/oven
       - ./logs:/app/logs
     networks:
       - poundcake
+    # Explicitly call python to skip the api entrypoint script
     command: python oven/oven.py
     restart: unless-stopped
 
@@ -72,24 +80,24 @@ services:
       dockerfile: Dockerfile
     container_name: poundcake-timer
     environment:
-      POUNDCAKE_API_URL: http://api:8000
+      POUNDCAKE_API_URL: http://api:8000/api/v1
       TIMER_INTERVAL: ${TIMER_INTERVAL:-10}
-      ST2_API_URL: http://st2api:9101/v1
-      ST2_API_KEY: ${ST2_API_KEY:-}
       LOG_LEVEL: INFO
     depends_on:
       - api
-      - mariadb
     volumes:
       - ./timer:/app/timer
       - ./logs:/app/logs
     networks:
       - poundcake
+    # Explicitly call python to skip the api entrypoint script
     command: python timer/timer.py
     restart: unless-stopped
 
+  # --- STACKSTORM BACKEND ---
+  # ... (stackstorm-mongodb, rabbitmq, redis sections remain unchanged) ...
   stackstorm-mongodb:
-    image: mongo:7.0.28
+    image: mongo:7.0
     container_name: stackstorm-mongodb
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -97,8 +105,6 @@ services:
     volumes:
       - mongo_data:/data/db
       - ./docker/mongodb-init:/docker-entrypoint-initdb.d
-    ports:
-      - "127.0.0.1:27017:27017"
     networks:
       - poundcake
     healthcheck:
@@ -116,9 +122,6 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-password}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    ports:
-      - "127.0.0.1:5672:5672"
-      - "127.0.0.1:15672:15672"
     networks:
       - poundcake
     healthcheck:
@@ -133,8 +136,6 @@ services:
     container_name: stackstorm-redis
     volumes:
       - redis_data:/data
-    ports:
-      - "127.0.0.1:6379:6379"
     networks:
       - poundcake
     healthcheck:
@@ -150,6 +151,9 @@ services:
     environment:
       ST2_AUTH_URL: http://stackstorm-auth:9100
       ST2_API_URL: http://stackstorm-api:9101
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
     depends_on:
       stackstorm-mongodb:
         condition: service_healthy
@@ -169,6 +173,9 @@ services:
   stackstorm-auth:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-auth
+    environment:
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
     depends_on:
       stackstorm-mongodb:
         condition: service_healthy
@@ -185,12 +192,14 @@ services:
   stackstorm-stream:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-stream
+    environment:
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
     depends_on:
       - stackstorm-api
     volumes:
       - ./docker/st2-config/st2.conf:/etc/st2/st2.conf:ro
-    ports:
-      - "127.0.0.1:9102:9102"
     networks:
       - poundcake
     command: /opt/stackstorm/st2/bin/st2stream --config-file /etc/st2/st2.conf
@@ -199,6 +208,10 @@ services:
   stackstorm-actionrunner:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-actionrunner
+    environment:
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
     depends_on:
       - stackstorm-api
     volumes:
@@ -211,6 +224,10 @@ services:
   stackstorm-scheduler:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-scheduler
+    environment:
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
     depends_on:
       - stackstorm-api
     volumes:
@@ -223,6 +240,10 @@ services:
   stackstorm-rulesengine:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-rulesengine
+    environment:
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
     depends_on:
       - stackstorm-api
     volumes:
@@ -235,6 +256,10 @@ services:
   stackstorm-notifier:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-notifier
+    environment:
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
     depends_on:
       - stackstorm-api
     volumes:
@@ -252,6 +277,9 @@ services:
       - stackstorm-auth
       - api
     environment:
+      ST2_CONF_DATABASE_PASSWORD: ${MONGO_PASSWORD}
+      ST2_CONF_DATABASE_AUTHENTICATION_DATABASE: admin
+      ST2_CONF_MESSAGING_URL: amqp://stackstorm:${RABBITMQ_PASSWORD}@stackstorm-rabbitmq:5672
       ST2_AUTH_URL: http://stackstorm-auth:9100
       ST2_API_URL: http://stackstorm-api:9101
     volumes:
