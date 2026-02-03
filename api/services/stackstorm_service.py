@@ -38,7 +38,8 @@ class StackStormClient:
         settings = get_settings()
         self.base_url = settings.stackstorm_url.rstrip("/")
         self.verify_ssl = settings.stackstorm_verify_ssl
-        self._api_key: str | None = api_key or settings.stackstorm_api_key or None
+        # Use get_stackstorm_api_key() which supports runtime file reading
+        self._api_key: str | None = api_key or settings.get_stackstorm_api_key() or None
         self._auth_token: str | None = settings.stackstorm_auth_token or None
 
     def _get_headers(self) -> dict[str, str]:

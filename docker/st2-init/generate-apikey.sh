@@ -20,10 +20,17 @@ NEW_KEY=$(st2 apikey create -p poundcake-api -t $ST2_TOKEN | grep key | awk '{pr
 
 if [ -n "$NEW_KEY" ]; then
     echo "Successfully generated key: $NEW_KEY"
-    # Update the .env file in the shared volume
-    # This uses sed to replace the ST2_API_KEY line in /poundcake/.env
+    
+    # Write key to shared config directory
+    mkdir -p /poundcake/config
+    echo "$NEW_KEY" > /poundcake/config/st2_api_key
+    chmod 644 /poundcake/config/st2_api_key
+    
+    # Also update .env for manual reference
     sed -i "s/^ST2_API_KEY=.*/ST2_API_KEY=$NEW_KEY/" /poundcake/.env
-    echo "PoundCake .env updated."
+    
+    echo "API Key written to config/st2_api_key and .env updated"
+    echo "PoundCake can now authenticate with StackStorm!"
 else
     echo "Failed to generate API Key."
     exit 1

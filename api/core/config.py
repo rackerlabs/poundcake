@@ -70,6 +70,30 @@ class Settings(BaseSettings):
     stackstorm_api_key: str = ""
     stackstorm_auth_token: str = ""
     stackstorm_verify_ssl: bool = False
+    
+    def get_stackstorm_api_key(self) -> str:
+        """Get StackStorm API key from env var or runtime config file.
+        
+        Priority:
+        1. Environment variable (POUNDCAKE_STACKSTORM_API_KEY)
+        2. Runtime config file (/app/config/st2_api_key)
+        3. Empty string
+        """
+        # First check environment variable
+        if self.stackstorm_api_key:
+            return self.stackstorm_api_key
+        
+        # Fall back to runtime config file (written by setup container)
+        config_file = Path("/app/config/st2_api_key")
+        if config_file.exists():
+            try:
+                key = config_file.read_text().strip()
+                if key:
+                    return key
+            except Exception:
+                pass
+        
+        return ""
 
     # ==========================================================================
     # Prometheus Settings
