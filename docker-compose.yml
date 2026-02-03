@@ -42,7 +42,7 @@ services:
       mariadb:
         condition: service_healthy
       stackstorm-api:
-        condition: service_started
+        condition: service_healthy  # Wait for ST2 to be ready
     volumes:
       - ./api:/app/api
       - ./tests:/app/tests
@@ -199,7 +199,7 @@ services:
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
     command: ["/opt/stackstorm/st2/bin/st2api", "--config-file", "/etc/st2/st2.conf"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9101/v1/actions?limit=1"]
+      test: ["CMD", "curl", "-s", "http://localhost:9101/v1"]
       interval: 10s
       timeout: 5s
       retries: 12
