@@ -198,7 +198,14 @@ services:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
     command: ["/opt/stackstorm/st2/bin/st2api", "--config-file", "/etc/st2/st2.conf"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9101/v1/actions?limit=1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     restart: unless-stopped
+
 
   stackstorm-auth:
     image: stackstorm/st2:3.9.0
@@ -311,7 +318,7 @@ services:
     container_name: st2client
     depends_on:
       stackstorm-api:
-        condition: service_started
+        condition: service_healthy  # Wait for API to be actually ready
       stackstorm-auth:
         condition: service_started
     environment:
@@ -328,8 +335,9 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command: ["sh", "/automated-setup.sh"]
-    restart: "no"
+    command: ["sh", "-c", "/automated-setup.sh && tail -f /dev/null"]  # Run setup then stay alive
+    restart: unless-stopped  # Keep running for troubleshooting
+
 
 networks:
   poundcake:
