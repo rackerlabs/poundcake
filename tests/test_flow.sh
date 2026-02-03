@@ -52,18 +52,22 @@ echo "OK: Recipe created."
 # 2. Fire a Mock Alert
 echo "Step 2: Firing mock Alertmanager webhook..."
 ALERT_JSON=$(cat <<EOF
-[
-  {
-    "labels": {
-      "alertname": "$RECIPE_NAME",
-      "instance": "test-host-01",
-      "severity": "critical"
-    },
-    "annotations": {
-      "summary": "Test alert for PoundCake"
+{
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "$RECIPE_NAME",
+        "instance": "test-host-01",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "Test alert for PoundCake"
+      },
+      "startsAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     }
-  }
-]
+  ]
+}
 EOF
 )
 

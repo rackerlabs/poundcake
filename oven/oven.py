@@ -48,22 +48,26 @@ def run_executor():
             # This ensures end-to-end traceability for this specific alert
             req_id = task['req_id']
             
-            # Logic: Pull action_ref from the task (usually stored in the database record)
-            # You might need to adjust based on how your Ingredient/Oven relation returns st2_action
-            action_ref = task.get('st2_action') or task.get('ingredient', {}).get('st2_action')
+            # Get ingredient details (includes st2_action and parameters)
+            ingredient = task.get('ingredient', {})
+            action_ref = ingredient.get('st2_action')
+            parameters = ingredient.get('parameters', {})
 
             if not action_ref:
                 logger.error("[%s] No action_ref found for Oven ID %s", req_id, oven_id)
                 time.sleep(POLL_INTERVAL)
                 continue
 
+            # Add req_id to parameters for traceability
+            parameters['req_id'] = req_id
+            
             # 2. Proxy the request through the API Bridge
             logger.info("[%s] Triggering %s via API bridge", req_id, action_ref)
             bridge_resp = requests.post(
                 f"{API_BASE_URL}/stackstorm/execute",
                 json={
                     "action": action_ref,
-                    "parameters": {"req_id": req_id}
+                    "parameters": parameters
                 },
                 headers={"X-Request-ID": req_id},
                 timeout=30

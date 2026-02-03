@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from api.core.database import get_db
 from api.core.logging import get_logger
 from api.models.models import Alert, Oven, Recipe, Ingredient
-from api.schemas.schemas import OvenResponse, OvenUpdate, BakeResponse
+from api.schemas.schemas import OvenResponse, OvenUpdate, BakeResponse, OvenDetailResponse
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -113,7 +113,7 @@ async def bake_ovens(
         recipe_name=recipe.name
     )
 
-@router.get("/ovens", response_model=List[OvenResponse])
+@router.get("/ovens", response_model=List[OvenDetailResponse])
 async def list_ovens(
     request: Request,
     processing_status: Optional[str] = None,
@@ -132,7 +132,8 @@ async def list_ovens(
         }
     )
     
-    query = db.query(Oven)
+    # Eager load ingredient relationship for oven executor
+    query = db.query(Oven).join(Ingredient)
     if processing_status:
         query = query.filter(Oven.processing_status == processing_status)
     if req_id:

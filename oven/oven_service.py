@@ -31,16 +31,15 @@ def dispatch_loop():
                 log(f"Triggering bake for alert_id={alert_id}", req_id=req_id)
                 
                 bake_resp = requests.post(
-                    f"{API_URL}/ovens/bake",
-                    json={"alert_id": alert_id},
+                    f"{API_URL}/ovens/bake/{alert_id}",
                     headers=headers,
                     timeout=15
                 )
                 
-                if bake_resp.status_code == 200:
+                if bake_resp.status_code in [200, 201]:
                     log(f"Successfully baked alert_id={alert_id} into tasks", req_id=req_id)
                 else:
-                    log(f"Bake failed: {bake_resp.text}", req_id=req_id)
+                    log(f"Bake failed (status={bake_resp.status_code}): {bake_resp.text}", req_id=req_id)
 
         except Exception as e:
             log(f"Loop error: {str(e)}")

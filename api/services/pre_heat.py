@@ -8,6 +8,7 @@
 
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+from dateutil import parser as dateutil_parser
 from api.models.models import Alert
 from api.core.logging import get_logger
 
@@ -61,6 +62,16 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
     if alert_status == "firing":
         if not existing:
             # Create fresh record; status 'new' triggers the Oven Service later
+            # Parse startsAt or use current time as default
+            starts_at = alert_data.get("startsAt")
+            if starts_at and isinstance(starts_at, str):
+                try:
+                    starts_at = dateutil_parser.isoparse(starts_at)
+                except (ValueError, TypeError):
+                    starts_at = datetime.now(timezone.utc)
+            elif not starts_at:
+                starts_at = datetime.now(timezone.utc)
+            
             new_alert = Alert(
                 req_id=req_id,  # Use request ID from webhook
                 fingerprint=fingerprint,
@@ -72,7 +83,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
                 instance=labels.get("instance"),
                 labels=labels,
                 annotations=alert_data.get("annotations", {}),
-                starts_at=alert_data.get("startsAt"),
+                starts_at=starts_at,
                 generator_url=alert_data.get("generatorURL"),
                 counter=1
             )

@@ -60,8 +60,8 @@ WEBHOOK_RESPONSE=$(curl -s -i -X POST "$API_URL/webhook" \
 HTTP_STATUS=$(echo "$WEBHOOK_RESPONSE" | grep -i "^HTTP" | awk '{print $2}')
 REQ_ID=$(echo "$WEBHOOK_RESPONSE" | grep -i "x-request-id" | awk '{print $2}' | tr -d '\r')
 
-if [ "$HTTP_STATUS" == "201" ] || [ "$HTTP_STATUS" == "200" ]; then
-    echo "    [OK] Webhook accepted alert"
+if [ "$HTTP_STATUS" == "202" ] || [ "$HTTP_STATUS" == "201" ] || [ "$HTTP_STATUS" == "200" ]; then
+    echo "    [OK] Webhook accepted alert (HTTP $HTTP_STATUS)"
     echo "    Request ID: $REQ_ID"
 else
     echo "    [ERROR] Webhook rejected alert"
