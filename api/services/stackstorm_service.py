@@ -33,23 +33,29 @@ class StackStormClient:
         """Initialize the StackStorm client.
 
         Args:
-            api_key: Optional API key to use. If not provided, uses settings.
+            api_key: Optional API key to use. If not provided, reads from settings on each request.
         """
         settings = get_settings()
         self.base_url = settings.stackstorm_url.rstrip("/")
         self.verify_ssl = settings.stackstorm_verify_ssl
-        # Use get_stackstorm_api_key() which supports runtime file reading
-        self._api_key: str | None = api_key or settings.get_stackstorm_api_key() or None
+        # Don't cache API key - _get_headers() will read it dynamically
         self._auth_token: str | None = settings.stackstorm_auth_token or None
 
     def _get_headers(self) -> dict[str, str]:
-        """Get headers with current API key."""
+        """Get headers with current API key.
+        
+        Re-reads the API key on each call to support runtime key generation.
+        """
         headers: dict[str, str] = {
             "Content-Type": "application/json",
         }
 
-        if self._api_key:
-            headers["St2-Api-Key"] = self._api_key
+        # Re-read API key from settings (which checks the file each time)
+        settings = get_settings()
+        api_key = settings.get_stackstorm_api_key()
+        
+        if api_key:
+            headers["St2-Api-Key"] = api_key
         elif self._auth_token:
             headers["X-Auth-Token"] = self._auth_token
 

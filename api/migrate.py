@@ -41,7 +41,7 @@ def upgrade(revision="head"):
     config = get_alembic_config()
     print(f"Upgrading database to revision: {revision}")
     command.upgrade(config, revision)
-    print("✓ Database upgrade complete")
+    print("OK: Database upgrade complete")
 
 
 def downgrade(revision="-1"):
@@ -53,7 +53,7 @@ def downgrade(revision="-1"):
     config = get_alembic_config()
     print(f"Downgrading database to revision: {revision}")
     command.downgrade(config, revision)
-    print("✓ Database downgrade complete")
+    print("OK: Database downgrade complete")
 
 
 def current():
@@ -79,7 +79,7 @@ def create_migration(message):
     config = get_alembic_config()
     print(f"Creating new migration: {message}")
     command.revision(config, message=message, autogenerate=True)
-    print("✓ Migration created")
+    print("OK: Migration created")
 
 
 def stamp(revision="head"):
@@ -93,7 +93,7 @@ def stamp(revision="head"):
     config = get_alembic_config()
     print(f"Stamping database with revision: {revision}")
     command.stamp(config, revision)
-    print("✓ Database stamped")
+    print("OK: Database stamped")
 
 
 def show_help():

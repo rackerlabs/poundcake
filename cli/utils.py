@@ -105,7 +105,7 @@ def print_output(data: Any, format: str = "table") -> None:
 
 def print_success(message: str) -> None:
     """Print a success message in green."""
-    click.echo(click.style(f"✓ {message}", fg="green"))
+    click.echo(click.style(f"OK: {message}", fg="green"))
 
 
 def print_error(message: str) -> None:

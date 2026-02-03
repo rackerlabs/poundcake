@@ -12,7 +12,7 @@ mkdir -p /app/config
 if [ -f "/app/config/st2_api_key" ]; then
     EXISTING_KEY=$(cat /app/config/st2_api_key)
     if [ -n "$EXISTING_KEY" ]; then
-        echo "✓ StackStorm API key already exists: $EXISTING_KEY"
+        echo "[OK] StackStorm API key already exists: $EXISTING_KEY"
         echo "Skipping key generation"
         exit 0
     fi
@@ -27,7 +27,7 @@ echo "Waiting for StackStorm API to be ready..."
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     if curl -sf http://stackstorm-api:9101/v1/actions?limit=1 >/dev/null 2>&1; then
-        echo "✓ StackStorm API is ready"
+        echo "[OK] StackStorm API is ready"
         break
     fi
     
@@ -56,7 +56,7 @@ if [ -z "$ST2_TOKEN" ]; then
     exit 1
 fi
 
-echo "✓ Authenticated with StackStorm"
+echo "[OK] Authenticated with StackStorm"
 
 # Create API key
 API_KEY=$(st2 apikey create -k -u st2admin -p 'Ch@ngeMe' 2>&1 | grep -oP '(?<=key: )\S+' || echo "")
@@ -66,22 +66,22 @@ if [ -z "$API_KEY" ]; then
     exit 1
 fi
 
-echo "✓ API key created: $API_KEY"
+echo "[OK] API key created: $API_KEY"
 
 # Write to config file (this will be read at runtime)
 echo "$API_KEY" > /app/config/st2_api_key
 chmod 644 /app/config/st2_api_key
 
-echo "✓ API key written to /app/config/st2_api_key"
+echo "[OK] API key written to /app/config/st2_api_key"
 
 # Also update .env for reference (if mounted)
 if [ -f "/app/.env" ]; then
     if grep -q "^ST2_API_KEY=" /app/.env; then
         sed -i "s|^ST2_API_KEY=.*|ST2_API_KEY=$API_KEY|" /app/.env
-        echo "✓ Updated ST2_API_KEY in .env file"
+        echo "[OK] Updated ST2_API_KEY in .env file"
     else
         echo "ST2_API_KEY=$API_KEY" >> /app/.env
-        echo "✓ Added ST2_API_KEY to .env file"
+        echo "[OK] Added ST2_API_KEY to .env file"
     fi
 fi
 

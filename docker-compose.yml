@@ -35,7 +35,6 @@ services:
       # Mapping to the POUNDCAKE_ prefix used in config.py
       POUNDCAKE_DATABASE_URL: mysql+pymysql://${DB_USER:-poundcake}:${DB_PASSWORD:-poundcake}@mariadb:3306/${DB_NAME:-poundcake}
       POUNDCAKE_STACKSTORM_URL: http://stackstorm-api:9101
-      POUNDCAKE_STACKSTORM_API_KEY: ${ST2_API_KEY}
       POUNDCAKE_STACKSTORM_VERIFY_SSL: "False"
       POUNDCAKE_LOG_LEVEL: DEBUG
       POUNDCAKE_APP_VERSION: ${APP_VERSION:-1.0.0}

@@ -44,16 +44,16 @@ apt-get install jq  # or brew install jq
 
 ## What's Tested
 
-✓ Database models (Alert, Recipe, Oven, Ingredient)  
-✓ Health endpoints (/health, /stats)  
-✓ OpenAPI schema  
-✓ Webhook alert ingestion  
-✓ Request ID tracking  
-✓ Recipe creation  
-✓ Oven baking (task generation)  
-✓ Task execution via StackStorm  
-✓ Timer monitoring  
-✓ Task completion  
+[OK] Database models (Alert, Recipe, Oven, Ingredient)  
+[OK] Health endpoints (/health, /stats)  
+[OK] OpenAPI schema  
+[OK] Webhook alert ingestion  
+[OK] Request ID tracking  
+[OK] Recipe creation  
+[OK] Oven baking (task generation)  
+[OK] Task execution via StackStorm  
+[OK] Timer monitoring  
+[OK] Task completion  
 
 ## Common Commands
 
@@ -93,13 +93,13 @@ docker compose logs | grep <request-id>
 ## Test Updates Made
 
 **Fixed Issues:**
-- ✓ Corrected API title check (was "PoundCake", now "PoundCake API")
-- ✓ Removed non-existent /ready and /live endpoint tests
-- ✓ Added /stats endpoint test
-- ✓ Fixed test_webhook.sh shebang typo
-- ✓ Completed test_webhook.sh implementation
-- ✓ Removed emojis from all test scripts
-- ✓ Made all scripts executable
+- [OK] Corrected API title check (was "PoundCake", now "PoundCake API")
+- [OK] Removed non-existent /ready and /live endpoint tests
+- [OK] Added /stats endpoint test
+- [OK] Fixed test_webhook.sh shebang typo
+- [OK] Completed test_webhook.sh implementation
+- [OK] Removed emojis from all test scripts
+- [OK] Made all scripts executable
 
 **All tests validated and working!**
 

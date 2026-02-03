@@ -89,11 +89,11 @@ curl http://localhost:8000/api/v1/alerts?processing_status=processing | jq
 
 ## Key Features
 
-✅ Ingredients table with is_blocking logic
-✅ Function-level logging across all services
-✅ Expected vs actual time tracking (SLA)
-✅ Recipe-based automation (alert.group_name matching)
-✅ Complete StackStorm integration
+[OK] Ingredients table with is_blocking logic
+[OK] Function-level logging across all services
+[OK] Expected vs actual time tracking (SLA)
+[OK] Recipe-based automation (alert.group_name matching)
+[OK] Complete StackStorm integration
 
 ---
 

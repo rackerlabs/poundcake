@@ -13,7 +13,7 @@ log() {
 if ! command -v envsubst &> /dev/null; then
     log "envsubst not found, installing gettext-base..."
     apt-get update -qq && apt-get install -y -qq gettext-base > /dev/null 2>&1
-    log "✓ envsubst installed"
+    log "[OK] envsubst installed"
 fi
 
 # Check if template exists
@@ -44,7 +44,7 @@ if [ ! -f "/etc/st2/st2.conf" ]; then
     exit 1
 fi
 
-log "✓ st2.conf generated successfully"
+log "[OK] st2.conf generated successfully"
 
 # Execute the command passed to this script (the actual ST2 service)
 log "Starting StackStorm service: $@"

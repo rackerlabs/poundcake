@@ -142,15 +142,15 @@ An oven is considered complete when:
 Time  Ingredient             ST2 Status    Ingredient Status
 ----  --------------------  ------------  ------------------
 T0    1. Check connectivity  running       processing
-T5    1. Check connectivity  succeeded     complete ✓
+T5    1. Check connectivity  succeeded     complete [OK]
       2. Check service A     running       processing
       3. Check service B     running       processing
-T10   2. Check service A     succeeded     complete ✓
-      3. Check service B     succeeded     complete ✓
+T10   2. Check service A     succeeded     complete [OK]
+      3. Check service B     succeeded     complete [OK]
       4. Restart services    running       processing
-T15   4. Restart services    succeeded     complete ✓
+T15   4. Restart services    succeeded     complete [OK]
       5. Verify recovery     running       processing
-T20   5. Verify recovery     succeeded     complete ✓
+T20   5. Verify recovery     succeeded     complete [OK]
       
       → ALL ingredients complete
       → Oven status: complete
@@ -177,7 +177,7 @@ sla_delta = actual_time_to_completion - expected_time_to_completion
 Ingredient: Check connectivity
 Expected: 5s
 Actual: 3s
-Status: ✓ On-time (2s under)
+Status: [OK] On-time (2s under)
 
 Ingredient: Restart services
 Expected: 30s
