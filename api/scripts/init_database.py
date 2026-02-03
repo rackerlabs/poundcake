@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from api.core.database import Base, engine
 from api.models.models import (
     Recipe,
+    Ingredient,  # noqa: F401 - Required for Base.metadata.create_all()
     Oven,  # noqa: F401 - Required for Base.metadata.create_all()
     Alert,  # noqa: F401 - Required for Base.metadata.create_all()
 )
@@ -41,9 +42,10 @@ def init_database() -> None:
 
 
 def seed_default_recipes() -> None:
-    """Seed database with default recipes."""
+    """Seed database with default recipes and their ingredients."""
     from sqlalchemy.orm import Session
     from api.core.database import SessionLocal
+    from api.models.models import Ingredient
 
     db: Session = SessionLocal()
 
@@ -56,40 +58,47 @@ def seed_default_recipes() -> None:
 
         logger.info("Seeding default recipes...")
 
-        # Default recipes
-        default_recipes = [
-            {
-                "name": "default",
-                "description": "Default recipe for unmatched alerts",
-                "st2_workflow_ref": "remediation.default_workflow",
-                "task_list": None,
-            },
-            {
-                "name": "HostDown",
-                "description": "Recipe for host down alerts",
-                "st2_workflow_ref": "remediation.host_down_workflow",
-                "task_list": None,
-            },
-            {
-                "name": "HighMemory",
-                "description": "Recipe for high memory alerts",
-                "st2_workflow_ref": "remediation.memory_check_workflow",
-                "task_list": None,
-            },
-            {
-                "name": "DiskFull",
-                "description": "Recipe for disk full alerts",
-                "st2_workflow_ref": "remediation.disk_cleanup_workflow",
-                "task_list": None,
-            },
+        # Default recipe with ingredients
+        default_recipe = Recipe(
+            name="default",
+            description="Default recipe for unmatched alerts",
+            enabled=True
+        )
+        
+        # Add default ingredients
+        default_ingredients = [
+            Ingredient(
+                task_id="log_alert",
+                task_name="Log Alert Information",
+                task_order=1,
+                is_blocking=True,
+                st2_action="core.echo",
+                parameters={"message": "Alert received and logged"},
+                expected_time_to_completion=5,
+                timeout=30,
+                retry_count=0,
+                on_failure="continue"
+            ),
+            Ingredient(
+                task_id="notify_team",
+                task_name="Notify Team",
+                task_order=2,
+                is_blocking=False,
+                st2_action="core.sendmail",
+                parameters={"to": "ops@example.com", "subject": "Alert Notification"},
+                expected_time_to_completion=10,
+                timeout=60,
+                retry_count=1,
+                retry_delay=5,
+                on_failure="continue"
+            )
         ]
-
-        for recipe_data in default_recipes:
-            recipe = Recipe(**recipe_data)
-            db.add(recipe)
-
+        
+        default_recipe.ingredients = default_ingredients
+        db.add(default_recipe)
         db.commit()
-        logger.info(f"✓ Seeded {len(default_recipes)} default recipes")
+        
+        logger.info(f"✓ Seeded default recipe with {len(default_ingredients)} ingredients")
 
     except Exception as e:
         logger.error(f"✗ Failed to seed recipes: {e}", exc_info=True)
