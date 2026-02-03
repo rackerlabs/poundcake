@@ -208,8 +208,7 @@ class StackStormClient:
             except Exception as e:
                 logger.error(
                     "health_check: StackStorm health check failed",
-                    extra={"error": str(e)},
-                    exc_info=True
+                    extra={"error": str(e)}
                 )
                 return False
 

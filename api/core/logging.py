@@ -42,9 +42,14 @@ def setup_logging() -> None:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-    # Set third-party loggers to WARNING
-    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "celery", "sqlalchemy", "httpx", "httpcore"]:
+    # Set third-party loggers to WARNING (suppresses INFO and DEBUG)
+    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "celery", "sqlalchemy"]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
+    
+    # Set httpx/httpcore to CRITICAL (suppresses ERROR, WARNING, INFO, DEBUG)
+    # This prevents connection error tracebacks during startup
+    for logger_name in ["httpx", "httpcore"]:
+        logging.getLogger(logger_name).setLevel(logging.CRITICAL)
 
 
 def get_logger(name: str) -> logging.Logger:
