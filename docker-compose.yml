@@ -29,8 +29,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: poundcake-api
-    # Use the entrypoint script to run migrations ONLY in the API container
-    entrypoint: /app/api/scripts/entrypoint.sh
+    # Use the auto-migrate entrypoint that creates initial migration if missing
+    entrypoint: /app/api/scripts/entrypoint-auto-migrate.sh
     environment:
       # Mapping to the POUNDCAKE_ prefix used in config.py
       POUNDCAKE_DATABASE_URL: mysql+pymysql://${DB_USER:-poundcake}:${DB_PASSWORD:-poundcake}@mariadb:3306/${DB_NAME:-poundcake}
@@ -52,6 +52,13 @@ services:
       - "8000:8000"
     networks:
       - poundcake
+    healthcheck:
+      # Check if API is ready to accept requests
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   oven:
@@ -64,7 +71,8 @@ services:
       OVEN_POLL_INTERVAL: ${OVEN_INTERVAL:-5}
       LOG_LEVEL: INFO
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     volumes:
       - ./oven:/app/oven
       - ./logs:/app/logs
@@ -84,7 +92,8 @@ services:
       TIMER_INTERVAL: ${TIMER_INTERVAL:-10}
       LOG_LEVEL: INFO
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     volumes:
       - ./timer:/app/timer
       - ./logs:/app/logs
