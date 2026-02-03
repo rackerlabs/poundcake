@@ -16,37 +16,30 @@ This directory contains helper scripts for managing and deploying PoundCake.
 2. Creates .env configuration file
 3. Starts all services with docker compose
 4. Waits for services to initialize
-5. Automatically generates and configures StackStorm API key
-6. Verifies deployment
+5. Verifies deployment
 
 This is the easiest way to get PoundCake up and running.
 
-### setup-apikey.sh
-**Purpose:** Generate and configure StackStorm API key  
-**Usage:**
-```bash
-./scripts/setup-apikey.sh
-```
+### automated-setup.sh
+**Purpose:** Automatic StackStorm API key generation (runs in st2client container)  
+**Used by:** Docker Compose automatically
 
 **What it does:**
 1. Waits for StackStorm services to be responsive
 2. Authenticates with StackStorm using default credentials
 3. Generates a new API key
-4. Updates .env file with the new key
-5. Restarts PoundCake services to apply the key
+4. Writes key to `/app/config/st2_api_key` (runtime config)
+5. Updates `.env` file as reference
 
-Use this when:
-- Running initial setup after `docker compose up -d`
-- Regenerating API keys
-- Troubleshooting authentication issues
+**You don't need to run this manually!** It's executed automatically by the `st2client` container when you run `docker compose up -d`.
 
 ## Script Conventions
 
 ### Naming
 - Bash scripts: `.sh` extension
 - Python scripts: `.py` extension
-- Use lowercase with hyphens for bash scripts: `setup-apikey.sh`
-- Use lowercase with underscores for Python scripts: `migrate.py`
+- Use lowercase with hyphens for bash scripts: `automated-setup.sh`
+- Use lowercase with underscores for Python scripts: `init_database.py`
 
 ### Location
 This directory should contain **only** helper scripts that:
@@ -91,43 +84,55 @@ When creating a new helper script:
 
 ## Examples
 
-### Quick deployment from scratch:
+### Quick deployment from scratch (Fully Automated):
 ```bash
-tar -xzf poundcake-timer-api.tar.gz
+tar -xzf poundcake-final-production.tar.gz
 cd poundcake-timer-api
-./scripts/quickstart.sh
-```
-
-### Manual deployment:
-```bash
-# Start services
 docker compose up -d
 
-# Wait for initialization
-sleep 60
+# That's it! Everything is automated:
+# - Database migrations run automatically
+# - StackStorm API key generated automatically
+# - All services start in correct order
+```
 
-# Setup API key
-./scripts/setup-apikey.sh
+### Manual verification:
+```bash
+# Check all services running
+docker compose ps
 
-# Run migrations
-python api/migrate.py upgrade head
+# Check API health
+curl http://localhost:8000/api/v1/health
+
+# Check database tables
+docker compose exec mariadb mysql -u poundcake -ppoundcake -e "SHOW TABLES;" poundcake
+
+# Verify API key was generated
+cat config/st2_api_key
 ```
 
 ### Database operations:
 ```bash
 # Check current migration version
-python api/migrate.py current
+docker compose exec api alembic current
 
-# Create a new migration
-python api/migrate.py create "add user preferences table"
+# View migration history
+docker compose exec api alembic history
 
-# Apply all pending migrations
-python api/migrate.py upgrade head
+# Manually run migrations (usually not needed)
+docker compose exec api alembic upgrade head
+
+# Create a new migration after model changes
+docker compose exec api alembic revision --autogenerate -m "add new field"
+
+# Copy migration from container to host
+docker compose cp api:/app/alembic/versions/. ./alembic/versions/
 ```
 
 ## Related Documentation
 
-- **Deployment Guide:** `../DEPLOY.md`
-- **Database Migrations:** `../docs/DATABASE_MIGRATIONS.md`
-- **API Documentation:** `../docs/API_ENDPOINTS.md`
-- **Troubleshooting:** `../docs/TROUBLESHOOTING.md`
+- **Production Guide:** `../FINAL_PRODUCTION_GUIDE.md`
+- **Migration Strategy:** `../MIGRATION_BELT_AND_SUSPENDERS.md`
+- **Automated Setup:** `../AUTOMATED_STACKSTORM_SETUP.md`
+- **Troubleshooting:** `../ALEMBIC_REVISION_ERROR_FIX.md`
+
