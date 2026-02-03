@@ -51,8 +51,6 @@ coverage.xml
 *.pot
 
 # Environments
-.env
-.env.local
 .env.example
 .venv
 env/

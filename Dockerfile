@@ -29,8 +29,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # This avoids most "Permission Denied" errors at runtime
 COPY --chown=appuser:appuser . .
 
-# 4. Final permission fix as root before switching
-RUN chmod +x /app/api/scripts/entrypoint.sh
+# 4. Make scripts executable as root before switching
+RUN chmod +x /app/api/scripts/entrypoint-auto-migrate.sh \
+    && chmod +x /app/scripts/automated-setup.sh
 
 # Switch to the restricted user
 USER appuser
