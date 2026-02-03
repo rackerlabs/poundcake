@@ -1,6 +1,14 @@
+#!/bin/bash
+#
+# Fix init-db script in running container
+#
+
+echo "Updating init_database.py in container..."
+
+docker compose exec api bash -c 'cat > /app/api/scripts/init_database.py << '\''EOF'\''
 #  ___                        _  ____      _
 # |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
-# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# | |_) / _ \| | | | '"'"'_ \ / _\` | |   / _\` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
@@ -12,7 +20,7 @@ from pathlib import Path
 
 # Add the parent of api directory to path for absolute imports
 # When run from container: /app/api/scripts/init_database.py
-# We need /app in sys.path so 'api.core.database' works
+# We need /app in sys.path so '"'"'api.core.database'"'"' works
 script_dir = Path(__file__).parent  # /app/api/scripts
 api_dir = script_dir.parent          # /app/api
 project_root = api_dir.parent        # /app
@@ -171,3 +179,8 @@ if __name__ == "__main__":
         "=" * 60,
         extra={"req_id": "SYSTEM-DB-INIT"}
     )
+EOF'
+
+echo "✓ Updated init_database.py"
+echo ""
+echo "Now run: ./scripts/init-db.sh"
