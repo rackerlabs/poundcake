@@ -18,6 +18,9 @@ ST2_API_URL = os.getenv("ST2_API_URL", "http://stackstorm-api:9101/v1").rstrip('
 ST2_API_KEY = os.getenv("ST2_API_KEY", "")
 TIMER_INTERVAL = int(os.getenv("TIMER_INTERVAL", "10"))
 
+# System request ID for polling operations (distinguishes system calls from alert processing)
+SYSTEM_REQ_ID = "SYSTEM-TIMER-POLL"
+
 def log(message: str, req_id: str = "SYSTEM"):
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] [req_id: {req_id}] timer: {message}", flush=True)
@@ -28,11 +31,18 @@ def monitor_ovens():
         headers["St2-Api-Key"] = ST2_API_KEY
 
     try:
-        # 1. Get ovens currently in flight
-        resp = requests.get(f"{POUNDCAKE_API_URL}/ovens", params={"processing_status": "processing"}, timeout=10)
+        # 1. Get ovens currently in flight (system operation, not tied to specific alert)
+        resp = requests.get(
+            f"{POUNDCAKE_API_URL}/ovens", 
+            params={"processing_status": "processing"}, 
+            headers={"X-Request-ID": SYSTEM_REQ_ID},
+            timeout=10
+        )
         ovens = resp.json()
 
         for oven in ovens:
+            # Switch from system polling req_id to alert's req_id for all subsequent operations
+            # This ensures end-to-end traceability for this specific alert
             req_id = oven.get("req_id", "UNKNOWN")
             action_id = oven.get("action_id")
 

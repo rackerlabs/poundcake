@@ -41,7 +41,7 @@ sequenceDiagram
     T->>API: PUT /api/v1/ovens/{id} (status: complete)
 
     Note over API, DB: All logs correlated via X-Request-ID
-```
+
 ### Components
 
 - **PoundCake API: Fast API entry point for webhooks, UI dashboard support, and state management.

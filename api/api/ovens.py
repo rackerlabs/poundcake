@@ -73,12 +73,16 @@ async def list_ovens(
     return query.all()
 
 @router.put("/ovens/{oven_id}", response_model=OvenResponse)
+@router.patch("/ovens/{oven_id}", response_model=OvenResponse)
 async def update_oven(
     oven_id: int, 
     payload: OvenUpdate,  # Changed from OvenBase - allows partial updates
     db: Session = Depends(get_db)
 ):
-    """Updates oven status/action_id from oven.py or results from Timer."""
+    """Updates oven status/action_id from oven.py or results from Timer.
+    
+    Supports both PUT and PATCH for partial updates (PATCH is more semantically correct).
+    """
     oven = db.query(Oven).filter(Oven.id == oven_id).first()
     if not oven:
         raise HTTPException(status_code=404, detail="Oven not found")

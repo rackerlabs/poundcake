@@ -21,13 +21,20 @@ logger = logging.getLogger(__name__)
 API_BASE_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000/api/v1")
 POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 
+# System request ID for polling operations (distinguishes system calls from alert processing)
+SYSTEM_REQ_ID = "SYSTEM-OVEN-POLL"
+
 def run_executor():
     logger.info("Oven Executor started. Target API: %s", API_BASE_URL)
     
     while True:
         try:
-            # 1. Fetch next 'new' oven task
-            resp = requests.get(f"{API_BASE_URL}/ovens", params={"processing_status": "new", "limit": 1})
+            # 1. Fetch next 'new' oven task (system operation, not tied to specific alert)
+            resp = requests.get(
+                f"{API_BASE_URL}/ovens", 
+                params={"processing_status": "new", "limit": 1},
+                headers={"X-Request-ID": SYSTEM_REQ_ID}
+            )
             resp.raise_for_status()
             tasks = resp.json()
 
@@ -37,6 +44,8 @@ def run_executor():
 
             task = tasks[0]
             oven_id = task['id']
+            # Switch from system polling req_id to alert's req_id for all subsequent operations
+            # This ensures end-to-end traceability for this specific alert
             req_id = task['req_id']
             
             # Logic: Pull action_ref from the task (usually stored in the database record)
