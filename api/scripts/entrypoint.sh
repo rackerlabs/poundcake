@@ -14,4 +14,5 @@ python3 -m alembic upgrade head
 echo "--- Migrations Successful. Launching API ---"
 
 # 2. Start the Application
-exec uvicorn api.main:app --host 0.0.0.0 --port 8000
+# Disable uvicorn access logs since our middleware already logs all requests
+exec uvicorn api.main:app --host 0.0.0.0 --port 8000 --no-access-log

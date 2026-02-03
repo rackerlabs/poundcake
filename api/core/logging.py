@@ -43,7 +43,7 @@ def setup_logging() -> None:
     logger.addHandler(handler)
 
     # Set third-party loggers to WARNING
-    for logger_name in ["uvicorn", "celery", "sqlalchemy"]:
+    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "celery", "sqlalchemy"]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
