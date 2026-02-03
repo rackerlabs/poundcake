@@ -26,8 +26,10 @@ RETRY_COUNT=0
 echo "Waiting for StackStorm API to be ready..."
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if curl -sf http://stackstorm-api:9101/v1/actions?limit=1 >/dev/null 2>&1; then
-        echo "[OK] StackStorm API is ready"
+    # Check if ST2 API responds (even 401 means it's ready)
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://stackstorm-api:9101/v1 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" != "000" ]; then
+        echo "[OK] StackStorm API is ready (HTTP $HTTP_CODE)"
         break
     fi
     
@@ -37,7 +39,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-    echo "✗ Timed out waiting for StackStorm API"
+    echo "[ERROR] Timed out waiting for StackStorm API"
     exit 1
 fi
 
