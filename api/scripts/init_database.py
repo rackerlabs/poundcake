@@ -7,19 +7,26 @@
 """Initialize database with new Recipe/Oven/Alert schema."""
 
 import sys
+import os
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add parent directory to path for direct execution
+script_dir = Path(__file__).parent
+api_dir = script_dir.parent
+sys.path.insert(0, str(api_dir))
 
-from api.core.database import Base, engine
-from api.models.models import (
+# Also add the parent of api_dir for api.* imports
+if str(api_dir.parent) not in sys.path:
+    sys.path.insert(0, str(api_dir.parent))
+
+from core.database import Base, engine, SessionLocal
+from models.models import (
     Recipe,
     Ingredient,  # noqa: F401 - Required for Base.metadata.create_all()
     Oven,  # noqa: F401 - Required for Base.metadata.create_all()
     Alert,  # noqa: F401 - Required for Base.metadata.create_all()
 )
-from api.core.logging import setup_logging, get_logger
+from core.logging import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger(__name__)
@@ -27,36 +34,47 @@ logger = get_logger(__name__)
 
 def init_database() -> None:
     """Initialize database tables."""
+    logger.info(
+        "init_database: Creating database tables",
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )
+    
     try:
-        logger.info("Creating database tables...")
         Base.metadata.create_all(bind=engine)
-        logger.info("✓ Database tables created successfully")
-
-        # Print table info
-        tables = Base.metadata.tables.keys()
-        logger.info(f"Created tables: {', '.join(tables)}")
+        
+        tables = list(Base.metadata.tables.keys())
+        logger.info(
+            "init_database: Database tables created successfully",
+            extra={"req_id": "SYSTEM-DB-INIT", "table_count": len(tables), "tables": tables}
+        )
 
     except Exception as e:
-        logger.error(f"✗ Failed to create database tables: {e}", exc_info=True)
+        logger.error(
+            "init_database: Failed to create database tables",
+            extra={"req_id": "SYSTEM-DB-INIT", "error": str(e)},
+            exc_info=True
+        )
         sys.exit(1)
 
 
 def seed_default_recipes() -> None:
     """Seed database with default recipes and their ingredients."""
-    from sqlalchemy.orm import Session
-    from api.core.database import SessionLocal
-    from api.models.models import Ingredient
-
-    db: Session = SessionLocal()
+    logger.info(
+        "seed_default_recipes: Starting",
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )
+    
+    db = SessionLocal()
 
     try:
         # Check if recipes already exist
         existing_count = db.query(Recipe).count()
         if existing_count > 0:
-            logger.info(f"Database already has {existing_count} recipes, skipping seed")
+            logger.info(
+                "seed_default_recipes: Recipes already exist, skipping",
+                extra={"req_id": "SYSTEM-DB-INIT", "existing_count": existing_count}
+            )
             return
-
-        logger.info("Seeding default recipes...")
 
         # Default recipe with ingredients
         default_recipe = Recipe(
@@ -98,19 +116,39 @@ def seed_default_recipes() -> None:
         db.add(default_recipe)
         db.commit()
         
-        logger.info(f"✓ Seeded default recipe with {len(default_ingredients)} ingredients")
+        logger.info(
+            "seed_default_recipes: Default recipe created successfully",
+            extra={
+                "req_id": "SYSTEM-DB-INIT",
+                "recipe_name": "default",
+                "ingredient_count": len(default_ingredients)
+            }
+        )
 
     except Exception as e:
-        logger.error(f"✗ Failed to seed recipes: {e}", exc_info=True)
+        logger.error(
+            "seed_default_recipes: Failed to seed recipes",
+            extra={"req_id": "SYSTEM-DB-INIT", "error": str(e)},
+            exc_info=True
+        )
         db.rollback()
     finally:
         db.close()
 
 
 if __name__ == "__main__":
-    logger.info("=" * 60)
-    logger.info("PoundCake v2.0 Database Initialization")
-    logger.info("=" * 60)
+    logger.info(
+        "=" * 60,
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )
+    logger.info(
+        "PoundCake Database Initialization",
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )
+    logger.info(
+        "=" * 60,
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )
 
     # Initialize tables
     init_database()
@@ -118,6 +156,15 @@ if __name__ == "__main__":
     # Seed default recipes
     seed_default_recipes()
 
-    logger.info("=" * 60)
-    logger.info("Database initialization complete!")
-    logger.info("=" * 60)
+    logger.info(
+        "=" * 60,
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )
+    logger.info(
+        "Database initialization complete",
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )
+    logger.info(
+        "=" * 60,
+        extra={"req_id": "SYSTEM-DB-INIT"}
+    )

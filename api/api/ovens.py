@@ -5,25 +5,47 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """API routes for Oven (task execution) management."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timezone
 
 from api.core.database import get_db
+from api.core.logging import get_logger
 from api.models.models import Alert, Oven, Recipe, Ingredient
-from api.schemas.schemas import OvenResponse, OvenUpdate
+from api.schemas.schemas import OvenResponse, OvenUpdate, BakeResponse
 
 router = APIRouter()
+logger = get_logger(__name__)
 
-@router.post("/ovens/bake/{alert_id}")
-async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
+@router.post("/ovens/bake/{alert_id}", response_model=BakeResponse)
+async def bake_ovens(
+    request: Request,
+    alert_id: int,
+    db: Session = Depends(get_db)
+) -> BakeResponse:
     """The 'Chef' logic: Creates individual Oven tasks from a Recipe."""
+    req_id = request.state.req_id
+    
+    logger.info(
+        "bake_ovens: Starting",
+        extra={"req_id": req_id, "alert_id": alert_id}
+    )
+    
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
+        logger.warning(
+            "bake_ovens: Alert not found",
+            extra={"req_id": req_id, "alert_id": alert_id}
+        )
         raise HTTPException(status_code=404, detail="Alert not found")
 
     # Match group_name to Recipe
+    logger.debug(
+        "bake_ovens: Looking for recipe",
+        extra={"req_id": req_id, "group_name": alert.group_name}
+    )
+    
     recipe = db.query(Recipe).filter(
         Recipe.name == alert.group_name, 
         Recipe.enabled == True
@@ -33,10 +55,29 @@ async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
         # Close alert if no recipe exists
         alert.processing_status = "complete"
         db.commit()
-        return {"status": "ignored", "reason": f"No recipe for {alert.group_name}"}
+        
+        logger.info(
+            "bake_ovens: No recipe found, alert closed",
+            extra={"req_id": req_id, "alert_id": alert_id, "group_name": alert.group_name}
+        )
+        return BakeResponse(
+            status="ignored",
+            reason=f"No recipe for {alert.group_name}"
+        )
 
     # Fetch ingredients (steps)
-    ingredients = db.query(Ingredient).filter(Ingredient.recipe_id == recipe.id).all()
+    ingredients = db.query(Ingredient).filter(Ingredient.recipe_id == recipe.id).order_by(Ingredient.task_order).all()
+    
+    logger.info(
+        "bake_ovens: Recipe matched, creating ovens",
+        extra={
+            "req_id": req_id,
+            "alert_id": alert_id,
+            "recipe_id": recipe.id,
+            "recipe_name": recipe.name,
+            "ingredient_count": len(ingredients)
+        }
+    )
 
     for ing in ingredients:
         new_oven = Oven(
@@ -55,36 +96,82 @@ async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
     alert.processing_status = "processing"
     db.commit()
     
-    return {"status": "baked", "ovens_created": len(ingredients)}
+    logger.info(
+        "bake_ovens: Ovens created successfully",
+        extra={
+            "req_id": req_id,
+            "alert_id": alert_id,
+            "recipe_id": recipe.id,
+            "ovens_created": len(ingredients)
+        }
+    )
+    
+    return BakeResponse(
+        status="baked",
+        ovens_created=len(ingredients),
+        recipe_id=recipe.id,
+        recipe_name=recipe.name
+    )
 
 @router.get("/ovens", response_model=List[OvenResponse])
 async def list_ovens(
+    request: Request,
     processing_status: Optional[str] = None,
     req_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """Used by oven.py to find executable tasks and Timer to monitor status."""
+    request_id = request.state.req_id
+    
+    logger.debug(
+        "list_ovens: Fetching ovens",
+        extra={
+            "req_id": request_id,
+            "processing_status": processing_status,
+            "filter_req_id": req_id
+        }
+    )
+    
     query = db.query(Oven)
     if processing_status:
         query = query.filter(Oven.processing_status == processing_status)
     if req_id:
         query = query.filter(Oven.req_id == req_id)
-        
-    return query.all()
+    
+    ovens = query.all()
+    
+    logger.debug(
+        "list_ovens: Ovens fetched",
+        extra={"req_id": request_id, "count": len(ovens)}
+    )
+    
+    return ovens
 
 @router.put("/ovens/{oven_id}", response_model=OvenResponse)
 @router.patch("/ovens/{oven_id}", response_model=OvenResponse)
 async def update_oven(
+    request: Request,
     oven_id: int, 
-    payload: OvenUpdate,  # Changed from OvenBase - allows partial updates
+    payload: OvenUpdate,
     db: Session = Depends(get_db)
 ):
     """Updates oven status/action_id from oven.py or results from Timer.
     
     Supports both PUT and PATCH for partial updates (PATCH is more semantically correct).
     """
+    req_id = request.state.req_id
+    
+    logger.info(
+        "update_oven: Starting",
+        extra={"req_id": req_id, "oven_id": oven_id}
+    )
+    
     oven = db.query(Oven).filter(Oven.id == oven_id).first()
     if not oven:
+        logger.warning(
+            "update_oven: Oven not found",
+            extra={"req_id": req_id, "oven_id": oven_id}
+        )
         raise HTTPException(status_code=404, detail="Oven not found")
 
     update_data = payload.dict(exclude_unset=True)
@@ -93,4 +180,15 @@ async def update_oven(
 
     db.commit()
     db.refresh(oven)
+    
+    logger.info(
+        "update_oven: Oven updated successfully",
+        extra={
+            "req_id": req_id,
+            "oven_id": oven_id,
+            "fields_updated": len(update_data),
+            "new_status": oven.processing_status
+        }
+    )
+    
     return oven

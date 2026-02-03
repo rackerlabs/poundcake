@@ -231,3 +231,62 @@ class AlertResponse(AlertBase):
 class AlertDetailResponse(AlertResponse):
     """Schema for detailed alert responses (includes ovens)."""
     ovens: List[OvenResponse] = []
+
+
+# ============================================================================
+# Operation Response Models
+# ============================================================================
+
+class WebhookResponse(BaseModel):
+    """Response from webhook endpoint."""
+    status: str  # created, counter_incremented, resolved, ignored, no_alerts
+    alert_id: Optional[int] = None
+    message: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BakeResponse(BaseModel):
+    """Response from bake ovens endpoint."""
+    status: str  # baked, ignored
+    ovens_created: Optional[int] = None
+    recipe_id: Optional[int] = None
+    recipe_name: Optional[str] = None
+    reason: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExecutionResponse(BaseModel):
+    """Response from StackStorm execution."""
+    id: str  # Execution ID
+    status: str  # pending, running, succeeded, failed, etc.
+    action: Dict[str, Any]  # Action reference and details
+    parameters: Dict[str, Any]  # Execution parameters
+    result: Optional[Dict[str, Any]] = None
+    start_timestamp: Optional[str] = None
+    end_timestamp: Optional[str] = None
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        extra='allow'  # Allow additional ST2 fields
+    )
+
+
+class SessionResponse(BaseModel):
+    """Response from login endpoint."""
+    session_id: str
+    username: str
+    expires_at: str  # ISO format datetime
+    token_type: str = "Bearer"
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DeleteResponse(BaseModel):
+    """Generic delete response."""
+    status: str = "deleted"
+    id: int
+    message: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)

@@ -50,7 +50,7 @@ class PreHeatMiddleware(BaseHTTPMiddleware):
 
         # Log request
         logger.info(
-            "Request completed",
+            "dispatch: Request completed",
             extra={
                 "req_id": req_id,
                 "method": request.method,

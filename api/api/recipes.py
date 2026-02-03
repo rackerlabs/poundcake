@@ -6,26 +6,43 @@
 #
 """API endpoints for recipe and ingredient management."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 
 from api.core.database import get_db
+from api.core.logging import get_logger
 from api.models.models import Recipe, Ingredient
 from api.schemas.schemas import (
     RecipeCreate, RecipeResponse, RecipeDetailResponse,
-    IngredientResponse
+    IngredientResponse, DeleteResponse
 )
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 # --- Recipe Endpoints ---
 
-@router.post("/recipes/")
-async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
+@router.post("/recipes/", response_model=RecipeDetailResponse, status_code=201)
+async def create_recipe(
+    request: Request,
+    recipe: RecipeCreate,
+    db: Session = Depends(get_db)
+) -> RecipeDetailResponse:
     """Create a new recipe with ingredients."""
+    req_id = request.state.req_id
+    
+    logger.info(
+        "create_recipe: Creating recipe",
+        extra={"req_id": req_id, "recipe_name": recipe.name}
+    )
+    
     existing = db.query(Recipe).filter(Recipe.name == recipe.name).first()
     if existing:
+        logger.warning(
+            "create_recipe: Recipe already exists",
+            extra={"req_id": req_id, "recipe_name": recipe.name}
+        )
         raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
 
     db_recipe = Recipe(name=recipe.name, description=recipe.description, enabled=recipe.enabled)
@@ -51,6 +68,17 @@ async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(db_recipe)
+    
+    logger.info(
+        "create_recipe: Recipe created successfully",
+        extra={
+            "req_id": req_id,
+            "recipe_id": db_recipe.id,
+            "recipe_name": db_recipe.name,
+            "ingredient_count": len(recipe.ingredients)
+        }
+    )
+    
     return db_recipe
 
 @router.get("/recipes/", response_model=List[RecipeDetailResponse])
@@ -87,16 +115,42 @@ async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
     
     return recipe
 
-@router.delete("/recipes/{recipe_id}")
-async def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
+@router.delete("/recipes/{recipe_id}", response_model=DeleteResponse)
+async def delete_recipe(
+    request: Request,
+    recipe_id: int,
+    db: Session = Depends(get_db)
+) -> DeleteResponse:
     """Delete a recipe and all its ingredients."""
+    req_id = request.state.req_id
+    
+    logger.info(
+        "delete_recipe: Deleting recipe",
+        extra={"req_id": req_id, "recipe_id": recipe_id}
+    )
+    
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
+        logger.warning(
+            "delete_recipe: Recipe not found",
+            extra={"req_id": req_id, "recipe_id": recipe_id}
+        )
         raise HTTPException(status_code=404, detail="Recipe not found")
 
+    recipe_name = recipe.name
     db.delete(recipe)
     db.commit()
-    return {"message": f"Recipe '{recipe.name}' deleted"}
+    
+    logger.info(
+        "delete_recipe: Recipe deleted successfully",
+        extra={"req_id": req_id, "recipe_id": recipe_id, "recipe_name": recipe_name}
+    )
+    
+    return DeleteResponse(
+        status="deleted",
+        id=recipe_id,
+        message=f"Recipe '{recipe_name}' deleted successfully"
+    )
 
 # --- Ingredient Endpoints ---
 

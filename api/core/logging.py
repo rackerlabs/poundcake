@@ -28,12 +28,15 @@ def setup_logging() -> None:
     # Configure formatter based on settings
     if settings.log_format == "json":
         formatter = JsonFormatter(
-            "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d",
+            "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d %(req_id)s",
             rename_fields={"levelname": "level", "asctime": "timestamp"},
         )
     else:
+        # Standard format: [datetime] [req_id] LEVEL - function_name: message
         formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            "%(asctime)s [%(req_id)s] %(levelname)s - %(message)s", 
+            datefmt="%Y-%m-%d %H:%M:%S",
+            defaults={"req_id": "NONE"}  # Default value if req_id not provided
         )
 
     handler.setFormatter(formatter)

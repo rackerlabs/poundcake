@@ -15,8 +15,10 @@ from typing import Any
 from fastapi import Cookie, HTTPException, Request, status, APIRouter
 
 from api.core.config import get_settings
+from api.core.logging import get_logger
+from api.schemas.schemas import SessionResponse
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Standard router definition for auth endpoints
 router = APIRouter()
@@ -148,19 +150,49 @@ def require_auth_if_enabled(
 
     return username
 
-@router.post("/auth/login")
-async def login(request: Request):
+@router.post("/auth/login", response_model=SessionResponse)
+async def login(request: Request) -> SessionResponse:
     """Simple login endpoint to set session."""
+    req_id = request.state.req_id
+    
     try:
         data = await request.json()
         username = data.get("username")
         password = data.get("password")
+        
+        logger.info(
+            "login: Login attempt",
+            extra={"req_id": req_id, "username": username}
+        )
 
         if verify_credentials(username, password):
             token = create_session(username)
-            return {"status": "success", "session": token}
+            session_data = _sessions[token]
+            
+            logger.info(
+                "login: Login successful",
+                extra={"req_id": req_id, "username": username}
+            )
+            
+            return SessionResponse(
+                session_id=token,
+                username=username,
+                expires_at=session_data["expires_at"].isoformat(),
+                token_type="Bearer"
+            )
 
+        logger.warning(
+            "login: Invalid credentials",
+            extra={"req_id": req_id, "username": username}
+        )
         raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Login failed: %s", str(e))
+        logger.error(
+            "login: Login failed",
+            extra={"req_id": req_id, "error": str(e)},
+            exc_info=True
+        )
         raise HTTPException(status_code=400, detail="Malformed request")

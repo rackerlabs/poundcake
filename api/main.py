@@ -16,6 +16,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from api.core.config import settings
 from api.core.database import init_db
 from api.core.middleware import PreHeatMiddleware
+from api.core.logging import setup_logging
 from api.api.health import router as health_router
 from api.api.stackstorm import router as st2_bridge_router
 from api.api.recipes import router as recipes_router
@@ -24,16 +25,16 @@ from api.api.routes import router as alerts_router
 from api.api.prometheus import router as prometheus_router
 from api.api.auth import router as auth_router
 
-# Configure logging based on Helm-injected settings
-logging.basicConfig(level=getattr(logging, settings.log_level.upper()))
+# Configure logging with custom formatter that includes req_id
+setup_logging()
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # init_db() is removed from here
-    logger.info("PoundCake API is starting up...")
+    logger.info("lifespan: PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
     yield
-    logger.info("Powering down PoundCake...")
+    logger.info("lifespan: Powering down PoundCake", extra={"req_id": "SYSTEM-SHUTDOWN"})
 
 app = FastAPI(
     title="PoundCake API",
