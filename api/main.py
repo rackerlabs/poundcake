@@ -75,11 +75,11 @@ app.include_router(auth_router, prefix="/api/v1/auth", tags=["security"])
 app.include_router(st2_bridge_router, prefix="/api/v1/stackstorm", tags=["infrastructure"])
 
 # 4. Business Logic
-app.include_router(recipes_router, prefix="/api/v1/recipes", tags=["logic"])
+app.include_router(recipes_router, prefix="/api/v1", tags=["logic"])
 app.include_router(ovens_router, prefix="/api/v1/ovens", tags=["executor"])
 
 # 5. Alert Ingestion (webhook)
-app.include_router(alerts_router, prefix="/api/v1/alerts", tags=["ingestion"])
+app.include_router(alerts_router, prefix="/api/v1", tags=["ingestion"])
 
 @app.get("/")
 async def root():

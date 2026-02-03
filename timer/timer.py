@@ -13,8 +13,7 @@ import time
 import requests
 from datetime import datetime, timezone
 
-POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip('/')
-API_URL = f"{POUNDCAKE_API_URL}/api/v1"
+POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000/api/v1").rstrip('/')
 ST2_API_URL = os.getenv("ST2_API_URL", "http://stackstorm-api:9101/v1").rstrip('/')
 ST2_API_KEY = os.getenv("ST2_API_KEY", "")
 TIMER_INTERVAL = int(os.getenv("TIMER_INTERVAL", "10"))
@@ -30,7 +29,7 @@ def monitor_ovens():
 
     try:
         # 1. Get ovens currently in flight
-        resp = requests.get(f"{API_URL}/ovens", params={"processing_status": "processing"}, timeout=10)
+        resp = requests.get(f"{POUNDCAKE_API_URL}/ovens", params={"processing_status": "processing"}, timeout=10)
         ovens = resp.json()
 
         for oven in ovens:
@@ -43,13 +42,20 @@ def monitor_ovens():
             # 2. Check ST2 Status
             st2_resp = requests.get(f"{ST2_API_URL}/executions/{action_id}", headers=headers, timeout=10)
             if st2_resp.status_code == 200:
-                st2_status = st2_resp.json().get("status")
+                st2_data = st2_resp.json()
+                
+                # Ensure response is a dict, not a string
+                if not isinstance(st2_data, dict):
+                    log(f"Unexpected ST2 response type for action {action_id}: {type(st2_data)}", req_id=req_id)
+                    continue
+                    
+                st2_status = st2_data.get("status")
 
                 # 3. If finished, update API
                 if st2_status in ["succeeded", "failed", "canceled"]:
                     new_status = "complete"
                     requests.put(
-                        f"{API_URL}/ovens/{oven.get('id')}",
+                        f"{POUNDCAKE_API_URL}/ovens/{oven.get('id')}",
                         json={"processing_status": new_status, "st2_status": st2_status},
                         headers=headers,
                         timeout=10

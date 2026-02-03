@@ -16,7 +16,7 @@ from api.schemas.schemas import OvenResponse, OvenUpdate
 
 router = APIRouter()
 
-@router.post("/ovens/bake/{alert_id}")
+@router.post("/bake/{alert_id}")
 async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
     """The 'Chef' logic: Creates individual Oven tasks from a Recipe."""
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
@@ -57,7 +57,7 @@ async def bake_ovens(alert_id: int, db: Session = Depends(get_db)):
     
     return {"status": "baked", "ovens_created": len(ingredients)}
 
-@router.get("/ovens", response_model=List[OvenResponse])
+@router.get("/", response_model=List[OvenResponse])
 async def list_ovens(
     processing_status: Optional[str] = None,
     req_id: Optional[str] = None,
@@ -72,7 +72,7 @@ async def list_ovens(
         
     return query.all()
 
-@router.put("/ovens/{oven_id}", response_model=OvenResponse)
+@router.put("/{oven_id}", response_model=OvenResponse)
 async def update_oven(
     oven_id: int, 
     payload: OvenUpdate,  # Changed from OvenBase - allows partial updates

@@ -9,6 +9,13 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Install envsubst if not available
+if ! command -v envsubst &> /dev/null; then
+    log "envsubst not found, installing gettext-base..."
+    apt-get update -qq && apt-get install -y -qq gettext-base > /dev/null 2>&1
+    log "✓ envsubst installed"
+fi
+
 # Check if template exists
 if [ ! -f "/etc/st2/st2.conf.template" ]; then
     log "ERROR: /etc/st2/st2.conf.template not found"
