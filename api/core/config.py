@@ -70,10 +70,10 @@ class Settings(BaseSettings):
     stackstorm_api_key: str = ""
     stackstorm_auth_token: str = ""
     stackstorm_verify_ssl: bool = False
-    
+
     def get_stackstorm_api_key(self) -> str:
         """Get StackStorm API key from env var or runtime config file.
-        
+
         Priority:
         1. Environment variable (POUNDCAKE_STACKSTORM_API_KEY)
         2. Runtime config file (/app/config/st2_api_key)
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
         # First check environment variable
         if self.stackstorm_api_key:
             return self.stackstorm_api_key
-        
+
         # Fall back to runtime config file (written by setup container)
         config_file = Path("/app/config/st2_api_key")
         if config_file.exists():
@@ -92,7 +92,7 @@ class Settings(BaseSettings):
                     return key
             except Exception:
                 pass
-        
+
         return ""
 
     # ==========================================================================
@@ -140,7 +140,7 @@ class Settings(BaseSettings):
     metrics_path: str = "/metrics"
 
     cors_origins: list[str] = ["*"]
-    allowed_origins: list[str] = ["*"] # Alias for main.py compatibility
+    allowed_origins: list[str] = ["*"]  # Alias for main.py compatibility
     cors_allow_credentials: bool = True
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
@@ -149,7 +149,7 @@ class Settings(BaseSettings):
     # Authentication & Identification
     # ==========================================================================
     instance_id: str = Field(default_factory=lambda: os.getenv("HOSTNAME", "poundcake-0"))
-    
+
     auth_enabled: bool = True
     auth_secret_name: str = "poundcake-admin"
     auth_secret_namespace: str = "poundcake"
@@ -163,13 +163,16 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
 
+
 def load_yaml_config(path: Path) -> dict[str, Any]:
     with open(path) as f:
         return yaml.safe_load(f) or {}
+
 
 def load_all_mappings(mappings_path: Path) -> dict[str, Any]:
     mappings: dict[str, Any] = {}

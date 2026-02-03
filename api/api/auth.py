@@ -27,6 +27,7 @@ router = APIRouter()
 # NOTE: Switch to Redis if scaling to multiple Kubernetes replicas
 _sessions: dict[str, dict[str, Any]] = {}
 
+
 def get_admin_credentials() -> tuple[str, str] | None:
     """Get admin credentials from Kubernetes secret or environment."""
     settings = get_settings()
@@ -65,6 +66,7 @@ def get_admin_credentials() -> tuple[str, str] | None:
         logger.error("No admin credentials configured in K8s or Environment!")
         return None
 
+
 def create_session(username: str) -> str:
     """Create a new session and return the token."""
     settings = get_settings()
@@ -79,6 +81,7 @@ def create_session(username: str) -> str:
 
     logger.info("Session created for %s, expires at %s", username, expires_at)
     return session_token
+
 
 def validate_session(session_token: str | None) -> str | None:
     """Validate token; returns username if valid, None if expired/not found."""
@@ -95,11 +98,13 @@ def validate_session(session_token: str | None) -> str | None:
 
     return session["username"]
 
+
 def destroy_session(session_token: str | None) -> None:
     """Manual logout/session destruction."""
     if session_token in _sessions:
         del _sessions[session_token]
         logger.info("Session destroyed.")
+
 
 def verify_credentials(username: str, password: str) -> bool:
     """Compare input against master admin credentials."""
@@ -110,9 +115,9 @@ def verify_credentials(username: str, password: str) -> bool:
     admin_user, admin_pass = credentials
     return username == admin_user and password == admin_pass
 
+
 def require_auth_if_enabled(
-    request: Request,
-    session: str | None = Cookie(default=None)
+    request: Request, session: str | None = Cookie(default=None)
 ) -> str | None:
     """Dependency for FastAPI routes. Checks if auth is enabled and validates session."""
     settings = get_settings()
@@ -150,49 +155,39 @@ def require_auth_if_enabled(
 
     return username
 
+
 @router.post("/auth/login", response_model=SessionResponse)
 async def login(request: Request) -> SessionResponse:
     """Simple login endpoint to set session."""
     req_id = request.state.req_id
-    
+
     try:
         data = await request.json()
         username = data.get("username")
         password = data.get("password")
-        
-        logger.info(
-            "login: Login attempt",
-            extra={"req_id": req_id, "username": username}
-        )
+
+        logger.info("login: Login attempt", extra={"req_id": req_id, "username": username})
 
         if verify_credentials(username, password):
             token = create_session(username)
             session_data = _sessions[token]
-            
-            logger.info(
-                "login: Login successful",
-                extra={"req_id": req_id, "username": username}
-            )
-            
+
+            logger.info("login: Login successful", extra={"req_id": req_id, "username": username})
+
             return SessionResponse(
                 session_id=token,
                 username=username,
                 expires_at=session_data["expires_at"].isoformat(),
-                token_type="Bearer"
+                token_type="Bearer",
             )
 
-        logger.warning(
-            "login: Invalid credentials",
-            extra={"req_id": req_id, "username": username}
-        )
+        logger.warning("login: Invalid credentials", extra={"req_id": req_id, "username": username})
         raise HTTPException(status_code=401, detail="Invalid credentials")
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(
-            "login: Login failed",
-            extra={"req_id": req_id, "error": str(e)},
-            exc_info=True
+            "login: Login failed", extra={"req_id": req_id, "error": str(e)}, exc_info=True
         )
         raise HTTPException(status_code=400, detail="Malformed request")

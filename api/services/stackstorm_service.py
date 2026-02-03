@@ -43,7 +43,7 @@ class StackStormClient:
 
     def _get_headers(self) -> dict[str, str]:
         """Get headers with current API key.
-        
+
         Re-reads the API key on each call to support runtime key generation.
         """
         headers: dict[str, str] = {
@@ -53,7 +53,7 @@ class StackStormClient:
         # Re-read API key from settings (which checks the file each time)
         settings = get_settings()
         api_key = settings.get_stackstorm_api_key()
-        
+
         if api_key:
             headers["St2-Api-Key"] = api_key
         elif self._auth_token:
@@ -91,7 +91,7 @@ class StackStormClient:
             try:
                 logger.info(
                     "execute_action: Executing StackStorm action",
-                    extra={"action_ref": action_ref, "parameters": parameters}
+                    extra={"action_ref": action_ref, "parameters": parameters},
                 )
 
                 response = await client.post(
@@ -107,8 +107,8 @@ class StackStormClient:
                         extra={
                             "action_ref": action_ref,
                             "execution_id": result.get("id"),
-                            "status": result.get("status")
-                        }
+                            "status": result.get("status"),
+                        },
                     )
                     return result
                 else:
@@ -118,8 +118,8 @@ class StackStormClient:
                         extra={
                             "action_ref": action_ref,
                             "status_code": response.status_code,
-                            "error": response.text
-                        }
+                            "error": response.text,
+                        },
                     )
                     raise StackStormError(error_msg)
 
@@ -127,7 +127,7 @@ class StackStormClient:
                 logger.error(
                     "execute_action: StackStorm request timed out",
                     extra={"action_ref": action_ref, "timeout": timeout, "error": str(e)},
-                    exc_info=True
+                    exc_info=True,
                 )
                 raise StackStormError(f"StackStorm request timed out after {timeout}s") from e
 
@@ -135,7 +135,7 @@ class StackStormClient:
                 logger.error(
                     "execute_action: StackStorm request failed",
                     extra={"action_ref": action_ref, "error": str(e)},
-                    exc_info=True
+                    exc_info=True,
                 )
                 raise StackStormError(f"StackStorm request failed: {e}") from e
 
@@ -213,8 +213,7 @@ class StackStormClient:
                 return response.status_code == 200
             except Exception as e:
                 logger.error(
-                    "health_check: StackStorm health check failed",
-                    extra={"error": str(e)}
+                    "health_check: StackStorm health check failed", extra={"error": str(e)}
                 )
                 return False
 
@@ -373,7 +372,7 @@ class StackStormActionManager:
                 result: dict[str, Any] = response.json()
                 logger.info(
                     "update_action: StackStorm action updated successfully",
-                    extra={"action_ref": action_ref}
+                    extra={"action_ref": action_ref},
                 )
                 return result
             else:
@@ -382,8 +381,8 @@ class StackStormActionManager:
                     extra={
                         "action_ref": action_ref,
                         "status_code": response.status_code,
-                        "error": response.text
-                    }
+                        "error": response.text,
+                    },
                 )
                 return None
 
@@ -415,13 +414,13 @@ class StackStormActionManager:
                 result: dict[str, Any] = response.json()
                 logger.info(
                     "create_action: StackStorm action created successfully",
-                    extra={"action_ref": result.get("ref")}
+                    extra={"action_ref": result.get("ref")},
                 )
                 return result
             else:
                 logger.error(
                     "create_action: Failed to create StackStorm action",
-                    extra={"status_code": response.status_code, "error": response.text}
+                    extra={"status_code": response.status_code, "error": response.text},
                 )
                 return None
 
@@ -448,13 +447,13 @@ class StackStormActionManager:
             if response.status_code == 204:
                 logger.info(
                     "delete_action: StackStorm action deleted successfully",
-                    extra={"action_ref": action_ref}
+                    extra={"action_ref": action_ref},
                 )
                 return True
             else:
                 logger.error(
                     "delete_action: Failed to delete StackStorm action",
-                    extra={"action_ref": action_ref, "status_code": response.status_code}
+                    extra={"action_ref": action_ref, "status_code": response.status_code},
                 )
                 return False
 

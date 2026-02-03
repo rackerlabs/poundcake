@@ -37,6 +37,15 @@ host = 0.0.0.0
 port = 9101
 allow_origin = *
 
+[cli]
+# API and Auth URLs for st2 CLI
+api_url = http://stackstorm-api:9101
+auth_url = http://stackstorm-auth:9100
+base_url = http://stackstorm-api:9101
+cacert = None
+debug = False
+
+
 [stream]
 host = 0.0.0.0
 port = 9102

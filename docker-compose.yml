@@ -118,6 +118,7 @@ services:
     volumes:
       - ./timer:/app/timer
       - ./logs:/app/logs
+      - ./config:/app/config:ro  # Read ST2 API key
     networks:
       - poundcake
     # Explicitly call python to skip the api entrypoint script
@@ -311,6 +312,43 @@ services:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
     command: ["/opt/stackstorm/st2/bin/st2notifier", "--config-file", "/etc/st2/st2.conf"]
+    restart: unless-stopped
+
+  stackstorm-garbagecollector:
+    image: stackstorm/st2:3.9.0
+    container_name: stackstorm-garbagecollector
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+    depends_on:
+      - stackstorm-api
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+    networks:
+      - poundcake
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2garbagecollector", "--config-file", "/etc/st2/st2.conf"]
+    restart: unless-stopped
+
+  stackstorm-chatops:
+    image: stackstorm/st2chatops:3.9.0
+    container_name: stackstorm-chatops
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+      ST2_API_URL: http://stackstorm-api:9101
+      ST2_AUTH_URL: http://stackstorm-auth:9100
+      # Chatops typically needs these configured
+      HUBOT_ADAPTER: ${HUBOT_ADAPTER:-shell}
+      HUBOT_NAME: ${HUBOT_NAME:-st2}
+    depends_on:
+      - stackstorm-api
+      - stackstorm-auth
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+    networks:
+      - poundcake
     restart: unless-stopped
 
   st2client:

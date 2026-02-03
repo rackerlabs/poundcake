@@ -1,16 +1,9 @@
-# ===================================================================
-# PoundCake .gitignore
-# ===================================================================
-
 # Python
-# ---------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-
-# Distribution / packaging
 build/
 develop-eggs/
 dist/
@@ -23,22 +16,28 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Unit test / coverage reports
+# Testing
 htmlcov/
 .tox/
 .nox/
@@ -51,191 +50,48 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
-.ruff_cache/
 
-# Translations
-*.mo
-*.pot
+# Logs
+*.log
+logs/*.log
+
+# Database
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
 
 # mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-
-# Environments
-# ---------------------------------------------------------------
-.env
-.env.local
-.env.*.local
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-
-# IDEs and Editors
-# ---------------------------------------------------------------
-# VSCode
-.vscode/
-*.code-workspace
-
-# PyCharm / IntelliJ
-.idea/
-*.iml
-
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
-# Vim
-*.swp
-*.swo
-*~
-
-# Emacs
-*~
-\#*\#
-.\#*
-
-
-# Operating Systems
-# ---------------------------------------------------------------
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-
-# Linux
-*~
-.directory
-.Trash-*
-
+# ruff
+.ruff_cache/
 
 # Docker
-# ---------------------------------------------------------------
-# Local overrides (but keep main docker-compose.yml)
 docker-compose.override.yml
-docker-compose.local.yml
 
-# Docker volumes (if mounted locally)
-.docker/
-
-
-# Logs and Databases
-# ---------------------------------------------------------------
-*.log
-logs/
-*.log.*
-
-# SQLite (development databases)
-*.db
-*.sqlite
-*.sqlite3
-
-
-# Alembic
-# ---------------------------------------------------------------
-# Keep migration files! Only ignore Python bytecode
-alembic/versions/__pycache__/
-
-
-# Application Specific
-# ---------------------------------------------------------------
-# Runtime configuration (keep .env.example for reference)
-.st2_api_key
-config/st2_api_key
-
-# Temporary files
+# Temporary
 *.tmp
 *.bak
 *.backup
-.~*
 
-# Local development files
+# Local configuration (keep .env.example!)
+.env.local
 *.local.yaml
 *.local.yml
-*.local.json
 
-# Cache and build artifacts
-.cache/
-.build/
+# StackStorm runtime key (generated)
+.st2_api_key
+config/st2_api_key
 
-
-# Project Specific - PoundCake
-# ---------------------------------------------------------------
-# Development servers
-cake-dev/
-*.dev/
-
-# Test artifacts
-test-results/
-.test-cache/
-
-# Package builds
-*.tar.gz
-*.tar.bz2
-*.zip
-poundcake-*.tar.gz
-!poundcake-FINAL.tar.gz  # Exception: keep final release tarball if committed
-
-
-# Documentation (if using separate docs repo)
-# Uncomment if you don't want to track docs in main repo
-# docs/_build/
-# docs/.doctrees/
-
-
-# Jupyter Notebooks (if used for analysis)
-# ---------------------------------------------------------------
-.ipynb_checkpoints
-*/.ipynb_checkpoints/*
-*.ipynb
-
-
-# Secrets and Credentials
-# ---------------------------------------------------------------
-# CRITICAL: Never commit these!
-*.pem
-*.key
-*.crt
-*.p12
-*.pfx
-secrets.yml
-secrets.yaml
-credentials.json
-service-account.json
-.secrets/
-
-# AWS
-.aws/
-
-# GCP
-.gcloud/
-.config/gcloud/
-
-
-# Notes and TODOs (optional)
-# ---------------------------------------------------------------
-# Uncomment if you want to keep personal notes out of git
-# TODO.md
-# NOTES.md
-# scratch/
-# .notes/
+# ==============================================================================
+# IMPORTANT: DO NOT IGNORE ALEMBIC MIGRATIONS!
+# ==============================================================================
+# Migration files MUST be tracked in version control
+# Only ignore pycache within alembic
+alembic/__pycache__/
+alembic/**/__pycache__/

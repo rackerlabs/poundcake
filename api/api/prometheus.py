@@ -25,6 +25,7 @@ router = APIRouter(tags=["prometheus"])
 # Rule Endpoints
 # =============================================================================
 
+
 @router.get("/prometheus/rules")
 async def list_rules(
     request: Request,
@@ -58,6 +59,7 @@ async def list_rule_groups(
 # =============================================================================
 # Metric/Label Discovery Endpoints
 # =============================================================================
+
 
 @router.get("/prometheus/metrics")
 async def list_metrics(
@@ -111,6 +113,7 @@ async def list_label_values(
 # Health & Management Endpoints
 # =============================================================================
 
+
 @router.get("/prometheus/health")
 async def prometheus_health(
     request: Request,
@@ -148,6 +151,7 @@ async def reload_prometheus(
 # =============================================================================
 # Rule CRUD Endpoints
 # =============================================================================
+
 
 @router.post("/prometheus/rules")
 async def create_rule(

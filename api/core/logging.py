@@ -34,9 +34,9 @@ def setup_logging() -> None:
     else:
         # Standard format: [datetime] [req_id] LEVEL - function_name: message
         formatter = logging.Formatter(
-            "%(asctime)s [%(req_id)s] %(levelname)s - %(message)s", 
+            "%(asctime)s [%(req_id)s] %(levelname)s - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
-            defaults={"req_id": "NONE"}  # Default value if req_id not provided
+            defaults={"req_id": "NONE"},  # Default value if req_id not provided
         )
 
     handler.setFormatter(formatter)
@@ -45,7 +45,7 @@ def setup_logging() -> None:
     # Set third-party loggers to WARNING (suppresses INFO and DEBUG)
     for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "celery", "sqlalchemy"]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
-    
+
     # Set httpx/httpcore to CRITICAL (suppresses ERROR, WARNING, INFO, DEBUG)
     # This prevents connection error tracebacks during startup
     for logger_name in ["httpx", "httpcore"]:

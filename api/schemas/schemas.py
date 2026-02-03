@@ -14,6 +14,7 @@ from datetime import datetime
 # Health & Stats
 # =============================================================================
 
+
 class HealthResponse(BaseModel):
     status: str
     version: str
@@ -36,8 +37,10 @@ class StatsResponse(BaseModel):
 # Ingredient Schemas
 # =============================================================================
 
+
 class IngredientBase(BaseModel):
     """Base schema for Ingredient creation/updates."""
+
     task_id: str = Field(..., max_length=100)
     task_name: str = Field(..., max_length=255)
     task_order: int = Field(..., ge=1)
@@ -53,11 +56,13 @@ class IngredientBase(BaseModel):
 
 class IngredientCreate(IngredientBase):
     """Schema for creating a new ingredient (used in recipe creation)."""
+
     pass
 
 
 class IngredientUpdate(BaseModel):
     """Schema for updating an ingredient (all fields optional)."""
+
     task_id: Optional[str] = Field(None, max_length=100)
     task_name: Optional[str] = Field(None, max_length=255)
     task_order: Optional[int] = Field(None, ge=1)
@@ -73,11 +78,12 @@ class IngredientUpdate(BaseModel):
 
 class IngredientResponse(IngredientBase):
     """Schema for ingredient responses (includes DB fields)."""
+
     id: int
     recipe_id: int
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -85,8 +91,10 @@ class IngredientResponse(IngredientBase):
 # Recipe Schemas
 # =============================================================================
 
+
 class RecipeBase(BaseModel):
     """Base schema for Recipe creation/updates."""
+
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     enabled: bool = True
@@ -94,11 +102,13 @@ class RecipeBase(BaseModel):
 
 class RecipeCreate(RecipeBase):
     """Schema for creating a recipe with ingredients."""
+
     ingredients: List[IngredientCreate] = Field(..., min_length=1)
 
 
 class RecipeUpdate(BaseModel):
     """Schema for updating a recipe (all fields optional)."""
+
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     enabled: Optional[bool] = None
@@ -106,15 +116,17 @@ class RecipeUpdate(BaseModel):
 
 class RecipeResponse(RecipeBase):
     """Schema for recipe responses (includes DB fields)."""
+
     id: int
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class RecipeDetailResponse(RecipeResponse):
     """Schema for detailed recipe responses (includes ingredients)."""
+
     ingredients: List[IngredientResponse] = []
 
 
@@ -122,14 +134,17 @@ class RecipeDetailResponse(RecipeResponse):
 # Oven Schemas
 # =============================================================================
 
+
 class OvenBase(BaseModel):
     """Base schema for Oven."""
+
     req_id: str = Field(..., max_length=100)
     processing_status: str = Field(default="new", max_length=50)
 
 
 class OvenUpdate(BaseModel):
     """Schema for updating an oven (used by timer service)."""
+
     processing_status: Optional[str] = Field(None, max_length=50)
     action_id: Optional[str] = Field(None, max_length=255)
     st2_status: Optional[str] = Field(None, max_length=50)
@@ -144,6 +159,7 @@ class OvenUpdate(BaseModel):
 
 class OvenResponse(OvenBase):
     """Schema for oven responses."""
+
     id: int
     alert_id: Optional[int] = None
     recipe_id: int
@@ -161,12 +177,13 @@ class OvenResponse(OvenBase):
     retry_attempt: int
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class OvenDetailResponse(OvenResponse):
     """Schema for detailed oven responses (includes ingredient info)."""
+
     ingredient: IngredientResponse
 
 
@@ -174,8 +191,10 @@ class OvenDetailResponse(OvenResponse):
 # Alert Schemas
 # =============================================================================
 
+
 class AlertBase(BaseModel):
     """Base schema for Alert."""
+
     req_id: str = Field(..., max_length=100)
     fingerprint: str = Field(..., max_length=255)
     alert_status: str = Field(..., max_length=50)
@@ -186,6 +205,7 @@ class AlertBase(BaseModel):
 
 class AlertCreate(AlertBase):
     """Schema for creating an alert."""
+
     processing_status: str = Field(default="new", max_length=50)
     group_name: Optional[str] = Field(None, max_length=255)
     severity: Optional[str] = Field(None, max_length=50)
@@ -201,6 +221,7 @@ class AlertCreate(AlertBase):
 
 class AlertUpdate(BaseModel):
     """Schema for updating an alert (all fields optional)."""
+
     alert_status: Optional[str] = Field(None, max_length=50)
     processing_status: Optional[str] = Field(None, max_length=50)
     ends_at: Optional[datetime] = None
@@ -210,6 +231,7 @@ class AlertUpdate(BaseModel):
 
 class AlertResponse(AlertBase):
     """Schema for alert responses."""
+
     id: int
     processing_status: str
     group_name: Optional[str] = None
@@ -224,12 +246,13 @@ class AlertResponse(AlertBase):
     raw_data: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class AlertDetailResponse(AlertResponse):
     """Schema for detailed alert responses (includes ovens)."""
+
     ovens: List[OvenResponse] = []
 
 
@@ -237,28 +260,32 @@ class AlertDetailResponse(AlertResponse):
 # Operation Response Models
 # ============================================================================
 
+
 class WebhookResponse(BaseModel):
     """Response from webhook endpoint."""
+
     status: str  # created, counter_incremented, resolved, ignored, no_alerts
     alert_id: Optional[int] = None
     message: Optional[str] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class BakeResponse(BaseModel):
     """Response from bake ovens endpoint."""
+
     status: str  # baked, ignored
     ovens_created: Optional[int] = None
     recipe_id: Optional[int] = None
     recipe_name: Optional[str] = None
     reason: Optional[str] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class ExecutionResponse(BaseModel):
     """Response from StackStorm execution."""
+
     id: str  # Execution ID
     status: str  # pending, running, succeeded, failed, etc.
     action: Dict[str, Any]  # Action reference and details
@@ -266,27 +293,26 @@ class ExecutionResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
     start_timestamp: Optional[str] = None
     end_timestamp: Optional[str] = None
-    
-    model_config = ConfigDict(
-        from_attributes=True,
-        extra='allow'  # Allow additional ST2 fields
-    )
+
+    model_config = ConfigDict(from_attributes=True, extra="allow")  # Allow additional ST2 fields
 
 
 class SessionResponse(BaseModel):
     """Response from login endpoint."""
+
     session_id: str
     username: str
     expires_at: str  # ISO format datetime
     token_type: str = "Bearer"
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class DeleteResponse(BaseModel):
     """Generic delete response."""
+
     status: str = "deleted"
     id: int
     message: Optional[str] = None
-    
+
     model_config = ConfigDict(from_attributes=True)

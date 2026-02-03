@@ -14,34 +14,36 @@ from api.core.database import get_db
 from api.core.logging import get_logger
 from api.models.models import Recipe, Ingredient
 from api.schemas.schemas import (
-    RecipeCreate, RecipeResponse, RecipeDetailResponse,
-    IngredientResponse, DeleteResponse
+    RecipeCreate,
+    RecipeResponse,
+    RecipeDetailResponse,
+    IngredientResponse,
+    DeleteResponse,
 )
+from api.validation import get_name_param, get_enabled_param, get_limit_param, get_offset_param
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 # --- Recipe Endpoints ---
 
+
 @router.post("/recipes/", response_model=RecipeDetailResponse, status_code=201)
 async def create_recipe(
-    request: Request,
-    recipe: RecipeCreate,
-    db: Session = Depends(get_db)
+    request: Request, recipe: RecipeCreate, db: Session = Depends(get_db)
 ) -> RecipeDetailResponse:
     """Create a new recipe with ingredients."""
     req_id = request.state.req_id
-    
+
     logger.info(
-        "create_recipe: Creating recipe",
-        extra={"req_id": req_id, "recipe_name": recipe.name}
+        "create_recipe: Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name}
     )
-    
+
     existing = db.query(Recipe).filter(Recipe.name == recipe.name).first()
     if existing:
         logger.warning(
             "create_recipe: Recipe already exists",
-            extra={"req_id": req_id, "recipe_name": recipe.name}
+            extra={"req_id": req_id, "recipe_name": recipe.name},
         )
         raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
 
@@ -62,32 +64,45 @@ async def create_recipe(
             timeout=ingredient_data.timeout,
             retry_count=ingredient_data.retry_count,
             retry_delay=ingredient_data.retry_delay,
-            on_failure=ingredient_data.on_failure
+            on_failure=ingredient_data.on_failure,
         )
         db.add(db_ingredient)
 
     db.commit()
     db.refresh(db_recipe)
-    
+
     logger.info(
         "create_recipe: Recipe created successfully",
         extra={
             "req_id": req_id,
             "recipe_id": db_recipe.id,
             "recipe_name": db_recipe.name,
-            "ingredient_count": len(recipe.ingredients)
-        }
+            "ingredient_count": len(recipe.ingredients),
+        },
     )
-    
+
     return db_recipe
+
 
 @router.get("/recipes/", response_model=List[RecipeDetailResponse])
 async def list_recipes(
-    name: Optional[str] = None,
-    enabled: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    name: Optional[str] = get_name_param(),
+    enabled: Optional[bool] = get_enabled_param(),
+    limit: int = get_limit_param(),
+    offset: int = get_offset_param(),
+    db: Session = Depends(get_db),
 ):
-    """List recipes with optional filtering and nested ingredients."""
+    """
+    List recipes with optional filtering and nested ingredients.
+
+    Query Parameters:
+    - name: Filter by recipe name
+    - enabled: Filter by enabled status (true/false)
+    - limit: Maximum number of results (default: 100, max: 1000)
+    - offset: Number of results to skip (default: 0)
+
+    Returns 400 Bad Request if invalid query parameters are provided.
+    """
     query = db.query(Recipe).options(joinedload(Recipe.ingredients))
 
     if name is not None:
@@ -95,64 +110,71 @@ async def list_recipes(
     if enabled is not None:
         query = query.filter(Recipe.enabled == enabled)
 
-    return query.all()
+    return query.limit(limit).offset(offset).all()
+
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
     """Get a recipe with all its ingredients."""
-    recipe = db.query(Recipe).options(joinedload(Recipe.ingredients)).filter(Recipe.id == recipe_id).first()
+    recipe = (
+        db.query(Recipe)
+        .options(joinedload(Recipe.ingredients))
+        .filter(Recipe.id == recipe_id)
+        .first()
+    )
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    
+
     return recipe
+
 
 @router.get("/recipes/by-name/{recipe_name}", response_model=RecipeDetailResponse)
 async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
     """Get a recipe by name (matches alert.group_name)."""
-    recipe = db.query(Recipe).options(joinedload(Recipe.ingredients)).filter(Recipe.name == recipe_name).first()
+    recipe = (
+        db.query(Recipe)
+        .options(joinedload(Recipe.ingredients))
+        .filter(Recipe.name == recipe_name)
+        .first()
+    )
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
-    
+
     return recipe
+
 
 @router.delete("/recipes/{recipe_id}", response_model=DeleteResponse)
 async def delete_recipe(
-    request: Request,
-    recipe_id: int,
-    db: Session = Depends(get_db)
+    request: Request, recipe_id: int, db: Session = Depends(get_db)
 ) -> DeleteResponse:
     """Delete a recipe and all its ingredients."""
     req_id = request.state.req_id
-    
-    logger.info(
-        "delete_recipe: Deleting recipe",
-        extra={"req_id": req_id, "recipe_id": recipe_id}
-    )
-    
+
+    logger.info("delete_recipe: Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
+
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         logger.warning(
-            "delete_recipe: Recipe not found",
-            extra={"req_id": req_id, "recipe_id": recipe_id}
+            "delete_recipe: Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id}
         )
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     recipe_name = recipe.name
     db.delete(recipe)
     db.commit()
-    
+
     logger.info(
         "delete_recipe: Recipe deleted successfully",
-        extra={"req_id": req_id, "recipe_id": recipe_id, "recipe_name": recipe_name}
-    )
-    
-    return DeleteResponse(
-        status="deleted",
-        id=recipe_id,
-        message=f"Recipe '{recipe_name}' deleted successfully"
+        extra={"req_id": req_id, "recipe_id": recipe_id, "recipe_name": recipe_name},
     )
 
+    return DeleteResponse(
+        status="deleted", id=recipe_id, message=f"Recipe '{recipe_name}' deleted successfully"
+    )
+
+
 # --- Ingredient Endpoints ---
+
 
 @router.get("/ingredients/{ingredient_id}", response_model=IngredientResponse)
 async def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)):

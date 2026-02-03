@@ -15,133 +15,164 @@ from api.core.logging import get_logger
 from api.models.models import Alert
 from api.schemas.schemas import AlertResponse, AlertUpdate, WebhookResponse
 from api.services.pre_heat import pre_heat
+from api.validation import (
+    ProcessingStatus,
+    AlertStatus,
+    get_processing_status_param,
+    get_alert_status_param,
+    get_req_id_param,
+    get_limit_param,
+    get_offset_param,
+    get_name_param,
+)
 
 router = APIRouter()
 logger = get_logger(__name__)
 
+
 @router.post("/webhook", response_model=WebhookResponse, status_code=202)
 async def alertmanager_webhook(
-    request: Request,
-    payload: dict = Body(...),
-    db: Session = Depends(get_db)
+    request: Request, payload: dict = Body(...), db: Session = Depends(get_db)
 ) -> WebhookResponse:
     """Entry point for Alertmanager webhooks. Handled by pre_heat service.
-    
+
     Returns 202 Accepted - webhook received and queued for asynchronous processing.
     """
     req_id = request.state.req_id
     alert_count = len(payload.get("alerts", []))
-    
+
     logger.info(
         "alertmanager_webhook: Received webhook from Alertmanager",
-        extra={"req_id": req_id, "alert_count": alert_count}
+        extra={"req_id": req_id, "alert_count": alert_count},
     )
-    
+
     result = pre_heat(payload, db, req_id)
-    
+
     logger.info(
         "alertmanager_webhook: Webhook processed successfully",
-        extra={"req_id": req_id, "status": result.get("status"), "alert_id": result.get("alert_id")}
+        extra={
+            "req_id": req_id,
+            "status": result.get("status"),
+            "alert_id": result.get("alert_id"),
+        },
     )
-    
+
     return WebhookResponse(
         status=result["status"],
         alert_id=result.get("alert_id"),
-        message=f"Alert {result['status']}"
+        message=f"Alert {result['status']}",
     )
+
 
 @router.get("/alerts", response_model=List[AlertResponse])
 async def get_alerts(
     request: Request,
-    processing_status: Optional[str] = None,
-    limit: int = 100,
-    db: Session = Depends(get_db)
+    processing_status: Optional[ProcessingStatus] = get_processing_status_param(),
+    alert_status: Optional[AlertStatus] = get_alert_status_param(),
+    req_id: Optional[str] = get_req_id_param(),
+    alert_name: Optional[str] = get_name_param(),
+    limit: int = get_limit_param(),
+    offset: int = get_offset_param(),
+    db: Session = Depends(get_db),
 ):
-    """Used by Oven Service to find 'new' alerts to bake."""
-    req_id = request.state.req_id
-    
+    """
+    Get alerts with optional filtering.
+
+    Query Parameters:
+    - processing_status: Filter by processing status (new/pending/processing/complete/failed)
+    - alert_status: Filter by alert status (firing/resolved)
+    - req_id: Filter by request ID
+    - alert_name: Filter by alert name
+    - limit: Maximum number of results (default: 100, max: 1000)
+    - offset: Number of results to skip (default: 0)
+
+    Returns 400 Bad Request if invalid query parameters are provided.
+    """
+    request_id = request.state.req_id
+
     logger.debug(
         "get_alerts: Fetching alerts",
-        extra={"req_id": req_id, "processing_status": processing_status, "limit": limit}
+        extra={
+            "req_id": request_id,
+            "processing_status": processing_status.value if processing_status else None,
+            "alert_status": alert_status.value if alert_status else None,
+            "filter_req_id": req_id,
+            "alert_name": alert_name,
+            "limit": limit,
+            "offset": offset,
+        },
     )
-    
+
     query = db.query(Alert)
+
     if processing_status:
-        query = query.filter(Alert.processing_status == processing_status)
-    
-    alerts = query.order_by(Alert.created_at.desc()).limit(limit).all()
-    
+        query = query.filter(Alert.processing_status == processing_status.value)
+    if alert_status:
+        query = query.filter(Alert.alert_status == alert_status.value)
+    if req_id:
+        query = query.filter(Alert.req_id == req_id)
+    if alert_name:
+        query = query.filter(Alert.alert_name == alert_name)
+
+    alerts = query.order_by(Alert.created_at.desc()).limit(limit).offset(offset).all()
+
     logger.debug(
         "get_alerts: Alerts fetched successfully",
-        extra={"req_id": req_id, "count": len(alerts)}
+        extra={"req_id": request_id, "count": len(alerts)},
     )
-    
+
     return alerts
 
+
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
-async def get_alert(
-    request: Request,
-    alert_id: int,
-    db: Session = Depends(get_db)
-):
+async def get_alert(request: Request, alert_id: int, db: Session = Depends(get_db)):
     """Retrieve a specific alert by ID."""
     req_id = request.state.req_id
-    
-    logger.debug(
-        "get_alert: Fetching alert by ID",
-        extra={"req_id": req_id, "alert_id": alert_id}
-    )
-    
+
+    logger.debug("get_alert: Fetching alert by ID", extra={"req_id": req_id, "alert_id": alert_id})
+
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
-    
+
     if not alert:
-        logger.warning(
-            "get_alert: Alert not found",
-            extra={"req_id": req_id, "alert_id": alert_id}
-        )
+        logger.warning("get_alert: Alert not found", extra={"req_id": req_id, "alert_id": alert_id})
         raise HTTPException(status_code=404, detail="Alert not found")
-    
+
     return alert
+
 
 @router.put("/alerts/{alert_id}", response_model=AlertResponse)
 async def update_alert(
-    request: Request,
-    alert_id: int, 
-    payload: AlertUpdate,
-    db: Session = Depends(get_db)
+    request: Request, alert_id: int, payload: AlertUpdate, db: Session = Depends(get_db)
 ):
     """Used by Timer to set status to 'complete' or Oven Service to 'processing'."""
     req_id = request.state.req_id
-    
-    logger.info(
-        "update_alert: Updating alert",
-        extra={"req_id": req_id, "alert_id": alert_id}
-    )
-    
+
+    logger.info("update_alert: Updating alert", extra={"req_id": req_id, "alert_id": alert_id})
+
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         logger.warning(
             "update_alert: Alert not found for update",
-            extra={"req_id": req_id, "alert_id": alert_id}
+            extra={"req_id": req_id, "alert_id": alert_id},
         )
         raise HTTPException(status_code=404, detail="Alert not found")
 
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(alert, key, value)
-    
+
     alert.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(alert)
-    
+
     logger.info(
         "update_alert: Alert updated successfully",
         extra={
             "req_id": req_id,
             "alert_id": alert_id,
             "fields_updated": len(update_data),
-            "new_status": alert.processing_status
-        }
+            "new_status": alert.processing_status,
+        },
     )
-    
+
     return alert
