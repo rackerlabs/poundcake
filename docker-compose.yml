@@ -83,6 +83,27 @@ services:
     command: python oven/oven.py
     restart: unless-stopped
 
+  oven-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poundcake-oven-service
+    environment:
+      POUNDCAKE_API_URL: http://api:8000
+      OVEN_INTERVAL: ${OVEN_INTERVAL:-5}
+      LOG_LEVEL: INFO
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./oven:/app/oven
+      - ./logs:/app/logs
+    networks:
+      - poundcake
+    # Run the dispatcher that converts alerts to ovens
+    command: python oven/oven_service.py
+    restart: unless-stopped
+
   timer:
     build:
       context: .
