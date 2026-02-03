@@ -8,8 +8,8 @@ echo "========================================="
 echo "  PoundCake Orchestration Starting"
 echo "========================================="
 
-# Check if any migrations exist
-MIGRATION_COUNT=$(find alembic/versions -name "*.py" ! -name "__*" 2>/dev/null | wc -l)
+# Check if any migrations exist (excluding __init__.py and __pycache__)
+MIGRATION_COUNT=$(find alembic/versions -name "*.py" ! -name "__init__*" ! -path "*/__ pycache__/*" 2>/dev/null | wc -l)
 
 if [ "$MIGRATION_COUNT" -eq 0 ]; then
     echo "⚠️  No migrations found. Creating initial schema migration..."

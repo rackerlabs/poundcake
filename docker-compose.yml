@@ -29,8 +29,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: poundcake-api
-    # Use the auto-migrate entrypoint that creates initial migration if missing
-    entrypoint: /app/api/scripts/entrypoint-auto-migrate.sh
+    # Use regular entrypoint - we have a committed migration now
+    entrypoint: /app/api/scripts/entrypoint.sh
     environment:
       # Mapping to the POUNDCAKE_ prefix used in config.py
       POUNDCAKE_DATABASE_URL: mysql+pymysql://${DB_USER:-poundcake}:${DB_PASSWORD:-poundcake}@mariadb:3306/${DB_NAME:-poundcake}
