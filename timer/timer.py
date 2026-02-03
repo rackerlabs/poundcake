@@ -75,7 +75,32 @@ def monitor_ovens():
     except Exception as e:
         log(f"Error in monitor loop: {str(e)}")
 
+def wait_for_api():
+    """Wait for API to be ready before starting main loop."""
+    log("Waiting for API to be ready")
+    max_attempts = 30
+    attempt = 0
+    
+    while attempt < max_attempts:
+        try:
+            resp = requests.get(f"{POUNDCAKE_API_URL}/health", timeout=5)
+            if resp.status_code == 200:
+                log("API is ready! Starting timer monitor...")
+                return True
+        except Exception:
+            pass
+        
+        attempt += 1
+        if attempt < max_attempts:
+            time.sleep(2)  # Check every 2 seconds
+    
+    log(f"API did not become ready after {max_attempts} attempts. Starting anyway...")
+    return False
+
 if __name__ == "__main__":
+    wait_for_api()
+    log(f"Timer Monitor started. Polling interval: {TIMER_INTERVAL}s")
+    
     while True:
         monitor_ovens()
         time.sleep(TIMER_INTERVAL)

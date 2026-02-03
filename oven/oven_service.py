@@ -12,7 +12,30 @@ def log(message: str, req_id: str = "SYSTEM"):
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] [req_id: {req_id}] oven_service: {message}", flush=True)
 
+def wait_for_api():
+    """Wait for API to be ready before starting main loop."""
+    log("Waiting for API to be ready")
+    max_attempts = 30
+    attempt = 0
+    
+    while attempt < max_attempts:
+        try:
+            resp = requests.get(f"{API_URL}/health", timeout=5)
+            if resp.status_code == 200:
+                log("API is ready! Starting dispatcher...")
+                return True
+        except Exception:
+            pass
+        
+        attempt += 1
+        if attempt < max_attempts:
+            time.sleep(2)  # Check every 2 seconds
+    
+    log(f"API did not become ready after {max_attempts} attempts. Starting anyway...")
+    return False
+
 def dispatch_loop():
+    wait_for_api()
     log(f"Starting dispatcher polling {API_URL}")
     while True:
         try:

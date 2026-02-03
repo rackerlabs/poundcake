@@ -24,7 +24,32 @@ POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 # System request ID for polling operations (distinguishes system calls from alert processing)
 SYSTEM_REQ_ID = "SYSTEM-OVEN-POLL"
 
+def wait_for_api():
+    """Wait for API to be ready before starting main loop."""
+    logger.info("Waiting for API to be ready: %s", API_BASE_URL)
+    max_attempts = 30
+    attempt = 0
+    
+    while attempt < max_attempts:
+        try:
+            resp = requests.get(f"{API_BASE_URL.rsplit('/api/v1', 1)[0]}/api/v1/health", timeout=5)
+            if resp.status_code == 200:
+                logger.info("API is ready! Starting executor...")
+                return True
+        except Exception:
+            pass
+        
+        attempt += 1
+        if attempt < max_attempts:
+            time.sleep(2)  # Check every 2 seconds
+    
+    logger.error("API did not become ready after %d attempts. Starting anyway...", max_attempts)
+    return False
+
 def run_executor():
+    # Wait for API to be ready
+    wait_for_api()
+    
     logger.info("Oven Executor started. Target API: %s", API_BASE_URL)
     
     while True:
