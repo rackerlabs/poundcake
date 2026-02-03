@@ -12,7 +12,7 @@ from api.services.stackstorm_service import StackStormActionManager, get_action_
 
 router = APIRouter()
 
-@router.post("/execute")
+@router.post("/stackstorm/execute")
 async def trigger_st2_execution(
     request_data: Dict[str, Any],
     x_request_id: str = Header(None),

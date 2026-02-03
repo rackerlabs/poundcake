@@ -148,7 +148,7 @@ def require_auth_if_enabled(
 
     return username
 
-@router.post("/login")
+@router.post("/auth/login")
 async def login(request: Request):
     """Simple login endpoint to set session."""
     try:

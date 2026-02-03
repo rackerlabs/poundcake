@@ -40,7 +40,8 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
-    redoc_url="/redoc" if settings.debug else None
+    redoc_url="/redoc" if settings.debug else None,
+    redirect_slashes=False  # Prevent 307 redirects for trailing slashes
 )
 
 # --- Middleware Registration ---
@@ -66,17 +67,17 @@ async def metrics():
 
 # 1. System & Monitoring
 app.include_router(health_router, prefix="/api/v1", tags=["system"])
-app.include_router(prometheus_router, prefix="/api/v1/prometheus", tags=["prometheus"])
+app.include_router(prometheus_router, prefix="/api/v1", tags=["prometheus"])
 
 # 2. Security / Authentication
-app.include_router(auth_router, prefix="/api/v1/auth", tags=["security"])
+app.include_router(auth_router, prefix="/api/v1", tags=["security"])
 
 # 3. Infrastructure & Automation
-app.include_router(st2_bridge_router, prefix="/api/v1/stackstorm", tags=["infrastructure"])
+app.include_router(st2_bridge_router, prefix="/api/v1", tags=["infrastructure"])
 
 # 4. Business Logic
 app.include_router(recipes_router, prefix="/api/v1", tags=["logic"])
-app.include_router(ovens_router, prefix="/api/v1/ovens", tags=["executor"])
+app.include_router(ovens_router, prefix="/api/v1", tags=["executor"])
 
 # 5. Alert Ingestion (webhook)
 app.include_router(alerts_router, prefix="/api/v1", tags=["ingestion"])

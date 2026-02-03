@@ -25,7 +25,7 @@ router = APIRouter(tags=["prometheus"])
 # Rule Endpoints
 # =============================================================================
 
-@router.get("/rules")
+@router.get("/prometheus/rules")
 async def list_rules(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
@@ -40,7 +40,7 @@ async def list_rules(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/rule-groups")
+@router.get("/prometheus/rule-groups")
 async def list_rule_groups(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
@@ -59,7 +59,7 @@ async def list_rule_groups(
 # Metric/Label Discovery Endpoints
 # =============================================================================
 
-@router.get("/metrics")
+@router.get("/prometheus/metrics")
 async def list_metrics(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
@@ -74,7 +74,7 @@ async def list_metrics(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/labels")
+@router.get("/prometheus/labels")
 async def list_labels(
     request: Request,
     metric: str | None = None,
@@ -90,7 +90,7 @@ async def list_labels(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/label-values/{label_name}")
+@router.get("/prometheus/label-values/{label_name}")
 async def list_label_values(
     label_name: str,
     request: Request,
@@ -111,7 +111,7 @@ async def list_label_values(
 # Health & Management Endpoints
 # =============================================================================
 
-@router.get("/health")
+@router.get("/prometheus/health")
 async def prometheus_health(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
@@ -126,7 +126,7 @@ async def prometheus_health(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/reload")
+@router.post("/prometheus/reload")
 async def reload_prometheus(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
@@ -149,7 +149,7 @@ async def reload_prometheus(
 # Rule CRUD Endpoints
 # =============================================================================
 
-@router.post("/rules")
+@router.post("/prometheus/rules")
 async def create_rule(
     request: Request,
     rule_name: str,
@@ -175,7 +175,7 @@ async def create_rule(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/rules/{rule_name}")
+@router.put("/prometheus/rules/{rule_name}")
 async def update_rule(
     rule_name: str,
     request: Request,
@@ -201,7 +201,7 @@ async def update_rule(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/rules/{rule_name}")
+@router.delete("/prometheus/rules/{rule_name}")
 async def delete_rule(
     rule_name: str,
     request: Request,

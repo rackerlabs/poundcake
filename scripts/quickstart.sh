@@ -36,38 +36,38 @@ if ! command -v docker &> /dev/null; then
     echo "ERROR: Docker is not installed"
     exit 1
 fi
-echo "✓ Docker found"
+echo "[OK] Docker found"
 
 # Check Docker Compose
 if ! command -v docker compose &> /dev/null; then
     echo "ERROR: Docker Compose is not installed"
     exit 1
 fi
-echo "✓ Docker Compose found"
+echo "[OK] Docker Compose found"
 
 # Check Docker daemon
 if ! docker ps &> /dev/null; then
     echo "ERROR: Docker daemon is not running"
     exit 1
 fi
-echo "✓ Docker daemon running"
+echo "[OK] Docker daemon running"
 
 echo ""
 echo "Step 2: Creating configuration..."
 
 if [ -f ".env" ]; then
-    echo "⚠ .env file already exists"
+    echo "[WARN] .env file already exists"
     read -p "Overwrite with defaults? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         cp .env.example .env
-        echo "✓ .env file created from template"
+        echo "[OK] .env file created from template"
     else
-        echo "✓ Using existing .env file"
+        echo "[OK] Using existing .env file"
     fi
 else
     cp .env.example .env
-    echo "✓ .env file created from template"
+    echo "[OK] .env file created from template"
 fi
 
 echo ""
@@ -76,7 +76,7 @@ echo "This will start 12+ services (may take a moment)..."
 
 docker compose up -d
 
-echo "✓ Services started"
+echo "[OK] Services started"
 
 echo ""
 echo "Step 4: Waiting for services to initialize and API key generation..."
@@ -89,7 +89,7 @@ for i in $(seq $WAIT_TIME -1 1); do
     printf "\rWaiting... %2ds remaining" $i
     sleep 1
 done
-printf "\r✓ Initialization complete              \n"
+printf "\r[OK] Initialization complete              \n"
 
 echo ""
 echo "Step 5: Verifying deployment..."
@@ -103,16 +103,16 @@ docker compose ps
 echo ""
 echo "Testing API health..."
 if curl -sf http://localhost:8000/api/v1/health > /dev/null 2>&1; then
-    echo "✓ PoundCake API is healthy"
+    echo "[OK] PoundCake API is healthy"
     curl -s http://localhost:8000/api/v1/health | python3 -m json.tool 2>/dev/null || true
 else
-    echo "⚠ PoundCake API is not responding yet"
+    echo "[WARN] PoundCake API is not responding yet"
     echo "  (May need more time to fully initialize)"
 fi
 
 echo ""
 echo "========================================"
-echo "✓ Quick Start Complete!"
+echo "[OK] Quick Start Complete!"
 echo "========================================"
 echo ""
 echo "Next steps:"
