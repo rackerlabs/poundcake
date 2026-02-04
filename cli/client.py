@@ -75,23 +75,23 @@ class PoundCakeClient:
             params["status"] = status
         if severity:
             params["severity"] = severity
-        return cast(list[dict[str, Any]], self._request("GET", "/api/alerts", params=params))
+        return cast(list[dict[str, Any]], self._request("GET", "/api/v1/alerts", params=params))
 
     def get_alert(self, fingerprint: str) -> dict[str, Any]:
         """Get a specific alert by fingerprint."""
-        return self._request("GET", f"/api/alerts/{fingerprint}")
+        return self._request("GET", f"/api/v1/alerts/{fingerprint}")
 
     # Prometheus rule management
 
     def list_rules(self) -> list[dict[str, Any]]:
         """List all Prometheus rules."""
-        return cast(list[dict[str, Any]], self._request("GET", "/api/prometheus/rules"))
+        return cast(list[dict[str, Any]], self._request("GET", "/api/v1/prometheus/rules"))
 
     def get_rule(self, crd_name: str, group_name: str, rule_name: str) -> dict[str, Any]:
         """Get a specific Prometheus rule."""
         return self._request(
             "GET",
-            f"/api/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
         )
 
     def create_rule(
@@ -104,7 +104,7 @@ class PoundCakeClient:
         """Create a new Prometheus rule."""
         return self._request(
             "POST",
-            f"/api/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
             json=rule_data,
         )
 
@@ -118,7 +118,7 @@ class PoundCakeClient:
         """Update an existing Prometheus rule."""
         return self._request(
             "PUT",
-            f"/api/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
             json=rule_data,
         )
 
@@ -131,18 +131,18 @@ class PoundCakeClient:
         """Delete a Prometheus rule."""
         return self._request(
             "DELETE",
-            f"/api/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
         )
 
     # Mapping management
 
     def list_mappings(self) -> dict[str, Any]:
         """List all alert-to-action mappings."""
-        return self._request("GET", "/api/mappings")
+        return self._request("GET", "/api/v1/mappings")
 
     def get_mapping(self, alert_name: str) -> dict[str, Any]:
         """Get a specific mapping by alert name."""
-        return self._request("GET", f"/api/mappings/{alert_name}")
+        return self._request("GET", f"/api/v1/mappings/{alert_name}")
 
     # StackStorm action management
 
@@ -156,19 +156,19 @@ class PoundCakeClient:
         if pack:
             params["pack"] = pack
         return cast(
-            list[dict[str, Any]], self._request("GET", "/api/stackstorm/actions", params=params)
+            list[dict[str, Any]], self._request("GET", "/api/v1/stackstorm/actions", params=params)
         )
 
     def get_st2_action(self, action_ref: str) -> dict[str, Any]:
         """Get a specific StackStorm action."""
-        return self._request("GET", f"/api/stackstorm/actions/{action_ref}")
+        return self._request("GET", f"/api/v1/stackstorm/actions/{action_ref}")
 
     # Health checks
 
     def health(self) -> dict[str, Any]:
         """Check API health."""
-        return self._request("GET", "/health")
+        return self._request("GET", "/api/v1/health")
 
     def ready(self) -> dict[str, Any]:
         """Check if API is ready."""
-        return self._request("GET", "/ready")
+        return self._request("GET", "/api/v1/ready")

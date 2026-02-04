@@ -7,7 +7,6 @@
 """Initialize database with new Recipe/Oven/Alert schema."""
 
 import sys
-import os
 from pathlib import Path
 
 # Add the parent of api directory to path for absolute imports
@@ -22,14 +21,21 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Now use absolute imports like the rest of the codebase
-from api.core.database import Base, engine, SessionLocal
-from api.models.models import (
+from api.core.database import (
+    Base,
+    engine,
+    SessionLocal,
+)  # noqa: E402 - Import after sys.path modification
+from api.models.models import (  # noqa: E402 - Import after sys.path modification
     Recipe,
     Ingredient,  # noqa: F401 - Required for Base.metadata.create_all()
     Oven,  # noqa: F401 - Required for Base.metadata.create_all()
     Alert,  # noqa: F401 - Required for Base.metadata.create_all()
 )
-from api.core.logging import setup_logging, get_logger
+from api.core.logging import (
+    setup_logging,
+    get_logger,
+)  # noqa: E402 - Import after sys.path modification
 
 setup_logging()
 logger = get_logger(__name__)

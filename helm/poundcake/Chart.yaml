@@ -14,9 +14,9 @@
 
 apiVersion: v2
 name: poundcake
-description: Auto-remediation framework bridging Prometheus Alertmanager with StackStorm
+description: All-in-one auto-remediation platform with integrated StackStorm, bridging Prometheus Alertmanager with automated remediation actions
 type: application
-version: 1.1.1
+version: 2.0.0
 appVersion: "1.0.3"
 maintainers:
   - name: Jake Briggs
@@ -26,6 +26,15 @@ keywords:
   - auto-remediation
   - prometheus
   - automation
+  - all-in-one
 home: https://github.com/aedan/poundCake
 sources:
   - https://github.com/aedan/poundCake
+dependencies:
+  - name: stackstorm-ha
+    version: "1.1.0"
+    repository: "https://helm.stackstorm.com/"
+    condition: stackstorm.chart.enabled
+    alias: stackstorm-chart
+    tags:
+      - stackstorm

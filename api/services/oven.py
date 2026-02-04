@@ -7,7 +7,6 @@
 """Oven service - scheduled crawler for processing alerts."""
 
 import os
-import time
 import requests
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone

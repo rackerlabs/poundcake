@@ -15,7 +15,6 @@ from api.core.logging import get_logger
 from api.models.models import Recipe, Ingredient
 from api.schemas.schemas import (
     RecipeCreate,
-    RecipeResponse,
     RecipeDetailResponse,
     IngredientResponse,
     DeleteResponse,

@@ -14,7 +14,6 @@ to ensure proper input validation and return 400 Bad Request for invalid inputs.
 from enum import Enum
 from typing import Optional
 from fastapi import Query
-from pydantic import Field, validator
 
 
 class ProcessingStatus(str, Enum):

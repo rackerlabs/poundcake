@@ -7,7 +7,7 @@
 """Database models for PoundCake."""
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Text, Integer, JSON, ForeignKey, Index, Boolean
+from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
 
 # We use the explicit MariaDB/MySQL JSON type to ensure the dialect handles serialization properly

@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from api.core.config import settings
-from api.core.database import init_db
 from api.core.middleware import PreHeatMiddleware
 from api.core.logging import setup_logging
 from api.api.health import router as health_router

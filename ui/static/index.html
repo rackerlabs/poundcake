@@ -551,7 +551,7 @@
         }
 
         async function loadStats() {
-            const res = await fetch('/alerts/stats');
+            const res = await fetch('/api/v1/stats');
             const data = await res.json();
 
             // Update header stats
@@ -640,7 +640,7 @@
         }
 
         async function loadMappings() {
-            const res = await fetch('/api/mappings');
+            const res = await fetch('/api/v1/mappings');
             const data = await res.json();
             const tbody = document.getElementById('mappings-table');
             tbody.innerHTML = '';
@@ -662,7 +662,7 @@
         }
 
         async function loadPacks() {
-            const res = await fetch('/api/stackstorm/packs');
+            const res = await fetch('/api/v1/stackstorm/packs');
             const data = await res.json();
             const select = document.getElementById('pack-filter');
             select.innerHTML = '<option value="">All Packs</option>';
@@ -673,7 +673,7 @@
 
         async function loadActions() {
             const pack = document.getElementById('pack-filter').value;
-            const url = pack ? `/api/stackstorm/actions?pack=${pack}` : '/api/stackstorm/actions';
+            const url = pack ? `/api/stackstorm/actions?pack=${pack}` : '/api/v1/stackstorm/actions';
             const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('actions-table');
@@ -704,12 +704,12 @@
         async function loadPrometheusRules() {
             const state = document.getElementById('prom-state-filter').value;
             const searchTerm = document.getElementById('prom-search').value.toLowerCase();
-            const res = await fetch('/api/prometheus/rules');
+            const res = await fetch('/api/v1/prometheus/rules');
             const data = await res.json();
             const tbody = document.getElementById('prometheus-table');
             tbody.innerHTML = '';
 
-            const settingsRes = await fetch('/api/settings');
+            const settingsRes = await fetch('/api/v1/settings');
             const settings = await settingsRes.json();
 
             const statusEl = document.getElementById('persistence-status');
@@ -835,7 +835,7 @@
 
             // Update button text based on Git configuration
             try {
-                const settingsRes = await fetch('/api/settings');
+                const settingsRes = await fetch('/api/v1/settings');
                 const settings = await settingsRes.json();
                 const saveBtn = document.getElementById('save-rule-btn');
                 if (settings.git_enabled) {
@@ -890,7 +890,7 @@
 
             // Update button text based on Git configuration
             try {
-                const settingsRes = await fetch('/api/settings');
+                const settingsRes = await fetch('/api/v1/settings');
                 const settings = await settingsRes.json();
                 const saveBtn = document.getElementById('save-rule-btn');
                 if (settings.git_enabled) {
@@ -986,14 +986,14 @@
                 let res;
                 if (isCreate) {
                     // POST request for creating a new rule
-                    res = await fetch(`/api/prometheus/rules?rule_name=${ruleName}&group_name=${groupName}&file_name=${fileName}`, {
+                    res = await fetch(`/api/v1/prometheus/rules?rule_name=${ruleName}&group_name=${groupName}&file_name=${fileName}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(ruleData)
                     });
                 } else {
                     // PUT request for updating an existing rule
-                    res = await fetch(`/api/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
+                    res = await fetch(`/api/v1/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(ruleData)
@@ -1045,7 +1045,7 @@
         async function deletePrometheusRule(ruleName, groupName, fileName) {
             if (!confirm(`Delete Prometheus rule "${ruleName}"?\n\nThis will create a PR to remove the rule.`)) return;
 
-            const res = await fetch(`/api/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
+            const res = await fetch(`/api/v1/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
                 method: 'DELETE'
             });
 
@@ -1092,7 +1092,7 @@
         // Initialize PromQL builder
         async function initPromQLBuilder() {
             try {
-                const res = await fetch('/api/prometheus/metrics');
+                const res = await fetch('/api/v1/prometheus/metrics');
                 const data = await res.json();
                 availableMetrics = data.metrics || [];
                 availableMetricsAdvanced = [...availableMetrics];
@@ -1204,7 +1204,7 @@
 
         async function loadBasicLabelKeys(select, metric) {
             try {
-                const url = metric ? `/api/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/prometheus/labels';
+                const url = metric ? `/api/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
                 const res = await fetch(url);
                 const data = await res.json();
                 const labels = data.labels || [];
@@ -1283,7 +1283,7 @@
 
         async function loadAdvancedLabelKeys(select, metric) {
             try {
-                const url = metric ? `/api/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/prometheus/labels';
+                const url = metric ? `/api/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
                 const res = await fetch(url);
                 const data = await res.json();
                 const labels = data.labels || [];
@@ -1446,7 +1446,7 @@
         }
 
         async function loadHistory() {
-            const res = await fetch('/remediations?limit=50');
+            const res = await fetch('/api/v1/ovens?limit=50');
             const data = await res.json();
             const tbody = document.getElementById('history-table');
             tbody.innerHTML = '';
@@ -1484,7 +1484,7 @@ actions:
 
         async function editMapping(name) {
             editMode = true;
-            const res = await fetch(`/api/mappings/${name}`);
+            const res = await fetch(`/api/v1/mappings/${name}`);
             const data = await res.json();
 
             document.getElementById('modal-title').textContent = 'Edit Mapping';
@@ -1499,7 +1499,7 @@ actions:
             const name = document.getElementById('alert-name').value;
             const config = jsyaml.load(document.getElementById('mapping-config').value);
 
-            const url = editMode ? `/api/mappings/${name}` : '/api/mappings';
+            const url = editMode ? `/api/v1/mappings/${name}` : '/api/v1/mappings';
             const method = editMode ? 'PUT' : 'POST';
             const body = editMode ? { config } : { alert_name: name, config };
 
@@ -1515,7 +1515,7 @@ actions:
 
         async function deleteMapping(name) {
             if (!confirm(`Delete mapping "${name}"?`)) return;
-            await fetch(`/api/mappings/${name}`, { method: 'DELETE' });
+            await fetch(`/api/v1/mappings/${name}`, { method: 'DELETE' });
             loadMappings();
         }
 
@@ -1536,7 +1536,7 @@ actions:
             const yaml_content = document.getElementById('import-yaml').value;
             const overwrite = document.getElementById('import-overwrite').checked;
 
-            const res = await fetch('/api/mappings/import', {
+            const res = await fetch('/api/v1/mappings/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ yaml_content, overwrite })
@@ -1549,11 +1549,11 @@ actions:
         }
 
         async function exportMappings() {
-            window.open('/api/mappings/export', '_blank');
+            window.open('/api/v1/mappings/export', '_blank');
         }
 
         async function showAction(ref) {
-            const res = await fetch(`/api/stackstorm/actions/${ref}`);
+            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`);
             currentAction = await res.json();
             document.getElementById('action-title').textContent = ref;
             document.getElementById('action-details').textContent = JSON.stringify(currentAction, null, 2);
@@ -1590,7 +1590,7 @@ actions:
         }
 
         async function editAction(ref) {
-            const res = await fetch(`/api/stackstorm/actions/${ref}`);
+            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`);
             const action = await res.json();
 
             editActionMode = true;
@@ -1630,7 +1630,7 @@ actions:
 
             try {
                 if (editActionMode) {
-                    const res = await fetch(`/api/stackstorm/actions/${ref}`, {
+                    const res = await fetch(`/api/v1/stackstorm/actions/${ref}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
@@ -1641,7 +1641,7 @@ actions:
                         return;
                     }
                 } else {
-                    const res = await fetch('/api/stackstorm/actions', {
+                    const res = await fetch('/api/v1/stackstorm/actions', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
@@ -1664,7 +1664,7 @@ actions:
         async function deleteAction(ref) {
             if (!confirm(`Delete action "${ref}"?`)) return;
 
-            const res = await fetch(`/api/stackstorm/actions/${ref}`, {
+            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`, {
                 method: 'DELETE'
             });
 
@@ -1685,15 +1685,15 @@ actions:
         async function loadDashboard() {
             try {
                 // Load health data for dashboard cards
-                const healthRes = await fetch('/health');
+                const healthRes = await fetch('/api/v1/health');
                 const health = await healthRes.json();
 
                 // Load alert stats
-                const statsRes = await fetch('/alerts/stats');
+                const statsRes = await fetch('/api/v1/stats');
                 const stats = await statsRes.json();
 
                 // Load recent history
-                const historyRes = await fetch('/remediations?limit=10');
+                const historyRes = await fetch('/api/v1/ovens?limit=10');
                 const history = await historyRes.json();
 
                 console.log('Dashboard data:', { health, stats, history });
@@ -1802,7 +1802,7 @@ actions:
             if (!confirm('Are you sure you want to logout?')) return;
 
             try {
-                const res = await fetch('/api/logout', {
+                const res = await fetch('/api/v1/logout', {
                     method: 'POST'
                 });
 

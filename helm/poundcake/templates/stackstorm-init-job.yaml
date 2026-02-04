@@ -1,0 +1,85 @@
+# ____                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
+# ╔════════════════════════════════════════════════════════════════╗
+# ____                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+# ╚════════════════════════════════════════════════════════════════╝
+
+{{- if .Values.stackstorm.chart.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "poundcake.fullname" . }}-stackstorm-init
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stackstorm-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      name: {{ include "poundcake.fullname" . }}-stackstorm-init
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: stackstorm-init
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      containers:
+      - name: st2-init
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "========================================"
+          echo "StackStorm Initialization Job"
+          echo "========================================"
+
+          # Wait for StackStorm API to be ready
+          echo "Waiting for StackStorm API at {{ include "poundcake.stackstormApiUrl" . }}..."
+          MAX_RETRIES=60
+          RETRY_COUNT=0
+
+          until curl -sf {{ include "poundcake.stackstormApiUrl" . }}/v1/actions > /dev/null 2>&1; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+              echo "ERROR: StackStorm API did not become ready after ${MAX_RETRIES} attempts (5 minutes)"
+              exit 1
+            fi
+            echo "Attempt ${RETRY_COUNT}/${MAX_RETRIES}: Waiting for StackStorm API..."
+            sleep 5
+          done
+
+          echo "✓ StackStorm API is ready"
+
+          # Note: API key creation would require st2 CLI which is not in PoundCake image
+          # This is handled by StackStorm's own initialization
+          # PoundCake will use the st2-apikeys secret created by StackStorm subchart
+
+          echo "========================================"
+          echo "Initialization Complete"
+          echo "========================================"
+          echo ""
+          echo "StackStorm is ready at:"
+          echo "  API: {{ include "poundcake.stackstormApiUrl" . }}"
+          echo "  Auth: {{ include "poundcake.stackstormAuthUrl" . }}"
+          echo ""
+          echo "PoundCake can now communicate with StackStorm."
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+{{- end }}

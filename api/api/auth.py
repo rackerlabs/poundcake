@@ -6,7 +6,6 @@
 #
 """Authentication and session management for PoundCake."""
 
-import logging
 import secrets
 import base64
 from datetime import datetime, timedelta
