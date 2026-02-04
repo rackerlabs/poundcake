@@ -6,38 +6,38 @@
 #
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     default-libmysqlclient-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and install build tools
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copy and install requirements first (for better caching)
+# 1. Create user FIRST so we can use it for COPY
+RUN useradd -m -u 1000 appuser
+
+# 2. Install requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source
-COPY api/ ./api/
+# 3. Copy EVERYTHING and set ownership to appuser immediately
+# This avoids most "Permission Denied" errors at runtime
+COPY --chown=appuser:appuser . .
 
-# Copy Alembic configuration and migrations
-COPY alembic.ini .
-COPY alembic/ ./alembic/
+# 4. Make scripts executable as root before switching
+RUN chmod +x /app/api/scripts/entrypoint-auto-migrate.sh \
+    && chmod +x /app/scripts/automated-setup.sh
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
-
+# Switch to the restricted user
 USER appuser
 
-# Set Python path
 ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
-# Default command (can be overridden)
+# Default command (Uvicorn fallback)
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

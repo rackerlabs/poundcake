@@ -1,12 +1,8 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -23,16 +19,25 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Unit test / coverage reports
+# Testing
 htmlcov/
 .tox/
 .nox/
@@ -46,42 +51,9 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Translations
-*.mo
-*.pot
-
-# Environments
-.env
-.env.local
-.env.example
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# IDEs
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Ruff
-.ruff_cache/
-
-# Local configuration
-*.local.yaml
-*.local.yml
-
 # Logs
 *.log
+logs/*.log
 
 # Database
 *.db
@@ -91,47 +63,6 @@ dmypy.json
 .DS_Store
 Thumbs.db
 
-# Alembic
-alembic/versions/*.py
-!alembic/versions/__init__.py
-
-# Testing
-coverage.xml
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-*.cover
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-*.egg
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Logs
-*.log
-logs/*.log
-
-# Environment
-.env
-.venv
-env/
-venv/
-ENV/
-
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -140,10 +71,6 @@ dmypy.json
 # ruff
 .ruff_cache/
 
-# OS
-.DS_Store
-Thumbs.db
-
 # Docker
 docker-compose.override.yml
 
@@ -151,3 +78,20 @@ docker-compose.override.yml
 *.tmp
 *.bak
 *.backup
+
+# Local configuration (keep .env.example!)
+.env.local
+*.local.yaml
+*.local.yml
+
+# StackStorm runtime key (generated)
+.st2_api_key
+config/st2_api_key
+
+# ==============================================================================
+# IMPORTANT: DO NOT IGNORE ALEMBIC MIGRATIONS!
+# ==============================================================================
+# Migration files MUST be tracked in version control
+# Only ignore pycache within alembic
+alembic/__pycache__/
+alembic/**/__pycache__/

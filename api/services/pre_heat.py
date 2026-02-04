@@ -1,216 +1,128 @@
-#  ___                        _  ____      _
+#  ____                        _  ____      _
 # |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Pre-heat service for alert ingestion and management."""
+"""Pre-heat service - Creates new alerts or increments existing ones."""
 
-from datetime import datetime
-from typing import List
 from sqlalchemy.orm import Session
-
-from api.core.logging import get_logger
+from datetime import datetime, timezone
+from dateutil import parser as dateutil_parser
 from api.models.models import Alert
-from api.schemas.schemas import AlertmanagerWebhook
+from api.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def pre_heat(webhook_data: AlertmanagerWebhook, req_id: str, db: Session) -> List[Alert]:
-    """Pre-heat function: Insert or update alerts table based on alert state.
-
-    Logic:
-    1. If fingerprint exists with processing_status="complete" AND webhook status="firing"
-       → Insert as NEW alert (new occurrence)
-
-    2. If fingerprint exists with processing_status!="complete" AND webhook status="firing"
-       → Update counter (alert is still being processed or is new)
-
-    3. If fingerprint exists with processing_status!="complete" AND webhook status="resolved"
-       → Update alert_status to "resolved"
+def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
+    """
+    Intake Handler: Solely responsible for Alert table management.
 
     Args:
-        webhook_data: The Alertmanager webhook payload
-        req_id: Request ID from middleware
+        payload: Alertmanager webhook payload
         db: Database session
+        req_id: Request ID for tracing
 
     Returns:
-        List of Alert objects that were created or updated
+        dict: Status and alert_id
     """
-    processed_alerts = []
+    alerts = payload.get("alerts", [])
 
-    # Extract group_name from groupLabels (used for recipe matching)
-    group_name = webhook_data.groupLabels.get("alertname")
+    if not alerts:
+        logger.warning("pre_heat: No alerts in payload", extra={"req_id": req_id})
+        return {"status": "no_alerts"}
 
-    for alert_data in webhook_data.alerts:
-        try:
-            # Query for existing alert with this fingerprint
-            existing_alert = (
-                db.query(Alert).filter(Alert.fingerprint == alert_data.fingerprint).first()
+    # Process first alert (Alertmanager sends one alert per webhook in practice)
+    alert_data = alerts[0]
+    labels = alert_data.get("labels", {})
+    alert_name = labels.get("alertname", "Unknown")
+    alert_status = alert_data.get("status", "firing")
+
+    # Use fingerprint or generate from labels
+    fingerprint = (
+        alert_data.get("fingerprint") or f"{alert_name}_{labels.get('instance', 'unknown')}"
+    )
+
+    logger.info(
+        "pre_heat: Processing alert",
+        extra={
+            "req_id": req_id,
+            "alert_name": alert_name,
+            "alert_status": alert_status,
+            "fingerprint": fingerprint,
+        },
+    )
+
+    existing = (
+        db.query(Alert)
+        .filter(Alert.fingerprint == fingerprint, Alert.processing_status != "complete")
+        .first()
+    )
+
+    if alert_status == "firing":
+        if not existing:
+            # Create fresh record; status 'new' triggers the Oven Service later
+            # Parse startsAt or use current time as default
+            starts_at = alert_data.get("startsAt")
+            if starts_at and isinstance(starts_at, str):
+                try:
+                    starts_at = dateutil_parser.isoparse(starts_at)
+                except (ValueError, TypeError):
+                    starts_at = datetime.now(timezone.utc)
+            elif not starts_at:
+                starts_at = datetime.now(timezone.utc)
+
+            new_alert = Alert(
+                req_id=req_id,  # Use request ID from webhook
+                fingerprint=fingerprint,
+                alert_name=alert_name,
+                group_name=alert_name,  # Recipe Match Key
+                alert_status="firing",
+                processing_status="new",
+                severity=labels.get("severity", "unknown"),
+                instance=labels.get("instance"),
+                labels=labels,
+                annotations=alert_data.get("annotations", {}),
+                starts_at=starts_at,
+                generator_url=alert_data.get("generatorURL"),
+                counter=1,
             )
+            db.add(new_alert)
+            db.commit()
+            db.refresh(new_alert)
 
-            webhook_status = alert_data.status  # "firing" or "resolved"
-
-            # Extract fields from labels (with safe defaults for optional fields)
-            alert_name = alert_data.labels.alertname
-            severity = getattr(alert_data.labels, "severity", None)
-            instance = getattr(alert_data.labels, "instance", None)
-            prometheus = getattr(alert_data.labels, "prometheus", None)
-
-            # Case 1: No existing alert → Insert as new
-            if not existing_alert:
-                logger.info(
-                    "Pre-heat: No existing alert, creating new",
-                    extra={"req_id": req_id, "fingerprint": alert_data.fingerprint},
-                )
-
-                alert = Alert(
-                    req_id=req_id,
-                    fingerprint=alert_data.fingerprint,
-                    alert_status=webhook_status,
-                    processing_status="new",
-                    alert_name=alert_name,
-                    group_name=group_name,
-                    severity=severity,
-                    instance=instance,
-                    prometheus=prometheus,
-                    labels=alert_data.labels.model_dump(mode="json"),
-                    annotations=(
-                        alert_data.annotations.model_dump(mode="json")
-                        if alert_data.annotations
-                        else None
-                    ),
-                    starts_at=alert_data.startsAt,
-                    ends_at=alert_data.endsAt,
-                    generator_url=alert_data.generatorURL,
-                    raw_data=alert_data.model_dump(mode="json"),
-                    counter=1,
-                )
-                db.add(alert)
-                db.flush()  # Get the ID without committing
-                processed_alerts.append(alert)
-
-                logger.info(
-                    f"Pre-heat: Created new alert id={alert.id}",
-                    extra={"req_id": req_id, "fingerprint": alert_data.fingerprint},
-                )
-
-            # Case 2: Alert exists with processing_status="complete" AND webhook says "firing"
-            # → Insert as NEW alert (new occurrence of a completed alert)
-            elif existing_alert.processing_status == "complete" and webhook_status == "firing":
-                logger.info(
-                    "Pre-heat: Completed alert fired again, creating new occurrence",
-                    extra={
-                        "req_id": req_id,
-                        "fingerprint": alert_data.fingerprint,
-                        "previous_counter": existing_alert.counter,
-                    },
-                )
-
-                # Create a new alert record (new occurrence)
-                alert = Alert(
-                    req_id=req_id,
-                    fingerprint=alert_data.fingerprint,
-                    alert_status=webhook_status,
-                    processing_status="new",
-                    alert_name=alert_name,
-                    group_name=group_name,
-                    severity=severity,
-                    instance=instance,
-                    prometheus=prometheus,
-                    labels=alert_data.labels.model_dump(mode="json"),
-                    annotations=(
-                        alert_data.annotations.model_dump(mode="json")
-                        if alert_data.annotations
-                        else None
-                    ),
-                    starts_at=alert_data.startsAt,
-                    ends_at=alert_data.endsAt,
-                    generator_url=alert_data.generatorURL,
-                    raw_data=alert_data.model_dump(mode="json"),
-                    counter=existing_alert.counter + 1,  # Increment from previous
-                )
-                db.add(alert)
-                db.flush()
-                processed_alerts.append(alert)
-
-                logger.info(
-                    f"Pre-heat: Created new occurrence id={alert.id}, counter={alert.counter}",
-                    extra={"req_id": req_id, "fingerprint": alert_data.fingerprint},
-                )
-
-            # Case 3: Alert exists with processing_status!="complete" AND webhook says "firing"
-            # → Update counter
-            elif existing_alert.processing_status != "complete" and webhook_status == "firing":
-                logger.info(
-                    "Pre-heat: Alert still processing, updating counter",
-                    extra={
-                        "req_id": req_id,
-                        "fingerprint": alert_data.fingerprint,
-                        "old_counter": existing_alert.counter,
-                    },
-                )
-
-                existing_alert.counter += 1
-                existing_alert.updated_at = datetime.utcnow()
-                existing_alert.raw_data = alert_data.model_dump(mode="json")
-                db.flush()
-                processed_alerts.append(existing_alert)
-
-                logger.info(
-                    f"Pre-heat: Updated counter to {existing_alert.counter}",
-                    extra={"req_id": req_id, "fingerprint": alert_data.fingerprint},
-                )
-
-            # Case 4: Alert exists with processing_status!="complete" AND webhook says "resolved"
-            # → Update alert_status to "resolved"
-            elif existing_alert.processing_status != "complete" and webhook_status == "resolved":
-                logger.info(
-                    "Pre-heat: Alert resolved, updating alert_status",
-                    extra={
-                        "req_id": req_id,
-                        "fingerprint": alert_data.fingerprint,
-                        "processing_status": existing_alert.processing_status,
-                    },
-                )
-
-                existing_alert.alert_status = "resolved"
-                existing_alert.ends_at = alert_data.endsAt
-                existing_alert.updated_at = datetime.utcnow()
-                existing_alert.raw_data = alert_data.model_dump(mode="json")
-                db.flush()
-                processed_alerts.append(existing_alert)
-
-                logger.info(
-                    "Pre-heat: Updated alert_status to resolved",
-                    extra={"req_id": req_id, "fingerprint": alert_data.fingerprint},
-                )
-
-            # Case 5: Alert exists with processing_status="complete" AND webhook says "resolved"
-            # → No action (alert already complete and now resolved)
-            else:
-                logger.info(
-                    "Pre-heat: Alert complete and resolved, no action",
-                    extra={
-                        "req_id": req_id,
-                        "fingerprint": alert_data.fingerprint,
-                        "processing_status": existing_alert.processing_status,
-                        "alert_status": webhook_status,
-                    },
-                )
-                processed_alerts.append(existing_alert)
-
-        except Exception as e:
-            logger.error(
-                f"Pre-heat error for fingerprint {alert_data.fingerprint}: {e}",
-                exc_info=True,
-                extra={"req_id": req_id},
+            logger.info(
+                "pre_heat: New alert created",
+                extra={
+                    "req_id": req_id,
+                    "alert_id": new_alert.id,
+                    "alert_name": alert_name,
+                    "group_name": alert_name,
+                },
             )
-            # Continue processing other alerts
-            continue
+            return {"status": "created", "alert_id": new_alert.id}
+        else:
+            # Alert already exists, increment counter
+            existing.counter += 1
+            db.commit()
 
-    # Commit all changes at once
-    db.commit()
+            logger.info(
+                "pre_heat: Alert counter incremented",
+                extra={"req_id": req_id, "alert_id": existing.id, "counter": existing.counter},
+            )
+            return {"status": "counter_incremented", "alert_id": existing.id}
 
-    return processed_alerts
+    elif alert_status == "resolved" and existing:
+        existing.alert_status = "resolved"
+        existing.ends_at = alert_data.get("endsAt")
+        db.commit()
+
+        logger.info("pre_heat: Alert resolved", extra={"req_id": req_id, "alert_id": existing.id})
+        return {"status": "resolved", "alert_id": existing.id}
+
+    logger.debug(
+        "pre_heat: Alert ignored",
+        extra={"req_id": req_id, "alert_status": alert_status, "existing": existing is not None},
+    )
+    return {"status": "ignored"}

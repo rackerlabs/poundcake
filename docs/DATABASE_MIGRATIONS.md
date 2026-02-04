@@ -26,7 +26,7 @@ alembic/
 └── script.py.mako     # Migration template
 
 alembic.ini            # Alembic configuration
-scripts/migrate.py     # Migration management script
+api/migrate.py     # Migration management script
 ```
 
 ---
@@ -38,7 +38,7 @@ scripts/migrate.py     # Migration management script
 Run migrations to create tables:
 
 ```bash
-python scripts/migrate.py upgrade
+python api/migrate.py upgrade
 ```
 
 This will:
@@ -49,7 +49,7 @@ This will:
 ### 2. Check Current Version
 
 ```bash
-python scripts/migrate.py current
+python api/migrate.py current
 ```
 
 Output:
@@ -61,7 +61,7 @@ Current database revision:
 ### 3. View Migration History
 
 ```bash
-python scripts/migrate.py history
+python api/migrate.py history
 ```
 
 ---
@@ -72,39 +72,39 @@ python scripts/migrate.py history
 
 ```bash
 # Upgrade to latest version
-python scripts/migrate.py upgrade
+python api/migrate.py upgrade
 
 # Upgrade by one version
-python scripts/migrate.py upgrade +1
+python api/migrate.py upgrade +1
 
 # Upgrade to specific version
-python scripts/migrate.py upgrade 002
+python api/migrate.py upgrade 002
 ```
 
 ### Downgrade Database
 
 ```bash
 # Downgrade by one version
-python scripts/migrate.py downgrade
+python api/migrate.py downgrade
 
 # Downgrade by two versions
-python scripts/migrate.py downgrade -2
+python api/migrate.py downgrade -2
 
 # Downgrade to specific version
-python scripts/migrate.py downgrade 001
+python api/migrate.py downgrade 001
 
 # Downgrade to initial state (empty database)
-python scripts/migrate.py downgrade base
+python api/migrate.py downgrade base
 ```
 
 ### Check Status
 
 ```bash
 # Current version
-python scripts/migrate.py current
+python api/migrate.py current
 
 # Migration history
-python scripts/migrate.py history
+python api/migrate.py history
 ```
 
 ---
@@ -116,7 +116,7 @@ python scripts/migrate.py history
 When you modify models, Alembic can auto-detect changes:
 
 ```bash
-python scripts/migrate.py create "add status column to alerts"
+python api/migrate.py create "add status column to alerts"
 ```
 
 This will:
@@ -138,7 +138,7 @@ class Alert(Base):
 **2. Generate migration:**
 
 ```bash
-python scripts/migrate.py create "add priority column to alerts"
+python api/migrate.py create "add priority column to alerts"
 ```
 
 **3. Review generated migration:**
@@ -157,7 +157,7 @@ def downgrade() -> None:
 **4. Apply migration:**
 
 ```bash
-python scripts/migrate.py upgrade
+python api/migrate.py upgrade
 ```
 
 ### Manual Migration Creation
@@ -191,13 +191,13 @@ def downgrade() -> None:
 ```bash
 # Test on development database first
 DATABASE_URL=mysql+pymysql://user:pass@dev-db/poundcake \
-  python scripts/migrate.py upgrade
+  python api/migrate.py upgrade
 
 # Verify it worked
-python scripts/migrate.py current
+python api/migrate.py current
 
 # Test rollback
-python scripts/migrate.py downgrade
+python api/migrate.py downgrade
 ```
 
 ### 2. Review Generated Migrations
@@ -206,13 +206,13 @@ python scripts/migrate.py downgrade
 
 ```bash
 # Generate migration
-python scripts/migrate.py create "my changes"
+python api/migrate.py create "my changes"
 
 # Review file in alembic/versions/
 cat alembic/versions/2026_01_23_*.py
 
 # Apply if looks good
-python scripts/migrate.py upgrade
+python api/migrate.py upgrade
 ```
 
 ### 3. Keep Migrations Small
@@ -272,14 +272,14 @@ mysqldump -u poundcake -p poundcake > backup_$(date +%Y%m%d).sql
 
 ```bash
 # On staging environment
-python scripts/migrate.py upgrade
+python api/migrate.py upgrade
 ```
 
 **3. Verify Staging**
 
 ```bash
 # Check version
-python scripts/migrate.py current
+python api/migrate.py current
 
 # Test application
 curl http://staging:8000/api/v1/health
@@ -289,13 +289,13 @@ curl http://staging:8000/api/v1/health
 
 ```bash
 # On production environment
-python scripts/migrate.py upgrade
+python api/migrate.py upgrade
 ```
 
 **5. Verify Production**
 
 ```bash
-python scripts/migrate.py current
+python api/migrate.py current
 curl http://production:8000/api/v1/health
 ```
 
@@ -305,7 +305,7 @@ Always have a rollback plan:
 
 ```bash
 # If something goes wrong, downgrade
-python scripts/migrate.py downgrade
+python api/migrate.py downgrade
 
 # Or restore from backup
 mysql -u poundcake -p poundcake < backup_20260123.sql
@@ -332,10 +332,10 @@ async def lifespan(app: FastAPI):
 
 ```bash
 # Run migrations in container
-docker exec poundcake-api python scripts/migrate.py upgrade
+docker exec poundcake-api python api/migrate.py upgrade
 
 # Check status
-docker exec poundcake-api python scripts/migrate.py current
+docker exec poundcake-api python api/migrate.py current
 ```
 
 ### Init Container Pattern (Kubernetes)
@@ -349,7 +349,7 @@ spec:
   initContainers:
   - name: migrate
     image: poundcake-api:latest
-    command: ["python", "scripts/migrate.py", "upgrade"]
+    command: ["python", "api/migrate.py", "upgrade"]
     env:
     - name: DATABASE_URL
       valueFrom:
@@ -369,24 +369,24 @@ spec:
 
 ```bash
 # Check current state
-python scripts/migrate.py current
+python api/migrate.py current
 
 # View migration history
-python scripts/migrate.py history
+python api/migrate.py history
 
 # Try to fix by stamping current version
-python scripts/migrate.py stamp 001
+python api/migrate.py stamp 001
 ```
 
 ### Database Out of Sync
 
 ```bash
 # Force stamp to current code version
-python scripts/migrate.py stamp head
+python api/migrate.py stamp head
 
 # Or regenerate from scratch
-python scripts/migrate.py downgrade base
-python scripts/migrate.py upgrade head
+python api/migrate.py downgrade base
+python api/migrate.py upgrade head
 ```
 
 ### Merge Conflicts in Migrations
@@ -465,15 +465,15 @@ def downgrade() -> None:
 
 ## Alembic Commands Reference
 
-### Via scripts/migrate.py (Recommended)
+### Via api/migrate.py (Recommended)
 
 ```bash
-python scripts/migrate.py upgrade       # Upgrade to head
-python scripts/migrate.py downgrade     # Downgrade one version
-python scripts/migrate.py current       # Show current version
-python scripts/migrate.py history       # Show migration history
-python scripts/migrate.py create "msg"  # Create new migration
-python scripts/migrate.py stamp head    # Mark as current version
+python api/migrate.py upgrade       # Upgrade to head
+python api/migrate.py downgrade     # Downgrade one version
+python api/migrate.py current       # Show current version
+python api/migrate.py history       # Show migration history
+python api/migrate.py create "msg"  # Create new migration
+python api/migrate.py stamp head    # Mark as current version
 ```
 
 ### Direct Alembic Commands
@@ -513,10 +513,10 @@ alembic stamp head
 
 ```bash
 # Downgrade to empty
-python scripts/migrate.py downgrade base
+python api/migrate.py downgrade base
 
 # Upgrade back to latest
-python scripts/migrate.py upgrade
+python api/migrate.py upgrade
 ```
 
 ### Q: Can I skip migrations?
@@ -525,7 +525,7 @@ python scripts/migrate.py upgrade
 
 ### Q: What if my migration fails halfway?
 
-**A:** Most databases support transactional DDL. If migration fails, it rolls back. Check `python scripts/migrate.py current` and fix the migration.
+**A:** Most databases support transactional DDL. If migration fails, it rolls back. Check `python api/migrate.py current` and fix the migration.
 
 ### Q: How do I handle production with no downtime?
 
@@ -538,12 +538,12 @@ Use a multi-step process:
 
 ## Summary
 
-✅ **Use Alembic for all schema changes**  
-✅ **Test migrations before production**  
-✅ **Keep migrations small and focused**  
-✅ **Always review auto-generated migrations**  
-✅ **Backup before production migrations**  
-✅ **Document complex migrations**  
+[OK] **Use Alembic for all schema changes**  
+[OK] **Test migrations before production**  
+[OK] **Keep migrations small and focused**  
+[OK] **Always review auto-generated migrations**  
+[OK] **Backup before production migrations**  
+[OK] **Document complex migrations**  
 
 ---
 

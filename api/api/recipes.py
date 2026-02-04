@@ -1,194 +1,188 @@
-#  ___                        _  ____      _
+#  ____                        _  ____      _
 # |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Recipe management API routes."""
+"""API endpoints for recipe and ingredient management."""
 
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from pydantic import BaseModel, ConfigDict
-from datetime import datetime
 
 from api.core.database import get_db
 from api.core.logging import get_logger
-from api.models.models import Recipe
+from api.models.models import Recipe, Ingredient
+from api.schemas.schemas import (
+    RecipeCreate,
+    RecipeResponse,
+    RecipeDetailResponse,
+    IngredientResponse,
+    DeleteResponse,
+)
+from api.validation import get_name_param, get_enabled_param, get_limit_param, get_offset_param
 
+router = APIRouter()
 logger = get_logger(__name__)
-router = APIRouter(prefix="/api/recipes", tags=["recipes"])
+
+# --- Recipe Endpoints ---
 
 
-# Pydantic models for request/response
-class RecipeCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    task_list: Optional[str] = None
-    st2_workflow_ref: str
-    time_to_complete: Optional[datetime] = None
-    time_to_clear: Optional[datetime] = None
+@router.post("/recipes/", response_model=RecipeDetailResponse, status_code=201)
+async def create_recipe(
+    request: Request, recipe: RecipeCreate, db: Session = Depends(get_db)
+) -> RecipeDetailResponse:
+    """Create a new recipe with ingredients."""
+    req_id = request.state.req_id
 
-
-class RecipeUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    task_list: Optional[str] = None
-    st2_workflow_ref: Optional[str] = None
-    time_to_complete: Optional[datetime] = None
-    time_to_clear: Optional[datetime] = None
-
-
-class RecipeResponse(BaseModel):
-    id: int
-    name: str
-    description: Optional[str]
-    task_list: Optional[str]
-    st2_workflow_ref: str
-    time_to_complete: Optional[datetime]
-    time_to_clear: Optional[datetime]
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-@router.post("/", response_model=RecipeResponse, status_code=201)
-def create_recipe(recipe_data: RecipeCreate, db: Session = Depends(get_db)) -> Recipe:
-    """Create a new recipe.
-
-    Example:
-    ```json
-    {
-        "name": "HostDownAlert",
-        "description": "Recipe for handling host down alerts",
-        "task_list": "uuid1,uuid2,uuid3",
-        "st2_workflow_ref": "remediation.host_down_workflow",
-        "time_to_complete": "2024-01-23T16:00:00Z",
-        "time_to_clear": "2024-01-23T18:00:00Z"
-    }
-    ```
-    """
-    # Check if recipe with same name already exists
-    existing = db.query(Recipe).filter(Recipe.name == recipe_data.name).first()
-    if existing:
-        raise HTTPException(
-            status_code=400, detail=f"Recipe with name '{recipe_data.name}' already exists"
-        )
-
-    # Create new recipe
-    recipe = Recipe(
-        name=recipe_data.name,
-        description=recipe_data.description,
-        task_list=recipe_data.task_list,
-        st2_workflow_ref=recipe_data.st2_workflow_ref,
-        time_to_complete=recipe_data.time_to_complete,
-        time_to_clear=recipe_data.time_to_clear,
+    logger.info(
+        "create_recipe: Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name}
     )
 
-    db.add(recipe)
-    db.commit()
-    db.refresh(recipe)
-
-    logger.info(f"Created recipe: {recipe.name}")
-    return recipe
-
-
-@router.get("/", response_model=List[RecipeResponse])
-def list_recipes(
-    name: Optional[str] = Query(None, description="Filter by recipe name"),
-    limit: int = Query(100, le=1000, description="Maximum number of recipes to return"),
-    offset: int = Query(0, ge=0, description="Number of recipes to skip"),
-    db: Session = Depends(get_db),
-) -> List[Recipe]:
-    """List all recipes with optional filtering by name."""
-    query = db.query(Recipe)
-
-    # Filter by name if provided
-    if name:
-        query = query.filter(Recipe.name == name)
-
-    recipes = query.order_by(desc(Recipe.created_at)).offset(offset).limit(limit).all()
-    return recipes
-
-
-@router.get("/{recipe_id}", response_model=RecipeResponse)
-def get_recipe(recipe_id: int, db: Session = Depends(get_db)) -> Recipe:
-    """Get a specific recipe by ID."""
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
-
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    return recipe
-
-
-@router.get("/name/{recipe_name}", response_model=RecipeResponse)
-def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)) -> Recipe:
-    """Get a specific recipe by name."""
-    recipe = db.query(Recipe).filter(Recipe.name == recipe_name).first()
-
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    return recipe
-
-
-@router.put("/{recipe_id}", response_model=RecipeResponse)
-def update_recipe(
-    recipe_id: int, recipe_data: RecipeUpdate, db: Session = Depends(get_db)
-) -> Recipe:
-    """Update an existing recipe."""
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
-
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-
-    # Update fields if provided
-    if recipe_data.name is not None:
-        # Check if new name conflicts with existing recipe
-        existing = (
-            db.query(Recipe).filter(Recipe.name == recipe_data.name, Recipe.id != recipe_id).first()
+    existing = db.query(Recipe).filter(Recipe.name == recipe.name).first()
+    if existing:
+        logger.warning(
+            "create_recipe: Recipe already exists",
+            extra={"req_id": req_id, "recipe_name": recipe.name},
         )
-        if existing:
-            raise HTTPException(
-                status_code=400, detail=f"Recipe with name '{recipe_data.name}' already exists"
-            )
-        recipe.name = recipe_data.name
+        raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
 
-    if recipe_data.description is not None:
-        recipe.description = recipe_data.description
+    db_recipe = Recipe(name=recipe.name, description=recipe.description, enabled=recipe.enabled)
+    db.add(db_recipe)
+    db.flush()  # Get the ID before adding ingredients
 
-    if recipe_data.task_list is not None:
-        recipe.task_list = recipe_data.task_list
-
-    if recipe_data.st2_workflow_ref is not None:
-        recipe.st2_workflow_ref = recipe_data.st2_workflow_ref
-
-    if recipe_data.time_to_complete is not None:
-        recipe.time_to_complete = recipe_data.time_to_complete
-
-    if recipe_data.time_to_clear is not None:
-        recipe.time_to_clear = recipe_data.time_to_clear
+    for ingredient_data in recipe.ingredients:
+        db_ingredient = Ingredient(
+            recipe_id=db_recipe.id,
+            task_id=ingredient_data.task_id,
+            task_name=ingredient_data.task_name,
+            task_order=ingredient_data.task_order,
+            is_blocking=ingredient_data.is_blocking,
+            st2_action=ingredient_data.st2_action,
+            parameters=ingredient_data.parameters,
+            expected_time_to_completion=ingredient_data.expected_time_to_completion,
+            timeout=ingredient_data.timeout,
+            retry_count=ingredient_data.retry_count,
+            retry_delay=ingredient_data.retry_delay,
+            on_failure=ingredient_data.on_failure,
+        )
+        db.add(db_ingredient)
 
     db.commit()
-    db.refresh(recipe)
+    db.refresh(db_recipe)
 
-    logger.info(f"Updated recipe: {recipe.name}")
-    return recipe
+    logger.info(
+        "create_recipe: Recipe created successfully",
+        extra={
+            "req_id": req_id,
+            "recipe_id": db_recipe.id,
+            "recipe_name": db_recipe.name,
+            "ingredient_count": len(recipe.ingredients),
+        },
+    )
+
+    return db_recipe
 
 
-@router.delete("/{recipe_id}", status_code=204)
-def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
-    """Delete a recipe."""
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+@router.get("/recipes/", response_model=List[RecipeDetailResponse])
+async def list_recipes(
+    name: Optional[str] = get_name_param(),
+    enabled: Optional[bool] = get_enabled_param(),
+    limit: int = get_limit_param(),
+    offset: int = get_offset_param(),
+    db: Session = Depends(get_db),
+):
+    """
+    List recipes with optional filtering and nested ingredients.
 
+    Query Parameters:
+    - name: Filter by recipe name
+    - enabled: Filter by enabled status (true/false)
+    - limit: Maximum number of results (default: 100, max: 1000)
+    - offset: Number of results to skip (default: 0)
+
+    Returns 400 Bad Request if invalid query parameters are provided.
+    """
+    query = db.query(Recipe).options(joinedload(Recipe.ingredients))
+
+    if name is not None:
+        query = query.filter(Recipe.name == name)
+    if enabled is not None:
+        query = query.filter(Recipe.enabled == enabled)
+
+    return query.limit(limit).offset(offset).all()
+
+
+@router.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
+async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
+    """Get a recipe with all its ingredients."""
+    recipe = (
+        db.query(Recipe)
+        .options(joinedload(Recipe.ingredients))
+        .filter(Recipe.id == recipe_id)
+        .first()
+    )
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
-    logger.info(f"Deleting recipe: {recipe.name}")
+    return recipe
+
+
+@router.get("/recipes/by-name/{recipe_name}", response_model=RecipeDetailResponse)
+async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
+    """Get a recipe by name (matches alert.group_name)."""
+    recipe = (
+        db.query(Recipe)
+        .options(joinedload(Recipe.ingredients))
+        .filter(Recipe.name == recipe_name)
+        .first()
+    )
+    if not recipe:
+        raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
+
+    return recipe
+
+
+@router.delete("/recipes/{recipe_id}", response_model=DeleteResponse)
+async def delete_recipe(
+    request: Request, recipe_id: int, db: Session = Depends(get_db)
+) -> DeleteResponse:
+    """Delete a recipe and all its ingredients."""
+    req_id = request.state.req_id
+
+    logger.info("delete_recipe: Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
+
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        logger.warning(
+            "delete_recipe: Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id}
+        )
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    recipe_name = recipe.name
     db.delete(recipe)
     db.commit()
 
-    return None
+    logger.info(
+        "delete_recipe: Recipe deleted successfully",
+        extra={"req_id": req_id, "recipe_id": recipe_id, "recipe_name": recipe_name},
+    )
+
+    return DeleteResponse(
+        status="deleted", id=recipe_id, message=f"Recipe '{recipe_name}' deleted successfully"
+    )
+
+
+# --- Ingredient Endpoints ---
+
+
+@router.get("/ingredients/{ingredient_id}", response_model=IngredientResponse)
+async def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)):
+    """
+    Fetch a single ingredient.
+    Crucial for oven-executor (oven.py) to resolve task details.
+    """
+    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    return ingredient

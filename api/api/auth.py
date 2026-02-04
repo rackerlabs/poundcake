@@ -8,42 +8,41 @@
 
 import logging
 import secrets
+import base64
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import Cookie, HTTPException, Request, status
+from fastapi import Cookie, HTTPException, Request, status, APIRouter
 
 from api.core.config import get_settings
+from api.core.logging import get_logger
+from api.schemas.schemas import SessionResponse
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+# Standard router definition for auth endpoints
+router = APIRouter()
 
 # In-memory session store (for single instance deployments)
-# For multi-instance, this should be moved to Redis
+# NOTE: Switch to Redis if scaling to multiple Kubernetes replicas
 _sessions: dict[str, dict[str, Any]] = {}
 
 
 def get_admin_credentials() -> tuple[str, str] | None:
-    """Get admin credentials from Kubernetes secret or environment.
-
-    Returns:
-        Tuple of (username, password) or None if not available
-    """
+    """Get admin credentials from Kubernetes secret or environment."""
     settings = get_settings()
 
     if not settings.auth_enabled:
         return None
 
-    # Try to load from Kubernetes secret
+    # 1. Attempt to load from Kubernetes (Helm/K8s Environment)
     try:
-        import base64
         from kubernetes import client, config
 
         try:
             config.load_incluster_config()
-            logger.info("Loaded in-cluster Kubernetes config")
         except Exception:
             config.load_kube_config()
-            logger.info("Loaded local Kubernetes config")
 
         v1 = client.CoreV1Api()
         secret = v1.read_namespaced_secret(
@@ -54,41 +53,22 @@ def get_admin_credentials() -> tuple[str, str] | None:
         username = base64.b64decode(secret.data["username"]).decode("utf-8")
         password = base64.b64decode(secret.data["password"]).decode("utf-8")
 
-        logger.info(
-            "Loaded admin credentials from Kubernetes secret: %s/%s",
-            settings.auth_secret_namespace,
-            settings.auth_secret_name,
-        )
+        logger.info("Credentials loaded from K8s secret: %s", settings.auth_secret_name)
         return (username, password)
-    except Exception as e:
-        logger.warning(
-            "Failed to load admin credentials from Kubernetes secret %s/%s: %s",
-            settings.auth_secret_namespace,
-            settings.auth_secret_name,
-            str(e),
-        )
 
-        # Fallback to environment variables for local development
+    except Exception as e:
+        logger.debug("K8s secret fetch skipped or failed (Normal for local dev): %s", str(e))
+
+        # 2. Fallback to environment variables (Docker Compose / Local Dev)
         if settings.auth_dev_username and settings.auth_dev_password:
-            logger.info("Using development credentials from environment variables")
             return (settings.auth_dev_username, settings.auth_dev_password)
 
-        logger.error(
-            "No admin credentials available - set POUNDCAKE_AUTH_DEV_USERNAME "
-            "and POUNDCAKE_AUTH_DEV_PASSWORD for local development"
-        )
+        logger.error("No admin credentials configured in K8s or Environment!")
         return None
 
 
 def create_session(username: str) -> str:
-    """Create a new session for a user.
-
-    Args:
-        username: The username to create a session for
-
-    Returns:
-        Session token
-    """
+    """Create a new session and return the token."""
     settings = get_settings()
     session_token = secrets.token_urlsafe(32)
     expires_at = datetime.utcnow() + timedelta(seconds=settings.auth_session_timeout)
@@ -99,19 +79,12 @@ def create_session(username: str) -> str:
         "expires_at": expires_at,
     }
 
-    logger.info("Created new session for user %s, expires at %s", username, expires_at.isoformat())
+    logger.info("Session created for %s, expires at %s", username, expires_at)
     return session_token
 
 
 def validate_session(session_token: str | None) -> str | None:
-    """Validate a session token.
-
-    Args:
-        session_token: The session token to validate
-
-    Returns:
-        Username if valid, None otherwise
-    """
+    """Validate token; returns username if valid, None if expired/not found."""
     if not session_token:
         return None
 
@@ -120,136 +93,101 @@ def validate_session(session_token: str | None) -> str | None:
         return None
 
     if datetime.utcnow() > session["expires_at"]:
-        # Session expired
         del _sessions[session_token]
         return None
 
-    username: str = session["username"]
-    return username
+    return session["username"]
 
 
 def destroy_session(session_token: str | None) -> None:
-    """Destroy a session.
-
-    Args:
-        session_token: The session token to destroy
-    """
-    if session_token and session_token in _sessions:
+    """Manual logout/session destruction."""
+    if session_token in _sessions:
         del _sessions[session_token]
-        logger.info("Destroyed session")
+        logger.info("Session destroyed.")
 
 
 def verify_credentials(username: str, password: str) -> bool:
-    """Verify user credentials.
-
-    Args:
-        username: Username to verify
-        password: Password to verify
-
-    Returns:
-        True if credentials are valid
-    """
+    """Compare input against master admin credentials."""
     credentials = get_admin_credentials()
     if not credentials:
         return False
 
-    admin_username, admin_password = credentials
-    return username == admin_username and password == admin_password
-
-
-def get_current_user(session: str | None = Cookie(default=None)) -> str:
-    """Get the current authenticated user.
-
-    Args:
-        session: Session cookie value
-
-    Returns:
-        Username of authenticated user
-
-    Raises:
-        HTTPException: If not authenticated
-    """
-    username = validate_session(session)
-    if not username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return username
+    admin_user, admin_pass = credentials
+    return username == admin_user and password == admin_pass
 
 
 def require_auth_if_enabled(
     request: Request, session: str | None = Cookie(default=None)
 ) -> str | None:
-    """Require authentication only if auth is enabled.
-
-    Args:
-        request: FastAPI request object
-        session: Session cookie value
-
-    Returns:
-        Username if authenticated, None if auth disabled
-
-    Raises:
-        HTTPException: If auth enabled but not authenticated
-    """
+    """Dependency for FastAPI routes. Checks if auth is enabled and validates session."""
     settings = get_settings()
 
     if not settings.auth_enabled:
         return None
 
-    # Allow access to login page, static resources, and public endpoints
+    # Alignment with main.py versioned routes
     public_paths = [
-        "/login",
-        "/api/login",
-        "/health",
-        "/ready",
-        "/metrics",
-        "/webhook",
-        "/api/v1/webhook",
+        "/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
         "/api/v1/health",
-        "/api/v1/health/ready",
-        "/api/v1/health/live",
+        "/api/v1/auth/login",
+        "/metrics",
+        "/api/v1/alerts",
     ]
-    if request.url.path in public_paths:
-        return None
 
-    # Also allow static files
-    if request.url.path.startswith("/static/"):
+    if request.url.path in public_paths or request.url.path.startswith("/static/"):
         return None
 
     username = validate_session(session)
     if not username:
-        # Redirect to login page for browser requests
         if "text/html" in request.headers.get("accept", ""):
             raise HTTPException(
                 status_code=status.HTTP_307_TEMPORARY_REDIRECT,
                 headers={"Location": "/login"},
             )
-        else:
-            # Return 401 for API requests
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Valid session required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return username
 
 
-def cleanup_expired_sessions() -> int:
-    """Clean up expired sessions.
+@router.post("/auth/login", response_model=SessionResponse)
+async def login(request: Request) -> SessionResponse:
+    """Simple login endpoint to set session."""
+    req_id = request.state.req_id
 
-    Returns:
-        Number of sessions cleaned up
-    """
-    now = datetime.utcnow()
-    expired = [token for token, session in _sessions.items() if now > session["expires_at"]]
-    for token in expired:
-        del _sessions[token]
+    try:
+        data = await request.json()
+        username = data.get("username")
+        password = data.get("password")
 
-    if expired:
-        logger.info("Cleaned up %d expired sessions", len(expired))
+        logger.info("login: Login attempt", extra={"req_id": req_id, "username": username})
 
-    return len(expired)
+        if verify_credentials(username, password):
+            token = create_session(username)
+            session_data = _sessions[token]
+
+            logger.info("login: Login successful", extra={"req_id": req_id, "username": username})
+
+            return SessionResponse(
+                session_id=token,
+                username=username,
+                expires_at=session_data["expires_at"].isoformat(),
+                token_type="Bearer",
+            )
+
+        logger.warning("login: Invalid credentials", extra={"req_id": req_id, "username": username})
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "login: Login failed", extra={"req_id": req_id, "error": str(e)}, exc_info=True
+        )
+        raise HTTPException(status_code=400, detail="Malformed request")

@@ -76,16 +76,24 @@ def test_openapi_endpoint(client):
     data = response.json()
     assert "openapi" in data
     assert "info" in data
-    assert data["info"]["title"] == "PoundCake"
+    assert data["info"]["title"] == "PoundCake API"
 
 
-def test_ready_endpoint(client):
-    """Test readiness endpoint."""
-    response = client.get("/api/v1/health/ready")
+def test_stats_endpoint(client):
+    """Test stats endpoint returns expected structure."""
+    response = client.get("/api/v1/stats")
     assert response.status_code == 200
+    data = response.json()
 
-
-def test_live_endpoint(client):
-    """Test liveness endpoint."""
-    response = client.get("/api/v1/health/live")
-    assert response.status_code == 200
+    # Check all required fields
+    required_fields = [
+        "total_alerts",
+        "total_recipes",
+        "total_executions",
+        "alerts_by_processing_status",
+        "alerts_by_alert_status",
+        "executions_by_status",
+        "recent_alerts",
+    ]
+    for field in required_fields:
+        assert field in data, f"Missing field: {field}"

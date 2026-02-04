@@ -311,6 +311,191 @@ curl "http://localhost:8000/api/v1/executions/550e8400-e29b-41d4-a716-4466554400
 
 ---
 
+## Oven Management
+
+### GET /api/v1/ovens
+
+**Description:** Get ovens (task executions) with optional filtering
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `req_id` | string | No | - | Filter by request ID |
+| `alert_id` | int | No | - | Filter by alert ID |
+| `processing_status` | string | No | - | Filter by status (pending/processing/complete/failed) |
+| `limit` | int | No | 100 | Maximum number of ovens to return (max: 1000) |
+| `offset` | int | No | 0 | Number of ovens to skip |
+
+**Response:** 200 OK
+```json
+[
+  {
+    "id": 1,
+    "req_id": "550e8400-e29b-41d4-a716-446655440000",
+    "alert_id": 1,
+    "recipe_id": 1,
+    "ingredient_id": 1,
+    "processing_status": "complete",
+    "action_ref": "core.local",
+    "action_id": "65e7a1b2c3d4e5f6g7h8i9j0",
+    "st2_status": "succeeded",
+    "action_result": {
+      "stdout": "Step 2 success\n",
+      "stderr": "",
+      "exit_code": 0,
+      "return_code": 0
+    },
+    "is_blocking": true,
+    "created_at": "2026-02-04T03:00:00Z",
+    "updated_at": "2026-02-04T03:01:00Z"
+  }
+]
+```
+
+**Examples:**
+```bash
+# Get all ovens
+curl "http://localhost:8000/api/v1/ovens"
+
+# Get ovens for specific request
+curl "http://localhost:8000/api/v1/ovens?req_id=550e8400-e29b-41d4-a716-446655440000"
+
+# Get ovens for specific alert
+curl "http://localhost:8000/api/v1/ovens?alert_id=1"
+
+# Get ovens currently processing
+curl "http://localhost:8000/api/v1/ovens?processing_status=processing"
+
+# Get completed ovens
+curl "http://localhost:8000/api/v1/ovens?processing_status=complete"
+
+# Get ovens with pagination
+curl "http://localhost:8000/api/v1/ovens?limit=50&offset=100"
+```
+
+---
+
+### POST /api/v1/ovens/bake/{alert_id}
+
+**Description:** Create ovens (task executions) for an alert based on its recipe
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `alert_id` | int | Yes | Alert ID to bake |
+
+**Query Parameters:** None
+
+**Response:** 202 Accepted
+```json
+{
+  "status": "accepted",
+  "req_id": "550e8400-e29b-41d4-a716-446655440000",
+  "alert_id": 1,
+  "ovens_created": 3,
+  "oven_ids": [1, 2, 3],
+  "message": "Created 3 ovens for alert 1"
+}
+```
+
+**Example:**
+```bash
+# Bake ovens for alert
+curl -X POST "http://localhost:8000/api/v1/ovens/bake/1"
+```
+
+---
+
+### PUT /api/v1/ovens/{oven_id}
+
+**Description:** Update an oven (full update)
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `oven_id` | int | Yes | Oven ID to update |
+
+**Request Body:**
+```json
+{
+  "processing_status": "complete",
+  "action_id": "65e7a1b2c3d4e5f6g7h8i9j0",
+  "st2_status": "succeeded",
+  "action_result": {
+    "stdout": "Command output\n",
+    "stderr": "",
+    "exit_code": 0
+  }
+}
+```
+
+**Response:** 200 OK
+```json
+{
+  "id": 1,
+  "processing_status": "complete",
+  "action_id": "65e7a1b2c3d4e5f6g7h8i9j0",
+  "st2_status": "succeeded",
+  "action_result": {...},
+  "updated_at": "2026-02-04T03:01:00Z"
+}
+```
+
+**Example:**
+```bash
+# Update oven status
+curl -X PUT "http://localhost:8000/api/v1/ovens/1" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "processing_status": "complete",
+    "st2_status": "succeeded",
+    "action_result": {
+      "stdout": "Success\n",
+      "exit_code": 0
+    }
+  }'
+```
+
+---
+
+### PATCH /api/v1/ovens/{oven_id}
+
+**Description:** Update an oven (partial update)
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `oven_id` | int | Yes | Oven ID to update |
+
+**Request Body:** (all fields optional)
+```json
+{
+  "processing_status": "processing",
+  "action_id": "65e7a1b2c3d4e5f6g7h8i9j0"
+}
+```
+
+**Response:** 200 OK (same as PUT)
+
+**Example:**
+```bash
+# Update only status
+curl -X PATCH "http://localhost:8000/api/v1/ovens/1" \
+  -H "Content-Type: application/json" \
+  -d '{"processing_status": "processing"}'
+
+# Update only action_id
+curl -X PATCH "http://localhost:8000/api/v1/ovens/1" \
+  -H "Content-Type: application/json" \
+  -d '{"action_id": "65e7a1b2c3d4e5f6g7h8i9j0"}'
+```
+
+---
+
 ## Health & Statistics
 
 ### GET /api/v1/health
@@ -395,6 +580,82 @@ curl "http://localhost:8000/api/v1/executions/550e8400-e29b-41d4-a716-4466554400
 ---
 
 ## StackStorm Integration
+
+### POST /api/v1/stackstorm/execute
+
+**Description:** Execute a StackStorm action (used internally by Oven Executor)
+
+**Request Body:**
+```json
+{
+  "action": "core.local",
+  "parameters": {
+    "cmd": "echo 'Hello World'"
+  }
+}
+```
+
+**Headers:**
+```
+X-Request-ID: 550e8400-e29b-41d4-a716-446655440000
+Content-Type: application/json
+```
+
+**Response:** 200 OK
+```json
+{
+  "id": "65e7a1b2c3d4e5f6g7h8i9j0",
+  "status": "running",
+  "action": {
+    "ref": "core.local",
+    "parameters": {
+      "cmd": "echo 'Hello World'"
+    }
+  },
+  "runner": {
+    "name": "local-shell-cmd"
+  },
+  "start_timestamp": "2026-02-04T03:00:00.000000Z"
+}
+```
+
+**Examples:**
+```bash
+# Execute simple command
+curl -X POST "http://localhost:8000/api/v1/stackstorm/execute" \
+  -H "Content-Type: application/json" \
+  -H "X-Request-ID: $(uuidgen)" \
+  -d '{
+    "action": "core.local",
+    "parameters": {
+      "cmd": "echo \"Hello World\""
+    }
+  }'
+
+# Execute with working directory
+curl -X POST "http://localhost:8000/api/v1/stackstorm/execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "core.local",
+    "parameters": {
+      "cmd": "ls -la",
+      "cwd": "/tmp"
+    }
+  }'
+
+# Execute remote command (if core.remote action exists)
+curl -X POST "http://localhost:8000/api/v1/stackstorm/execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "core.remote",
+    "parameters": {
+      "hosts": "server1.example.com",
+      "cmd": "uptime"
+    }
+  }'
+```
+
+---
 
 ### GET /stackstorm/packs
 
@@ -643,6 +904,214 @@ curl "http://localhost:8000/metrics"
 
 ---
 
+## Complete End-to-End Workflow
+
+### Example: Alert Processing with Action Results
+
+This example shows the complete flow from alert to action execution to result capture.
+
+```bash
+# Step 1: Send alert webhook
+curl -X POST "http://localhost:8000/api/v1/webhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alerts": [{
+      "labels": {
+        "alertname": "DiskSpaceLow",
+        "instance": "server1.example.com",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Disk space is running low"
+      },
+      "status": "firing"
+    }]
+  }'
+
+# Response:
+# {
+#   "status": "accepted",
+#   "request_id": "550e8400-e29b-41d4-a716-446655440000",
+#   "alerts_received": 1
+# }
+
+# Step 2: Check alert was created
+curl "http://localhost:8000/api/v1/alerts?req_id=550e8400-e29b-41d4-a716-446655440000"
+
+# Response:
+# [{
+#   "id": 1,
+#   "req_id": "550e8400-e29b-41d4-a716-446655440000",
+#   "alert_name": "DiskSpaceLow",
+#   "processing_status": "new"
+# }]
+
+# Step 3: Bake ovens for the alert (create task executions)
+curl -X POST "http://localhost:8000/api/v1/ovens/bake/1"
+
+# Response:
+# {
+#   "status": "accepted",
+#   "alert_id": 1,
+#   "ovens_created": 2,
+#   "oven_ids": [1, 2]
+# }
+
+# Step 4: Check oven status (initially pending)
+curl "http://localhost:8000/api/v1/ovens?alert_id=1"
+
+# Response:
+# [{
+#   "id": 1,
+#   "alert_id": 1,
+#   "processing_status": "pending",
+#   "action_ref": "core.local",
+#   "action_result": null
+# }]
+
+# Step 5: Wait for oven executor to pick up and execute
+# (Oven Executor runs automatically every 5 seconds)
+sleep 10
+
+# Step 6: Check oven status (now processing)
+curl "http://localhost:8000/api/v1/ovens?alert_id=1"
+
+# Response:
+# [{
+#   "id": 1,
+#   "processing_status": "processing",
+#   "action_id": "65e7a1b2c3d4e5f6g7h8i9j0",
+#   "action_result": null
+# }]
+
+# Step 7: Wait for timer to detect completion
+# (Timer checks every 10 seconds)
+sleep 15
+
+# Step 8: Check oven status (now complete with result!)
+curl "http://localhost:8000/api/v1/ovens?alert_id=1"
+
+# Response:
+# [{
+#   "id": 1,
+#   "processing_status": "complete",
+#   "action_id": "65e7a1b2c3d4e5f6g7h8i9j0",
+#   "st2_status": "succeeded",
+#   "action_result": {
+#     "stdout": "Step 2 success\n",
+#     "stderr": "",
+#     "exit_code": 0,
+#     "return_code": 0
+#   }
+# }]
+
+# Step 9: Check execution history by request ID
+curl "http://localhost:8000/api/v1/executions/550e8400-e29b-41d4-a716-446655440000"
+
+# Response:
+# {
+#   "req_id": "550e8400-e29b-41d4-a716-446655440000",
+#   "total_executions": 2,
+#   "executions": [{
+#     "oven_id": 1,
+#     "status": "complete",
+#     "st2_execution_id": "65e7a1b2c3d4e5f6g7h8i9j0",
+#     "action_result": {
+#       "stdout": "Step 2 success\n",
+#       "exit_code": 0
+#     }
+#   }]
+# }
+```
+
+### Understanding action_result
+
+The `action_result` field contains the output from the StackStorm action execution:
+
+**For core.local (local shell commands):**
+```json
+{
+  "stdout": "command output\n",
+  "stderr": "error output if any\n",
+  "exit_code": 0,
+  "return_code": 0
+}
+```
+
+**For core.remote (remote commands):**
+```json
+{
+  "server1.example.com": {
+    "stdout": "uptime output\n",
+    "stderr": "",
+    "succeeded": true,
+    "return_code": 0
+  }
+}
+```
+
+**For HTTP actions:**
+```json
+{
+  "status_code": 200,
+  "body": "{\"result\": \"success\"}",
+  "headers": {...}
+}
+```
+
+**For failed actions:**
+```json
+{
+  "stdout": "partial output\n",
+  "stderr": "error: command not found\n",
+  "exit_code": 127,
+  "return_code": 127
+}
+```
+
+---
+
+## Quick Reference
+
+### Most Common Commands
+
+```bash
+# Send alert
+curl -X POST "http://localhost:8000/api/v1/webhook" \
+  -H "Content-Type: application/json" \
+  -d @alert.json
+
+# Check alert status
+curl "http://localhost:8000/api/v1/alerts?fingerprint=abc123"
+
+# View ovens (task executions)
+curl "http://localhost:8000/api/v1/ovens?alert_id=1"
+
+# View execution results
+curl "http://localhost:8000/api/v1/executions/550e8400-e29b-41d4-a716-446655440000"
+
+# System health
+curl "http://localhost:8000/api/v1/health"
+
+# System stats
+curl "http://localhost:8000/api/v1/stats"
+```
+
+### Monitoring Active Processing
+
+```bash
+# Watch alerts being processed
+watch -n 2 'curl -s "http://localhost:8000/api/v1/alerts?processing_status=processing" | jq'
+
+# Watch ovens being executed
+watch -n 2 'curl -s "http://localhost:8000/api/v1/ovens?processing_status=processing" | jq'
+
+# Watch system stats
+watch -n 5 'curl -s "http://localhost:8000/api/v1/stats" | jq'
+```
+
+---
+
 **Version:** 0.0.1  
-**Date:** January 23, 2026  
+**Date:** February 4, 2026  
 **Status:** Production Ready
