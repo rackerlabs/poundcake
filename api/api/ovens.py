@@ -57,6 +57,7 @@ async def bake_ovens(
         # Close alert if no recipe exists
         alert.processing_status = "complete"
         alert.updated_at = datetime.now(timezone.utc)
+
         db.commit()
 
         logger.error(
@@ -167,7 +168,6 @@ async def list_ovens(
     logger.debug("list_ovens: Ovens fetched", extra={"req_id": request_id, "count": len(ovens)})
 
     return ovens
-
 
 @router.put("/ovens/{oven_id}", response_model=OvenResponse)
 @router.patch("/ovens/{oven_id}", response_model=OvenResponse)
