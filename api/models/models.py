@@ -5,6 +5,7 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """Database models for PoundCake."""
+
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text, Integer, JSON, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
@@ -103,7 +104,7 @@ class Alert(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     req_id = Column(String(100), nullable=False, index=True)
-    fingerprint = Column(String(255), unique=True, nullable=False, index=True)
+    fingerprint = Column(String(255), nullable=False, index=True)
     alert_status = Column(String(50), nullable=False, index=True)
     processing_status = Column(String(50), default="new", nullable=False, index=True)
     alert_name = Column(String(255), nullable=False, index=True)
