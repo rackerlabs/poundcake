@@ -16,7 +16,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 # Config: No ST2 keys required here!
-API_BASE_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000/api/v1")
+POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
+API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 
 # System request ID for polling operations (distinguishes system calls from alert processing)

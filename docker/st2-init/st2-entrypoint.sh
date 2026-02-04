@@ -9,6 +9,10 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Setup Environment Paths (CRITICAL for Service Discovery)
+export PYTHONPATH=$PYTHONPATH:/opt/stackstorm/st2/lib/python3.10/site-packages
+export PATH=$PATH:/opt/stackstorm/st2/bin
+
 # Install envsubst if not available
 if ! command -v envsubst &> /dev/null; then
     log "envsubst not found, installing gettext-base..."
@@ -44,8 +48,10 @@ if [ ! -f "/etc/st2/st2.conf" ]; then
     exit 1
 fi
 
-log "[OK] st2.conf generated successfully"
+# Register Content
+log "Registering StackStorm content and setting up virtualenvs..."
+st2-register-content --register-all --setup-virtualenvs || log "Warning: Registration failed, continuing anyway..."
 
-# Execute the command passed to this script (the actual ST2 service)
-log "Starting StackStorm service: $@"
+# Start the Service
+log "[OK] Initialization complete. Starting: $@"
 exec "$@"

@@ -51,16 +51,22 @@ def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, fina
     if status: payload["processing_status"] = status
     if st2_status: payload["st2_status"] = st2_status
     if error_msg: payload["error_message"] = error_msg
-        
+
     if final_status:
         now = datetime.now(timezone.utc)
         payload["processing_status"] = "complete"
         payload["completed_at"] = now.isoformat()
-        
+
         # Calculate duration using started_at (fallback to created_at)
         start_str = oven.get("started_at") or oven.get("created_at")
         if start_str:
-            start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            # FIX: Convert string to aware datetime
+            dt_obj = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            if dt_obj.tzinfo is None:
+                start_dt = dt_obj.replace(tzinfo=timezone.utc)
+            else:
+                start_dt = dt_obj
+
             duration = (now - start_dt).total_seconds()
             payload["actual_duration"] = int(duration)
 
@@ -99,8 +105,15 @@ def check_for_timeouts(oven, req_id):
     """
     created_at_str = oven.get("created_at")
     if not created_at_str: return False
-        
-    created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+
+    # Ensure the string is interpreted correctly
+    # and force it to be UTC aware
+    dt_obj = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+    if dt_obj.tzinfo is None:
+        created_at = dt_obj.replace(tzinfo=timezone.utc)
+    else:
+        created_at = dt_obj
+
     elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
     
     expected = oven.get("expected_duration") or 60
@@ -108,7 +121,7 @@ def check_for_timeouts(oven, req_id):
     hard_timeout = expected * 5
     extra = {"req_id": req_id}
 
-    # 1. Hard Timeout Check
+    # Hard Timeout Check
     if elapsed > hard_timeout:
         logger.critical(f"Oven {oven['id']} exceeded safety timeout ({int(elapsed)}s). Killing.", extra=extra)
         cancel_st2_execution(oven.get("action_id"), req_id)
@@ -120,7 +133,7 @@ def check_for_timeouts(oven, req_id):
         )
         return True
 
-    # 2. SLA Warning Check
+    # SLA Warning Check
     if elapsed > sla_threshold:
         logger.warning(f"Oven {oven['id']} running past SLA buffer ({int(elapsed)}s > {int(sla_threshold)}s)", extra=extra)
     
