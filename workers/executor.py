@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Oven Executor: Polls the API and triggers StackStorm via Bridge."""
+"""Oven Executor: Polls for pending Oven tasks calls /stackstorm/execute API"""
 
 import os
 import time
@@ -16,7 +16,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 # Config: No ST2 keys required here!
-API_BASE_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000/api/v1")
+POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
+API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 
 # System request ID for polling operations (distinguishes system calls from alert processing)
@@ -40,7 +41,7 @@ def wait_for_api():
 
         attempt += 1
         if attempt < max_attempts:
-            time.sleep(2)  # Check every 2 seconds
+            time.sleep(2)
 
     logger.error("API did not become ready after %d attempts. Starting anyway...", max_attempts)
     return False
@@ -54,7 +55,7 @@ def run_executor():
 
     while True:
         try:
-            # 1. Fetch next 'new' oven task (system operation, not tied to specific alert)
+            # Fetch next 'new' oven task
             resp = requests.get(
                 f"{API_BASE_URL}/ovens",
                 params={"processing_status": "new", "limit": 1},
@@ -70,7 +71,6 @@ def run_executor():
             task = tasks[0]
             oven_id = task["id"]
             # Switch from system polling req_id to alert's req_id for all subsequent operations
-            # This ensures end-to-end traceability for this specific alert
             req_id = task["req_id"]
 
             # Get ingredient details (includes st2_action and parameters)
@@ -83,8 +83,7 @@ def run_executor():
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # 2. Proxy the request through the API Bridge
-            # Note: req_id passed in X-Request-ID header, not in parameters
+            # Proxy the request through the API Bridge
             logger.info("[%s] Triggering %s via API bridge", req_id, action_ref)
 
             try:
@@ -99,7 +98,7 @@ def run_executor():
                     st2_data = bridge_resp.json()
                     st2_id = st2_data.get("id")
 
-                    # 3. Update task status with started timestamp
+                    # Update task status with started timestamp
                     current_time = datetime.now(timezone.utc).isoformat()
                     requests.patch(
                         f"{API_BASE_URL}/ovens/{oven_id}",

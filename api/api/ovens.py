@@ -56,6 +56,7 @@ async def bake_ovens(
     if not recipe:
         # Close alert if no recipe exists
         alert.processing_status = "complete"
+        alert.updated_at = datetime.now(timezone.utc)        
         db.commit()
 
         logger.error(
@@ -167,16 +168,12 @@ async def list_ovens(
 
     return ovens
 
-
 @router.put("/ovens/{oven_id}", response_model=OvenResponse)
 @router.patch("/ovens/{oven_id}", response_model=OvenResponse)
 async def update_oven(
     request: Request, oven_id: int, payload: OvenUpdate, db: Session = Depends(get_db)
 ):
-    """Updates oven status/action_id from oven.py or results from Timer.
-
-    Supports both PUT and PATCH for partial updates (PATCH is more semantically correct).
-    """
+    """Updates oven status/action_id from oven.py or results from Timer."""
     req_id = request.state.req_id
 
     logger.info("update_oven: Starting", extra={"req_id": req_id, "oven_id": oven_id})
@@ -193,12 +190,34 @@ async def update_oven(
     db.commit()
     db.refresh(oven)
 
+    # --- Parent Alert Status Synchronization ---
+    # List of terminal statuses that count as "finished"
+    terminal_statuses = ["complete", "failed", "abandoned", "timeout", "canceled"]
+    
+    if oven.processing_status in terminal_statuses:
+        # Check if any other ovens for this alert are still active
+        remaining_active = db.query(Oven).filter(
+            Oven.alert_id == oven.alert_id,
+            Oven.processing_status.notin_(terminal_statuses),
+            Oven.id != oven.id
+        ).count()
+
+        if remaining_active == 0:
+            alert = db.query(Alert).filter(Alert.id == oven.alert_id).first()
+            if alert and alert.processing_status != "complete":
+                logger.info(
+                    "update_oven: All ovens finished. Closing alert.", 
+                    extra={"req_id": req_id, "alert_id": alert.id}
+                )
+                alert.processing_status = "complete"
+                alert.updated_at = datetime.now(timezone.utc)
+                db.commit()
+
     logger.info(
         "update_oven: Oven updated successfully",
         extra={
             "req_id": req_id,
             "oven_id": oven_id,
-            "fields_updated": len(update_data),
             "new_status": oven.processing_status,
         },
     )
