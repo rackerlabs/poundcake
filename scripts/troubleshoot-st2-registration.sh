@@ -169,7 +169,7 @@ fi
 if ! docker compose exec -T stackstorm-actionrunner test -d /opt/stackstorm/packs/core; then
     echo "❌ CRITICAL: Core pack missing"
     echo "   → Run manual registration:"
-    echo "   docker compose exec stackstorm-actionrunner st2-register-content --register-all --setup-virtualenvs --config-file /etc/st2/st2.conf"
+    echo "   docker compose exec stackstorm-actionrunner st2-register-content --register-all --register-setup-virtualenvs --config-file /etc/st2/st2.conf"
     echo ""
 fi
 

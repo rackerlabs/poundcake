@@ -50,7 +50,7 @@ fi
 
 # Register Content
 log "Registering StackStorm content and setting up virtualenvs..."
-st2-register-content --register-all --setup-virtualenvs --config-file /etc/st2/st2.conf
+st2-register-content --register-all --register-setup-virtualenvs --config-file /etc/st2/st2.conf
 
 if [ $? -eq 0 ]; then
     log "[OK] Content registration successful"

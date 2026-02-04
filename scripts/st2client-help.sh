@@ -79,7 +79,7 @@ echo "   docker compose exec st2client /opt/stackstorm/st2/bin/python3 -m st2com
 echo ""
 
 echo "🔍 Re-register Content (if needed)"
-echo "   docker compose exec st2client st2-register-content --register-all --setup-virtualenvs --config-file /etc/st2/st2.conf"
+echo "   docker compose exec st2client st2-register-content --register-all --register-setup-virtualenvs --config-file /etc/st2/st2.conf"
 echo ""
 
 echo "========================================="
