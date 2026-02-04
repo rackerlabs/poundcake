@@ -25,10 +25,9 @@ ST2_API_KEY_FILE = "/app/config/st2_api_key"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(req_id)s] %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger("timer")
-
 
 def get_st2_api_key():
     """Read ST2 API key from file."""
@@ -36,12 +35,9 @@ def get_st2_api_key():
         if os.path.exists(ST2_API_KEY_FILE):
             with open(ST2_API_KEY_FILE, "r") as f:
                 key = f.read().strip()
-                if key:
-                    return key
-    except Exception:
-        pass
+                if key: return key
+    except Exception: pass
     return os.getenv("ST2_API_KEY")
-
 
 def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, final_status=False):
     """
@@ -51,13 +47,10 @@ def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, fina
     oven_id = oven.get("id")
     payload = {}
     extra = {"req_id": req_id}
-
-    if status:
-        payload["processing_status"] = status
-    if st2_status:
-        payload["st2_status"] = st2_status
-    if error_msg:
-        payload["error_message"] = error_msg
+    
+    if status: payload["processing_status"] = status
+    if st2_status: payload["st2_status"] = st2_status
+    if error_msg: payload["error_message"] = error_msg
 
     if final_status:
         now = datetime.now(timezone.utc)
@@ -90,7 +83,6 @@ def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, fina
         logger.error(f"Failed to update Oven {oven_id}: {e}", extra=extra)
         return False
 
-
 def cancel_st2_execution(action_id, req_id):
     """Instructs StackStorm to stop an execution."""
     api_key = get_st2_api_key()
@@ -105,10 +97,9 @@ def cancel_st2_execution(action_id, req_id):
         logger.error(f"Error canceling ST2 action {action_id}: {e}", extra={"req_id": req_id})
     return False
 
-
 def check_for_timeouts(oven, req_id):
     """
-    Evaluates timeouts.
+    Evaluates timeouts. 
     SLA Warning: expected_duration * (1 + buffer)
     Hard Timeout: expected_duration * 5 (Safety net)
     """
