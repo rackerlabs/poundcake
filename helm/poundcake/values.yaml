@@ -327,7 +327,7 @@ persistence:
 prometheus:
   # Prometheus API URL for querying metrics
   url: "http://prometheus-server.prometheus.svc.cluster.local:9090"
-  verifySsl: true
+  verifySsl: false
 
   # Prometheus Operator CRD settings (Kubernetes)
   # When enabled, PoundCake can manage PrometheusRule CRDs directly
