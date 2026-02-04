@@ -139,7 +139,7 @@ services:
     volumes:
       - mongo_data:/data/db
       # Uses the user creation script for the 'st2' database
-      - ./docker/mongo-init/01-create-st2-user.sh:/docker-entrypoint-initdb.d/01-create-st2-user.sh:ro
+      - ./docker/mongodb-init/01-create-st2-user.sh:/docker-entrypoint-initdb.d/01-create-st2-user.sh:ro
     networks:
       - poundcake
     healthcheck:
@@ -249,9 +249,9 @@ services:
     command: ["/opt/stackstorm/st2/bin/st2actionrunner", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
-  st2client:
+  stackstorm-bootstrap:
     image: stackstorm/st2:3.9.0
-    container_name: st2client
+    container_name: stackstorm-bootstrap
     depends_on:
       stackstorm-api:
         condition: service_healthy
@@ -262,6 +262,8 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
       ST2_AUTH_URL: http://stackstorm-auth:9100
       ST2_API_URL: http://stackstorm-api:9101
+      ST2_AUTH_USER: ${ST2_AUTH_USER:-st2admin}
+      ST2_AUTH_PASSWORD: ${ST2_AUTH_PASSWORD:-Ch@ngeMe}
     volumes:
       - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
       - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
@@ -271,8 +273,34 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    # The setup script registers content and installs the kubernetes and rackspace packs
-    command: ["sh", "-c", "/automated-setup.sh && tail -f /dev/null"]
+    # Bootstrap runs once: registers content, installs packs, generates API keys, then exits
+    command: ["/automated-setup.sh"]
+    restart: on-failure
+
+  st2client:
+    image: stackstorm/st2:3.9.0
+    container_name: st2client
+    depends_on:
+      stackstorm-bootstrap:
+        condition: service_completed_successfully
+      stackstorm-api:
+        condition: service_healthy
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+      ST2_AUTH_URL: http://stackstorm-auth:9100
+      ST2_API_URL: http://stackstorm-api:9101
+      ST2_AUTH_USER: ${ST2_AUTH_USER:-st2admin}
+      ST2_AUTH_PASSWORD: ${ST2_AUTH_PASSWORD:-Ch@ngeMe}
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./config:/app/config:ro
+    networks:
+      - poundcake
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    # Client stays alive for interactive troubleshooting and debugging
+    command: ["sh", "-c", "echo 'ST2 Client ready for troubleshooting' && tail -f /dev/null"]
     restart: unless-stopped
 
 networks:

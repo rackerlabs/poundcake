@@ -5,5 +5,3 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """PoundCake Oven Service - Task orchestration with dependency management."""
-
-__version__ = "0.0.1"

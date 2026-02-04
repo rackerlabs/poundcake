@@ -54,4 +54,28 @@ for pack in kubernetes rackspace; do
     fi
 done
 
-echo "Setup Complete!"
+echo ""
+echo "========================================="
+echo "  Verifying Core Components"
+echo "========================================="
+
+# Verify core pack is available
+if st2 action list --pack=core > /dev/null 2>&1; then
+    echo "[OK] Core pack verified and functional"
+    echo ""
+    echo "Sample core actions:"
+    st2 action list --pack=core | head -5
+else
+    echo "[ERROR] Core pack not available or not functional!"
+    echo "This is a critical issue - PoundCake requires core pack."
+    exit 1
+fi
+
+echo ""
+echo "All registered packs:"
+st2 pack list
+
+echo ""
+echo "========================================="
+echo "  Setup Complete!"
+echo "========================================="

@@ -5,5 +5,3 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """PoundCake CLI - Command-line interface for PoundCake API."""
-
-__version__ = "0.0.1"

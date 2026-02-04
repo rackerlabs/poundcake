@@ -50,7 +50,17 @@ fi
 
 # Register Content
 log "Registering StackStorm content and setting up virtualenvs..."
-st2-register-content --register-all --setup-virtualenvs || log "Warning: Registration failed, continuing anyway..."
+st2-register-content --register-all --setup-virtualenvs --config-file /etc/st2/st2.conf
+
+if [ $? -eq 0 ]; then
+    log "[OK] Content registration successful"
+    log "Packs directory:"
+    ls -la /opt/stackstorm/packs/ 2>/dev/null | head -10 || log "Could not list packs"
+else
+    log "[ERROR] Content registration failed!"
+    log "This service may not function correctly without registered content."
+    # Don't exit - let the service start and show errors for debugging
+fi
 
 # Start the Service
 log "[OK] Initialization complete. Starting: $@"
