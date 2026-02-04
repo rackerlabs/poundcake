@@ -249,6 +249,104 @@ services:
     command: ["/opt/stackstorm/st2/bin/st2actionrunner", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
+  stackstorm-stream:
+    image: stackstorm/st2:3.9.0
+    container_name: stackstorm-stream
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+    depends_on:
+      stackstorm-api:
+        condition: service_healthy
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+    ports:
+      - "127.0.0.1:9102:9102"
+    networks:
+      - poundcake
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2stream", "--config-file", "/etc/st2/st2.conf"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "st2stream"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  stackstorm-workflowengine:
+    image: stackstorm/st2:3.9.0
+    container_name: stackstorm-workflowengine
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+    depends_on:
+      stackstorm-api:
+        condition: service_healthy
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+    networks:
+      - poundcake
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2workflowengine", "--config-file", "/etc/st2/st2.conf"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "st2workflowengine"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  stackstorm-notifier:
+    image: stackstorm/st2:3.9.0
+    container_name: stackstorm-notifier
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+    depends_on:
+      stackstorm-api:
+        condition: service_healthy
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+    networks:
+      - poundcake
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2notifier", "--config-file", "/etc/st2/st2.conf"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "st2notifier"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  stackstorm-garbagecollector:
+    image: stackstorm/st2:3.9.0
+    container_name: stackstorm-garbagecollector
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+    depends_on:
+      stackstorm-api:
+        condition: service_healthy
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+    networks:
+      - poundcake
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2garbagecollector", "--config-file", "/etc/st2/st2.conf"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "st2garbagecollector"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
   stackstorm-bootstrap:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-bootstrap
