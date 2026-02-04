@@ -5,6 +5,7 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """API routes for Oven (task execution) management."""
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -31,7 +32,7 @@ logger = get_logger(__name__)
 async def bake_ovens(
     request: Request, alert_id: int, db: Session = Depends(get_db)
 ) -> BakeResponse:
-    """The 'Chef' logic: Creates individual Oven tasks from a Recipe."""
+    """Creates individual Oven tasks from a Recipe."""
     req_id = request.state.req_id
 
     logger.info("bake_ovens: Starting", extra={"req_id": req_id, "alert_id": alert_id})
@@ -57,13 +58,13 @@ async def bake_ovens(
         alert.processing_status = "complete"
         db.commit()
 
-        logger.info(
+        logger.error(
             "bake_ovens: No recipe found, alert closed",
             extra={"req_id": req_id, "alert_id": alert_id, "group_name": alert.group_name},
         )
         return BakeResponse(status="ignored", reason=f"No recipe for {alert.group_name}")
 
-    # Fetch ingredients (steps)
+    # Fetch ingredients
     ingredients = (
         db.query(Ingredient)
         .filter(Ingredient.recipe_id == recipe.id)

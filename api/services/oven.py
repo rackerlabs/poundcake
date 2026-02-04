@@ -4,19 +4,8 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Oven service - scheduled crawler for processing alerts.
+"""Oven service - scheduled crawler for processing alerts."""
 
-This service runs as a scheduled background task that:
-1. Crawls the alerts table looking for processing_status = 'NEW'
-2. For each NEW alert, queries recipes by group_name
-3. Parses recipe.task_list (comma-separated UUIDs)
-4. Creates one oven entry per task in task_list
-5. POSTs to /api/v1/alerts/process to trigger task execution
-
-The oven service ONLY talks to PoundCake API endpoints - it does NOT
-access the database directly. All database operations and StackStorm
-integration happen through the API layer.
-"""
 import os
 import time
 import requests

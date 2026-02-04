@@ -56,7 +56,10 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
 
     existing = (
         db.query(Alert)
-        .filter(Alert.fingerprint == fingerprint, Alert.processing_status != "complete")
+        .filter(
+            Alert.fingerprint == fingerprint, Alert.processing_status != "complete"
+        )  # pyright: ignore[reportOptionalCall]
+        .order_by(Alert.created_at.desc())
         .first()
     )
 
@@ -77,7 +80,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
                 req_id=req_id,  # Use request ID from webhook
                 fingerprint=fingerprint,
                 alert_name=alert_name,
-                group_name=alert_name,  # Recipe Match Key
+                group_name=alert_name,
                 alert_status="firing",
                 processing_status="new",
                 severity=labels.get("severity", "unknown"),
