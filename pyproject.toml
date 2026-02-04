@@ -63,6 +63,7 @@ disallow_untyped_defs = true
 module = [
     "api.api.*",
     "api.main",
+    "api.migrate",
 ]
 disallow_untyped_defs = false
 
