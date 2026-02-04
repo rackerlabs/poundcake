@@ -347,6 +347,30 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  stackstorm-scheduler:
+    image: stackstorm/st2:3.9.0
+    container_name: stackstorm-scheduler
+    environment:
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+    depends_on:
+      stackstorm-api:
+        condition: service_healthy
+    volumes:
+      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+    networks:
+      - poundcake
+    entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
+    command: ["/opt/stackstorm/st2/bin/st2scheduler", "--config-file", "/etc/st2/st2.conf"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "st2scheduler"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
   stackstorm-bootstrap:
     image: stackstorm/st2:3.9.0
     container_name: stackstorm-bootstrap
