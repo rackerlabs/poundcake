@@ -25,9 +25,10 @@ ST2_API_KEY_FILE = "/app/config/st2_api_key"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(req_id)s] %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("timer")
+
 
 def get_st2_api_key():
     """Read ST2 API key from file."""
@@ -35,9 +36,12 @@ def get_st2_api_key():
         if os.path.exists(ST2_API_KEY_FILE):
             with open(ST2_API_KEY_FILE, "r") as f:
                 key = f.read().strip()
-                if key: return key
-    except Exception: pass
+                if key:
+                    return key
+    except Exception:
+        pass
     return os.getenv("ST2_API_KEY")
+
 
 def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, final_status=False):
     """
@@ -47,10 +51,13 @@ def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, fina
     oven_id = oven.get("id")
     payload = {}
     extra = {"req_id": req_id}
-    
-    if status: payload["processing_status"] = status
-    if st2_status: payload["st2_status"] = st2_status
-    if error_msg: payload["error_message"] = error_msg
+
+    if status:
+        payload["processing_status"] = status
+    if st2_status:
+        payload["st2_status"] = st2_status
+    if error_msg:
+        payload["error_message"] = error_msg
 
     if final_status:
         now = datetime.now(timezone.utc)
@@ -75,13 +82,14 @@ def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, fina
             f"{POUNDCAKE_API_URL}/ovens/{oven_id}",
             json=payload,
             headers={"X-Request-ID": req_id},
-            timeout=10
+            timeout=10,
         )
         resp.raise_for_status()
         return True
     except Exception as e:
         logger.error(f"Failed to update Oven {oven_id}: {e}", extra=extra)
         return False
+
 
 def cancel_st2_execution(action_id, req_id):
     """Instructs StackStorm to stop an execution."""
@@ -90,21 +98,23 @@ def cancel_st2_execution(action_id, req_id):
         requests.delete(
             f"{ST2_API_URL}/executions/{action_id}",
             headers={"St2-Api-Key": api_key, "X-Request-ID": req_id},
-            timeout=10
+            timeout=10,
         )
         return True
     except Exception as e:
         logger.error(f"Error canceling ST2 action {action_id}: {e}", extra={"req_id": req_id})
     return False
 
+
 def check_for_timeouts(oven, req_id):
     """
-    Evaluates timeouts. 
+    Evaluates timeouts.
     SLA Warning: expected_duration * (1 + buffer)
     Hard Timeout: expected_duration * 5 (Safety net)
     """
     created_at_str = oven.get("created_at")
-    if not created_at_str: return False
+    if not created_at_str:
+        return False
 
     # Ensure the string is interpreted correctly
     # and force it to be UTC aware
@@ -115,7 +125,7 @@ def check_for_timeouts(oven, req_id):
         created_at = dt_obj
 
     elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
-    
+
     expected = oven.get("expected_duration") or 60
     sla_threshold = expected * (1 + SLA_BUFFER)
     hard_timeout = expected * 5
@@ -123,21 +133,28 @@ def check_for_timeouts(oven, req_id):
 
     # Hard Timeout Check
     if elapsed > hard_timeout:
-        logger.critical(f"Oven {oven['id']} exceeded safety timeout ({int(elapsed)}s). Killing.", extra=extra)
+        logger.critical(
+            f"Oven {oven['id']} exceeded safety timeout ({int(elapsed)}s). Killing.", extra=extra
+        )
         cancel_st2_execution(oven.get("action_id"), req_id)
         update_oven(
-            oven, req_id, 
-            st2_status="timeout", 
-            error_msg=f"Task killed: elapsed time {int(elapsed)}s exceeded 5x expected duration", 
-            final_status=True
+            oven,
+            req_id,
+            st2_status="timeout",
+            error_msg=f"Task killed: elapsed time {int(elapsed)}s exceeded 5x expected duration",
+            final_status=True,
         )
         return True
 
     # SLA Warning Check
     if elapsed > sla_threshold:
-        logger.warning(f"Oven {oven['id']} running past SLA buffer ({int(elapsed)}s > {int(sla_threshold)}s)", extra=extra)
-    
+        logger.warning(
+            f"Oven {oven['id']} running past SLA buffer ({int(elapsed)}s > {int(sla_threshold)}s)",
+            extra=extra,
+        )
+
     return False
+
 
 def monitor_ovens():
     """Polls for processing ovens and updates terminal states."""
@@ -160,13 +177,14 @@ def monitor_ovens():
                 continue
 
             # B. Sync with StackStorm
-            if not action_id: continue
+            if not action_id:
+                continue
 
             api_key = get_st2_api_key()
             st2_resp = requests.get(
-                f"{ST2_API_URL}/executions/{action_id}", 
-                headers={"St2-Api-Key": api_key, "X-Request-ID": req_id}, 
-                timeout=10
+                f"{ST2_API_URL}/executions/{action_id}",
+                headers={"St2-Api-Key": api_key, "X-Request-ID": req_id},
+                timeout=10,
             )
 
             if st2_resp.status_code == 200:
@@ -178,16 +196,27 @@ def monitor_ovens():
                     if st2_status == "failed":
                         res = st2_data.get("result", {})
                         err = res.get("error") or "StackStorm execution failed"
-                    
-                    update_oven(oven, req_id, st2_status=st2_status, error_msg=err, final_status=True)
-                    logger.info(f"Oven {oven['id']} finalized with ST2 status: {st2_status}", extra=extra)
-            
+
+                    update_oven(
+                        oven, req_id, st2_status=st2_status, error_msg=err, final_status=True
+                    )
+                    logger.info(
+                        f"Oven {oven['id']} finalized with ST2 status: {st2_status}", extra=extra
+                    )
+
             elif st2_resp.status_code == 404:
                 logger.error(f"Oven {oven['id']} action {action_id} not found in ST2.", extra=extra)
-                update_oven(oven, req_id, st2_status="abandoned", error_msg="ST2 ID not found", final_status=True)
+                update_oven(
+                    oven,
+                    req_id,
+                    st2_status="abandoned",
+                    error_msg="ST2 ID not found",
+                    final_status=True,
+                )
 
     except Exception as e:
         logger.error(f"Error in monitor loop: {str(e)}", extra={"req_id": "SYSTEM"})
+
 
 def wait_for_api():
     logger.info("Waiting for API health check...", extra={"req_id": "SYSTEM"})
@@ -195,12 +224,17 @@ def wait_for_api():
         try:
             if requests.get(f"{POUNDCAKE_API_URL}/health", timeout=5).status_code == 200:
                 return True
-        except Exception: pass
+        except Exception:
+            pass
         time.sleep(2)
+
 
 if __name__ == "__main__":
     wait_for_api()
-    logger.info(f"Timer started. Interval: {TIMER_INTERVAL}s, SLA Buffer: {int(SLA_BUFFER*100)}%", extra={"req_id": "SYSTEM"})
+    logger.info(
+        f"Timer started. Interval: {TIMER_INTERVAL}s, SLA Buffer: {int(SLA_BUFFER*100)}%",
+        extra={"req_id": "SYSTEM"},
+    )
     while True:
         monitor_ovens()
         time.sleep(TIMER_INTERVAL)
