@@ -5,10 +5,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Database migration management script for PoundCake.
-
-This script provides commands for managing database migrations using Alembic.
-"""
+"""Database migration management script using alembic."""
 
 import sys
 import os

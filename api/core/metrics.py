@@ -4,10 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Prometheus metrics definitions for PoundCake.
-
-This module defines application metrics that are exposed via the /metrics endpoint.
-"""
+"""Prometheus metrics definitions for PoundCake."""
 
 from prometheus_client import Counter, Histogram, Gauge, Info
 

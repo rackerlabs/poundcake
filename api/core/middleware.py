@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Middleware for request ID tracking - pre_heat function for ALL HTTP verbs."""
+"""Middleware for request ID tracking."""
 
 import time
 import uuid

@@ -26,14 +26,14 @@ settings = get_settings()
 @router.get("/health", response_model=HealthResponse)
 async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
     """Health check using the existing StackStorm client health_check method."""
-    # 1. Check Database
+    # Check Database
     try:
         db.execute(text("SELECT 1"))
         db_status = "healthy"
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
 
-    # 2. Check StackStorm via existing async client
+    # Check StackStorm via existing async client
     st2_client = get_stackstorm_client()
     is_st2_healthy = await st2_client.health_check()
     st2_status = "healthy" if is_st2_healthy else "unhealthy"
