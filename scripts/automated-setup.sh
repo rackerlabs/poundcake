@@ -28,31 +28,22 @@ export ST2_AUTH_TOKEN=$ST2_TOKEN
 
 # 3. Idempotent API Key Creation
 # Check if key exists AND is still valid in the DB
-if [ -f "/app/config/st2_api_key" ]; then
+if [ -f "/app/config/st2_api_key" ] && [ -s "/app/config/st2_api_key" ]; then
     OLD_KEY=$(cat /app/config/st2_api_key)
-    if curl -s -k -H "St2-Api-Key: $OLD_KEY" http://stackstorm-api:9101/v1/actions > /dev/null; then
+    if curl -s -k -H "St2-Api-Key: $OLD_KEY" http://stackstorm-api:9101/v1/actions > /dev/null 2>&1; then
         echo "[OK] Existing API Key is valid. Skipping creation."
     else
         echo "[WARN] Key file found but invalid. Re-generating..."
-        st2 apikey create -m "PoundCake-Internal" -u ${ST2_AUTH_USER} > /app/config/st2_api_key
+        st2 apikey create -k -m '{"description": "PoundCake-Internal"}' > /app/config/st2_api_key
     fi
 else
     echo "Generating new API Key..."
-    st2 apikey create -m "PoundCake-Internal" -u ${ST2_AUTH_USER} > /app/config/st2_api_key
+    st2 apikey create -k -m '{"description": "PoundCake-Internal"}' > /app/config/st2_api_key
 fi
 
-# 4. Register Content & Install Packs
+# 4. Register Content (packs will be installed later if needed)
 echo "Registering content..."
 st2-register-content --register-all --config-file /etc/st2/st2.conf
-
-for pack in kubernetes rackspace; do
-    if st2 pack list | grep -q "$pack"; then
-        echo "[OK] Pack $pack already installed."
-    else
-        echo "Installing $pack..."
-        st2 pack install "$pack"
-    fi
-done
 
 echo ""
 echo "========================================="
@@ -79,3 +70,8 @@ echo ""
 echo "========================================="
 echo "  Setup Complete!"
 echo "========================================="
+echo ""
+echo "Note: Additional packs (kubernetes, rackspace, etc.) can be"
+echo "      installed later using the st2client container:"
+echo "      docker compose exec st2client st2 pack install <pack-name>"
+echo ""
