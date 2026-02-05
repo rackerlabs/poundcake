@@ -77,6 +77,16 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.mariadbOperator.enabled }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Construct database URL with password from secret
+              export POUNDCAKE_DATABASE_URL="mysql+pymysql://{{ include "poundcake.mariadbUsername" . }}:${MARIADB_PASSWORD}@{{ include "poundcake.mariadbHost" . }}:3306/{{ include "poundcake.mariadbDatabaseName" . }}"
+              # Start the application
+              exec uvicorn api.main:app --host ${POUNDCAKE_SERVER_HOST} --port ${POUNDCAKE_SERVER_PORT}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.config.port }}
@@ -115,15 +125,12 @@ spec:
               value: {{ .Values.database.url | quote }}
               {{- end }}
             {{- else if .Values.mariadbOperator.enabled }}
-            # MariaDB Operator: password from generated secret
+            # MariaDB Operator: password from generated secret (URL constructed in command)
             - name: MARIADB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.mariadbUserSecretName" . }}
                   key: {{ .Values.mariadbOperator.user.passwordSecretKey | default "password" }}
-            # MariaDB Operator: construct database URL
-            - name: POUNDCAKE_DATABASE_URL
-              value: "mysql+pymysql://{{ include "poundcake.mariadbUsername" . }}:$(MARIADB_PASSWORD)@{{ include "poundcake.mariadbHost" . }}:3306/{{ include "poundcake.mariadbDatabaseName" . }}"
             {{- end }}
             {{- if .Values.celery.enabled }}
             - name: POUNDCAKE_CELERY_BROKER_URL

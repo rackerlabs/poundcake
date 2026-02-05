@@ -40,6 +40,11 @@ spec:
           echo "PoundCake Database Migration"
           echo "========================================"
 
+          {{- if .Values.mariadbOperator.enabled }}
+          # Construct database URL with password from secret
+          export POUNDCAKE_DATABASE_URL="mysql+pymysql://{{ include "poundcake.mariadbUsername" . }}:${MARIADB_PASSWORD}@{{ include "poundcake.mariadbHost" . }}:3306/{{ include "poundcake.mariadbDatabaseName" . }}"
+          {{- end }}
+
           # Change to project root where alembic.ini lives
           cd /app
 
@@ -105,8 +110,6 @@ spec:
             value: {{ .Values.database.url | quote }}
             {{- end }}
           {{- else if .Values.mariadbOperator.enabled }}
-          - name: POUNDCAKE_DATABASE_URL
-            value: {{ include "poundcake.databaseUrl" . | quote }}
           - name: MARIADB_PASSWORD
             valueFrom:
               secretKeyRef:
