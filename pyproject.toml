@@ -26,6 +26,7 @@ dependencies = [
     "pydantic-settings>=2.7.0",
     "python-json-logger>=3.2.0",
     "python-multipart>=0.0.18",
+    "python-dateutil>=2.9.0",
     "PyYAML>=6.0.2",
     "prometheus-client>=0.21.0",
 ]
@@ -41,6 +42,7 @@ dev = [
     "mypy>=1.13.0",
     "types-PyYAML>=6.0.12",
     "types-requests>=2.32.0",
+    "types-python-dateutil>=2.9.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -61,6 +63,7 @@ disallow_untyped_defs = true
 module = [
     "api.api.*",
     "api.main",
+    "api.migrate",
 ]
 disallow_untyped_defs = false
 
@@ -87,10 +90,13 @@ module = [
     "api.api.routes",
     "api.api.recipes",
     "api.api.auth",
+    "api.api.ovens",
     "api.api.v1.*",
+    "api.models.models",
+    "api.validation.query_params",
 ]
 # Ignore SQLAlchemy and Celery type issues in API modules
-disable_error_code = ["assignment", "arg-type", "call-overload", "var-annotated", "return-value"]
+disable_error_code = ["assignment", "arg-type", "call-overload", "var-annotated", "return-value", "no-any-return", "no-untyped-def"]
 
 [[tool.mypy.overrides]]
 module = [

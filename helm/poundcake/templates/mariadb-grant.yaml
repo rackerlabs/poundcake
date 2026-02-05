@@ -1,19 +1,5 @@
-# ____                        _  ____      _
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
-# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
-# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
-# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-#
-# ╔════════════════════════════════════════════════════════════════╗
-# ____                        _  ____      _         
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
-# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
-# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
-# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# ╚════════════════════════════════════════════════════════════════╝
 
 {{- if .Values.mariadbOperator.enabled }}
-{{- if .Capabilities.APIVersions.Has "k8s.mariadb.com/v1alpha1" }}
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: Grant
 metadata:
@@ -23,33 +9,24 @@ metadata:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: mariadb
 spec:
-  # Reference to the MariaDB instance
   mariaDbRef:
     name: {{ include "poundcake.mariadbName" . }}
     waitForIt: true
 
-  # Privileges to grant
   privileges:
     {{- range .Values.mariadbOperator.grants.privileges }}
     - {{ . | quote }}
     {{- end }}
 
-  # Database to grant privileges on
   database: {{ include "poundcake.mariadbDatabaseName" . }}
 
-  # Table (use * for all tables)
   table: "*"
 
-  # Username to grant privileges to
   username: {{ include "poundcake.mariadbUsername" . }}
 
-  # Grant option (allow user to grant privileges to others)
   grantOption: false
 
-  # Host
   host: "%"
 
-  # Retry configuration
   retryInterval: 5s
-{{- end }}
 {{- end }}

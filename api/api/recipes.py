@@ -8,14 +8,13 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
-from typing import List, Optional
+from typing import List
 
 from api.core.database import get_db
 from api.core.logging import get_logger
 from api.models.models import Recipe, Ingredient
 from api.schemas.schemas import (
     RecipeCreate,
-    RecipeResponse,
     RecipeDetailResponse,
     IngredientResponse,
     DeleteResponse,

@@ -6,9 +6,7 @@
 #
 """Health check and statistics endpoints."""
 
-import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session

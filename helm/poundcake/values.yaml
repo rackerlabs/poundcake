@@ -136,14 +136,22 @@ config:
   defaultTimeout: 300
   maxConcurrentRemediations: 10
 
-# StackStorm connection settings
+# StackStorm Helm Chart Integration
+# Controls whether to deploy StackStorm as a subchart or use external instance
 stackstorm:
-  # URL to StackStorm API (defaults to service in stackstorm namespace)
-  url: "http://stackstorm-st2api.stackstorm.svc.cluster.local:9101"
-  # URL to StackStorm Auth service (defaults to url if not specified)
-  # StackStorm HA deploys separate services for API and Auth
-  authUrl: "http://stackstorm-st2auth.stackstorm.svc.cluster.local:9100"
+  chart:
+    # Enable StackStorm subchart deployment (all-in-one mode)
+    # When true: StackStorm is deployed as part of this chart
+    # When false: Connect to external StackStorm instance using url/authUrl below
+    enabled: true
+
+  # Connection configuration
+  # When chart.enabled = true: These are auto-generated from subchart service names (leave empty)
+  # When chart.enabled = false: Set these to point to your external StackStorm instance
+  url: ""  # Auto-generated when subchart enabled: http://{{ .Release.Name }}-stackstorm-ha-st2api:9101
+  authUrl: ""  # Auto-generated when subchart enabled: http://{{ .Release.Name }}-stackstorm-ha-st2auth:9100
   verifySsl: false
+
   # API key or auth token (use secrets for production)
   apiKey: ""
   authToken: ""
@@ -159,99 +167,115 @@ stackstorm:
   # Admin credentials for auto API key generation
   adminUser: "st2admin"
   adminPassword: ""
-  adminPasswordSecret: "stackstorm-admin"
-  adminPasswordSecretKey: "password"
-  
-  # Redis configuration (required for StackStorm coordination)
-  redis:
-    enabled: true
-    # Use external Redis or deploy subchart
-    external: false
-    # External Redis settings (if external: true)
-    host: "redis.default.svc.cluster.local"
-    port: 6379
-    password: ""
-    database: 0
-    # Subchart settings (if external: false)
-    # Uses bitnami/redis chart
-    auth:
-      enabled: false
-    architecture: standalone
-    master:
-      persistence:
-        enabled: true
-        size: 8Gi
-    replica:
-      replicaCount: 0
-  
-  # RabbitMQ configuration (required for StackStorm task distribution)
-  rabbitmq:
-    enabled: true
-    # Use external RabbitMQ or deploy subchart
-    external: false
-    # External RabbitMQ settings (if external: true)
-    host: "rabbitmq.default.svc.cluster.local"
-    port: 5672
-    username: "stackstorm"
-    password: "stackstorm"
-    vhost: "/"
-    # Subchart settings (if external: false)
-    # Uses bitnami/rabbitmq chart
-    auth:
-      username: stackstorm
-      password: stackstorm
-    persistence:
-      enabled: true
-      size: 8Gi
-    service:
-      type: ClusterIP
-      port: 5672
-    # Management UI
-    management:
-      enabled: true
-      port: 15672
-  
-  # MongoDB configuration (required for StackStorm primary database)
+  adminPasswordSecret: "poundcake-st2-auth"
+  adminPasswordSecretKey: "ST2_AUTH_PASSWORD"
+
+# StackStorm subchart configuration
+# These values are passed to the stackstorm-ha subchart when stackstorm.chart.enabled = true
+stackstorm-chart:
+  # Disable bundled services in StackStorm chart (we deploy them at parent level for sharing)
   mongodb:
-    enabled: true
-    # Use external MongoDB or deploy subchart
-    external: false
-    # External MongoDB settings (if external: true)
-    host: "mongodb.default.svc.cluster.local"
-    port: 27017
-    database: "st2"
-    username: "stackstorm"
-    password: "stackstorm"
-    # Authentication database (usually admin for root user)
-    authDatabase: "admin"
-    # Connection options
-    replicaSet: ""
-    # Docker image settings
-    imageTag: "7.0.28"  # MongoDB 7.0.28 (latest 7.x, fully supported by StackStorm 3.9.0)
-    # Subchart settings (if external: false)
-    # Uses bitnami/mongodb chart
+    enabled: false
+
+  rabbitmq:
+    enabled: false
+
+  redis:
+    enabled: false
+
+  # StackStorm configuration
+  st2:
+    rbac:
+      enabled: true
+
+    # Admin user configuration
     auth:
-      enabled: true
-      rootPassword: "stackstorm"
-      username: "stackstorm"
-      password: "stackstorm"
-      database: "st2"
-    architecture: standalone
-    persistence:
-      enabled: true
-      size: 20Gi
-      storageClass: ""
-    service:
-      type: ClusterIP
-      port: 27017
-    # Resource limits for MongoDB
-    resources:
-      limits:
-        cpu: 1000m
-        memory: 2Gi
-      requests:
-        cpu: 500m
-        memory: 1Gi
+      username: st2admin
+      password: ""  # Auto-generated if empty
+
+    # Configure StackStorm to use parent-level services
+    # Note: Cannot use Helm templates here, must use actual service names
+    config: |
+      [database]
+      host = poundcake-mongodb
+      port = 27017
+      db_name = st2
+      username = stackstorm
+      password = stackstorm
+
+      [messaging]
+      url = amqp://stackstorm:stackstorm@poundcake-rabbitmq:5672
+
+      [coordination]
+      url = redis://poundcake-redis:6379
+
+      [api]
+      allow_origin = *
+
+# Redis configuration (used by StackStorm for coordination and optionally by PoundCake for caching)
+# Uses Redis Operator (OpsTree Labs) to deploy Redis
+redis:
+  enabled: true
+  # Use external Redis or deploy via operator
+  external: false
+  # External Redis settings (if external: true)
+  host: "redis.default.svc.cluster.local"
+  port: 6379
+  password: ""
+  database: 0
+  # Deployment settings (if external: false, uses Redis Operator)
+  image:
+    repository: quay.io/opstree/redis
+    tag: v7.0.15
+    pullPolicy: IfNotPresent
+  auth:
+    enabled: false
+    password: ""
+  persistence:
+    size: 1Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  metrics:
+    enabled: false
+    image:
+      repository: quay.io/opstree/redis-exporter
+      tag: v1.44.0
+
+# RabbitMQ configuration (used by StackStorm for task distribution and workflow coordination)
+# Uses RabbitMQ Operator to deploy RabbitMQ cluster
+rabbitmq:
+  enabled: true
+  # Use external RabbitMQ or deploy via operator
+  external: false
+  # External RabbitMQ settings (if external: true)
+  host: "rabbitmq.default.svc.cluster.local"
+  port: 5672
+  username: "stackstorm"
+  password: "stackstorm"
+  vhost: "/"
+  # Deployment settings (if external: false, uses RabbitMQ Operator)
+  replicas: 1
+  auth:
+    username: stackstorm
+    password: stackstorm
+  persistence:
+    size: 8Gi
+    storageClassName: ""
+  service:
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 
 # Alert-to-action mappings
 # These will be mounted as ConfigMap
@@ -296,13 +320,12 @@ mappings:
 
 # ServiceMonitor for Prometheus Operator
 serviceMonitor:
-  enabled: false
-  namespace: ""
+  enabled: true
+  namespace: prometheus
   interval: 30s
   scrapeTimeout: 10s
-  labels: {}
-  # selector:
-  #   prometheus: kube-prometheus
+  labels:
+    release: kube-prometheus-stack
 
 # Pod Disruption Budget
 podDisruptionBudget:
@@ -320,8 +343,9 @@ persistence:
 # Prometheus integration
 prometheus:
   # Prometheus API URL for querying metrics
-  url: "http://prometheus-server.prometheus.svc.cluster.local:9090"
-  verifySsl: true
+  # Default for kube-prometheus-stack installation
+  url: "http://kube-prometheus-stack-prometheus.prometheus.svc.cluster.local:9090"
+  verifySsl: false
 
   # Prometheus Operator CRD settings (Kubernetes)
   # When enabled, PoundCake can manage PrometheusRule CRDs directly
@@ -331,7 +355,7 @@ prometheus:
   # IMPORTANT: Labels to apply to PrometheusRule CRDs created by PoundCake
   # These MUST match your Prometheus Operator's ruleSelector, otherwise
   # Prometheus will not load the rules. Check your Prometheus CR with:
-  #   kubectl get prometheus -n <namespace> -o jsonpath='{.items[0].spec.ruleSelector}'
+  #   kubectl get prometheus -n prometheus -o jsonpath='{.items[0].spec.ruleSelector}'
   #
   # Default is for kube-prometheus-stack. Adjust if using a different release name.
   crdLabels:
@@ -460,7 +484,7 @@ database:
 mariadbOperator:
   # Enable MariaDB Operator integration
   # When true, the chart will check for the operator and create MariaDB CRDs
-  enabled: false
+  enabled: true
 
   # Namespace to deploy MariaDB resources (defaults to release namespace)
   namespace: ""
@@ -517,14 +541,17 @@ mariadbOperator:
     privileges:
       - "ALL PRIVILEGES"
 
-# MongoDB configuration (required for StackStorm)
+# MongoDB configuration (shared by StackStorm and PoundCake)
+# When stackstorm.chart.enabled = true, this MongoDB instance is used by both:
+# - StackStorm (st2 database)
+# - PoundCake (poundcake database, if needed)
 mongodb:
   # Enable MongoDB deployment
   enabled: true
-  
+
   # Use external MongoDB or deploy as part of the chart
   external: false
-  
+
   # External MongoDB settings (if external: true)
   host: "mongodb.default.svc.cluster.local"
   port: 27017
@@ -535,41 +562,49 @@ mongodb:
   existingSecret: ""
   usernameKey: "mongodb-username"
   passwordKey: "mongodb-password"
-  
+
   # MongoDB deployment settings (if external: false)
   image:
     repository: mongo
-    tag: "6.0"
+    tag: "7.0.28"  # MongoDB 7.0.28 (fully supported by StackStorm 3.9.0)
     pullPolicy: IfNotPresent
-  
-  # Storage configuration
+
+  # Authentication settings
+  auth:
+    enabled: true
+    rootPassword: ""  # Auto-generated if not provided
+    # Primary user for StackStorm
+    username: "stackstorm"
+    password: "stackstorm"
+    database: "st2"
+
+  # Storage configuration (increased for both StackStorm + PoundCake data)
   persistence:
     enabled: true
-    size: 10Gi
+    size: 20Gi
     storageClassName: ""
-  
+
   # Resource limits
   resources:
     requests:
-      cpu: 250m
-      memory: 512Mi
+      cpu: 500m
+      memory: 1Gi
     limits:
       cpu: 1000m
-      memory: 1Gi
-  
-  # MongoDB root credentials
-  rootUsername: "stackstorm"
-  rootPassword: ""  # Auto-generated if not provided
-  
+      memory: 2Gi
+
   # Service configuration
   service:
     type: ClusterIP
     port: 27017
 
 # Celery worker configuration for async task processing
+# NOTE: Celery deployment template not included in this chart version.
+# Worker services (oven, oven-service, timer) handle task processing instead.
+# Keep enabled for future Celery integration or if using external Celery workers.
 celery:
-  # Enable Celery workers (required for async alert processing)
-  enabled: true
+  # Enable Celery configuration (no deployment template currently)
+  enabled: false
 
   # Number of Celery worker replicas
   replicaCount: 1
@@ -592,3 +627,60 @@ celery:
 
   # Worker concurrency (number of parallel tasks)
   concurrency: 4
+
+# Oven service configuration
+# Executor service that polls for ovens and triggers their execution
+oven:
+  enabled: true
+  replicaCount: 1
+  pollInterval: 5
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Dispatcher service configuration
+# Polls API and triggers baking operations
+dispatcher:
+  enabled: true
+  replicaCount: 1
+  interval: 5
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Oven-service configuration
+# Dispatcher service that converts alerts into oven objects
+ovenService:
+  enabled: true
+  replicaCount: 1
+  interval: 5
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Timer service configuration
+# Monitoring service that tracks oven execution status in StackStorm
+timer:
+  enabled: true
+  replicaCount: 1
+  interval: 10
+  slaBufferPercent: 0.2
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

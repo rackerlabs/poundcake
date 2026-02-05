@@ -95,3 +95,8 @@ config/st2_api_key
 # Only ignore pycache within alembic
 alembic/__pycache__/
 alembic/**/__pycache__/
+
+# Helm chart artifacts
+# Chart tarballs are downloaded dependencies, not source files
+helm/poundcake/charts/*.tgz
+# NOTE: Chart.lock should be committed to pin versions

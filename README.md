@@ -110,6 +110,7 @@ docker compose logs -f api oven-service oven timer
 
 Containers:
 - **poundcake-api** - API server (webhooks, recipes, ST2 bridge)
+- **poundcake-ui** - Web UI (nginx-based frontend)
 - **poundcake-oven-service** - Dispatcher (alerts → ovens)
 - **poundcake-oven** - Executor (ovens → ST2 actions)
 - **poundcake-timer** - Monitor (tracks completions)
@@ -117,6 +118,7 @@ Containers:
 
 Services:
 - PoundCake API: http://localhost:8000
+- PoundCake UI: http://localhost:8080
 - API Documentation: http://localhost:8000/docs
 - StackStorm API: http://localhost:9101 (requires ST2_API_KEY)
 - RabbitMQ Management: http://localhost:15672 (guest/guest)

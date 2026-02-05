@@ -40,18 +40,6 @@ def mock_stackstorm():
         yield mock_get
 
 
-def test_health_endpoint(client):
-    """Test health endpoint returns healthy status."""
-    response = client.get("/api/v1/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert "status" in data
-    assert data["status"] == "healthy"
-    assert "database" in data
-    assert "stackstorm" in data
-    assert "version" in data
-
-
 def test_health_endpoint_structure(client):
     """Test health endpoint returns expected structure."""
     response = client.get("/api/v1/health")

@@ -1,0 +1,95 @@
+
+{{- if .Values.dispatcher.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "poundcake.fullname" . }}-dispatcher
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatcher
+spec:
+  replicas: {{ .Values.dispatcher.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "poundcake.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dispatcher
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dispatcher
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-api
+          image: curlimages/curl:latest
+          command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            echo "Waiting for PoundCake API to be ready..."
+
+            MAX_WAIT=300  # 5 minutes
+            ELAPSED=0
+            INTERVAL=5
+
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              if curl -sf http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1/health > /dev/null 2>&1; then
+                echo "✓ PoundCake API is ready"
+                exit 0
+              fi
+
+              echo "Waiting for API... (${ELAPSED}s / ${MAX_WAIT}s)"
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            echo "✗ Timeout waiting for PoundCake API"
+            exit 1
+      containers:
+        - name: dispatcher
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "workers/dispatcher.py"]
+          env:
+            - name: POUNDCAKE_API_URL
+              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
+            - name: OVEN_INTERVAL
+              value: {{ .Values.dispatcher.interval | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+          resources:
+            {{- toYaml .Values.dispatcher.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

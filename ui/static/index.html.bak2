@@ -986,14 +986,14 @@
                 let res;
                 if (isCreate) {
                     // POST request for creating a new rule
-                    res = await fetch(`/api/v1/prometheus/rules?rule_name=${ruleName}&group_name=${groupName}&file_name=${fileName}`, {
+                    res = await fetch(`/api/prometheus/rules?rule_name=${ruleName}&group_name=${groupName}&file_name=${fileName}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(ruleData)
                     });
                 } else {
                     // PUT request for updating an existing rule
-                    res = await fetch(`/api/v1/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
+                    res = await fetch(`/api/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(ruleData)
@@ -1045,7 +1045,7 @@
         async function deletePrometheusRule(ruleName, groupName, fileName) {
             if (!confirm(`Delete Prometheus rule "${ruleName}"?\n\nThis will create a PR to remove the rule.`)) return;
 
-            const res = await fetch(`/api/v1/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
+            const res = await fetch(`/api/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
                 method: 'DELETE'
             });
 
@@ -1484,7 +1484,7 @@ actions:
 
         async function editMapping(name) {
             editMode = true;
-            const res = await fetch(`/api/v1/mappings/${name}`);
+            const res = await fetch(`/api/mappings/${name}`);
             const data = await res.json();
 
             document.getElementById('modal-title').textContent = 'Edit Mapping';
@@ -1499,7 +1499,7 @@ actions:
             const name = document.getElementById('alert-name').value;
             const config = jsyaml.load(document.getElementById('mapping-config').value);
 
-            const url = editMode ? `/api/v1/mappings/${name}` : '/api/v1/mappings';
+            const url = editMode ? `/api/mappings/${name}` : '/api/v1/mappings';
             const method = editMode ? 'PUT' : 'POST';
             const body = editMode ? { config } : { alert_name: name, config };
 
@@ -1515,7 +1515,7 @@ actions:
 
         async function deleteMapping(name) {
             if (!confirm(`Delete mapping "${name}"?`)) return;
-            await fetch(`/api/v1/mappings/${name}`, { method: 'DELETE' });
+            await fetch(`/api/mappings/${name}`, { method: 'DELETE' });
             loadMappings();
         }
 
@@ -1553,7 +1553,7 @@ actions:
         }
 
         async function showAction(ref) {
-            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`);
+            const res = await fetch(`/api/stackstorm/actions/${ref}`);
             currentAction = await res.json();
             document.getElementById('action-title').textContent = ref;
             document.getElementById('action-details').textContent = JSON.stringify(currentAction, null, 2);
@@ -1590,7 +1590,7 @@ actions:
         }
 
         async function editAction(ref) {
-            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`);
+            const res = await fetch(`/api/stackstorm/actions/${ref}`);
             const action = await res.json();
 
             editActionMode = true;
@@ -1630,7 +1630,7 @@ actions:
 
             try {
                 if (editActionMode) {
-                    const res = await fetch(`/api/v1/stackstorm/actions/${ref}`, {
+                    const res = await fetch(`/api/stackstorm/actions/${ref}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
@@ -1664,7 +1664,7 @@ actions:
         async function deleteAction(ref) {
             if (!confirm(`Delete action "${ref}"?`)) return;
 
-            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`, {
+            const res = await fetch(`/api/stackstorm/actions/${ref}`, {
                 method: 'DELETE'
             });
 

@@ -231,3 +231,36 @@ Get the database URL - prioritizes explicit config over operator
 {{- printf "mysql+pymysql://%s:$(MARIADB_PASSWORD)@%s:3306/%s" $user $host $db }}
 {{- end }}
 {{- end }}
+
+{{/*
+Get StackStorm API URL - either from subchart service or external URL
+*/}}
+{{- define "poundcake.stackstormApiUrl" -}}
+{{- if .Values.stackstorm.chart.enabled }}
+{{- printf "http://%s-stackstorm-ha-st2api.%s.svc.cluster.local:9101" .Release.Name .Release.Namespace }}
+{{- else }}
+{{- .Values.stackstorm.url | required "stackstorm.url is required when stackstorm.chart.enabled is false" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Get StackStorm Auth URL - either from subchart service or external URL
+*/}}
+{{- define "poundcake.stackstormAuthUrl" -}}
+{{- if .Values.stackstorm.chart.enabled }}
+{{- printf "http://%s-stackstorm-ha-st2auth.%s.svc.cluster.local:9100" .Release.Name .Release.Namespace }}
+{{- else }}
+{{- .Values.stackstorm.authUrl | required "stackstorm.authUrl is required when stackstorm.chart.enabled is false" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Get StackStorm API key secret name
+*/}}
+{{- define "poundcake.stackstormApiKeySecret" -}}
+{{- if .Values.stackstorm.chart.enabled }}
+{{- printf "%s-stackstorm-ha-st2-apikeys" .Release.Name }}
+{{- else }}
+{{- .Values.stackstorm.existingSecret | default (printf "%s-stackstorm" (include "poundcake.fullname" .)) }}
+{{- end }}
+{{- end }}

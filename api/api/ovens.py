@@ -8,7 +8,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 from datetime import datetime, timezone
 
 from api.core.database import get_db
@@ -42,9 +42,7 @@ async def bake_ovens(
         "bake_ovens: Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name}
     )
 
-    recipe = (
-        db.query(Recipe).filter(Recipe.name == alert.group_name, Recipe.enabled == True).first()
-    )
+    recipe = db.query(Recipe).filter(Recipe.name == alert.group_name, Recipe.enabled).first()
 
     if not recipe:
         # Close alert if no recipe exists
