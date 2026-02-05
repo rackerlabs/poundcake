@@ -13,7 +13,6 @@
 # ╚════════════════════════════════════════════════════════════════╝
 
 {{- if .Values.mariadbOperator.enabled }}
-{{- if .Capabilities.APIVersions.Has "k8s.mariadb.com/v1alpha1" }}
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: User
 metadata:

@@ -13,7 +13,6 @@
 # ╚════════════════════════════════════════════════════════════════╝
 
 {{- if .Values.mariadbOperator.enabled }}
-{{- if .Capabilities.APIVersions.Has "k8s.mariadb.com/v1alpha1" }}
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: MariaDB
 metadata:
@@ -84,12 +83,4 @@ spec:
   # Update strategy
   updateStrategy:
     type: ReplicasFirstPrimaryLast
-
-{{- else }}
-# MariaDB Operator CRDs not found in cluster
-# Install the mariadb-operator first:
-#   helm repo add mariadb-operator https://mariadb-operator.github.io/mariadb-operator
-#   helm install mariadb-operator mariadb-operator/mariadb-operator
-{{- fail "MariaDB Operator CRDs (k8s.mariadb.com/v1alpha1) not found. Install mariadb-operator first or set mariadbOperator.enabled=false" }}
-{{- end }}
 {{- end }}
