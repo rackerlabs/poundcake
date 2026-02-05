@@ -5,7 +5,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Dispatcher: Polls the API and triggers the /bake API"""
+"""Prep Chef: Polls for new alerts and triggers the /bake API"""
 
 import os
 import time
@@ -21,8 +21,8 @@ POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/"
 API_URL = f"{POUNDCAKE_API_URL}/api/v1"
 OVEN_INTERVAL = int(os.getenv("OVEN_INTERVAL", "5"))
 
-# System request ID for dispatcher operations
-SYSTEM_REQ_ID = "SYSTEM-DISPATCHER"
+# System request ID for prep chef operations
+SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
 
 
 def wait_for_api():
@@ -39,7 +39,7 @@ def wait_for_api():
             resp = requests.get(f"{API_URL}/health", timeout=5)
             if resp.status_code == 200:
                 logger.info(
-                    "wait_for_api: API is ready! Starting dispatcher...",
+                    "wait_for_api: API is ready! Starting prep chef...",
                     extra={"req_id": SYSTEM_REQ_ID},
                 )
                 return True
@@ -57,16 +57,17 @@ def wait_for_api():
     return False
 
 
-def dispatch_loop():
+def prep_loop():
+    """Main prep chef loop - polls for new alerts and triggers baking."""
     wait_for_api()
     logger.info(
-        "dispatch_loop: Starting dispatcher",
+        "prep_loop: Starting prep chef",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": OVEN_INTERVAL},
     )
 
     while True:
         try:
-            # 1. Fetch 'new' alerts
+            # Fetch alerts.process_status of 'new' (crawler)
             resp = requests.get(
                 f"{API_URL}/alerts", params={"processing_status": "new"}, timeout=10
             )
@@ -81,7 +82,7 @@ def dispatch_loop():
                 headers = {"X-Request-ID": req_id}
 
                 logger.info(
-                    "dispatch_loop: Triggering bake for alert",
+                    f"prep_loop: Preparing alert with id {alert_id} for baking",
                     extra={"req_id": req_id, "alert_id": alert_id},
                 )
 
@@ -91,12 +92,12 @@ def dispatch_loop():
 
                 if bake_resp.status_code in [200, 201]:
                     logger.info(
-                        "dispatch_loop: Successfully baked alert into tasks",
+                        f"prep_loop: Successfully prepared alert with id {alert_id} for oven",
                         extra={"req_id": req_id, "alert_id": alert_id},
                     )
                 else:
                     logger.error(
-                        "dispatch_loop: Bake failed",
+                        "prep_loop: Bake preparation failed",
                         extra={
                             "req_id": req_id,
                             "alert_id": alert_id,
@@ -107,11 +108,11 @@ def dispatch_loop():
 
         except Exception as e:
             logger.error(
-                "dispatch_loop: Loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
+                "prep_loop: Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
             )
 
         time.sleep(OVEN_INTERVAL)
 
 
 if __name__ == "__main__":
-    dispatch_loop()
+    prep_loop()

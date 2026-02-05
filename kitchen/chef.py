@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Oven Executor: Polls for pending Oven tasks calls /stackstorm/execute API"""
+"""Chef: Polls for pending Oven tasks and executes them via StackStorm"""
 
 import os
 import time
@@ -23,7 +23,7 @@ API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 
 # System request ID for polling operations (distinguishes system calls from alert processing)
-SYSTEM_REQ_ID = "SYSTEM-OVEN-POLL"
+SYSTEM_REQ_ID = "SYSTEM-CHEF"
 
 
 def wait_for_api():
@@ -40,8 +40,7 @@ def wait_for_api():
             resp = requests.get(f"{API_BASE_URL.rsplit('/api/v1', 1)[0]}/api/v1/health", timeout=5)
             if resp.status_code == 200:
                 logger.info(
-                    "wait_for_api: API is ready! Starting executor...",
-                    extra={"req_id": SYSTEM_REQ_ID},
+                    "wait_for_api: API is ready! Starting chef...", extra={"req_id": SYSTEM_REQ_ID}
                 )
                 return True
         except Exception:
@@ -58,12 +57,13 @@ def wait_for_api():
     return False
 
 
-def run_executor():
+def run_chef():
+    """Main chef loop - polls for oven tasks and executes them."""
     # Wait for API to be ready
     wait_for_api()
 
     logger.info(
-        "run_executor: Oven Executor started",
+        "run_chef: Chef started",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_BASE_URL, "poll_interval": POLL_INTERVAL},
     )
 
@@ -95,7 +95,7 @@ def run_executor():
 
             if not action_ref:
                 logger.error(
-                    "run_executor: No action_ref found for Oven",
+                    "run_chef: No action_ref found for Oven",
                     extra={"req_id": req_id, "oven_id": oven_id},
                 )
                 time.sleep(POLL_INTERVAL)
@@ -103,7 +103,7 @@ def run_executor():
 
             # Proxy the request through the API Bridge
             logger.info(
-                "run_executor: Triggering action via API bridge",
+                "run_chef: Cooking action with ref {action_ref} via API bridge",
                 extra={"req_id": req_id, "action_ref": action_ref, "oven_id": oven_id},
             )
 
@@ -131,7 +131,7 @@ def run_executor():
                         headers={"X-Request-ID": req_id},
                     )
                     logger.info(
-                        "run_executor: Action started successfully",
+                        "run_chef: Action with ref {action_ref} started successfully",
                         extra={
                             "req_id": req_id,
                             "st2_id": st2_id,
@@ -143,7 +143,7 @@ def run_executor():
                     # Failed to execute - update error_message
                     error_msg = f"API Bridge failed: {bridge_resp.status_code} - {bridge_resp.text}"
                     logger.error(
-                        "run_executor: API Bridge execution failed",
+                        "run_chef: API Bridge execution failed",
                         extra={
                             "req_id": req_id,
                             "oven_id": oven_id,
@@ -161,7 +161,7 @@ def run_executor():
                 # Network/timeout error - update error_message
                 error_msg = f"Failed to reach API Bridge: {str(e)}"
                 logger.error(
-                    "run_executor: Failed to reach API Bridge",
+                    "run_chef: Failed to reach API Bridge",
                     extra={"req_id": req_id, "oven_id": oven_id, "error": str(e)},
                 )
                 try:
@@ -173,7 +173,7 @@ def run_executor():
                     )
                 except Exception as update_error:
                     logger.error(
-                        "run_executor: Could not update oven status after error",
+                        "run_chef: Could not update oven status after error",
                         extra={
                             "req_id": req_id,
                             "oven_id": oven_id,
@@ -183,11 +183,11 @@ def run_executor():
 
         except Exception as e:
             logger.error(
-                "run_executor: Executor loop encountered an error",
+                "run_chef: Chef loop encountered an error",
                 extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
             )
             time.sleep(POLL_INTERVAL)
 
 
 if __name__ == "__main__":
-    run_executor()
+    run_chef()

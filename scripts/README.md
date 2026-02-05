@@ -5,13 +5,16 @@ This directory contains helper scripts for managing and deploying PoundCake.
 ## Scripts
 
 ### quickstart.sh
-**Purpose:** Automated full deployment script  
+
+**Purpose:** Automated full deployment script
 **Usage:**
+
 ```bash
 ./scripts/quickstart.sh
 ```
 
 **What it does:**
+
 1. Checks prerequisites (Docker, Docker Compose)
 2. Creates .env configuration file
 3. Starts all services with docker compose
@@ -21,10 +24,12 @@ This directory contains helper scripts for managing and deploying PoundCake.
 This is the easiest way to get PoundCake up and running.
 
 ### automated-setup.sh
-**Purpose:** Automatic StackStorm API key generation (runs in st2client container)  
+
+**Purpose:** Automatic StackStorm API key generation (runs in st2client container)
 **Used by:** Docker Compose automatically
 
 **What it does:**
+
 1. Waits for StackStorm services to be responsive
 2. Authenticates with StackStorm using default credentials
 3. Generates a new API key
@@ -36,18 +41,22 @@ This is the easiest way to get PoundCake up and running.
 ## Script Conventions
 
 ### Naming
+
 - Bash scripts: `.sh` extension
 - Python scripts: `.py` extension
 - Use lowercase with hyphens for bash scripts: `automated-setup.sh`
 - Use lowercase with underscores for Python scripts: `init_database.py`
 
 ### Location
+
 This directory should contain **only** helper scripts that:
+
 - Assist with deployment and configuration
 - Perform administrative tasks
 - Are not part of the core application
 
 ### What NOT to Put Here
+
 - Service code (goes in `api/`, `oven/`, `timer/`)
 - Application logic (goes in appropriate service directory)
 - Configuration files (goes in `config/` or `docker/`)
@@ -58,15 +67,19 @@ This directory should contain **only** helper scripts that:
 When creating a new helper script:
 
 1. **Add executable permissions:**
+
    ```bash
    chmod +x scripts/your-script.sh
    ```
 
 2. **Add shebang line:**
+
    ```bash
    #!/bin/bash
    ```
+
    or
+
    ```python
    #!/usr/bin/env python3
    ```
@@ -84,7 +97,8 @@ When creating a new helper script:
 
 ## Examples
 
-### Quick deployment from scratch (Fully Automated):
+### Quick deployment from scratch (Fully Automated)
+
 ```bash
 tar -xzf poundcake-final-production.tar.gz
 cd poundcake-timer-api
@@ -96,7 +110,8 @@ docker compose up -d
 # - All services start in correct order
 ```
 
-### Manual verification:
+### Manual verification
+
 ```bash
 # Check all services running
 docker compose ps
@@ -111,7 +126,8 @@ docker compose exec mariadb mysql -u poundcake -ppoundcake -e "SHOW TABLES;" pou
 cat config/st2_api_key
 ```
 
-### Database operations:
+### Database operations
+
 ```bash
 # Check current migration version
 docker compose exec api alembic current
@@ -135,4 +151,3 @@ docker compose cp api:/app/alembic/versions/. ./alembic/versions/
 - **Migration Strategy:** `../MIGRATION_BELT_AND_SUSPENDERS.md`
 - **Automated Setup:** `../AUTOMATED_STACKSTORM_SETUP.md`
 - **Troubleshooting:** `../ALEMBIC_REVISION_ERROR_FIX.md`
-

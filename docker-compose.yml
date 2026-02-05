@@ -1,5 +1,5 @@
 services:
-  # --- POUNDCAKE INFRASTRUCTURE ---
+  # POUNDCAKE INFRASTRUCTURE
   mariadb:
     image: mariadb:11.6
     container_name: poundcake-mariadb
@@ -22,7 +22,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # --- POUNDCAKE SERVICES ---
+  # POUNDCAKE SERVICES
   api:
     build:
       context: .
@@ -60,11 +60,11 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  worker:
+  chef:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: poundcake-worker
+    container_name: poundcake-chef
     working_dir: /app
     environment:
       PYTHONPATH: /app
@@ -79,14 +79,14 @@ services:
       - ./logs:/app/logs
     networks:
       - poundcake
-    command: python3 workers/executor.py
+    command: python3 kitchen/chef.py
     restart: unless-stopped
 
-  dispatcher:
+  prep-chef:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: poundcake-dispatcher
+    container_name: poundcake-prep-chef
     working_dir: /app
     environment:
       PYTHONPATH: /app
@@ -101,7 +101,7 @@ services:
       - ./logs:/app/logs
     networks:
       - poundcake
-    command: python3 workers/dispatcher.py
+    command: python3 kitchen/prep_chef.py
     restart: unless-stopped
 
   timer:
@@ -126,10 +126,10 @@ services:
       - ./config:/app/config:ro
     networks:
       - poundcake
-    command: python3 workers/timer.py
+    command: python3 kitchen/timer.py
     restart: unless-stopped
 
-  # --- STACKSTORM BACKEND ---
+  # STACKSTORM BACKEND
   stackstorm-mongodb:
     image: mongo:7.0
     container_name: stackstorm-mongodb

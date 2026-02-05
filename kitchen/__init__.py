@@ -4,4 +4,4 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""PoundCake Oven Service - Task orchestration with dependency management."""
+"""PoundCake Workers."""

@@ -21,11 +21,11 @@ echo ""
 run_test() {
     local test_name=$1
     local test_command=$2
-    
+
     echo "[INFO] Running: $test_name"
     echo "Command: $test_command"
     echo ""
-    
+
     if eval "$test_command"; then
         echo "[PASS] $test_name"
         echo ""
@@ -82,10 +82,10 @@ echo ""
 if [ "$SKIP_UNIT" = false ]; then
     echo "--- Python Unit Tests ---"
     echo ""
-    
+
     run_test "Model Tests" "python -m pytest tests/test_models.py -v" || true
     run_test "API Health Tests" "python -m pytest tests/test_api_health.py -v" || true
-    
+
     echo ""
 fi
 
@@ -93,9 +93,9 @@ fi
 if [ "$SKIP_INTEGRATION" = false ]; then
     echo "--- Integration Tests ---"
     echo ""
-    
+
     run_test "Webhook Test" "./tests/test_webhook.sh" || true
-    
+
     echo ""
 fi
 
@@ -103,9 +103,9 @@ fi
 if [ "$SKIP_INTEGRATION" = false ] && [ "$SKIP_FLOW" = false ]; then
     echo "--- End-to-End Flow Test ---"
     echo ""
-    
+
     run_test "Complete Flow Test" "./tests/test_flow.sh" || true
-    
+
     echo ""
 fi
 

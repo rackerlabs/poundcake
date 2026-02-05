@@ -156,8 +156,11 @@ async def list_ovens(
         query = query.filter(Oven.action_id == params.action_id)
 
     ovens = query.order_by(Oven.created_at.desc()).limit(params.limit).offset(params.offset).all()
+    oven_count = len(ovens)
 
-    logger.debug("list_ovens: Ovens fetched", extra={"req_id": request_id, "count": len(ovens)})
+    logger.debug(
+        f"list_ovens: {oven_count} Ovens fetched", extra={"req_id": request_id, "count": oven_count}
+    )
 
     return ovens
 
