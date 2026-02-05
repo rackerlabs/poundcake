@@ -8,7 +8,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
+from datetime import datetime, timezone
 
 from api.core.database import get_db
 from api.core.logging import get_logger
