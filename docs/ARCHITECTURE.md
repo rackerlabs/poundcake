@@ -7,7 +7,7 @@ PoundCake is an auto-remediation framework that bridges Prometheus Alertmanager 
 ## Design Principles
 
 1. **Fast Response**: Webhook returns 202 immediately, processes in background
-2. **Complete Audit Trail**: Track alerts from webhook to execution
+2. **Complete Audit Trail**: Track alerts from webhook to execution via `req_id`
 3. **Stateless Design**: No Redis/Celery dependency, scales horizontally
 4. **Schema Versioning**: Alembic migrations for safe upgrades
 5. **Clear Separation**: PoundCake handles routing, StackStorm handles execution
@@ -15,160 +15,75 @@ PoundCake is an auto-remediation framework that bridges Prometheus Alertmanager 
 ## Components
 
 ### FastAPI Application
-- Webhook receiver with background processing
-- RESTful API for alerts and recipes management
+- Webhook receiver with background processing (`pre_heat`)
+- RESTful API for alerts, recipes, and ovens
 - Health checks and metrics endpoint
-- Alembic-based schema migrations
+- Alembic-based schema migrations (startup)
 
 ### Database (MySQL/MariaDB)
-- Three main tables: recipes, alerts, ovens
-- Stores alert history and execution tracking
-- Managed via Alembic migrations
+- Stores recipes, ingredients, alerts, and ovens
+- Tracks alert lifecycle and execution status
+
+### Workers
+- **Prep Chef**: Polls for new alerts and triggers baking (`/ovens/bake/{alert_id}`)
+- **Chef**: Polls for new ovens and executes StackStorm actions via API bridge
+- **Timer**: Polls for in-flight ovens and updates completion status
 
 ### StackStorm Integration
 - Executes remediation workflows
 - Returns execution IDs for tracking
 - Requires Redis and RabbitMQ
 
-## Database Schema
+## Database Schema (Conceptual)
 
-### poundcake_recipes
+### recipes
+Defines remediation workflows and their ingredients.
+- `name`, `description`, `enabled`, `created_at`, `updated_at`
 
-Defines remediation workflows and their StackStorm mappings.
+### ingredients
+Defines tasks inside a recipe.
+- `recipe_id`, `task_id`, `task_name`, `task_order`, `is_blocking`
+- `st2_action`, `parameters`, `expected_time_to_completion`, `timeout`
+- `retry_count`, `retry_delay`, `on_failure`
 
-```sql
-CREATE TABLE poundcake_recipes (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(256) UNIQUE NOT NULL,
-    description TEXT,
-    task_list TEXT,  
-    st2_workflow_ref VARCHAR(256) NOT NULL,
-    time_to_complete DATETIME,
-    time_to_clear DATETIME,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME,
-    INDEX idx_recipe_name (name),
-    INDEX idx_recipe_st2_ref (st2_workflow_ref)
-);
-```
+### alerts
+Stores alert intake and lifecycle state.
+- `req_id`, `fingerprint`, `alert_status`, `processing_status`
+- `alert_name`, `group_name`, `labels`, `annotations`
+- `severity`, `instance`, `starts_at`, `ends_at`, `counter`
 
-### poundcake_alerts
-
-Stores alert data from Alertmanager webhooks.
-
-```sql
-CREATE TABLE poundcake_alerts (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    req_id VARCHAR(36) NOT NULL,
-    fingerprint VARCHAR(64) NOT NULL,
-    alert_status VARCHAR(20) NOT NULL,
-    processing_status VARCHAR(20) NOT NULL,
-    alert_name VARCHAR(256) NOT NULL,
-    severity VARCHAR(20),
-    instance VARCHAR(256),
-    prometheus VARCHAR(256),
-    labels JSON,
-    annotations JSON,
-    starts_at DATETIME,
-    ends_at DATETIME,
-    generator_url TEXT,
-    raw_data JSON,
-    counter INT NOT NULL DEFAULT 1,
-    ticket_number VARCHAR(100),
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME,
-    INDEX idx_alert_fingerprint (fingerprint),
-    INDEX idx_alert_name (alert_name),
-    INDEX idx_alert_processing_status (processing_status),
-    INDEX idx_alert_req_id (req_id)
-);
-```
-
-### poundcake_ovens
-
-Executes recipes and tracks StackStorm execution status.
-
-```sql
-CREATE TABLE poundcake_ovens (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    req_id VARCHAR(36) NOT NULL,
-    alert_id INT,
-    recipe_id INT NOT NULL,
-    action_id VARCHAR(100),
-    action_result JSON,
-    status VARCHAR(20) NOT NULL,
-    started_at DATETIME,
-    ended_at DATETIME,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME,
-    FOREIGN KEY (alert_id) REFERENCES poundcake_alerts(id),
-    FOREIGN KEY (recipe_id) REFERENCES poundcake_recipes(id),
-    INDEX idx_oven_req_id (req_id),
-    INDEX idx_oven_alert_id (alert_id),
-    INDEX idx_oven_recipe_id (recipe_id),
-    INDEX idx_oven_action_id (action_id),
-    INDEX idx_oven_status (status)
-);
-```
+### ovens
+Tracks individual ingredient execution.
+- `req_id`, `alert_id`, `recipe_id`, `ingredient_id`
+- `processing_status`, `action_id`, `st2_status`
+- `started_at`, `completed_at`, `action_result`, `error_message`
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   Alertmanager                          │
-│              (Prometheus component)                     │
-└────────────────────┬────────────────────────────────────┘
-                     │ POST /api/v1/webhook
-                     ▼
-┌─────────────────────────────────────────────────────────┐
-│                   PoundCake API                         │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  FastAPI Application                              │  │
-│  │  - Webhook receiver (202 immediate response)      │  │
-│  │  - Background processing (pre_heat)               │  │
-│  │  - Recipe/Alert/Oven management                   │  │
-│  │  - Health checks & metrics                        │  │
-│  └─────────────────┬─────────────────────────────────┘  │
-│                    │                                     │
-│  ┌─────────────────▼─────────────────────────────────┐  │
-│  │        MySQL/MariaDB Database                     │  │
-│  │  - poundcake_recipes (workflow definitions)       │  │
-│  │  - poundcake_alerts (alert history)               │  │
-│  │  - poundcake_ovens (execution tracking)           │  │
-│  └─────────────────┬─────────────────────────────────┘  │
-└────────────────────┼─────────────────────────────────────┘
-                     │ HTTP API call
-                     ▼
-┌─────────────────────────────────────────────────────────┐
-│                    StackStorm                           │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  st2api (API Server)                              │  │
-│  │  - Receives execution requests                    │  │
-│  │  - Returns execution ID                           │  │
-│  └─────────────────┬─────────────────────────────────┘  │
-│                    │                                     │
-│  ┌─────────────────▼─────────────────────────────────┐  │
-│  │  Workflow Engines                                 │  │
-│  │  - Orquesta, Mistral, ActionChain                │  │
-│  │  - Execute remediation steps                      │  │
-│  └─────────────────┬─────────────────────────────────┘  │
-│                    │                                     │
-│  ┌─────────────────▼─────────────────────────────────┐  │
-│  │  Message Queue (RabbitMQ)                         │  │
-│  │  - Task distribution                              │  │
-│  └───────────────────────────────────────────────────┘  │
-│                                                           │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Redis                                            │  │
-│  │  - Coordination and locking                       │  │
-│  └───────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────┐
-│              Target Systems                             │
-│         (remediation actions executed here)             │
-└─────────────────────────────────────────────────────────┘
+Alertmanager
+    │ POST /api/v1/webhook
+    ▼
+PoundCake API
+    │ creates/updates alerts (pre_heat)
+    ▼
+MariaDB
+    ▲
+    │
+Prep Chef ── GET /api/v1/alerts?processing_status=new
+    │ POST /api/v1/ovens/bake/{alert_id}
+    ▼
+MariaDB (ovens)
+    ▲
+    │
+Chef ── GET /api/v1/ovens?processing_status=new
+    │ POST /api/v1/stackstorm/execute
+    ▼
+StackStorm
+    ▲
+    │
+Timer ── GET /api/v1/ovens?processing_status=processing
+         PATCH /api/v1/ovens/{id}
 ```
 
 ## Data Flow
@@ -178,55 +93,49 @@ CREATE TABLE poundcake_ovens (
 ```
 Alertmanager sends POST /api/v1/webhook
                 ↓
-PreHeatMiddleware generates req_id: "abc-123"
+PreHeatMiddleware generates req_id
                 ↓
-Return 202 Accepted (request_id: "abc-123")
+pre_heat creates Alert (processing_status="new")
                 ↓
-Background Task: pre_heat()
-  - Parse alerts from payload
-  - Insert/update poundcake_alerts table
-  - Set processing_status = "new"
+Return 202 Accepted immediately
 ```
 
 **Key Points:**
-- Response sent BEFORE processing (under 10ms)
-- Background task creates own DB session
-- Alert state tracked via processing_status
+- Response sent before processing (under 10ms)
+- Alert `group_name` defaults to `labels.alertname`
+- `group_name` matches `recipe.name`
 
-### 2. Alert Processing
+### 2. Alert Dispatching (Prep Chef)
 
 ```
-POST /api/v1/alerts/process
-                ↓
-Query alerts WHERE processing_status = "new"
-                ↓
+Prep Chef polls: GET /api/v1/alerts?processing_status=new
+    ↓
 For each alert:
-  1. determine_recipe(alert_name) returns Recipe
-  2. Create Oven (req_id, alert_id, recipe_id)
-  3. execute_recipe(oven, recipe, alert)
-     - Call ST2 API with recipe.st2_workflow_ref
-     - Store ST2 execution_id in oven.action_id
-  4. Update alert.processing_status = "processing"
-                ↓
-Return 202 Accepted with req_ids and execution_ids
+  - Match alert.group_name to recipe.name
+  - POST /api/v1/ovens/bake/{alert_id}
+  - Creates one oven per recipe ingredient
+  - Updates alert (processing_status="processing")
 ```
 
-### 3. Recipe Execution
+### 3. Task Execution (Chef)
 
-```python
-# PoundCake calls StackStorm API
-response = requests.post(
-    f"{ST2_API_URL}/v1/executions",
-    json={
-        "action": recipe.st2_workflow_ref,
-        "parameters": {
-            "alert_name": alert.alert_name,
-            "req_id": req_id
-        }
-    }
-)
+```
+Chef polls: GET /api/v1/ovens?processing_status=new
+    ↓
+For each oven (respecting is_blocking dependencies):
+  - Extract ingredient.st2_action and parameters
+  - POST /api/v1/stackstorm/execute (via API bridge)
+  - Update oven (processing_status="processing", action_id=ST2_ID)
+```
 
-st2_execution_id = response.json()["id"]
+### 4. Completion Monitoring (Timer)
+
+```
+Timer polls: GET /api/v1/ovens?processing_status=processing
+    ↓
+For each oven:
+  - Check StackStorm execution status
+  - Update oven (processing_status="complete", st2_status="succeeded")
 ```
 
 ## Request ID Tracking
@@ -245,44 +154,12 @@ StackStorm execution (receives req_id in parameters)
 
 ## Recipe Matching Logic
 
-```python
-def determine_recipe(alert_name: str, db: Session):
-    # 1. Try exact match
-    # 2. Try pattern matching
-    # 3. Fallback to default recipe
-```
+- `pre_heat` sets `alert_name` from `labels.alertname`
+- `group_name` defaults to `alert_name`
+- Baking matches `alert.group_name` to `recipe.name`
 
 ## Deployment Patterns
 
 ### Docker Compose
 
 Single-host deployment with all services.
-
-### Kubernetes/Helm
-
-Production deployment with horizontal scaling.
-
-### Configuration
-
-```bash
-# Database
-DATABASE_URL=mysql+pymysql://user:pass@host/db
-
-# StackStorm
-ST2_API_URL=http://stackstorm-api:9101/v1
-ST2_API_KEY=your-api-key
-```
-
-## Version History
-
-### v0.0.1 (Current)
-- Alembic migrations for schema management
-- FastAPI BackgroundTasks (no Celery/Redis)
-- Recipe/Oven/Alert architecture
-- Background webhook processing
-- Complete audit trail via req_id
-
----
-
-**Version:** 0.0.1  
-**Last Updated:** January 23, 2026

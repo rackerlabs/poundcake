@@ -42,7 +42,7 @@ python api/migrate.py upgrade
 ```
 
 This will:
-- Create all tables (recipes, alerts, ovens)
+- Create all tables (recipes, ingredients, alerts, ovens)
 - Create indexes
 - Set up foreign key relationships
 

@@ -9,9 +9,9 @@
 
 import os
 import time
-import httpx
 from datetime import datetime, timezone
 from api.core.logging import setup_logging, get_logger
+from api.core.http_client import request_with_retry_sync
 
 # Configuration
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000/api/v1").rstrip("/")
@@ -86,12 +86,13 @@ def update_oven(
 
     try:
         start_time = time.time()
-        with httpx.Client(timeout=10) as client:
-            resp = client.put(
-                f"{POUNDCAKE_API_URL}/ovens/{oven_id}",
-                json=payload,
-                headers={"X-Request-ID": req_id},
-            )
+        resp = request_with_retry_sync(
+            "PUT",
+            f"{POUNDCAKE_API_URL}/ovens/{oven_id}",
+            json=payload,
+            headers={"X-Request-ID": req_id},
+            timeout=10,
+        )
         latency_ms = int((time.time() - start_time) * 1000)
         resp.raise_for_status()
         return True
@@ -109,11 +110,12 @@ def cancel_st2_execution(action_id, req_id):
     api_key = get_st2_api_key()
     try:
         start_time = time.time()
-        with httpx.Client(timeout=10) as client:
-            resp = client.delete(
-                f"{ST2_API_URL}/executions/{action_id}",
-                headers={"St2-Api-Key": api_key, "X-Request-ID": req_id},
-            )
+        resp = request_with_retry_sync(
+            "DELETE",
+            f"{ST2_API_URL}/executions/{action_id}",
+            headers={"St2-Api-Key": api_key, "X-Request-ID": req_id},
+            timeout=10,
+        )
         latency_ms = int((time.time() - start_time) * 1000)
         return True
     except Exception as e:
@@ -184,11 +186,12 @@ def monitor_ovens():
     """Polls for processing ovens and updates terminal states."""
     try:
         start_time = time.time()
-        with httpx.Client(timeout=10) as client:
-            resp = client.get(
-                f"{POUNDCAKE_API_URL}/ovens",
-                params={"processing_status": "processing"},
-            )
+        resp = request_with_retry_sync(
+            "GET",
+            f"{POUNDCAKE_API_URL}/ovens",
+            params={"processing_status": "processing"},
+            timeout=10,
+        )
         latency_ms = int((time.time() - start_time) * 1000)
         if resp.status_code != 200:
             logger.error(
@@ -218,11 +221,12 @@ def monitor_ovens():
 
             api_key = get_st2_api_key()
             st2_start_time = time.time()
-            with httpx.Client(timeout=10) as client:
-                st2_resp = client.get(
-                    f"{ST2_API_URL}/executions/{action_id}",
-                    headers={"St2-Api-Key": api_key, "X-Request-ID": req_id},
-                )
+            st2_resp = request_with_retry_sync(
+                "GET",
+                f"{ST2_API_URL}/executions/{action_id}",
+                headers={"St2-Api-Key": api_key, "X-Request-ID": req_id},
+                timeout=10,
+            )
             st2_latency_ms = int((time.time() - st2_start_time) * 1000)
 
             if st2_resp.status_code == 200:
@@ -289,8 +293,11 @@ def wait_for_api():
     while True:
         try:
             start_time = time.time()
-            with httpx.Client(timeout=5) as client:
-                resp = client.get(f"{POUNDCAKE_API_URL}/health")
+            resp = request_with_retry_sync(
+                "GET",
+                f"{POUNDCAKE_API_URL}/health",
+                timeout=5,
+            )
             latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code == 200:
                 logger.info(

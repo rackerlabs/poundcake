@@ -9,6 +9,7 @@
 set -e
 
 API_URL="http://localhost:8000/api/v1"
+RECIPE_NAME="TestAutomation_INT_$(date +%s)"
 
 wait_for_recipe_ready() {
     local recipe_name="$1"
@@ -19,7 +20,7 @@ wait_for_recipe_ready() {
 
     while [ $count -lt $max_retries ]; do
         echo "Waiting for recipe [$recipe_name] to be ready... ($((count+1))/$max_retries)"
-        response=$(curl -s "$API_URL/recipes/name/$recipe_name")
+        response=$(curl -s "$API_URL/recipes/by-name/$recipe_name")
 
         if echo "$response" | grep -q '"id"' \
             && echo "$response" | grep -q '"ingredients"' \
@@ -34,6 +35,31 @@ wait_for_recipe_ready() {
 
     echo "    [ERROR] Recipe [$recipe_name] not ready after $((max_retries * sleep_seconds)) seconds."
     echo "    Last response: $response"
+    return 1
+}
+
+wait_for_alert_by_name() {
+    local alert_name="$1"
+    local max_retries="${2:-10}"
+    local sleep_seconds="${3:-1}"
+    local count=0
+    local response=""
+
+    while [ $count -lt $max_retries ]; do
+        echo "    Waiting for alert [$alert_name] to be stored... ($((count+1))/$max_retries)"
+        response=$(curl -s "$API_URL/alerts?alert_name=$alert_name")
+
+        if [ -n "$response" ] && [ "$response" != "[]" ]; then
+            echo "    [OK] Alert found in database"
+            return 0
+        fi
+
+        sleep "$sleep_seconds"
+        count=$((count+1))
+    done
+
+    echo "    [ERROR] Alert [$alert_name] not found after $((max_retries * sleep_seconds)) seconds."
+    echo "    Response: $response"
     return 1
 }
 
@@ -55,22 +81,58 @@ else
     exit 1
 fi
 
-# 2. Wait for the recipe to exist (and include ingredients)
+# 2. Create a test recipe (and wait for it to exist with ingredients)
 echo ""
-echo "Step 2: Waiting for HelloWorldAlert recipe to be ready..."
-wait_for_recipe_ready "HelloWorldAlert" 20 2
+echo "Step 2: Creating test recipe [$RECIPE_NAME]..."
+RECIPE_JSON=$(cat <<EOF
+{
+  "name": "$RECIPE_NAME",
+  "description": "Webhook Test Recipe",
+  "enabled": true,
+  "ingredients": [
+    {
+      "task_id": "step_1",
+      "task_name": "Initial Check",
+      "task_order": 1,
+      "is_blocking": true,
+      "st2_action": "core.local",
+      "parameters": { "cmd": "echo 'Step 1 success'" },
+      "expected_time_to_completion": 10
+    },
+    {
+      "task_id": "step_2",
+      "task_name": "Parallel Notification",
+      "task_order": 2,
+      "is_blocking": false,
+      "st2_action": "core.local",
+      "parameters": { "cmd": "echo 'Step 2 success'" },
+      "expected_time_to_completion": 10
+    }
+  ]
+}
+EOF
+)
+
+curl -s -X POST "$API_URL/recipes/" \
+     -H "Content-Type: application/json" \
+     -d "$RECIPE_JSON" > /dev/null
+
+echo "    [OK] Recipe created."
+echo "    Waiting for recipe [$RECIPE_NAME] to be ready..."
+wait_for_recipe_ready "$RECIPE_NAME" 20 2
 
 # 3. Send Test Alert
 echo ""
 echo "Step 3: Sending test alert to webhook..."
 
-ALERT_JSON=$(cat <<'EOF'
+ALERT_JSON=$(cat <<EOF
 {
   "alerts": [
     {
       "status": "firing",
       "labels": {
-        "alertname": "HelloWorldAlert",
+        "alertname": "$RECIPE_NAME",
+        "group_name": "$RECIPE_NAME",
         "instance": "test-server-01",
         "severity": "warning"
       },
@@ -105,19 +167,7 @@ fi
 # 4. Verify Alert Was Stored
 echo ""
 echo "Step 4: Verifying alert was stored in database..."
-sleep 2  # Give it a moment to be stored
-
-ALERTS=$(curl -s "$API_URL/alerts?processing_status=new")
-ALERT_NAME=$(echo "$ALERTS" | grep -o '"alert_name":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-if [ "$ALERT_NAME" == "HelloWorldAlert" ]; then
-    echo "    [OK] Alert found in database"
-    echo "    Alert name: $ALERT_NAME"
-else
-    echo "    [ERROR] Alert not found in 'new' queue"
-    echo "    Response: $ALERTS"
-    exit 1
-fi
+wait_for_alert_by_name "$RECIPE_NAME" 12 1
 
 # 5. Check if alert can be retrieved by req_id
 echo ""

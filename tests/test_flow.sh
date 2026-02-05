@@ -17,7 +17,7 @@ wait_for_recipe_ready() {
 
     while [ $count -lt $max_retries ]; do
         echo "Waiting for recipe [$recipe_name] to be ready... ($((count+1))/$max_retries)"
-        response=$(curl -s "$API_URL/recipes/name/$recipe_name")
+        response=$(curl -s "$API_URL/recipes/by-name/$recipe_name")
 
         if echo "$response" | grep -q '"id"' \
             && echo "$response" | grep -q '"ingredients"' \
@@ -86,6 +86,7 @@ ALERT_JSON=$(cat <<EOF
       "status": "firing",
       "labels": {
         "alertname": "$RECIPE_NAME",
+        "group_name": "$RECIPE_NAME",
         "instance": "test-host-01",
         "severity": "critical"
       },
