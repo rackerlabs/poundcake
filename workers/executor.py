@@ -9,11 +9,13 @@
 import os
 import time
 import requests
-import logging
 from datetime import datetime, timezone
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger(__name__)
+from api.core.logging import setup_logging, get_logger
+
+# Initialize logging with standardized configuration
+setup_logging()
+logger = get_logger(__name__)
 
 # Config: No ST2 keys required here!
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
@@ -26,7 +28,10 @@ SYSTEM_REQ_ID = "SYSTEM-OVEN-POLL"
 
 def wait_for_api():
     """Wait for API to be ready before starting main loop."""
-    logger.info("Waiting for API to be ready: %s", API_BASE_URL)
+    logger.info(
+        "wait_for_api: Waiting for API to be ready",
+        extra={"req_id": SYSTEM_REQ_ID, "api_url": API_BASE_URL},
+    )
     max_attempts = 30
     attempt = 0
 
@@ -34,7 +39,10 @@ def wait_for_api():
         try:
             resp = requests.get(f"{API_BASE_URL.rsplit('/api/v1', 1)[0]}/api/v1/health", timeout=5)
             if resp.status_code == 200:
-                logger.info("API is ready! Starting executor...")
+                logger.info(
+                    "wait_for_api: API is ready! Starting executor...",
+                    extra={"req_id": SYSTEM_REQ_ID},
+                )
                 return True
         except Exception:
             pass
@@ -43,7 +51,10 @@ def wait_for_api():
         if attempt < max_attempts:
             time.sleep(2)
 
-    logger.error("API did not become ready after %d attempts. Starting anyway...", max_attempts)
+    logger.error(
+        "wait_for_api: API did not become ready. Starting anyway...",
+        extra={"req_id": SYSTEM_REQ_ID, "max_attempts": max_attempts},
+    )
     return False
 
 
@@ -51,7 +62,10 @@ def run_executor():
     # Wait for API to be ready
     wait_for_api()
 
-    logger.info("Oven Executor started. Target API: %s", API_BASE_URL)
+    logger.info(
+        "run_executor: Oven Executor started",
+        extra={"req_id": SYSTEM_REQ_ID, "api_url": API_BASE_URL, "poll_interval": POLL_INTERVAL},
+    )
 
     while True:
         try:
@@ -80,12 +94,18 @@ def run_executor():
             parameters = ingredient.get("parameters", {})
 
             if not action_ref:
-                logger.error("[%s] No action_ref found for Oven ID %s", req_id, oven_id)
+                logger.error(
+                    "run_executor: No action_ref found for Oven",
+                    extra={"req_id": req_id, "oven_id": oven_id},
+                )
                 time.sleep(POLL_INTERVAL)
                 continue
 
             # Proxy the request through the API Bridge
-            logger.info("[%s] Triggering %s via API bridge", req_id, action_ref)
+            logger.info(
+                "run_executor: Triggering action via API bridge",
+                extra={"req_id": req_id, "action_ref": action_ref, "oven_id": oven_id},
+            )
 
             try:
                 bridge_resp = requests.post(
@@ -111,12 +131,26 @@ def run_executor():
                         headers={"X-Request-ID": req_id},
                     )
                     logger.info(
-                        "[%s] Action started. ST2 ID: %s at %s", req_id, st2_id, current_time
+                        "run_executor: Action started successfully",
+                        extra={
+                            "req_id": req_id,
+                            "st2_id": st2_id,
+                            "started_at": current_time,
+                            "oven_id": oven_id,
+                        },
                     )
                 else:
                     # Failed to execute - update error_message
                     error_msg = f"API Bridge failed: {bridge_resp.status_code} - {bridge_resp.text}"
-                    logger.error("[%s] %s", req_id, error_msg)
+                    logger.error(
+                        "run_executor: API Bridge execution failed",
+                        extra={
+                            "req_id": req_id,
+                            "oven_id": oven_id,
+                            "status_code": bridge_resp.status_code,
+                            "error_message": error_msg,
+                        },
+                    )
                     requests.patch(
                         f"{API_BASE_URL}/ovens/{oven_id}",
                         json={"processing_status": "failed", "error_message": error_msg},
@@ -126,7 +160,10 @@ def run_executor():
             except requests.exceptions.RequestException as e:
                 # Network/timeout error - update error_message
                 error_msg = f"Failed to reach API Bridge: {str(e)}"
-                logger.error("[%s] %s", req_id, error_msg)
+                logger.error(
+                    "run_executor: Failed to reach API Bridge",
+                    extra={"req_id": req_id, "oven_id": oven_id, "error": str(e)},
+                )
                 try:
                     requests.patch(
                         f"{API_BASE_URL}/ovens/{oven_id}",
@@ -134,11 +171,21 @@ def run_executor():
                         headers={"X-Request-ID": req_id},
                         timeout=5,
                     )
-                except Exception:
-                    logger.error("[%s] Could not update oven status after error", req_id)
+                except Exception as update_error:
+                    logger.error(
+                        "run_executor: Could not update oven status after error",
+                        extra={
+                            "req_id": req_id,
+                            "oven_id": oven_id,
+                            "update_error": str(update_error),
+                        },
+                    )
 
         except Exception as e:
-            logger.error("Executor loop encountered an error: %s", str(e))
+            logger.error(
+                "run_executor: Executor loop encountered an error",
+                extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
+            )
             time.sleep(POLL_INTERVAL)
 
 

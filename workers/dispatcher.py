@@ -10,21 +10,27 @@
 import os
 import time
 import requests
-from datetime import datetime, timezone
+
+from api.core.logging import setup_logging, get_logger
+
+# Initialize logging with standardized configuration
+setup_logging()
+logger = get_logger(__name__)
 
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
 API_URL = f"{POUNDCAKE_API_URL}/api/v1"
 OVEN_INTERVAL = int(os.getenv("OVEN_INTERVAL", "5"))
 
-
-def log(message: str, req_id: str = "SYSTEM"):
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [req_id: {req_id}] oven_service: {message}", flush=True)
+# System request ID for dispatcher operations
+SYSTEM_REQ_ID = "SYSTEM-DISPATCHER"
 
 
 def wait_for_api():
     """Wait for API to be ready before starting main loop."""
-    log("Waiting for API to be ready")
+    logger.info(
+        "wait_for_api: Waiting for API to be ready",
+        extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL},
+    )
     max_attempts = 30
     attempt = 0
 
@@ -32,7 +38,10 @@ def wait_for_api():
         try:
             resp = requests.get(f"{API_URL}/health", timeout=5)
             if resp.status_code == 200:
-                log("API is ready! Starting dispatcher...")
+                logger.info(
+                    "wait_for_api: API is ready! Starting dispatcher...",
+                    extra={"req_id": SYSTEM_REQ_ID},
+                )
                 return True
         except Exception:
             pass
@@ -41,13 +50,20 @@ def wait_for_api():
         if attempt < max_attempts:
             time.sleep(2)  # Check every 2 seconds
 
-    log(f"API did not become ready after {max_attempts} attempts. Starting anyway...")
+    logger.warning(
+        "wait_for_api: API did not become ready. Starting anyway...",
+        extra={"req_id": SYSTEM_REQ_ID, "max_attempts": max_attempts},
+    )
     return False
 
 
 def dispatch_loop():
     wait_for_api()
-    log(f"Starting dispatcher polling {API_URL}")
+    logger.info(
+        "dispatch_loop: Starting dispatcher",
+        extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": OVEN_INTERVAL},
+    )
+
     while True:
         try:
             # 1. Fetch 'new' alerts
@@ -64,22 +80,35 @@ def dispatch_loop():
                 # Pass the original Request ID to the next hop
                 headers = {"X-Request-ID": req_id}
 
-                log(f"Triggering bake for alert_id={alert_id}", req_id=req_id)
+                logger.info(
+                    "dispatch_loop: Triggering bake for alert",
+                    extra={"req_id": req_id, "alert_id": alert_id},
+                )
 
                 bake_resp = requests.post(
                     f"{API_URL}/ovens/bake/{alert_id}", headers=headers, timeout=15
                 )
 
                 if bake_resp.status_code in [200, 201]:
-                    log(f"Successfully baked alert_id={alert_id} into tasks", req_id=req_id)
+                    logger.info(
+                        "dispatch_loop: Successfully baked alert into tasks",
+                        extra={"req_id": req_id, "alert_id": alert_id},
+                    )
                 else:
-                    log(
-                        f"Bake failed (status={bake_resp.status_code}): {bake_resp.text}",
-                        req_id=req_id,
+                    logger.error(
+                        "dispatch_loop: Bake failed",
+                        extra={
+                            "req_id": req_id,
+                            "alert_id": alert_id,
+                            "status_code": bake_resp.status_code,
+                            "response": bake_resp.text,
+                        },
                     )
 
         except Exception as e:
-            log(f"Loop error: {str(e)}")
+            logger.error(
+                "dispatch_loop: Loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
+            )
 
         time.sleep(OVEN_INTERVAL)
 
