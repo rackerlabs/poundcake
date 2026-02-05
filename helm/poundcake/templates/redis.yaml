@@ -39,9 +39,7 @@ spec:
 
   redisExporter:
     enabled: {{ .Values.redis.metrics.enabled | default false }}
-    {{- if .Values.redis.metrics.enabled }}
     image: {{ .Values.redis.metrics.image.repository | default "quay.io/opstree/redis-exporter" }}:{{ .Values.redis.metrics.image.tag | default "v1.44.0" }}
-    {{- end }}
 
   {{- if .Values.redis.auth.enabled }}
   redisConfig:
