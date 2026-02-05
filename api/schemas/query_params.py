@@ -6,14 +6,14 @@
 #
 """Pydantic models for query parameter validation."""
 
-from typing import Optional, Type
+from typing import Optional, Type, Callable
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi import Request, HTTPException
 
 from api.validation import ProcessingStatus, AlertStatus
 
 
-def validate_query_params(model_class: Type[BaseModel]):
+def validate_query_params(model_class: Type[BaseModel]) -> Callable[[Request], BaseModel]:
     """
     Dependency factory that validates query parameters against a Pydantic model.
 
@@ -26,7 +26,7 @@ def validate_query_params(model_class: Type[BaseModel]):
         ):
     """
 
-    def dependency(request: Request):
+    def dependency(request: Request) -> BaseModel:
         # Get allowed field names from Pydantic model
         allowed_params = set(model_class.model_fields.keys())
 
