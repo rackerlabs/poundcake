@@ -1,0 +1,138 @@
+
+{{- if and .Values.mongodb.enabled (not .Values.mongodb.external) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "poundcake.fullname" . }}-mongodb-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      name: {{ include "poundcake.fullname" . }}-mongodb-init
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mongodb-init
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      containers:
+      - name: mongodb-init
+        image: mongo:7.0.28
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "========================================"
+          echo "MongoDB User Initialization for StackStorm"
+          echo "========================================"
+
+          # Wait for MongoDB to be ready
+          echo "Waiting for MongoDB to be ready..."
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if mongosh --host {{ include "poundcake.fullname" . }}-mongodb --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+              echo "✓ MongoDB is ready"
+              break
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Attempt ${RETRY_COUNT}/${MAX_RETRIES}: Waiting for MongoDB..."
+            sleep 2
+          done
+
+          if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+            echo "✗ ERROR: MongoDB did not become ready after ${MAX_RETRIES} attempts"
+            exit 1
+          fi
+
+          # Create StackStorm user in st2 database
+          echo "Creating StackStorm user in st2 database..."
+
+          mongosh --host {{ include "poundcake.fullname" . }}-mongodb \
+            -u "${MONGO_ROOT_USERNAME}" \
+            -p "${MONGO_ROOT_PASSWORD}" \
+            --authenticationDatabase admin \
+            --eval "
+              use st2;
+
+              // Try to create the user, catch error if already exists
+              try {
+                db.createUser({
+                  user: '${ST2_DB_USERNAME}',
+                  pwd: '${ST2_DB_PASSWORD}',
+                  roles: [
+                    { role: 'dbOwner', db: 'st2' }
+                  ]
+                });
+                print('✓ User ${ST2_DB_USERNAME} created successfully with dbOwner role on st2 database');
+              } catch (e) {
+                if (e.codeName === 'DuplicateKey') {
+                  print('✓ User ${ST2_DB_USERNAME} already exists, updating password and roles...');
+                  db.updateUser('${ST2_DB_USERNAME}', {
+                    pwd: '${ST2_DB_PASSWORD}',
+                    roles: [
+                      { role: 'dbOwner', db: 'st2' }
+                    ]
+                  });
+                  print('✓ User ${ST2_DB_USERNAME} updated successfully');
+                } else {
+                  print('✗ ERROR: ' + e);
+                  throw e;
+                }
+              }
+
+              // Verify the user exists
+              var users = db.getUsers();
+              var userFound = false;
+              users.users.forEach(function(user) {
+                if (user.user === '${ST2_DB_USERNAME}') {
+                  userFound = true;
+                  print('✓ Verified: User ${ST2_DB_USERNAME} exists in st2 database');
+                  print('  Roles: ' + JSON.stringify(user.roles));
+                }
+              });
+
+              if (!userFound) {
+                print('✗ ERROR: User ${ST2_DB_USERNAME} not found after creation');
+                quit(1);
+              }
+            "
+
+          echo "========================================"
+          echo "MongoDB Initialization Complete"
+          echo "========================================"
+        env:
+        - name: MONGO_ROOT_USERNAME
+          value: {{ .Values.mongodb.auth.username | default "stackstorm" | quote }}
+        - name: MONGO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "poundcake.fullname" . }}-mongodb-secret
+              key: mongodb-root-password
+        - name: ST2_DB_USERNAME
+          value: {{ .Values.mongodb.auth.username | default "stackstorm" | quote }}
+        - name: ST2_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "poundcake.fullname" . }}-mongodb-secret
+              key: mongodb-password
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+{{- end }}
