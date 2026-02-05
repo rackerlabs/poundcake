@@ -207,36 +207,51 @@ stackstorm-chart:
       url = amqp://stackstorm:stackstorm@poundcake-rabbitmq:5672
 
       [coordination]
-      url = redis://poundcake-redis-master:6379
+      url = redis://poundcake-redis:6379
 
       [api]
       allow_origin = *
 
 # Redis configuration (used by StackStorm for coordination and optionally by PoundCake for caching)
+# Uses Redis Operator (OpsTree Labs) to deploy Redis
 redis:
   enabled: true
-  # Use external Redis or deploy as part of this chart
+  # Use external Redis or deploy via operator
   external: false
   # External Redis settings (if external: true)
   host: "redis.default.svc.cluster.local"
   port: 6379
   password: ""
   database: 0
-  # Deployment settings (if external: false)
+  # Deployment settings (if external: false, uses Redis Operator)
+  image:
+    repository: quay.io/opstree/redis
+    tag: v7.0.15
+    pullPolicy: IfNotPresent
   auth:
     enabled: false
-  architecture: standalone
-  master:
-    persistence:
-      enabled: true
-      size: 8Gi
-  replica:
-    replicaCount: 0
+    password: ""
+  persistence:
+    size: 1Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  metrics:
+    enabled: false
+    image:
+      repository: quay.io/opstree/redis-exporter
+      tag: v1.44.0
 
 # RabbitMQ configuration (used by StackStorm for task distribution and workflow coordination)
+# Uses RabbitMQ Operator to deploy RabbitMQ cluster
 rabbitmq:
   enabled: true
-  # Use external RabbitMQ or deploy as part of this chart
+  # Use external RabbitMQ or deploy via operator
   external: false
   # External RabbitMQ settings (if external: true)
   host: "rabbitmq.default.svc.cluster.local"
@@ -244,24 +259,23 @@ rabbitmq:
   username: "stackstorm"
   password: "stackstorm"
   vhost: "/"
-  # Deployment settings (if external: false)
-  image:
-    registry: docker.io
-    repository: bitnami/rabbitmq
-    tag: 3.13.7-debian-12-r4
+  # Deployment settings (if external: false, uses RabbitMQ Operator)
+  replicas: 1
   auth:
     username: stackstorm
     password: stackstorm
   persistence:
-    enabled: true
     size: 8Gi
+    storageClassName: ""
   service:
     type: ClusterIP
-    port: 5672
-  # Management UI
-  management:
-    enabled: true
-    port: 15672
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 
 # Alert-to-action mappings
 # These will be mounted as ConfigMap
