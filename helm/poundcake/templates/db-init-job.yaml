@@ -48,6 +48,17 @@ spec:
           # Change to project root where alembic.ini lives
           cd /app
 
+          # Debug: Check if alembic.ini exists and is readable
+          echo "Checking alembic.ini..."
+          if [ -f /app/alembic.ini ]; then
+            echo "✓ alembic.ini exists"
+            echo "First 20 lines of alembic.ini:"
+            head -20 /app/alembic.ini
+          else
+            echo "✗ ERROR: alembic.ini not found!"
+            exit 1
+          fi
+
           # Wait for database to be ready
           echo "Waiting for database connection..."
           MAX_RETRIES=30
