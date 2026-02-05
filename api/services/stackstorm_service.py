@@ -7,14 +7,16 @@
 """StackStorm API client and action management service."""
 
 import asyncio
-import logging
+import time
 from typing import Any
 
 import httpx
 
 from api.core.config import get_settings
+from api.core.logging import get_logger
+from api.core.httpx_utils import silence_httpx
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class StackStormError(Exception):
@@ -88,9 +90,10 @@ class StackStormClient:
             timeout=httpx.Timeout(timeout),
         ) as client:
             try:
+                start_time = time.time()
                 logger.info(
-                    "execute_action: Executing StackStorm action",
-                    extra={"req_id": req_id, "action_ref": action_ref, "parameters": parameters},
+                    "Executing StackStorm action",
+                    extra={"req_id": req_id, "action_ref": action_ref, "method": "POST"},
                 )
 
                 response = await client.post(
@@ -98,14 +101,18 @@ class StackStormClient:
                     headers=headers,
                     json=payload,
                 )
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 if response.status_code == 201:
                     result: dict[str, Any] = response.json()
                     logger.info(
-                        "execute_action: Action execution started successfully",
+                        "Action execution started successfully",
                         extra={
                             "req_id": req_id,
                             "action_ref": action_ref,
+                            "method": "POST",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
                             "execution_id": result.get("id"),
                             "status": result.get("status"),
                         },
@@ -114,23 +121,28 @@ class StackStormClient:
                 else:
                     error_msg = f"StackStorm API error: {response.status_code} - {response.text}"
                     logger.error(
-                        "execute_action: StackStorm API error",
+                        "StackStorm API error",
                         extra={
                             "req_id": req_id,
                             "action_ref": action_ref,
+                            "method": "POST",
                             "status_code": response.status_code,
+                            "latency_ms": latency_ms,
                             "error": response.text,
                         },
                     )
                     raise StackStormError(error_msg)
 
             except httpx.TimeoutException as e:
+                latency_ms = int((time.time() - start_time) * 1000)
                 logger.error(
-                    "execute_action: StackStorm request timed out",
+                    "StackStorm request timed out",
                     extra={
                         "req_id": req_id,
                         "action_ref": action_ref,
+                        "method": "POST",
                         "timeout": timeout,
+                        "latency_ms": latency_ms,
                         "error": str(e),
                     },
                     exc_info=True,
@@ -138,9 +150,16 @@ class StackStormClient:
                 raise StackStormError(f"StackStorm request timed out after {timeout}s") from e
 
             except httpx.RequestError as e:
+                latency_ms = int((time.time() - start_time) * 1000)
                 logger.error(
-                    "execute_action: StackStorm request failed",
-                    extra={"req_id": req_id, "action_ref": action_ref, "error": str(e)},
+                    "StackStorm request failed",
+                    extra={
+                        "req_id": req_id,
+                        "action_ref": action_ref,
+                        "method": "POST",
+                        "latency_ms": latency_ms,
+                        "error": str(e),
+                    },
                     exc_info=True,
                 )
                 raise StackStormError(f"StackStorm request failed: {e}") from e
@@ -202,26 +221,39 @@ class StackStormClient:
 
         raise StackStormError(f"Execution {execution_id} timed out after {timeout}s")
 
-    async def health_check(self) -> bool:
+    async def health_check(self, req_id: str | None = None) -> bool:
         """Check if StackStorm API is accessible."""
         headers = self._get_headers()
+        if req_id:
+            headers["X-Request-ID"] = req_id
 
-        async with httpx.AsyncClient(
-            verify=self.verify_ssl,
-            timeout=httpx.Timeout(10),
-        ) as client:
-            try:
-                response = await client.get(
-                    f"{self.base_url}/v1/actions",
-                    headers=headers,
-                    params={"limit": 1},
-                )
-                return response.status_code == 200
-            except Exception as e:
-                logger.error(
-                    "health_check: StackStorm health check failed", extra={"error": str(e)}
-                )
-                return False
+        with silence_httpx():
+            async with httpx.AsyncClient(
+                verify=self.verify_ssl,
+                timeout=httpx.Timeout(10),
+            ) as client:
+                try:
+                    start_time = time.time()
+                    response = await client.get(
+                        f"{self.base_url}/v1/actions",
+                        headers=headers,
+                        params={"limit": 1},
+                    )
+                    return response.status_code == 200
+                except Exception as e:
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    logger.error(
+                        "StackStorm health check failed",
+                        extra={
+                            "req_id": req_id,
+                            "method": "GET",
+                            "latency_ms": latency_ms,
+                            "error": str(e),
+                        }
+                        if req_id
+                        else {"method": "GET", "error": str(e)},
+                    )
+                    return False
 
 
 class StackStormActionManager:
@@ -377,13 +409,13 @@ class StackStormActionManager:
             if response.status_code == 200:
                 result: dict[str, Any] = response.json()
                 logger.info(
-                    "update_action: StackStorm action updated successfully",
+                    "StackStorm action updated successfully",
                     extra={"action_ref": action_ref},
                 )
                 return result
             else:
                 logger.error(
-                    "update_action: Failed to update StackStorm action",
+                    "Failed to update StackStorm action",
                     extra={
                         "action_ref": action_ref,
                         "status_code": response.status_code,
@@ -419,13 +451,13 @@ class StackStormActionManager:
             if response.status_code == 201:
                 result: dict[str, Any] = response.json()
                 logger.info(
-                    "create_action: StackStorm action created successfully",
+                    "StackStorm action created successfully",
                     extra={"action_ref": result.get("ref")},
                 )
                 return result
             else:
                 logger.error(
-                    "create_action: Failed to create StackStorm action",
+                    "Failed to create StackStorm action",
                     extra={"status_code": response.status_code, "error": response.text},
                 )
                 return None
@@ -452,13 +484,13 @@ class StackStormActionManager:
 
             if response.status_code == 204:
                 logger.info(
-                    "delete_action: StackStorm action deleted successfully",
+                    "StackStorm action deleted successfully",
                     extra={"action_ref": action_ref},
                 )
                 return True
             else:
                 logger.error(
-                    "delete_action: Failed to delete StackStorm action",
+                    "Failed to delete StackStorm action",
                     extra={"action_ref": action_ref, "status_code": response.status_code},
                 )
                 return False

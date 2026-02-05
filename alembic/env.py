@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Import Base and all models
 from api.core.database import Base
-from api.models.models import Alert, Recipe, Oven  # Import all models
 from api.core.config import settings
 
 # this is the Alembic Config object, which provides

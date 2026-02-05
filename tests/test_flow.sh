@@ -8,6 +8,33 @@ set -e
 API_URL="http://localhost:8000/api/v1"
 RECIPE_NAME="TestAutomation_$(date +%s)"
 
+wait_for_recipe_ready() {
+    local recipe_name="$1"
+    local max_retries="${2:-20}"
+    local sleep_seconds="${3:-2}"
+    local count=0
+    local response=""
+
+    while [ $count -lt $max_retries ]; do
+        echo "Waiting for recipe [$recipe_name] to be ready... ($((count+1))/$max_retries)"
+        response=$(curl -s "$API_URL/recipes/name/$recipe_name")
+
+        if echo "$response" | grep -q '"id"' \
+            && echo "$response" | grep -q '"ingredients"' \
+            && echo "$response" | grep -q '"task_id"'; then
+            echo "OK: Recipe is available with ingredients."
+            return 0
+        fi
+
+        sleep "$sleep_seconds"
+        count=$((count+1))
+    done
+
+    echo "ERROR: Recipe [$recipe_name] not ready after $((max_retries * sleep_seconds)) seconds."
+    echo "Last response: $response"
+    return 1
+}
+
 echo "-------------------------------------------------------"
 echo "Starting PoundCake End-to-End Test"
 echo "-------------------------------------------------------"
@@ -48,6 +75,7 @@ curl -s -X POST "$API_URL/recipes/" \
      -d "$RECIPE_JSON" > /dev/null
 
 echo "OK: Recipe created."
+wait_for_recipe_ready "$RECIPE_NAME" 20 2
 
 # 2. Fire a Mock Alert
 echo "Step 2: Firing mock Alertmanager webhook..."

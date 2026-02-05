@@ -35,13 +35,13 @@ async def create_recipe(
     req_id = request.state.req_id
 
     logger.info(
-        "create_recipe: Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name}
+        "Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name}
     )
 
     existing = db.query(Recipe).filter(Recipe.name == recipe.name).first()
     if existing:
         logger.warning(
-            "create_recipe: Recipe already exists",
+            "Recipe already exists",
             extra={"req_id": req_id, "recipe_name": recipe.name},
         )
         raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
@@ -71,7 +71,7 @@ async def create_recipe(
     db.refresh(db_recipe)
 
     logger.info(
-        "create_recipe: Recipe created successfully",
+        "Recipe created successfully",
         extra={
             "req_id": req_id,
             "recipe_id": db_recipe.id,
@@ -147,12 +147,12 @@ async def delete_recipe(
     """Delete a recipe and all its ingredients."""
     req_id = request.state.req_id
 
-    logger.info("delete_recipe: Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
+    logger.info("Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
 
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         logger.warning(
-            "delete_recipe: Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id}
+            "Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id}
         )
         raise HTTPException(status_code=404, detail="Recipe not found")
 
@@ -161,7 +161,7 @@ async def delete_recipe(
     db.commit()
 
     logger.info(
-        "delete_recipe: Recipe deleted successfully",
+        "Recipe deleted successfully",
         extra={"req_id": req_id, "recipe_id": recipe_id, "recipe_name": recipe_name},
     )
 

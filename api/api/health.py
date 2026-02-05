@@ -19,6 +19,7 @@ from api.services.stackstorm_service import get_stackstorm_client
 
 router = APIRouter()
 settings = get_settings()
+SYSTEM_REQ_ID = "SYSTEM-HEALTH"
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -33,7 +34,7 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
 
     # Check StackStorm via existing async client
     st2_client = get_stackstorm_client()
-    is_st2_healthy = await st2_client.health_check()
+    is_st2_healthy = await st2_client.health_check(req_id=SYSTEM_REQ_ID)
     st2_status = "healthy" if is_st2_healthy else "unhealthy"
 
     overall_status = "healthy" if db_status == "healthy" and is_st2_healthy else "degraded"

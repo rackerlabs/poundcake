@@ -7,7 +7,8 @@
 """Oven service - scheduled crawler for processing alerts."""
 
 import os
-import requests
+import time
+import httpx
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
@@ -66,21 +67,34 @@ class OvenService:
     def _get_new_alerts(self) -> List[Dict[str, Any]]:
         """GET alerts with processing_status = 'new' from API."""
         try:
-            response = requests.get(
-                f"{self.api_base}/alerts",
-                params={"processing_status": "new", "limit": 100},
-                timeout=30,
-            )
+            start_time = time.time()
+            with httpx.Client(timeout=30) as client:
+                response = client.get(
+                    f"{self.api_base}/alerts",
+                    params={"processing_status": "new", "limit": 100},
+                )
+            latency_ms = int((time.time() - start_time) * 1000)
 
             if response.status_code == 200:
                 data = response.json()
                 # Handle both direct list or wrapped object response
                 return data if isinstance(data, list) else data.get("alerts", [])
 
-            logger.error(f"Failed to fetch new alerts: {response.status_code}")
+            logger.error(
+                "Failed to fetch new alerts",
+                extra={
+                    "method": "GET",
+                    "status_code": response.status_code,
+                    "latency_ms": latency_ms,
+                },
+            )
             return []
         except Exception as e:
-            logger.error(f"Error fetching new alerts: {e}")
+            latency_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "Error fetching new alerts",
+                extra={"method": "GET", "latency_ms": latency_ms, "error": str(e)},
+            )
             return []
 
     def _get_recipe_by_group_name(self, group_name: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -90,18 +104,38 @@ class OvenService:
 
         try:
             # Fixed: Added v1 and pluralized correctly to match main.py
-            response = requests.get(
-                f"{self.api_base}/recipes",
-                params={"name": group_name},
-                timeout=10,
-            )
+            start_time = time.time()
+            with httpx.Client(timeout=10) as client:
+                response = client.get(
+                    f"{self.api_base}/recipes",
+                    params={"name": group_name},
+                )
+            latency_ms = int((time.time() - start_time) * 1000)
 
             if response.status_code == 200:
                 recipes = response.json()
                 return recipes[0] if recipes and isinstance(recipes, list) else None
+            logger.error(
+                "Failed to fetch recipe",
+                extra={
+                    "method": "GET",
+                    "status_code": response.status_code,
+                    "latency_ms": latency_ms,
+                    "group_name": group_name,
+                },
+            )
             return None
         except Exception as e:
-            logger.error(f"Error fetching recipe for {group_name}: {e}")
+            latency_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "Error fetching recipe",
+                extra={
+                    "method": "GET",
+                    "latency_ms": latency_ms,
+                    "group_name": group_name,
+                    "error": str(e),
+                },
+            )
             return None
 
     def _trigger_task_execution(
@@ -109,23 +143,31 @@ class OvenService:
     ) -> Dict[str, Any]:
         """POST to /api/v1/alerts/process to trigger task execution."""
         try:
-            response = requests.post(
-                f"{self.api_base}/alerts/process",
-                json={
-                    "alert_id": alert_id,
-                    "recipe_id": recipe_id,
-                    "task_id": task_id,
-                },
-                headers={"X-Request-ID": req_id},  # Pass req_id in headers for tracing
-                timeout=60,
-            )
+            start_time = time.time()
+            with httpx.Client(timeout=60) as client:
+                response = client.post(
+                    f"{self.api_base}/alerts/process",
+                    json={
+                        "alert_id": alert_id,
+                        "recipe_id": recipe_id,
+                        "task_id": task_id,
+                    },
+                    headers={"X-Request-ID": req_id},  # Pass req_id in headers for tracing
+                )
+            latency_ms = int((time.time() - start_time) * 1000)
 
             if response.status_code in [200, 201, 202]:
                 return response.json()
 
-            return {"success": False, "error": response.text}
+            return {
+                "success": False,
+                "error": response.text,
+                "status_code": response.status_code,
+                "latency_ms": latency_ms,
+            }
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            latency_ms = int((time.time() - start_time) * 1000)
+            return {"success": False, "error": str(e), "latency_ms": latency_ms}
 
     def _process_single_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
         """Orchestrate the processing of a single alert."""

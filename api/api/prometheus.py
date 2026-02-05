@@ -6,7 +6,7 @@
 #
 """Prometheus API endpoints for rule and metric management."""
 
-import logging
+from api.core.logging import get_logger
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,7 +15,7 @@ from api.api.auth import require_auth_if_enabled
 from api.services.prometheus_service import get_prometheus_client
 from api.services.prometheus_rule_manager import get_prometheus_rule_manager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # REMOVED hardcoded prefix to allow main.py to handle /api/v1 nesting
 router = APIRouter(tags=["prometheus"])
@@ -37,7 +37,10 @@ async def list_rules(
         rules = await client.get_rules()
         return {"rules": rules}
     except Exception as e:
-        logger.error("Failed to list rules: %s", str(e))
+        logger.error(
+            "Failed to list rules",
+            extra={"req_id": request.state.req_id, "method": request.method, "error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 

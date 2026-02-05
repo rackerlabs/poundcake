@@ -6,7 +6,6 @@
 #
 """Main FastAPI Entrypoint for PoundCake (Helm-Ready)."""
 
-import logging
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Response
@@ -15,7 +14,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from api.core.config import settings
 from api.core.middleware import PreHeatMiddleware
-from api.core.logging import setup_logging
+from api.core.logging import setup_logging, get_logger
 from api.api.health import router as health_router
 from api.api.stackstorm import router as st2_bridge_router
 from api.api.recipes import router as recipes_router
@@ -26,15 +25,15 @@ from api.api.auth import router as auth_router
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # init_db() is removed from here
-    logger.info("lifespan: PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
+    logger.info("PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
     yield
-    logger.info("lifespan: Powering down PoundCake", extra={"req_id": "SYSTEM-SHUTDOWN"})
+    logger.info("Powering down PoundCake", extra={"req_id": "SYSTEM-SHUTDOWN"})
 
 
 app = FastAPI(

@@ -165,13 +165,13 @@ async def login(request: Request) -> SessionResponse:
         username = data.get("username")
         password = data.get("password")
 
-        logger.info("login: Login attempt", extra={"req_id": req_id, "username": username})
+        logger.info("Login attempt", extra={"req_id": req_id, "username": username})
 
         if verify_credentials(username, password):
             token = create_session(username)
             session_data = _sessions[token]
 
-            logger.info("login: Login successful", extra={"req_id": req_id, "username": username})
+            logger.info("Login successful", extra={"req_id": req_id, "username": username})
 
             return SessionResponse(
                 session_id=token,
@@ -180,13 +180,13 @@ async def login(request: Request) -> SessionResponse:
                 token_type="Bearer",
             )
 
-        logger.warning("login: Invalid credentials", extra={"req_id": req_id, "username": username})
+        logger.warning("Invalid credentials", extra={"req_id": req_id, "username": username})
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(
-            "login: Login failed", extra={"req_id": req_id, "error": str(e)}, exc_info=True
+            "Login failed", extra={"req_id": req_id, "error": str(e)}, exc_info=True
         )
         raise HTTPException(status_code=400, detail="Malformed request")
