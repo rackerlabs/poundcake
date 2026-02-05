@@ -19,7 +19,7 @@ from api.schemas.schemas import (
     IngredientResponse,
     DeleteResponse,
 )
-from api.validation import get_name_param, get_enabled_param, get_limit_param, get_offset_param
+from api.schemas.query_params import RecipeQueryParams, validate_query_params
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -85,10 +85,8 @@ async def create_recipe(
 
 @router.get("/recipes/", response_model=List[RecipeDetailResponse])
 async def list_recipes(
-    name: Optional[str] = get_name_param(),
-    enabled: Optional[bool] = get_enabled_param(),
-    limit: int = get_limit_param(),
-    offset: int = get_offset_param(),
+    request: Request,
+    params: RecipeQueryParams = Depends(validate_query_params(RecipeQueryParams)),
     db: Session = Depends(get_db),
 ):
     """
@@ -100,16 +98,16 @@ async def list_recipes(
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
 
-    Returns 400 Bad Request if invalid query parameters are provided.
+    Returns 422 Unprocessable Entity if unknown or invalid query parameters are provided.
     """
     query = db.query(Recipe).options(joinedload(Recipe.ingredients))
 
-    if name is not None:
-        query = query.filter(Recipe.name == name)
-    if enabled is not None:
-        query = query.filter(Recipe.enabled == enabled)
+    if params.name is not None:
+        query = query.filter(Recipe.name == params.name)
+    if params.enabled is not None:
+        query = query.filter(Recipe.enabled == params.enabled)
 
-    return query.limit(limit).offset(offset).all()
+    return query.limit(params.limit).offset(params.offset).all()
 
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)

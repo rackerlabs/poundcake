@@ -197,3 +197,19 @@ def get_enabled_param() -> Optional[bool]:
         FastAPI Query parameter
     """
     return Query(default=None, description="Filter by enabled status (true/false)")
+
+
+def get_action_id_param() -> Optional[str]:
+    """
+    Action ID parameter with validation (StackStorm execution ID).
+
+    Returns:
+        FastAPI Query parameter
+    """
+    return Query(
+        default=None,
+        min_length=24,
+        max_length=24,
+        pattern=r"^[a-f0-9]{24}$",
+        description="Filter by StackStorm action/execution ID (24-character hex string)",
+    )
