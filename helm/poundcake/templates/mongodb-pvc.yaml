@@ -5,14 +5,14 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 # ╔════════════════════════════════════════════════════════════════╗
-# ____                        _  ____      _         
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
+# ____                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 # ╚════════════════════════════════════════════════════════════════╝
 
-{{- if and .Values.stackstorm.mongodb.enabled (not .Values.stackstorm.mongodb.external) .Values.stackstorm.mongodb.persistence.enabled }}
+{{- if and .Values.mongodb.enabled (not .Values.mongodb.external) .Values.mongodb.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -23,10 +23,10 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  {{- if .Values.stackstorm.mongodb.persistence.storageClassName }}
-  storageClassName: {{ .Values.stackstorm.mongodb.persistence.storageClassName }}
+  {{- if .Values.mongodb.persistence.storageClassName }}
+  storageClassName: {{ .Values.mongodb.persistence.storageClassName }}
   {{- end }}
   resources:
     requests:
-      storage: {{ .Values.stackstorm.mongodb.persistence.size }}
+      storage: {{ .Values.mongodb.persistence.size }}
 {{- end }}

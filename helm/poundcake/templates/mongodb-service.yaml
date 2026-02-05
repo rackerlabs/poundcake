@@ -12,7 +12,7 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 # ╚════════════════════════════════════════════════════════════════╝
 
-{{- if and .Values.stackstorm.mongodb.enabled (not .Values.stackstorm.mongodb.external) }}
+{{- if and .Values.mongodb.enabled (not .Values.mongodb.external) }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -21,9 +21,9 @@ metadata:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: mongodb
 spec:
-  type: {{ .Values.stackstorm.mongodb.service.type }}
+  type: {{ .Values.mongodb.service.type }}
   ports:
-  - port: {{ .Values.stackstorm.mongodb.service.port }}
+  - port: {{ .Values.mongodb.service.port }}
     targetPort: mongodb
     protocol: TCP
     name: mongodb
