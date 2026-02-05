@@ -64,7 +64,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "oven/oven_service.py"]
+          command: ["python", "workers/dispatcher.py"]
           env:
             - name: POUNDCAKE_API_URL
               value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"

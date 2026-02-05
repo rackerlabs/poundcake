@@ -1,18 +1,18 @@
 
-{{- if .Values.timer.enabled }}
+{{- if .Values.dispatcher.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "poundcake.fullname" . }}-timer
+  name: {{ include "poundcake.fullname" . }}-dispatcher
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: timer
+    app.kubernetes.io/component: dispatcher
 spec:
-  replicas: {{ .Values.timer.replicaCount }}
+  replicas: {{ .Values.dispatcher.replicaCount }}
   selector:
     matchLabels:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: timer
+      app.kubernetes.io/component: dispatcher
   template:
     metadata:
       annotations:
@@ -22,7 +22,7 @@ spec:
         {{- end }}
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: timer
+        app.kubernetes.io/component: dispatcher
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -59,40 +59,27 @@ spec:
             echo "✗ Timeout waiting for PoundCake API"
             exit 1
       containers:
-        - name: timer
+        - name: dispatcher
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "workers/timer.py"]
+          command: ["python", "workers/dispatcher.py"]
           env:
             - name: POUNDCAKE_API_URL
-              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1"
-            - name: ST2_API_URL
-              value: "{{ .Values.stackstorm.url }}/v1"
-            - name: TIMER_INTERVAL
-              value: {{ .Values.timer.interval | quote }}
-            - name: SLA_BUFFER_PERCENT
-              value: {{ .Values.timer.slaBufferPercent | default "0.2" | quote }}
+              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
+            - name: OVEN_INTERVAL
+              value: {{ .Values.dispatcher.interval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
           resources:
-            {{- toYaml .Values.timer.resources | nindent 12 }}
+            {{- toYaml .Values.dispatcher.resources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: config
-              mountPath: /app/config
-              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: config
-          secret:
-            secretName: {{ include "poundcake.stackstormSecretName" . }}
-            items:
-              - key: {{ .Values.stackstorm.secretKeys.apiKey }}
-                path: st2_api_key
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

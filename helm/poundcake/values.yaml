@@ -642,6 +642,20 @@ oven:
       cpu: 50m
       memory: 64Mi
 
+# Dispatcher service configuration
+# Polls API and triggers baking operations
+dispatcher:
+  enabled: true
+  replicaCount: 1
+  interval: 5
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
 # Oven-service configuration
 # Dispatcher service that converts alerts into oven objects
 ovenService:
@@ -662,6 +676,7 @@ timer:
   enabled: true
   replicaCount: 1
   interval: 10
+  slaBufferPercent: 0.2
   resources:
     limits:
       cpu: 200m
