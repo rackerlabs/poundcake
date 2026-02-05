@@ -70,6 +70,7 @@ def run_executor():
 
             task = tasks[0]
             oven_id = task["id"]
+
             # Switch from system polling req_id to alert's req_id for all subsequent operations
             req_id = task["req_id"]
 

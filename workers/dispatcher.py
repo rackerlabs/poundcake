@@ -61,7 +61,7 @@ def dispatch_loop():
                 req_id = alert.get("req_id", "UNKNOWN")
                 alert_id = alert.get("id")
 
-                # PROPAGATE: Pass the original Request ID to the next hop
+                # Pass the original Request ID to the next hop
                 headers = {"X-Request-ID": req_id}
 
                 log(f"Triggering bake for alert_id={alert_id}", req_id=req_id)

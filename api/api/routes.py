@@ -16,16 +16,7 @@ from api.core.logging import get_logger
 from api.models.models import Alert
 from api.schemas.schemas import AlertResponse, AlertUpdate, WebhookResponse
 from api.services.pre_heat import pre_heat
-from api.validation import (
-    ProcessingStatus,
-    AlertStatus,
-    get_processing_status_param,
-    get_alert_status_param,
-    get_req_id_param,
-    get_limit_param,
-    get_offset_param,
-    get_name_param,
-)
+from api.schemas.query_params import AlertQueryParams, validate_query_params
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -68,12 +59,7 @@ async def alertmanager_webhook(
 @router.get("/alerts", response_model=List[AlertResponse])
 async def get_alerts(
     request: Request,
-    processing_status: Optional[ProcessingStatus] = get_processing_status_param(),
-    alert_status: Optional[AlertStatus] = get_alert_status_param(),
-    req_id: Optional[str] = get_req_id_param(),
-    alert_name: Optional[str] = get_name_param(),
-    limit: int = get_limit_param(),
-    offset: int = get_offset_param(),
+    params: AlertQueryParams = Depends(validate_query_params(AlertQueryParams)),
     db: Session = Depends(get_db),
 ):
     """
@@ -87,7 +73,7 @@ async def get_alerts(
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
 
-    Returns 400 Bad Request if invalid query parameters are provided.
+    Returns 422 Unprocessable Entity if unknown or invalid query parameters are provided.
     """
     request_id = request.state.req_id
 
@@ -95,27 +81,29 @@ async def get_alerts(
         "get_alerts: Fetching alerts",
         extra={
             "req_id": request_id,
-            "processing_status": processing_status.value if processing_status else None,
-            "alert_status": alert_status.value if alert_status else None,
-            "filter_req_id": req_id,
-            "alert_name": alert_name,
-            "limit": limit,
-            "offset": offset,
+            "processing_status": (
+                params.processing_status.value if params.processing_status else None
+            ),
+            "alert_status": params.alert_status.value if params.alert_status else None,
+            "filter_req_id": params.req_id,
+            "alert_name": params.alert_name,
+            "limit": params.limit,
+            "offset": params.offset,
         },
     )
 
     query = db.query(Alert)
 
-    if processing_status:
-        query = query.filter(Alert.processing_status == processing_status.value)
-    if alert_status:
-        query = query.filter(Alert.alert_status == alert_status.value)
-    if req_id:
-        query = query.filter(Alert.req_id == req_id)
-    if alert_name:
-        query = query.filter(Alert.alert_name == alert_name)
+    if params.processing_status:
+        query = query.filter(Alert.processing_status == params.processing_status.value)
+    if params.alert_status:
+        query = query.filter(Alert.alert_status == params.alert_status.value)
+    if params.req_id:
+        query = query.filter(Alert.req_id == params.req_id)
+    if params.alert_name:
+        query = query.filter(Alert.alert_name == params.alert_name)
 
-    alerts = query.order_by(Alert.created_at.desc()).limit(limit).offset(offset).all()
+    alerts = query.order_by(Alert.created_at.desc()).limit(params.limit).offset(params.offset).all()
 
     logger.debug(
         "get_alerts: Alerts fetched successfully",

@@ -13,7 +13,7 @@ import requests
 import logging
 from datetime import datetime, timezone
 
-# --- Configuration ---
+# Configuration
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000/api/v1").rstrip("/")
 ST2_API_URL = os.getenv("ST2_API_URL", "http://stackstorm-api:9101/v1").rstrip("/")
 TIMER_INTERVAL = int(os.getenv("TIMER_INTERVAL", "10"))
@@ -21,13 +21,14 @@ SLA_BUFFER = float(os.getenv("SLA_BUFFER_PERCENT", "0.2"))
 
 ST2_API_KEY_FILE = "/app/config/st2_api_key"
 
-# --- Logging Setup (Matches project standard) ---
+# Configure Logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(req_id)s] %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("timer")
+
 
 def get_st2_api_key():
     """Read ST2 API key from file."""
@@ -35,22 +36,39 @@ def get_st2_api_key():
         if os.path.exists(ST2_API_KEY_FILE):
             with open(ST2_API_KEY_FILE, "r") as f:
                 key = f.read().strip()
-                if key: return key
-    except Exception: pass
+                if key:
+                    return key
+    except Exception:
+        pass
     return os.getenv("ST2_API_KEY")
 
-def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, final_status=False):
+
+def update_oven(
+    oven,
+    req_id,
+    status=None,
+    st2_status=None,
+    error_msg=None,
+    final_status=False,
+    action_result=None,
+):
     """
     Centralized helper to update Oven records.
     Calculates actual_duration (int) based on started_at and now.
+    Updates action_result with stackstorm results
     """
     oven_id = oven.get("id")
     payload = {}
     extra = {"req_id": req_id}
-    
-    if status: payload["processing_status"] = status
-    if st2_status: payload["st2_status"] = st2_status
-    if error_msg: payload["error_message"] = error_msg
+
+    if status:
+        payload["processing_status"] = status
+    if st2_status:
+        payload["st2_status"] = st2_status
+    if error_msg:
+        payload["error_message"] = error_msg
+    if action_result is not None:
+        payload["action_result"] = action_result
 
     if final_status:
         now = datetime.now(timezone.utc)
@@ -83,6 +101,7 @@ def update_oven(oven, req_id, status=None, st2_status=None, error_msg=None, fina
         logger.error(f"Failed to update Oven {oven_id}: {e}", extra=extra)
         return False
 
+
 def cancel_st2_execution(action_id, req_id):
     """Instructs StackStorm to stop an execution."""
     api_key = get_st2_api_key()
@@ -97,9 +116,10 @@ def cancel_st2_execution(action_id, req_id):
         logger.error(f"Error canceling ST2 action {action_id}: {e}", extra={"req_id": req_id})
     return False
 
+
 def check_for_timeouts(oven, req_id):
     """
-    Evaluates timeouts. 
+    Evaluates timeouts.
     SLA Warning: expected_duration * (1 + buffer)
     Hard Timeout: expected_duration * 5 (Safety net)
     """
@@ -163,11 +183,11 @@ def monitor_ovens():
             action_id = oven.get("action_id")
             extra = {"req_id": req_id}
 
-            # A. Check Timing / SLA
+            # Check Timing / SLA
             if check_for_timeouts(oven, req_id):
                 continue
 
-            # B. Sync with StackStorm
+            # Sync with StackStorm
             if not action_id:
                 continue
 
@@ -181,15 +201,20 @@ def monitor_ovens():
             if st2_resp.status_code == 200:
                 st2_data = st2_resp.json()
                 st2_status = st2_data.get("status")
+                st2_action_results = st2_data.get("result", {})
 
                 if st2_status in ["succeeded", "failed", "canceled", "timeout"]:
                     err = None
                     if st2_status == "failed":
-                        res = st2_data.get("result", {})
-                        err = res.get("error") or "StackStorm execution failed"
+                        err = st2_action_results.get("error") or "StackStorm execution failed"
 
                     update_oven(
-                        oven, req_id, st2_status=st2_status, error_msg=err, final_status=True
+                        oven,
+                        req_id,
+                        st2_status=st2_status,
+                        error_msg=err,
+                        final_status=True,
+                        action_result=st2_action_results,
                     )
                     logger.info(
                         f"Oven {oven['id']} finalized with ST2 status: {st2_status}", extra=extra
