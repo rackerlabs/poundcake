@@ -94,7 +94,7 @@ spec:
           echo "Verifying user..."
           mongosh "${MONGO_URI}" --eval "
             db.getSiblingDB('st2').runCommand({usersInfo: '${ST2_DB_USERNAME}'})
-          " | grep -q '"user" : "${ST2_DB_USERNAME}"' && echo "✓ User ${ST2_DB_USERNAME} verified in st2 database" || (echo "✗ ERROR: User verification failed" && exit 1)
+          " | grep -q "user: '${ST2_DB_USERNAME}'" && echo "✓ User ${ST2_DB_USERNAME} verified in st2 database" || (echo "✗ ERROR: User verification failed" && exit 1)
 
           echo "========================================"
           echo "MongoDB Initialization Complete"
