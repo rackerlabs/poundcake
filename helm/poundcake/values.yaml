@@ -167,7 +167,7 @@ stackstorm:
   # Admin credentials for auto API key generation
   adminUser: "st2admin"
   adminPassword: ""
-  adminPasswordSecret: "stackstorm-admin"
+  adminPasswordSecret: "poundcake-st2-auth"
   adminPasswordSecretKey: "password"
 
 # StackStorm subchart configuration

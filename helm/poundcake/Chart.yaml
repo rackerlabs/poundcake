@@ -2,7 +2,7 @@ apiVersion: v2
 name: poundcake
 description: All-in-one auto-remediation platform with integrated StackStorm, bridging Prometheus Alertmanager with automated remediation actions
 type: application
-version: 2.0.15
+version: 2.0.16
 appVersion: "main"
 maintainers:
   - name: Jake Briggs
@@ -18,7 +18,7 @@ sources:
   - https://github.com/aedan/poundCake
 dependencies:
   - name: rabbitmq
-    version: "14.6.6"
+    version: "15.0.7"
     repository: "https://charts.bitnami.com/bitnami"
     condition: rabbitmq.enabled
     tags:
