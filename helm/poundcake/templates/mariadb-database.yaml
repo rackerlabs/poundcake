@@ -37,4 +37,3 @@ spec:
   # Retry configuration for database creation
   retryInterval: 5s
 {{- end }}
-{{- end }}
