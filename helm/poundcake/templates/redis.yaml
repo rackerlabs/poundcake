@@ -26,6 +26,10 @@ spec:
         memory: 512Mi
     {{- end }}
 
+  podSecurityContext:
+    runAsUser: 1000
+    fsGroup: 1000
+
   storage:
     volumeClaimTemplate:
       spec:
