@@ -302,13 +302,12 @@ mappings:
 
 # ServiceMonitor for Prometheus Operator
 serviceMonitor:
-  enabled: false
-  namespace: ""
+  enabled: true
+  namespace: prometheus
   interval: 30s
   scrapeTimeout: 10s
-  labels: {}
-  # selector:
-  #   prometheus: kube-prometheus
+  labels:
+    release: kube-prometheus-stack
 
 # Pod Disruption Budget
 podDisruptionBudget:
@@ -326,7 +325,8 @@ persistence:
 # Prometheus integration
 prometheus:
   # Prometheus API URL for querying metrics
-  url: "http://prometheus-server.prometheus.svc.cluster.local:9090"
+  # Default for kube-prometheus-stack installation
+  url: "http://kube-prometheus-stack-prometheus.prometheus.svc.cluster.local:9090"
   verifySsl: false
 
   # Prometheus Operator CRD settings (Kubernetes)
@@ -337,7 +337,7 @@ prometheus:
   # IMPORTANT: Labels to apply to PrometheusRule CRDs created by PoundCake
   # These MUST match your Prometheus Operator's ruleSelector, otherwise
   # Prometheus will not load the rules. Check your Prometheus CR with:
-  #   kubectl get prometheus -n <namespace> -o jsonpath='{.items[0].spec.ruleSelector}'
+  #   kubectl get prometheus -n prometheus -o jsonpath='{.items[0].spec.ruleSelector}'
   #
   # Default is for kube-prometheus-stack. Adjust if using a different release name.
   crdLabels:
@@ -466,7 +466,7 @@ database:
 mariadbOperator:
   # Enable MariaDB Operator integration
   # When true, the chart will check for the operator and create MariaDB CRDs
-  enabled: false
+  enabled: true
 
   # Namespace to deploy MariaDB resources (defaults to release namespace)
   namespace: ""
