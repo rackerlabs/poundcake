@@ -15,14 +15,7 @@ from api.core.database import get_db
 from api.core.logging import get_logger
 from api.models.models import Alert, Oven, Recipe, Ingredient
 from api.schemas.schemas import OvenResponse, OvenUpdate, BakeResponse, OvenDetailResponse
-from api.validation import (
-    ProcessingStatus,
-    get_processing_status_param,
-    get_req_id_param,
-    get_alert_id_param,
-    get_limit_param,
-    get_offset_param,
-)
+from api.schemas.query_params import OvenQueryParams, validate_query_params
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -57,7 +50,6 @@ async def bake_ovens(
         # Close alert if no recipe exists
         alert.processing_status = "complete"
         alert.updated_at = datetime.now(timezone.utc)
-
         db.commit()
 
         logger.error(
@@ -120,11 +112,7 @@ async def bake_ovens(
 @router.get("/ovens", response_model=List[OvenDetailResponse])
 async def list_ovens(
     request: Request,
-    processing_status: Optional[ProcessingStatus] = get_processing_status_param(),
-    req_id: Optional[str] = get_req_id_param(),
-    alert_id: Optional[int] = get_alert_id_param(),
-    limit: int = get_limit_param(),
-    offset: int = get_offset_param(),
+    params: OvenQueryParams = Depends(validate_query_params(OvenQueryParams)),
     db: Session = Depends(get_db),
 ):
     """
@@ -133,11 +121,12 @@ async def list_ovens(
     Query Parameters:
     - processing_status: Filter by processing status (new/pending/processing/complete/failed)
     - req_id: Filter by request ID
-    - alert_id: Filter by alert ID
+    - alert_id: Filter by alert ID (integer)
+    - action_id: Filter by StackStorm action/execution ID (24-char hex string)
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
 
-    Returns 400 Bad Request if invalid query parameters are provided.
+    Returns 422 Unprocessable Entity if unknown or invalid query parameters are provided.
     """
     request_id = request.state.req_id
 
@@ -145,29 +134,35 @@ async def list_ovens(
         "list_ovens: Fetching ovens",
         extra={
             "req_id": request_id,
-            "processing_status": processing_status.value if processing_status else None,
-            "filter_req_id": req_id,
-            "alert_id": alert_id,
-            "limit": limit,
-            "offset": offset,
+            "processing_status": (
+                params.processing_status.value if params.processing_status else None
+            ),
+            "filter_req_id": params.req_id,
+            "alert_id": params.alert_id,
+            "action_id": params.action_id,
+            "limit": params.limit,
+            "offset": params.offset,
         },
     )
 
     # Eager load ingredient relationship for oven executor
     query = db.query(Oven).join(Ingredient)
 
-    if processing_status:
-        query = query.filter(Oven.processing_status == processing_status.value)
-    if req_id:
-        query = query.filter(Oven.req_id == req_id)
-    if alert_id:
-        query = query.filter(Oven.alert_id == alert_id)
+    if params.processing_status:
+        query = query.filter(Oven.processing_status == params.processing_status.value)
+    if params.req_id:
+        query = query.filter(Oven.req_id == params.req_id)
+    if params.alert_id:
+        query = query.filter(Oven.alert_id == params.alert_id)
+    if params.action_id:
+        query = query.filter(Oven.action_id == params.action_id)
 
-    ovens = query.order_by(Oven.created_at.desc()).limit(limit).offset(offset).all()
+    ovens = query.order_by(Oven.created_at.desc()).limit(params.limit).offset(params.offset).all()
 
     logger.debug("list_ovens: Ovens fetched", extra={"req_id": request_id, "count": len(ovens)})
 
     return ovens
+
 
 @router.put("/ovens/{oven_id}", response_model=OvenResponse)
 @router.patch("/ovens/{oven_id}", response_model=OvenResponse)
