@@ -45,9 +45,7 @@ class KeyValueConsoleFormatter(logging.Formatter):
         req_id = getattr(record, "req_id", "SYSTEM")
         method = getattr(record, "method", None) or getattr(record, "http_method", None) or "NA"
         status_code = (
-            getattr(record, "status_code", None)
-            or getattr(record, "http_status", None)
-            or "NA"
+            getattr(record, "status_code", None) or getattr(record, "http_status", None) or "NA"
         )
         latency_ms = (
             getattr(record, "latency_ms", None)
@@ -70,7 +68,16 @@ class KeyValueConsoleFormatter(logging.Formatter):
             key: value
             for key, value in record.__dict__.items()
             if key not in self._reserved
-            and key not in {"req_id", "method", "http_method", "status_code", "http_status", "latency_ms", "processing_time_ms"}
+            and key
+            not in {
+                "req_id",
+                "method",
+                "http_method",
+                "status_code",
+                "http_status",
+                "latency_ms",
+                "processing_time_ms",
+            }
         }
         if not extras:
             return base

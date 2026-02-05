@@ -554,20 +554,21 @@
             const res = await fetch('/api/v1/stats');
             const data = await res.json();
 
-            // Update header stats
+            // Update header stats (API returns total_alerts and alerts_by_processing_status, not total and by_status)
             const headerStats = document.getElementById('header-stats');
             headerStats.innerHTML = `
-                <span>Total: ${data.total}</span>
-                ${Object.entries(data.by_status).map(([k, v]) => `<span>${k}: ${v}</span>`).join('')}
+                <span>Total Alerts: ${data.total_alerts || 0}</span>
+                <span>Total Recipes: ${data.total_recipes || 0}</span>
+                <span>Total Executions: ${data.total_executions || 0}</span>
             `;
 
             // Update stats bar
             const statsBar = document.getElementById('stats-bar');
             statsBar.innerHTML = '';
 
-            const statusOrder = ['received', 'remediating', 'remediated', 'resolved'];
+            const statusOrder = ['new', 'processing', 'complete', 'failed'];
             statusOrder.forEach(status => {
-                const count = data.by_status[status] || 0;
+                const count = data.alerts_by_processing_status?.[status] || 0;
                 if (count > 0 || status === 'received' || status === 'remediating') {
                     statsBar.innerHTML += `
                         <div class="stat-item">
@@ -640,20 +641,21 @@
         }
 
         async function loadMappings() {
-            const res = await fetch('/api/v1/mappings');
+            const res = await fetch('/api/v1/recipes/');
             const data = await res.json();
             const tbody = document.getElementById('mappings-table');
             tbody.innerHTML = '';
 
-            for (const [name, config] of Object.entries(data.mappings)) {
-                const actions = config.actions ? config.actions.length : 0;
+            // data is now an array of recipes, not an object with mappings
+            for (const recipe of data) {
+                const actions = recipe.ingredients ? recipe.ingredients.length : 0;
                 tbody.innerHTML += `
                     <tr>
-                        <td>${name}</td>
-                        <td>${config.handler || 'yaml_config'}</td>
+                        <td>${recipe.name}</td>
+                        <td>${recipe.description || 'N/A'}</td>
                         <td>${actions}</td>
                         <td>
-                            <button class="btn btn-primary" onclick="editMapping('${name}')">Edit</button>
+                            <button class="btn btn-primary" onclick="editMapping('${recipe.name}')">Edit</button>
                             <button class="btn btn-danger" onclick="deleteMapping('${name}')">Delete</button>
                         </td>
                     </tr>
@@ -1451,16 +1453,16 @@
             const tbody = document.getElementById('history-table');
             tbody.innerHTML = '';
 
-            data.remediations.forEach(r => {
-                const statusClass = r.status === 'success' ? 'status-success' :
-                                   r.status === 'failed' ? 'status-failed' : 'status-running';
+            data.forEach(r => {
+                const statusClass = r.processing_status === 'complete' ? 'status-success' :
+                                   r.processing_status === 'failed' ? 'status-failed' : 'status-running';
                 tbody.innerHTML += `
                     <tr>
-                        <td>${r.alert_name}</td>
-                        <td>${r.action_name}</td>
-                        <td><span class="status ${statusClass}">${r.status}</span></td>
-                        <td>${new Date(r.started_at).toLocaleString()}</td>
-                        <td>${r.execution_id || '-'}</td>
+                        <td>${r.task_name || 'Unknown'}</td>
+                        <td>${r.st2_action || 'N/A'}</td>
+                        <td><span class="status ${statusClass}">${r.processing_status}</span></td>
+                        <td>${r.started_at ? new Date(r.started_at).toLocaleString() : 'Pending'}</td>
+                        <td>${r.action_id || '-'}</td>
                     </tr>
                 `;
             });
@@ -1752,18 +1754,18 @@ actions:
                 </div>
             `;
 
-            // Update recent activity
+            // Update recent activity (history is now an array of ovens, not an object with remediations)
             const activityDiv = document.getElementById('recent-activity');
-            if (history.remediations.length === 0) {
+            if (!history || history.length === 0) {
                 activityDiv.innerHTML = '<p style="color: #666; text-align: center;">No recent activity</p>';
             } else {
-                activityDiv.innerHTML = history.remediations.slice(0, 5).map(r => {
-                    const statusClass = r.status === 'success' ? 'success' : 'failed';
-                    const time = new Date(r.started_at).toLocaleString();
+                activityDiv.innerHTML = history.slice(0, 5).map(r => {
+                    const statusClass = r.processing_status === 'complete' ? 'success' : (r.processing_status === 'failed' ? 'failed' : 'pending');
+                    const time = r.started_at ? new Date(r.started_at).toLocaleString() : new Date(r.created_at).toLocaleString();
                     return `
                         <div class="activity-item ${statusClass}">
-                            <div><strong>${r.alert_name}</strong> → ${r.action_name}</div>
-                            <div class="time">${time}</div>
+                            <div><strong>${r.task_name || 'Unknown Task'}</strong> → ${r.st2_action || 'N/A'}</div>
+                            <div class="time">${time} - ${r.processing_status}</div>
                         </div>
                     `;
                 }).join('');
@@ -1774,15 +1776,15 @@ actions:
             quickStatsDiv.innerHTML = `
                 <div class="metric-row">
                     <span class="metric-label">Active Alerts</span>
-                    <span class="metric-value">${stats.by_status?.remediating || 0}</span>
+                    <span class="metric-value">${stats.alerts_by_processing_status?.processing || stats.alerts_by_processing_status?.new || 0}</span>
                 </div>
                 <div class="metric-row">
-                    <span class="metric-label">Resolved Today</span>
-                    <span class="metric-value">${stats.by_status?.resolved || 0}</span>
+                    <span class="metric-label">Total Executions</span>
+                    <span class="metric-value">${stats.total_executions || 0}</span>
                 </div>
                 <div class="metric-row">
-                    <span class="metric-label">Total Tracked</span>
-                    <span class="metric-value">${stats.total || 0}</span>
+                    <span class="metric-label">Total Alerts</span>
+                    <span class="metric-value">${stats.total_alerts || 0}</span>
                 </div>
             `;
             } catch (error) {

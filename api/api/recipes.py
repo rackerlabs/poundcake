@@ -34,9 +34,7 @@ async def create_recipe(
     """Create a new recipe with ingredients."""
     req_id = request.state.req_id
 
-    logger.info(
-        "Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name}
-    )
+    logger.info("Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name})
 
     existing = db.query(Recipe).filter(Recipe.name == recipe.name).first()
     if existing:
@@ -151,9 +149,7 @@ async def delete_recipe(
 
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
-        logger.warning(
-            "Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id}
-        )
+        logger.warning("Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id})
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     recipe_name = recipe.name
