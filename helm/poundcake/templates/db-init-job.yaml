@@ -84,7 +84,7 @@ spec:
 
           if [ "$MIGRATION_COUNT" -eq 0 ]; then
             echo "[WARN] No migrations found. Creating initial schema migration..."
-            python3 -m alembic -c /app/alembic.ini revision --autogenerate -m "initial_schema"
+            alembic -c /app/alembic.ini revision --autogenerate -m "initial_schema"
             echo "[OK] Initial migration created"
           else
             echo "[OK] Found $MIGRATION_COUNT existing migration(s)"
@@ -92,7 +92,7 @@ spec:
 
           # Run database migrations
           echo "Running database migrations..."
-          python3 -m alembic -c /app/alembic.ini upgrade head
+          alembic -c /app/alembic.ini upgrade head
 
           if [ $? -eq 0 ]; then
             echo "✓ Database migrations applied successfully"
@@ -104,7 +104,7 @@ spec:
           # Show current revision
           echo ""
           echo "Current database revision:"
-          python3 -m alembic -c /app/alembic.ini current
+          alembic -c /app/alembic.ini current
 
           echo "========================================"
           echo "Migration Complete"
