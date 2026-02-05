@@ -30,47 +30,6 @@ spec:
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{- if or .Values.database.url .Values.database.existingSecret .Values.mariadbOperator.enabled }}
-      initContainers:
-        - name: wait-for-db-init
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command:
-          - /bin/bash
-          - -c
-          - |
-            set -e
-            echo "Waiting for database initialization job to complete..."
-
-            MAX_WAIT=300  # 5 minutes
-            ELAPSED=0
-            INTERVAL=5
-
-            # Wait for the migration job to complete successfully
-            while [ $ELAPSED -lt $MAX_WAIT ]; do
-              # Check if db-init job exists and completed successfully
-              JOB_STATUS=$(kubectl get job {{ include "poundcake.fullname" . }}-db-init -n {{ .Release.Namespace }} -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "")
-
-              if [ "$JOB_STATUS" = "1" ]; then
-                echo "✓ Database initialization completed successfully"
-                exit 0
-              fi
-
-              # Check if job failed
-              JOB_FAILED=$(kubectl get job {{ include "poundcake.fullname" . }}-db-init -n {{ .Release.Namespace }} -o jsonpath='{.status.failed}' 2>/dev/null || echo "0")
-              if [ "$JOB_FAILED" != "0" ] && [ "$JOB_FAILED" != "" ]; then
-                echo "✗ Database initialization job failed"
-                exit 1
-              fi
-
-              echo "Waiting for db-init... (${ELAPSED}s / ${MAX_WAIT}s)"
-              sleep $INTERVAL
-              ELAPSED=$((ELAPSED + INTERVAL))
-            done
-
-            echo "✗ Timeout waiting for database initialization"
-            exit 1
-      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
