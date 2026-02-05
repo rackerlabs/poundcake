@@ -16,6 +16,7 @@ This file contains the StackStorm API key used by PoundCake to authenticate with
 **The .env file ST2_API_KEY is NOT used!**
 
 The `ST2_API_KEY` entry in `.env` is updated by st2client as a reference/backup, but:
+
 - It's NOT passed to containers as an environment variable
 - The API reads from THIS file (`st2_api_key`), not from .env
 - You can safely ignore the .env entry
@@ -23,6 +24,7 @@ The `ST2_API_KEY` entry in `.env` is updated by st2client as a reference/backup,
 ### Persistence Across Restarts
 
 This directory is a bind mount, so files persist across:
+
 - `docker compose restart`
 - `docker compose down`
 - `docker compose down -v` (!)
@@ -68,6 +70,7 @@ The `.gitignore` file excludes `config/st2_api_key` to prevent accidentally comm
 **Problem:** 401 Unauthorized errors from StackStorm
 
 **Solution:**
+
 ```bash
 # Check if key exists
 cat config/st2_api_key
@@ -81,6 +84,7 @@ docker compose logs -f st2client
 **Problem:** Old key from previous deployment
 
 **Solution:**
+
 ```bash
 ./scripts/clean-config.sh
 docker compose restart st2client

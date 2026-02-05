@@ -94,7 +94,7 @@ echo ""
 echo "4. Checking core pack..."
 if docker compose exec -T stackstorm-actionrunner test -d /opt/stackstorm/packs/core; then
     success "Core pack directory exists"
-    
+
     # Check if actions exist
     CORE_ACTIONS=$(docker compose exec -T stackstorm-actionrunner sh -c "ls -1 /opt/stackstorm/packs/core/actions/ 2>/dev/null | wc -l" || echo "0")
     if [ "$CORE_ACTIONS" -gt 0 ]; then

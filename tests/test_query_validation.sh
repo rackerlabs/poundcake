@@ -24,19 +24,19 @@ run_test() {
     local name="$1"
     local url="$2"
     local expected_status="$3"
-    
+
     test_count=$((test_count + 1))
-    
+
     echo "Test $test_count: $name"
     echo "  URL: $url"
-    
+
     response=$(curl -s -w "\n%{http_code}" "$url")
     status_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
-    
+
     echo "  Expected: $expected_status"
     echo "  Got: $status_code"
-    
+
     if [ "$status_code" == "$expected_status" ]; then
         echo -e "  ${GREEN}✓ PASS${NC}"
         pass_count=$((pass_count + 1))

@@ -47,7 +47,9 @@ async def trigger_st2_execution(
         )
 
         # Utilize the existing async StackStormClient inside the manager
-        result = await manager._client.execute_action(action_ref=action_ref, parameters=parameters)
+        result = await manager._client.execute_action(
+            req_id=req_id, action_ref=action_ref, parameters=parameters
+        )
 
         logger.info(
             "execute: StackStorm execution started successfully",

@@ -61,6 +61,7 @@ class StackStormClient:
     async def execute_action(
         self,
         action_ref: str,
+        req_id: str,
         parameters: dict[str, Any] | None = None,
         timeout: int = 300,
     ) -> dict[str, Any]:
@@ -70,6 +71,7 @@ class StackStormClient:
             action_ref: The action reference (pack.action_name)
             parameters: Parameters to pass to the action
             timeout: Request timeout in seconds
+            req_id: Orignal request id from ovens.req_id
 
         Returns:
             The execution result from StackStorm
@@ -88,7 +90,7 @@ class StackStormClient:
             try:
                 logger.info(
                     "execute_action: Executing StackStorm action",
-                    extra={"action_ref": action_ref, "parameters": parameters},
+                    extra={"req_id": req_id, "action_ref": action_ref, "parameters": parameters},
                 )
 
                 response = await client.post(
@@ -102,6 +104,7 @@ class StackStormClient:
                     logger.info(
                         "execute_action: Action execution started successfully",
                         extra={
+                            "req_id": req_id,
                             "action_ref": action_ref,
                             "execution_id": result.get("id"),
                             "status": result.get("status"),
@@ -113,6 +116,7 @@ class StackStormClient:
                     logger.error(
                         "execute_action: StackStorm API error",
                         extra={
+                            "req_id": req_id,
                             "action_ref": action_ref,
                             "status_code": response.status_code,
                             "error": response.text,
@@ -123,7 +127,12 @@ class StackStormClient:
             except httpx.TimeoutException as e:
                 logger.error(
                     "execute_action: StackStorm request timed out",
-                    extra={"action_ref": action_ref, "timeout": timeout, "error": str(e)},
+                    extra={
+                        "req_id": req_id,
+                        "action_ref": action_ref,
+                        "timeout": timeout,
+                        "error": str(e),
+                    },
                     exc_info=True,
                 )
                 raise StackStormError(f"StackStorm request timed out after {timeout}s") from e
@@ -131,7 +140,7 @@ class StackStormClient:
             except httpx.RequestError as e:
                 logger.error(
                     "execute_action: StackStorm request failed",
-                    extra={"action_ref": action_ref, "error": str(e)},
+                    extra={"req_id": req_id, "action_ref": action_ref, "error": str(e)},
                     exc_info=True,
                 )
                 raise StackStormError(f"StackStorm request failed: {e}") from e

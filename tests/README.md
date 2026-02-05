@@ -17,17 +17,20 @@ pytest tests/                    # Python unit tests
 ## Prerequisites
 
 **Python unit tests:**
+
 ```bash
 pip install -r requirements.txt
 ```
 
 **Integration tests:**
+
 ```bash
 docker compose up -d
 sleep 75  # Wait for services
 ```
 
 **Flow test (additional):**
+
 ```bash
 apt-get install jq  # or brew install jq
 ```
@@ -44,16 +47,16 @@ apt-get install jq  # or brew install jq
 
 ## What's Tested
 
-[OK] Database models (Alert, Recipe, Oven, Ingredient)  
-[OK] Health endpoints (/health, /stats)  
-[OK] OpenAPI schema  
-[OK] Webhook alert ingestion  
-[OK] Request ID tracking  
-[OK] Recipe creation  
-[OK] Oven baking (task generation)  
-[OK] Task execution via StackStorm  
-[OK] Timer monitoring  
-[OK] Task completion  
+[OK] Database models (Alert, Recipe, Oven, Ingredient)
+[OK] Health endpoints (/health, /stats)
+[OK] OpenAPI schema
+[OK] Webhook alert ingestion
+[OK] Request ID tracking
+[OK] Recipe creation
+[OK] Oven baking (task generation)
+[OK] Task execution via StackStorm
+[OK] Timer monitoring
+[OK] Task completion
 
 ## Common Commands
 
@@ -93,6 +96,7 @@ docker compose logs | grep <request-id>
 ## Test Updates Made
 
 **Fixed Issues:**
+
 - [OK] Corrected API title check (was "PoundCake", now "PoundCake API")
 - [OK] Removed non-existent /ready and /live endpoint tests
 - [OK] Added /stats endpoint test

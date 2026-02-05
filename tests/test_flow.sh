@@ -94,10 +94,10 @@ COUNT=0
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
     echo "Checking status... ($((COUNT+1))/$MAX_RETRIES)"
-    
+
     # Fetch ovens for this request ID
     OVENS=$(curl -s "$API_URL/ovens?req_id=$REQ_ID")
-    
+
     # Check if we got a valid response
     if [ -z "$OVENS" ] || [ "$OVENS" == "[]" ]; then
         echo "WAIT: No ovens found yet..."
@@ -108,7 +108,7 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
         COMPLETE=$(echo "$OVENS" | jq '[.[] | select(.processing_status=="complete")] | length')
 
         echo "STATUS: $TOTAL tasks found | $PROCESSING processing | $COMPLETE complete"
-        
+
         if [ "$COMPLETE" -eq "$TOTAL" ] && [ "$TOTAL" -gt 0 ]; then
             echo ""
             echo "-------------------------------------------------------"
