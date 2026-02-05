@@ -73,7 +73,7 @@ spec:
 
           if [ "$MIGRATION_COUNT" -eq 0 ]; then
             echo "[WARN] No migrations found. Creating initial schema migration..."
-            alembic revision --autogenerate -m "initial_schema"
+            python3 -m alembic revision --autogenerate -m "initial_schema"
             echo "[OK] Initial migration created"
           else
             echo "[OK] Found $MIGRATION_COUNT existing migration(s)"
