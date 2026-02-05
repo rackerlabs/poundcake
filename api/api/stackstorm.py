@@ -32,18 +32,26 @@ async def trigger_st2_execution(
     parameters = request_data.get("parameters", {})
 
     logger.info(
-        "execute: Received StackStorm execution request",
-        extra={"req_id": req_id, "action_ref": action_ref},
+        "Received StackStorm execution request",
+        extra={"req_id": req_id, "action_ref": action_ref, "method": request.method},
     )
 
     if not action_ref:
-        logger.warning("execute: Missing action reference", extra={"req_id": req_id})
+        logger.warning(
+            "Missing action reference",
+            extra={"req_id": req_id, "method": request.method, "status_code": 400},
+        )
         raise HTTPException(status_code=400, detail="Missing 'action' (action_ref) in payload")
 
     try:
         logger.debug(
-            "execute: Calling StackStorm API",
-            extra={"req_id": req_id, "action_ref": action_ref, "params": parameters},
+            "Calling StackStorm API",
+            extra={
+                "req_id": req_id,
+                "action_ref": action_ref,
+                "method": request.method,
+                "params": parameters,
+            },
         )
 
         # Utilize the existing async StackStormClient inside the manager
@@ -52,16 +60,28 @@ async def trigger_st2_execution(
         )
 
         logger.info(
-            "execute: StackStorm execution started successfully",
-            extra={"req_id": req_id, "action_ref": action_ref, "execution_id": result.get("id")},
+            "StackStorm execution started successfully",
+            extra={
+                "req_id": req_id,
+                "action_ref": action_ref,
+                "method": request.method,
+                "status_code": 200,
+                "execution_id": result.get("id"),
+            },
         )
 
         return ExecutionResponse(**result)
 
     except Exception as e:
         logger.error(
-            "execute: StackStorm execution failed",
-            extra={"req_id": req_id, "action_ref": action_ref, "error": str(e)},
+            "StackStorm execution failed",
+            extra={
+                "req_id": req_id,
+                "action_ref": action_ref,
+                "method": request.method,
+                "status_code": 502,
+                "error": str(e),
+            },
             exc_info=True,
         )
         # This catches StackStormError or connectivity issues

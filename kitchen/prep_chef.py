@@ -9,7 +9,7 @@
 
 import os
 import time
-import requests
+import httpx
 
 from api.core.logging import setup_logging, get_logger
 
@@ -28,7 +28,7 @@ SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
 def wait_for_api():
     """Wait for API to be ready before starting main loop."""
     logger.info(
-        "wait_for_api: Waiting for API to be ready",
+        "Waiting for API to be ready",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL},
     )
     max_attempts = 30
@@ -36,11 +36,19 @@ def wait_for_api():
 
     while attempt < max_attempts:
         try:
-            resp = requests.get(f"{API_URL}/health", timeout=5)
+            start_time = time.time()
+            with httpx.Client(timeout=5) as client:
+                resp = client.get(f"{API_URL}/health")
+            latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code == 200:
                 logger.info(
-                    "wait_for_api: API is ready! Starting prep chef...",
-                    extra={"req_id": SYSTEM_REQ_ID},
+                    "API is ready! Starting prep chef...",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": resp.status_code,
+                        "latency_ms": latency_ms,
+                    },
                 )
                 return True
         except Exception:
@@ -51,7 +59,7 @@ def wait_for_api():
             time.sleep(2)  # Check every 2 seconds
 
     logger.warning(
-        "wait_for_api: API did not become ready. Starting anyway...",
+        "API did not become ready. Starting anyway...",
         extra={"req_id": SYSTEM_REQ_ID, "max_attempts": max_attempts},
     )
     return False
@@ -61,17 +69,31 @@ def prep_loop():
     """Main prep chef loop - polls for new alerts and triggers baking."""
     wait_for_api()
     logger.info(
-        "prep_loop: Starting prep chef",
+        "Starting prep chef",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": OVEN_INTERVAL},
     )
 
     while True:
         try:
             # Fetch alerts.process_status of 'new' (crawler)
-            resp = requests.get(
-                f"{API_URL}/alerts", params={"processing_status": "new"}, timeout=10
-            )
-            resp.raise_for_status()
+            start_time = time.time()
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(
+                    f"{API_URL}/alerts", params={"processing_status": "new"}
+                )
+            latency_ms = int((time.time() - start_time) * 1000)
+            if resp.status_code != 200:
+                logger.error(
+                    "Failed to fetch new alerts",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": resp.status_code,
+                        "latency_ms": latency_ms,
+                    },
+                )
+                time.sleep(OVEN_INTERVAL)
+                continue
             alerts = resp.json()
 
             for alert in alerts:
@@ -82,33 +104,44 @@ def prep_loop():
                 headers = {"X-Request-ID": req_id}
 
                 logger.info(
-                    f"prep_loop: Preparing alert with id {alert_id} for baking",
+                    f"Preparing alert with id {alert_id} for baking",
                     extra={"req_id": req_id, "alert_id": alert_id},
                 )
 
-                bake_resp = requests.post(
-                    f"{API_URL}/ovens/bake/{alert_id}", headers=headers, timeout=15
-                )
+                start_time = time.time()
+                with httpx.Client(timeout=15) as client:
+                    bake_resp = client.post(
+                        f"{API_URL}/ovens/bake/{alert_id}", headers=headers
+                    )
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 if bake_resp.status_code in [200, 201]:
                     logger.info(
-                        f"prep_loop: Successfully prepared alert with id {alert_id} for oven",
-                        extra={"req_id": req_id, "alert_id": alert_id},
-                    )
-                else:
-                    logger.error(
-                        "prep_loop: Bake preparation failed",
+                        f"Successfully prepared alert with id {alert_id} for oven",
                         extra={
                             "req_id": req_id,
                             "alert_id": alert_id,
+                            "method": "POST",
                             "status_code": bake_resp.status_code,
+                            "latency_ms": latency_ms,
+                        },
+                    )
+                else:
+                    logger.error(
+                        "Bake preparation failed",
+                        extra={
+                            "req_id": req_id,
+                            "alert_id": alert_id,
+                            "method": "POST",
+                            "status_code": bake_resp.status_code,
+                            "latency_ms": latency_ms,
                             "response": bake_resp.text,
                         },
                     )
 
         except Exception as e:
             logger.error(
-                "prep_loop: Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
+                "Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
             )
 
         time.sleep(OVEN_INTERVAL)

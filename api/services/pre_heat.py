@@ -30,7 +30,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
     alerts = payload.get("alerts", [])
 
     if not alerts:
-        logger.warning("pre_heat: No alerts in payload", extra={"req_id": req_id})
+        logger.warning("No alerts in payload", extra={"req_id": req_id})
         return {"status": "no_alerts"}
 
     # Process first alert (Alertmanager sends one alert per webhook in practice)
@@ -45,7 +45,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
     )
 
     logger.info(
-        "pre_heat: Processing alert",
+        "Processing alert",
         extra={
             "req_id": req_id,
             "alert_name": alert_name,
@@ -96,7 +96,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
             db.refresh(new_alert)
 
             logger.info(
-                "pre_heat: New alert created",
+                "New alert created",
                 extra={
                     "req_id": req_id,
                     "alert_id": new_alert.id,
@@ -111,7 +111,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
             db.commit()
 
             logger.info(
-                "pre_heat: Alert counter incremented",
+                "Alert counter incremented",
                 extra={"req_id": req_id, "alert_id": existing.id, "counter": existing.counter},
             )
             return {"status": "counter_incremented", "alert_id": existing.id}
@@ -121,11 +121,11 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
         existing.ends_at = alert_data.get("endsAt")
         db.commit()
 
-        logger.info("pre_heat: Alert resolved", extra={"req_id": req_id, "alert_id": existing.id})
+        logger.info("Alert resolved", extra={"req_id": req_id, "alert_id": existing.id})
         return {"status": "resolved", "alert_id": existing.id}
 
     logger.debug(
-        "pre_heat: Alert ignored",
+        "Alert ignored",
         extra={"req_id": req_id, "alert_status": alert_status, "existing": existing is not None},
     )
     return {"status": "ignored"}

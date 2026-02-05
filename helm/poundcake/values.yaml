@@ -126,7 +126,7 @@ config:
 
   # Logging
   logLevel: INFO
-  logFormat: json
+  logFormat: console
 
   # Metrics
   metricsEnabled: true

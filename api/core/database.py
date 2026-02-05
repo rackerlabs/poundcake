@@ -7,13 +7,13 @@
 """Database configuration and session management."""
 
 import time
-import logging
+from api.core.logging import get_logger
 from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from api.core.config import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Create engine
 engine = create_engine(

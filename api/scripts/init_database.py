@@ -28,9 +28,7 @@ from api.core.database import (  # noqa: E402
 )
 from api.models.models import (  # noqa: E402
     Recipe,
-    Ingredient,  # noqa: F401 - Required for Base.metadata.create_all()
-    Oven,  # noqa: F401 - Required for Base.metadata.create_all()
-    Alert,  # noqa: F401 - Required for Base.metadata.create_all()
+    Ingredient,
 )
 from api.core.logging import (  # noqa: E402
     setup_logging,
@@ -43,20 +41,20 @@ logger = get_logger(__name__)
 
 def init_database() -> None:
     """Initialize database tables."""
-    logger.info("init_database: Creating database tables", extra={"req_id": "SYSTEM-DB-INIT"})
+    logger.info("Creating database tables", extra={"req_id": "SYSTEM-DB-INIT"})
 
     try:
         Base.metadata.create_all(bind=engine)
 
         tables = list(Base.metadata.tables.keys())
         logger.info(
-            "init_database: Database tables created successfully",
+            "Database tables created successfully",
             extra={"req_id": "SYSTEM-DB-INIT", "table_count": len(tables), "tables": tables},
         )
 
     except Exception as e:
         logger.error(
-            "init_database: Failed to create database tables",
+            "Failed to create database tables",
             extra={"req_id": "SYSTEM-DB-INIT", "error": str(e)},
             exc_info=True,
         )
@@ -65,7 +63,7 @@ def init_database() -> None:
 
 def seed_default_recipes() -> None:
     """Seed database with default recipes and their ingredients."""
-    logger.info("seed_default_recipes: Starting", extra={"req_id": "SYSTEM-DB-INIT"})
+    logger.info("Starting", extra={"req_id": "SYSTEM-DB-INIT"})
 
     db = SessionLocal()
 
@@ -74,7 +72,7 @@ def seed_default_recipes() -> None:
         existing_count = db.query(Recipe).count()
         if existing_count > 0:
             logger.info(
-                "seed_default_recipes: Recipes already exist, skipping",
+                "Recipes already exist, skipping",
                 extra={"req_id": "SYSTEM-DB-INIT", "existing_count": existing_count},
             )
             return
@@ -118,7 +116,7 @@ def seed_default_recipes() -> None:
         db.commit()
 
         logger.info(
-            "seed_default_recipes: Default recipe created successfully",
+            "Default recipe created successfully",
             extra={
                 "req_id": "SYSTEM-DB-INIT",
                 "recipe_name": "default",
@@ -128,7 +126,7 @@ def seed_default_recipes() -> None:
 
     except Exception as e:
         logger.error(
-            "seed_default_recipes: Failed to seed recipes",
+            "Failed to seed recipes",
             extra={"req_id": "SYSTEM-DB-INIT", "error": str(e)},
             exc_info=True,
         )

@@ -42,21 +42,21 @@ class PreHeatMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # Calculate processing time
-        processing_time_ms = int((time.time() - start_time) * 1000)
+        latency_ms = int((time.time() - start_time) * 1000)
 
         # Add req_id and timing to response headers
         response.headers["X-Request-ID"] = req_id
-        response.headers["X-Processing-Time-Ms"] = str(processing_time_ms)
+        response.headers["X-Latency-Ms"] = str(latency_ms)
 
         # Log request
         logger.info(
-            "dispatch: Request completed",
+            "Request completed",
             extra={
                 "req_id": req_id,
                 "method": request.method,
                 "path": str(request.url.path),
                 "status_code": response.status_code,
-                "processing_time_ms": processing_time_ms,
+                "latency_ms": latency_ms,
             },
         )
 

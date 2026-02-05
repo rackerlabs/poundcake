@@ -12,6 +12,73 @@ from pythonjsonlogger.json import JsonFormatter
 from api.core.config import settings
 
 
+class KeyValueConsoleFormatter(logging.Formatter):
+    """Console formatter that appends extra fields as key=value pairs."""
+
+    _reserved = {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "message",
+        "asctime",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Ensure req_id always exists for format string
+        req_id = getattr(record, "req_id", "SYSTEM")
+        method = getattr(record, "method", None) or getattr(record, "http_method", None) or "NA"
+        status_code = (
+            getattr(record, "status_code", None)
+            or getattr(record, "http_status", None)
+            or "NA"
+        )
+        latency_ms = (
+            getattr(record, "latency_ms", None)
+            or getattr(record, "processing_time_ms", None)
+            or "NA"
+        )
+
+        # Strip redundant "funcName:" prefix if present
+        message = record.getMessage()
+        func_prefix = f"{record.funcName}:"
+        if message.startswith(func_prefix):
+            message = message[len(func_prefix) :].lstrip()
+
+        timestamp = self.formatTime(record, self.datefmt)
+        base = (
+            f"{timestamp} [{req_id}] [{record.levelname}] [{method}] "
+            f"status={status_code} latency_ms={latency_ms} {record.funcName} - {message}"
+        )
+        extras = {
+            key: value
+            for key, value in record.__dict__.items()
+            if key not in self._reserved
+            and key not in {"req_id", "method", "http_method", "status_code", "http_status", "latency_ms", "processing_time_ms"}
+        }
+        if not extras:
+            return base
+
+        extra_parts = " ".join(f"{key}={value}" for key, value in sorted(extras.items()))
+        return f"{base} {extra_parts}"
+
+
 def setup_logging() -> None:
     """Configure application logging."""
 
@@ -28,15 +95,14 @@ def setup_logging() -> None:
     # Configure formatter based on settings
     if settings.log_format == "json":
         formatter = JsonFormatter(
-            "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d %(req_id)s",
+            "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d",
             rename_fields={"levelname": "level", "asctime": "timestamp"},
         )
     else:
         # Standard format: [datetime] [req_id] LEVEL - function_name: message
-        formatter = logging.Formatter(
-            "%(asctime)s [%(req_id)s] %(levelname)s - %(message)s",
+        formatter = KeyValueConsoleFormatter(
+            "%(asctime)s [%(req_id)s] %(levelname)s %(funcName)s - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
-            defaults={"req_id": "NONE"},  # Default value if req_id not provided
         )
 
     handler.setFormatter(formatter)
@@ -46,10 +112,9 @@ def setup_logging() -> None:
     for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "celery", "sqlalchemy"]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
-    # Set httpx/httpcore to CRITICAL (suppresses ERROR, WARNING, INFO, DEBUG)
-    # This prevents connection error tracebacks during startup
+    # Set httpx/httpcore to ERROR (suppress WARNING/INFO/DEBUG by default)
     for logger_name in ["httpx", "httpcore"]:
-        logging.getLogger(logger_name).setLevel(logging.CRITICAL)
+        logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 
 def get_logger(name: str) -> logging.Logger:

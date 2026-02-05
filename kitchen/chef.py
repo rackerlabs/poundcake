@@ -8,7 +8,7 @@
 
 import os
 import time
-import requests
+import httpx
 from datetime import datetime, timezone
 
 from api.core.logging import setup_logging, get_logger
@@ -29,7 +29,7 @@ SYSTEM_REQ_ID = "SYSTEM-CHEF"
 def wait_for_api():
     """Wait for API to be ready before starting main loop."""
     logger.info(
-        "wait_for_api: Waiting for API to be ready",
+        "Waiting for API to be ready",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_BASE_URL},
     )
     max_attempts = 30
@@ -37,10 +37,19 @@ def wait_for_api():
 
     while attempt < max_attempts:
         try:
-            resp = requests.get(f"{API_BASE_URL.rsplit('/api/v1', 1)[0]}/api/v1/health", timeout=5)
+            start_time = time.time()
+            with httpx.Client(timeout=5) as client:
+                resp = client.get(f"{API_BASE_URL.rsplit('/api/v1', 1)[0]}/api/v1/health")
+            latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code == 200:
                 logger.info(
-                    "wait_for_api: API is ready! Starting chef...", extra={"req_id": SYSTEM_REQ_ID}
+                    "API is ready! Starting chef...",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": resp.status_code,
+                        "latency_ms": latency_ms,
+                    },
                 )
                 return True
         except Exception:
@@ -51,7 +60,7 @@ def wait_for_api():
             time.sleep(2)
 
     logger.error(
-        "wait_for_api: API did not become ready. Starting anyway...",
+        "API did not become ready. Starting anyway...",
         extra={"req_id": SYSTEM_REQ_ID, "max_attempts": max_attempts},
     )
     return False
@@ -63,19 +72,33 @@ def run_chef():
     wait_for_api()
 
     logger.info(
-        "run_chef: Chef started",
+        "Chef started",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_BASE_URL, "poll_interval": POLL_INTERVAL},
     )
 
     while True:
         try:
             # Fetch next 'new' oven task
-            resp = requests.get(
-                f"{API_BASE_URL}/ovens",
-                params={"processing_status": "new", "limit": 1},
-                headers={"X-Request-ID": SYSTEM_REQ_ID},
-            )
-            resp.raise_for_status()
+            start_time = time.time()
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(
+                    f"{API_BASE_URL}/ovens",
+                    params={"processing_status": "new", "limit": 1},
+                    headers={"X-Request-ID": SYSTEM_REQ_ID},
+                )
+            latency_ms = int((time.time() - start_time) * 1000)
+            if resp.status_code != 200:
+                logger.error(
+                    "Failed to fetch ovens",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": resp.status_code,
+                        "latency_ms": latency_ms,
+                    },
+                )
+                time.sleep(POLL_INTERVAL)
+                continue
             tasks = resp.json()
 
             if not tasks:
@@ -95,7 +118,7 @@ def run_chef():
 
             if not action_ref:
                 logger.error(
-                    "run_chef: No action_ref found for Oven",
+                    "No action_ref found for Oven",
                     extra={"req_id": req_id, "oven_id": oven_id},
                 )
                 time.sleep(POLL_INTERVAL)
@@ -103,17 +126,19 @@ def run_chef():
 
             # Proxy the request through the API Bridge
             logger.info(
-                "run_chef: Cooking action with ref {action_ref} via API bridge",
+                "Cooking action via API bridge",
                 extra={"req_id": req_id, "action_ref": action_ref, "oven_id": oven_id},
             )
 
             try:
-                bridge_resp = requests.post(
-                    f"{API_BASE_URL}/stackstorm/execute",
-                    json={"action": action_ref, "parameters": parameters},
-                    headers={"X-Request-ID": req_id},
-                    timeout=30,
-                )
+                start_time = time.time()
+                with httpx.Client(timeout=30) as client:
+                    bridge_resp = client.post(
+                        f"{API_BASE_URL}/stackstorm/execute",
+                        json={"action": action_ref, "parameters": parameters},
+                        headers={"X-Request-ID": req_id},
+                    )
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 if bridge_resp.status_code == 200:
                     st2_data = bridge_resp.json()
@@ -121,59 +146,66 @@ def run_chef():
 
                     # Update task status with started timestamp
                     current_time = datetime.now(timezone.utc).isoformat()
-                    requests.patch(
-                        f"{API_BASE_URL}/ovens/{oven_id}",
-                        json={
-                            "processing_status": "processing",
-                            "action_id": st2_id,
-                            "started_at": current_time,
-                        },
-                        headers={"X-Request-ID": req_id},
-                    )
+                    with httpx.Client(timeout=10) as client:
+                        client.patch(
+                            f"{API_BASE_URL}/ovens/{oven_id}",
+                            json={
+                                "processing_status": "processing",
+                                "action_id": st2_id,
+                                "started_at": current_time,
+                            },
+                            headers={"X-Request-ID": req_id},
+                        )
                     logger.info(
-                        "run_chef: Action with ref {action_ref} started successfully",
+                        "Action started successfully",
                         extra={
                             "req_id": req_id,
                             "st2_id": st2_id,
                             "started_at": current_time,
                             "oven_id": oven_id,
+                            "method": "POST",
+                            "status_code": bridge_resp.status_code,
+                            "latency_ms": latency_ms,
                         },
                     )
                 else:
                     # Failed to execute - update error_message
                     error_msg = f"API Bridge failed: {bridge_resp.status_code} - {bridge_resp.text}"
                     logger.error(
-                        "run_chef: API Bridge execution failed",
+                        "API Bridge execution failed",
                         extra={
                             "req_id": req_id,
                             "oven_id": oven_id,
+                            "method": "POST",
                             "status_code": bridge_resp.status_code,
+                            "latency_ms": latency_ms,
                             "error_message": error_msg,
                         },
                     )
-                    requests.patch(
-                        f"{API_BASE_URL}/ovens/{oven_id}",
-                        json={"processing_status": "failed", "error_message": error_msg},
-                        headers={"X-Request-ID": req_id},
-                    )
+                    with httpx.Client(timeout=10) as client:
+                        client.patch(
+                            f"{API_BASE_URL}/ovens/{oven_id}",
+                            json={"processing_status": "failed", "error_message": error_msg},
+                            headers={"X-Request-ID": req_id},
+                        )
 
-            except requests.exceptions.RequestException as e:
+            except httpx.RequestError as e:
                 # Network/timeout error - update error_message
                 error_msg = f"Failed to reach API Bridge: {str(e)}"
                 logger.error(
-                    "run_chef: Failed to reach API Bridge",
+                    "Failed to reach API Bridge",
                     extra={"req_id": req_id, "oven_id": oven_id, "error": str(e)},
                 )
                 try:
-                    requests.patch(
-                        f"{API_BASE_URL}/ovens/{oven_id}",
-                        json={"processing_status": "failed", "error_message": error_msg},
-                        headers={"X-Request-ID": req_id},
-                        timeout=5,
-                    )
+                    with httpx.Client(timeout=5) as client:
+                        client.patch(
+                            f"{API_BASE_URL}/ovens/{oven_id}",
+                            json={"processing_status": "failed", "error_message": error_msg},
+                            headers={"X-Request-ID": req_id},
+                        )
                 except Exception as update_error:
                     logger.error(
-                        "run_chef: Could not update oven status after error",
+                        "Could not update oven status after error",
                         extra={
                             "req_id": req_id,
                             "oven_id": oven_id,
@@ -183,7 +215,7 @@ def run_chef():
 
         except Exception as e:
             logger.error(
-                "run_chef: Chef loop encountered an error",
+                "Chef loop encountered an error",
                 extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
             )
             time.sleep(POLL_INTERVAL)

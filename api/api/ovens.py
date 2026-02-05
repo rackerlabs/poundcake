@@ -28,18 +28,18 @@ async def bake_ovens(
     """Creates individual Oven tasks from a Recipe."""
     req_id = request.state.req_id
 
-    logger.info("bake_ovens: Starting", extra={"req_id": req_id, "alert_id": alert_id})
+    logger.info("Starting", extra={"req_id": req_id, "alert_id": alert_id})
 
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         logger.warning(
-            "bake_ovens: Alert not found", extra={"req_id": req_id, "alert_id": alert_id}
+            "Alert not found", extra={"req_id": req_id, "alert_id": alert_id}
         )
         raise HTTPException(status_code=404, detail="Alert not found")
 
     # Match group_name to Recipe
     logger.debug(
-        "bake_ovens: Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name}
+        "Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name}
     )
 
     recipe = db.query(Recipe).filter(Recipe.name == alert.group_name, Recipe.enabled).first()
@@ -51,7 +51,7 @@ async def bake_ovens(
         db.commit()
 
         logger.error(
-            "bake_ovens: No recipe found, alert closed",
+            "No recipe found, alert closed",
             extra={"req_id": req_id, "alert_id": alert_id, "group_name": alert.group_name},
         )
         return BakeResponse(status="ignored", reason=f"No recipe for {alert.group_name}")
@@ -65,7 +65,7 @@ async def bake_ovens(
     )
 
     logger.info(
-        "bake_ovens: Recipe matched, creating ovens",
+        "Recipe matched, creating ovens",
         extra={
             "req_id": req_id,
             "alert_id": alert_id,
@@ -93,7 +93,7 @@ async def bake_ovens(
     db.commit()
 
     logger.info(
-        "bake_ovens: Ovens created successfully",
+        "Ovens created successfully",
         extra={
             "req_id": req_id,
             "alert_id": alert_id,
@@ -129,7 +129,7 @@ async def list_ovens(
     request_id = request.state.req_id
 
     logger.debug(
-        "list_ovens: Fetching ovens",
+        "Fetching ovens",
         extra={
             "req_id": request_id,
             "processing_status": (
@@ -156,10 +156,9 @@ async def list_ovens(
         query = query.filter(Oven.action_id == params.action_id)
 
     ovens = query.order_by(Oven.created_at.desc()).limit(params.limit).offset(params.offset).all()
-    oven_count = len(ovens)
 
     logger.debug(
-        f"list_ovens: {oven_count} Ovens fetched", extra={"req_id": request_id, "count": oven_count}
+        "Ovens fetched", extra={"req_id": request_id, "count": len(ovens)}
     )
 
     return ovens
@@ -173,11 +172,11 @@ async def update_oven(
     """Updates oven status/action_id from oven.py or results from Timer."""
     req_id = request.state.req_id
 
-    logger.info("update_oven: Starting", extra={"req_id": req_id, "oven_id": oven_id})
+    logger.info("Starting", extra={"req_id": req_id, "oven_id": oven_id})
 
     oven = db.query(Oven).filter(Oven.id == oven_id).first()
     if not oven:
-        logger.warning("update_oven: Oven not found", extra={"req_id": req_id, "oven_id": oven_id})
+        logger.warning("Oven not found", extra={"req_id": req_id, "oven_id": oven_id})
         raise HTTPException(status_code=404, detail="Oven not found")
 
     update_data = payload.dict(exclude_unset=True)
@@ -207,7 +206,7 @@ async def update_oven(
             alert = db.query(Alert).filter(Alert.id == oven.alert_id).first()
             if alert and alert.processing_status != "complete":
                 logger.info(
-                    "update_oven: All ovens finished. Closing alert.",
+                    "All ovens finished. Closing alert.",
                     extra={"req_id": req_id, "alert_id": alert.id},
                 )
                 alert.processing_status = "complete"
@@ -215,7 +214,7 @@ async def update_oven(
                 db.commit()
 
     logger.info(
-        "update_oven: Oven updated successfully",
+        "Oven updated successfully",
         extra={
             "req_id": req_id,
             "oven_id": oven_id,

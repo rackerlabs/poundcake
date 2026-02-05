@@ -34,14 +34,14 @@ async def alertmanager_webhook(
     alert_count = len(payload.get("alerts", []))
 
     logger.info(
-        "alertmanager_webhook: Received webhook from Alertmanager",
+        "Received webhook from Alertmanager",
         extra={"req_id": req_id, "alert_count": alert_count},
     )
 
     result = pre_heat(payload, db, req_id)
 
     logger.info(
-        "alertmanager_webhook: Webhook processed successfully",
+        "Webhook processed successfully",
         extra={
             "req_id": req_id,
             "status": result.get("status"),
@@ -78,7 +78,7 @@ async def get_alerts(
     request_id = request.state.req_id
 
     logger.debug(
-        "get_alerts: Fetching alerts",
+        "Fetching alerts",
         extra={
             "req_id": request_id,
             "processing_status": (
@@ -106,7 +106,7 @@ async def get_alerts(
     alerts = query.order_by(Alert.created_at.desc()).limit(params.limit).offset(params.offset).all()
 
     logger.debug(
-        "get_alerts: Alerts fetched successfully",
+        "Alerts fetched successfully",
         extra={"req_id": request_id, "count": len(alerts)},
     )
 
@@ -118,12 +118,12 @@ async def get_alert(request: Request, alert_id: int, db: Session = Depends(get_d
     """Retrieve a specific alert by ID."""
     req_id = request.state.req_id
 
-    logger.debug("get_alert: Fetching alert by ID", extra={"req_id": req_id, "alert_id": alert_id})
+    logger.debug("Fetching alert by ID", extra={"req_id": req_id, "alert_id": alert_id})
 
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
 
     if not alert:
-        logger.warning("get_alert: Alert not found", extra={"req_id": req_id, "alert_id": alert_id})
+        logger.warning("Alert not found", extra={"req_id": req_id, "alert_id": alert_id})
         raise HTTPException(status_code=404, detail="Alert not found")
 
     return alert
@@ -136,12 +136,12 @@ async def update_alert(
     """Used by Timer to set status to 'complete' or Oven Service to 'processing'."""
     req_id = request.state.req_id
 
-    logger.info("update_alert: Updating alert", extra={"req_id": req_id, "alert_id": alert_id})
+    logger.info("Updating alert", extra={"req_id": req_id, "alert_id": alert_id})
 
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         logger.warning(
-            "update_alert: Alert not found for update",
+            "Alert not found for update",
             extra={"req_id": req_id, "alert_id": alert_id},
         )
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -155,7 +155,7 @@ async def update_alert(
     db.refresh(alert)
 
     logger.info(
-        "update_alert: Alert updated successfully",
+        "Alert updated successfully",
         extra={
             "req_id": req_id,
             "alert_id": alert_id,

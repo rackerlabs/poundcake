@@ -10,14 +10,17 @@ Ported from poundcake/src/poundcake/prometheus.py.
 Note: CRD manager and Git integration can be added as separate modules.
 """
 
-import logging
+from api.core.logging import get_logger
 from typing import Any
+import time
 
 import httpx
 
 from api.core.config import get_settings
+from api.core.httpx_utils import silence_httpx
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+SYSTEM_REQ_ID = "SYSTEM-PROM"
 
 
 class PrometheusClient:
@@ -40,10 +43,12 @@ class PrometheusClient:
                 verify=self.verify_ssl,
                 timeout=httpx.Timeout(30),
             ) as client:
+                start_time = time.time()
                 response = await client.get(
                     f"{self.base_url}/api/v1/rules",
                     params={"type": "alert"},
                 )
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 if response.status_code == 200:
                     data = response.json()
@@ -52,18 +57,36 @@ class PrometheusClient:
                         return self._flatten_rules(groups)
                     else:
                         logger.error(
-                            "Prometheus API returned error: %s",
-                            data.get("error"),
+                            "Prometheus API returned error",
+                            extra={
+                                "req_id": SYSTEM_REQ_ID,
+                                "method": "GET",
+                                "status_code": response.status_code,
+                                "latency_ms": latency_ms,
+                                "error": data.get("error"),
+                            },
                         )
                         return []
                 else:
                     logger.error(
-                        "Failed to fetch Prometheus rules: %d",
-                        response.status_code,
+                        "Failed to fetch Prometheus rules",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "GET",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
+                        },
                     )
                     return []
         except Exception as e:
-            logger.error("Error fetching Prometheus rules: %s", str(e))
+            logger.error(
+                "Error fetching Prometheus rules",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "method": "GET",
+                    "error": str(e),
+                },
+            )
             return []
 
     def _flatten_rules(self, groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -101,7 +124,9 @@ class PrometheusClient:
                 verify=self.verify_ssl,
                 timeout=httpx.Timeout(30),
             ) as client:
+                start_time = time.time()
                 response = await client.get(f"{self.base_url}/api/v1/rules")
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 if response.status_code == 200:
                     data = response.json()
@@ -109,32 +134,55 @@ class PrometheusClient:
                         return data.get("data", {}).get("groups", [])
                     else:
                         logger.error(
-                            "Prometheus API returned error: %s",
-                            data.get("error"),
+                            "Prometheus API returned error",
+                            extra={
+                                "req_id": SYSTEM_REQ_ID,
+                                "method": "GET",
+                                "status_code": response.status_code,
+                                "latency_ms": latency_ms,
+                                "error": data.get("error"),
+                            },
                         )
                         return []
                 else:
                     logger.error(
-                        "Failed to fetch Prometheus rule groups: %d",
-                        response.status_code,
+                        "Failed to fetch Prometheus rule groups",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "GET",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
+                        },
                     )
                     return []
         except Exception as e:
-            logger.error("Error fetching Prometheus rule groups: %s", str(e))
+            logger.error(
+                "Error fetching Prometheus rule groups",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "method": "GET",
+                    "error": str(e),
+                },
+            )
             return []
 
     async def health_check(self) -> dict[str, Any]:
         """Check if Prometheus is reachable."""
         try:
-            async with httpx.AsyncClient(
-                verify=self.verify_ssl,
-                timeout=httpx.Timeout(10),
-            ) as client:
-                response = await client.get(f"{self.base_url}/-/healthy")
-                return {
-                    "status": "healthy" if response.status_code == 200 else "unhealthy",
-                    "url": self.base_url,
-                }
+            with silence_httpx():
+                async with httpx.AsyncClient(
+                    verify=self.verify_ssl,
+                    timeout=httpx.Timeout(10),
+                ) as client:
+                    start_time = time.time()
+                    response = await client.get(f"{self.base_url}/-/healthy")
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    return {
+                        "status": "healthy" if response.status_code == 200 else "unhealthy",
+                        "url": self.base_url,
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                    }
         except Exception as e:
             return {
                 "status": "unhealthy",
@@ -166,19 +214,34 @@ class PrometheusClient:
                 verify=self.verify_ssl,
                 timeout=httpx.Timeout(30),
             ) as client:
+                start_time = time.time()
                 response = await client.post(reload_url)
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 if response.status_code == 200:
-                    logger.info("Prometheus configuration reloaded successfully")
+                    logger.info(
+                        "Prometheus configuration reloaded successfully",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "POST",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
+                        },
+                    )
                     return {
                         "status": "success",
                         "message": "Prometheus configuration reloaded",
                     }
                 else:
                     logger.error(
-                        "Failed to reload Prometheus: %d - %s",
-                        response.status_code,
-                        response.text,
+                        "Failed to reload Prometheus",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "POST",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
+                            "error": response.text,
+                        },
                     )
                     return {
                         "status": "error",
@@ -186,7 +249,14 @@ class PrometheusClient:
                         "detail": response.text,
                     }
         except Exception as e:
-            logger.error("Error reloading Prometheus: %s", str(e))
+            logger.error(
+                "Error reloading Prometheus",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "method": "POST",
+                    "error": str(e),
+                },
+            )
             return {
                 "status": "error",
                 "message": str(e),
@@ -199,9 +269,11 @@ class PrometheusClient:
                 verify=self.verify_ssl,
                 timeout=httpx.Timeout(30),
             ) as client:
+                start_time = time.time()
                 response = await client.get(
                     f"{self.base_url}/api/v1/label/__name__/values",
                 )
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 if response.status_code == 200:
                     data = response.json()
@@ -209,18 +281,32 @@ class PrometheusClient:
                         return data.get("data", [])
                     else:
                         logger.error(
-                            "Prometheus API returned error: %s",
-                            data.get("error"),
+                            "Prometheus API returned error",
+                            extra={
+                                "req_id": SYSTEM_REQ_ID,
+                                "method": "GET",
+                                "status_code": response.status_code,
+                                "latency_ms": latency_ms,
+                                "error": data.get("error"),
+                            },
                         )
                         return []
                 else:
                     logger.error(
-                        "Failed to fetch metric names: %d",
-                        response.status_code,
+                        "Failed to fetch metric names",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "GET",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
+                        },
                     )
                     return []
         except Exception as e:
-            logger.error("Error fetching metric names: %s", str(e))
+            logger.error(
+                "Error fetching metric names",
+                extra={"req_id": SYSTEM_REQ_ID, "method": "GET", "error": str(e)},
+            )
             return []
 
     async def get_label_names(self, metric: str | None = None) -> list[str]:
@@ -235,10 +321,12 @@ class PrometheusClient:
                 timeout=httpx.Timeout(30),
             ) as client:
                 if metric:
+                    start_time = time.time()
                     response = await client.get(
                         f"{self.base_url}/api/v1/series",
                         params={"match[]": metric},
                     )
+                    latency_ms = int((time.time() - start_time) * 1000)
                     if response.status_code == 200:
                         data = response.json()
                         if data.get("status") == "success":
@@ -248,7 +336,9 @@ class PrometheusClient:
                             label_names.discard("__name__")
                             return sorted(list(label_names))
                 else:
+                    start_time = time.time()
                     response = await client.get(f"{self.base_url}/api/v1/labels")
+                    latency_ms = int((time.time() - start_time) * 1000)
                     if response.status_code == 200:
                         data = response.json()
                         if data.get("status") == "success":
@@ -256,12 +346,20 @@ class PrometheusClient:
                             return [label for label in labels if label != "__name__"]
 
                 logger.error(
-                    "Failed to fetch label names: %d",
-                    response.status_code,
+                    "Failed to fetch label names",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                    },
                 )
                 return []
         except Exception as e:
-            logger.error("Error fetching label names: %s", str(e))
+            logger.error(
+                "Error fetching label names",
+                extra={"req_id": SYSTEM_REQ_ID, "method": "GET", "error": str(e)},
+            )
             return []
 
     async def get_label_values(
@@ -281,10 +379,12 @@ class PrometheusClient:
                 timeout=httpx.Timeout(30),
             ) as client:
                 if metric:
+                    start_time = time.time()
                     response = await client.get(
                         f"{self.base_url}/api/v1/series",
                         params={"match[]": metric},
                     )
+                    latency_ms = int((time.time() - start_time) * 1000)
                     if response.status_code == 200:
                         data = response.json()
                         if data.get("status") == "success":
@@ -294,22 +394,37 @@ class PrometheusClient:
                                     values.add(series[label_name])
                             return sorted(list(values))
                 else:
+                    start_time = time.time()
                     response = await client.get(
                         f"{self.base_url}/api/v1/label/{label_name}/values",
                     )
+                    latency_ms = int((time.time() - start_time) * 1000)
                     if response.status_code == 200:
                         data = response.json()
                         if data.get("status") == "success":
                             return data.get("data", [])
 
                 logger.error(
-                    "Failed to fetch label values for %s: %d",
-                    label_name,
-                    response.status_code,
+                    "Failed to fetch label values",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                        "label_name": label_name,
+                    },
                 )
                 return []
         except Exception as e:
-            logger.error("Error fetching label values: %s", str(e))
+            logger.error(
+                "Error fetching label values",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "method": "GET",
+                    "label_name": label_name,
+                    "error": str(e),
+                },
+            )
             return []
 
 

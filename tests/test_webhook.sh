@@ -10,6 +10,33 @@ set -e
 
 API_URL="http://localhost:8000/api/v1"
 
+wait_for_recipe_ready() {
+    local recipe_name="$1"
+    local max_retries="${2:-20}"
+    local sleep_seconds="${3:-2}"
+    local count=0
+    local response=""
+
+    while [ $count -lt $max_retries ]; do
+        echo "Waiting for recipe [$recipe_name] to be ready... ($((count+1))/$max_retries)"
+        response=$(curl -s "$API_URL/recipes/name/$recipe_name")
+
+        if echo "$response" | grep -q '"id"' \
+            && echo "$response" | grep -q '"ingredients"' \
+            && echo "$response" | grep -q '"task_id"'; then
+            echo "    [OK] Recipe is available with ingredients."
+            return 0
+        fi
+
+        sleep "$sleep_seconds"
+        count=$((count+1))
+    done
+
+    echo "    [ERROR] Recipe [$recipe_name] not ready after $((max_retries * sleep_seconds)) seconds."
+    echo "    Last response: $response"
+    return 1
+}
+
 echo "========================================"
 echo "PoundCake Webhook Test"
 echo "========================================"
@@ -28,9 +55,14 @@ else
     exit 1
 fi
 
-# 2. Send Test Alert
+# 2. Wait for the recipe to exist (and include ingredients)
 echo ""
-echo "Step 2: Sending test alert to webhook..."
+echo "Step 2: Waiting for HelloWorldAlert recipe to be ready..."
+wait_for_recipe_ready "HelloWorldAlert" 20 2
+
+# 3. Send Test Alert
+echo ""
+echo "Step 3: Sending test alert to webhook..."
 
 ALERT_JSON=$(cat <<'EOF'
 {
@@ -70,9 +102,9 @@ else
     exit 1
 fi
 
-# 3. Verify Alert Was Stored
+# 4. Verify Alert Was Stored
 echo ""
-echo "Step 3: Verifying alert was stored in database..."
+echo "Step 4: Verifying alert was stored in database..."
 sleep 2  # Give it a moment to be stored
 
 ALERTS=$(curl -s "$API_URL/alerts?processing_status=new")
@@ -87,9 +119,9 @@ else
     exit 1
 fi
 
-# 4. Check if alert can be retrieved by req_id
+# 5. Check if alert can be retrieved by req_id
 echo ""
-echo "Step 4: Retrieving alert by request ID..."
+echo "Step 5: Retrieving alert by request ID..."
 if [ -n "$REQ_ID" ]; then
     ALERT_BY_REQID=$(curl -s "$API_URL/alerts" | grep "$REQ_ID" || echo "")
     if [ -n "$ALERT_BY_REQID" ]; then
