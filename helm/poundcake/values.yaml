@@ -32,7 +32,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
-  tag: "2e53c82"  # Git SHA tag from build workflow
+  tag: "ad562d9"  # Git SHA tag from build workflow
 
 imagePullSecrets: []
 nameOverride: ""
@@ -68,7 +68,7 @@ ui:
   image:
     repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
-    tag: "2e53c82"  # Git SHA tag from build workflow
+    tag: "ad562d9"  # Git SHA tag from build workflow
   service:
     type: ClusterIP
     port: 80
