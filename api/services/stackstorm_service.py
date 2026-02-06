@@ -186,9 +186,7 @@ class StackStormClient:
         if response.status_code == 200:
             result: dict[str, Any] = response.json()
             return result
-        raise StackStormError(
-            f"Failed to get execution {execution_id}: {response.status_code}"
-        )
+        raise StackStormError(f"Failed to get execution {execution_id}: {response.status_code}")
 
     async def wait_for_execution(
         self,
@@ -241,14 +239,16 @@ class StackStormClient:
                 latency_ms = int((time.time() - start_time) * 1000)
                 logger.error(
                     "StackStorm health check failed",
-                    extra={
-                        "req_id": req_id,
-                        "method": "GET",
-                        "latency_ms": latency_ms,
-                        "error": str(e),
-                    }
-                    if req_id
-                    else {"method": "GET", "error": str(e)},
+                    extra=(
+                        {
+                            "req_id": req_id,
+                            "method": "GET",
+                            "latency_ms": latency_ms,
+                            "error": str(e),
+                        }
+                        if req_id
+                        else {"method": "GET", "error": str(e)}
+                    ),
                 )
                 return False
 

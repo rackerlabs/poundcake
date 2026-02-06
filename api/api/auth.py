@@ -186,7 +186,5 @@ async def login(request: Request) -> SessionResponse:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(
-            "Login failed", extra={"req_id": req_id, "error": str(e)}, exc_info=True
-        )
+        logger.error("Login failed", extra={"req_id": req_id, "error": str(e)}, exc_info=True)
         raise HTTPException(status_code=400, detail="Malformed request")

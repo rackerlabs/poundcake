@@ -147,9 +147,7 @@ def prep_loop():
                     )
 
         except Exception as e:
-            logger.error(
-                "Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
-            )
+            logger.error("Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)})
 
         time.sleep(OVEN_INTERVAL)
 

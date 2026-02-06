@@ -77,9 +77,7 @@ async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     executions_by_status = dict(result.all())
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    result = await db.execute(
-        select(func.count(Alert.id)).where(Alert.created_at >= cutoff)
-    )
+    result = await db.execute(select(func.count(Alert.id)).where(Alert.created_at >= cutoff))
     recent = result.scalar() or 0
 
     return StatsResponse(

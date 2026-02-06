@@ -35,19 +35,13 @@ async def bake_ovens(
     result = await db.execute(select(Alert).where(Alert.id == alert_id))
     alert = result.scalars().first()
     if not alert:
-        logger.warning(
-            "Alert not found", extra={"req_id": req_id, "alert_id": alert_id}
-        )
+        logger.warning("Alert not found", extra={"req_id": req_id, "alert_id": alert_id})
         raise HTTPException(status_code=404, detail="Alert not found")
 
     # Match group_name to Recipe
-    logger.debug(
-        "Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name}
-    )
+    logger.debug("Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name})
 
-    result = await db.execute(
-        select(Recipe).where(Recipe.name == alert.group_name, Recipe.enabled)
-    )
+    result = await db.execute(select(Recipe).where(Recipe.name == alert.group_name, Recipe.enabled))
     recipe = result.scalars().first()
 
     if not recipe:
@@ -64,9 +58,7 @@ async def bake_ovens(
 
     # Fetch ingredients
     result = await db.execute(
-        select(Ingredient)
-        .where(Ingredient.recipe_id == recipe.id)
-        .order_by(Ingredient.task_order)
+        select(Ingredient).where(Ingredient.recipe_id == recipe.id).order_by(Ingredient.task_order)
     )
     ingredients = result.scalars().all()
 
@@ -165,9 +157,7 @@ async def list_ovens(
     result = await db.execute(query)
     ovens = result.scalars().all()
 
-    logger.debug(
-        "Ovens fetched", extra={"req_id": request_id, "count": len(ovens)}
-    )
+    logger.debug("Ovens fetched", extra={"req_id": request_id, "count": len(ovens)})
 
     return ovens
 

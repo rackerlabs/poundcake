@@ -259,7 +259,11 @@ def monitor_ovens():
 
             elif st2_resp.status_code == 404:
                 extra.update(
-                    {"method": "GET", "status_code": st2_resp.status_code, "latency_ms": st2_latency_ms}
+                    {
+                        "method": "GET",
+                        "status_code": st2_resp.status_code,
+                        "latency_ms": st2_latency_ms,
+                    }
                 )
                 logger.error(f"Oven {oven['id']} action {action_id} not found in ST2.", extra=extra)
                 update_oven(

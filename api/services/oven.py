@@ -56,9 +56,7 @@ class OvenService:
                         if result.get("success"):
                             processed_count += 1
                     except Exception as e:
-                        logger.error(
-                            f"Oven crawler: Error processing alert {alert.get('id')}: {e}"
-                        )
+                        logger.error(f"Oven crawler: Error processing alert {alert.get('id')}: {e}")
                         errors.append({"alert_id": alert.get("id"), "error": str(e)})
 
             await asyncio.gather(*[_process(alert) for alert in alerts])

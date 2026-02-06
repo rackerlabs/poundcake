@@ -36,9 +36,7 @@ async def create_recipe(
     """Create a new recipe with ingredients."""
     req_id = request.state.req_id
 
-    logger.info(
-        "Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name}
-    )
+    logger.info("Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name})
 
     result = await db.execute(select(Recipe).where(Recipe.name == recipe.name))
     existing = result.scalars().first()
@@ -75,9 +73,7 @@ async def create_recipe(
 
     # Re-fetch with ingredients eagerly loaded to avoid lazy-load during response serialization.
     result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.ingredients))
-        .where(Recipe.id == db_recipe.id)
+        select(Recipe).options(joinedload(Recipe.ingredients)).where(Recipe.id == db_recipe.id)
     )
     db_recipe = result.scalars().first()
 
@@ -127,9 +123,7 @@ async def list_recipes(
 async def get_recipe(recipe_id: int, db: AsyncSession = Depends(get_db)):
     """Get a recipe with all its ingredients."""
     result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.ingredients))
-        .where(Recipe.id == recipe_id)
+        select(Recipe).options(joinedload(Recipe.ingredients)).where(Recipe.id == recipe_id)
     )
     recipe = result.scalars().first()
     if not recipe:
@@ -142,9 +136,7 @@ async def get_recipe(recipe_id: int, db: AsyncSession = Depends(get_db)):
 async def get_recipe_by_name(recipe_name: str, db: AsyncSession = Depends(get_db)):
     """Get a recipe by name (matches alert.group_name)."""
     result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.ingredients))
-        .where(Recipe.name == recipe_name)
+        select(Recipe).options(joinedload(Recipe.ingredients)).where(Recipe.name == recipe_name)
     )
     recipe = result.scalars().first()
     if not recipe:
@@ -165,9 +157,7 @@ async def delete_recipe(
     result = await db.execute(select(Recipe).where(Recipe.id == recipe_id))
     recipe = result.scalars().first()
     if not recipe:
-        logger.warning(
-            "Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id}
-        )
+        logger.warning("Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id})
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     recipe_name = recipe.name

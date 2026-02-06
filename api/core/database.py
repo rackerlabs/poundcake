@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 logger = get_logger(__name__)
 
+
 def get_sync_database_url() -> str:
     """Return a sync DB URL for tooling like Alembic."""
     url = settings.database_url
