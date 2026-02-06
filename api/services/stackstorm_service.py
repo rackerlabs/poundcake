@@ -244,14 +244,16 @@ class StackStormClient:
                     latency_ms = int((time.time() - start_time) * 1000)
                     logger.error(
                         "StackStorm health check failed",
-                        extra={
-                            "req_id": req_id,
-                            "method": "GET",
-                            "latency_ms": latency_ms,
-                            "error": str(e),
-                        }
-                        if req_id
-                        else {"method": "GET", "error": str(e)},
+                        extra=(
+                            {
+                                "req_id": req_id,
+                                "method": "GET",
+                                "latency_ms": latency_ms,
+                                "error": str(e),
+                            }
+                            if req_id
+                            else {"method": "GET", "error": str(e)}
+                        ),
                     )
                     return False
 

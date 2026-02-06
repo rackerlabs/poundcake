@@ -32,15 +32,11 @@ async def bake_ovens(
 
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
-        logger.warning(
-            "Alert not found", extra={"req_id": req_id, "alert_id": alert_id}
-        )
+        logger.warning("Alert not found", extra={"req_id": req_id, "alert_id": alert_id})
         raise HTTPException(status_code=404, detail="Alert not found")
 
     # Match group_name to Recipe
-    logger.debug(
-        "Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name}
-    )
+    logger.debug("Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name})
 
     recipe = db.query(Recipe).filter(Recipe.name == alert.group_name, Recipe.enabled).first()
 
@@ -157,9 +153,7 @@ async def list_ovens(
 
     ovens = query.order_by(Oven.created_at.desc()).limit(params.limit).offset(params.offset).all()
 
-    logger.debug(
-        "Ovens fetched", extra={"req_id": request_id, "count": len(ovens)}
-    )
+    logger.debug("Ovens fetched", extra={"req_id": request_id, "count": len(ovens)})
 
     return ovens
 

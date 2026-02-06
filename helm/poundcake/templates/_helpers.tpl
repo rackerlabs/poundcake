@@ -237,7 +237,7 @@ Get StackStorm API URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormApiUrl" -}}
 {{- if .Values.stackstorm.chart.enabled }}
-{{- printf "http://%s-stackstorm-ha-st2api.%s.svc.cluster.local:9101" .Release.Name .Release.Namespace }}
+{{- printf "http://%s-st2api.%s.svc.cluster.local:9101" .Release.Name .Release.Namespace }}
 {{- else }}
 {{- .Values.stackstorm.url | required "stackstorm.url is required when stackstorm.chart.enabled is false" }}
 {{- end }}
@@ -248,7 +248,7 @@ Get StackStorm Auth URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormAuthUrl" -}}
 {{- if .Values.stackstorm.chart.enabled }}
-{{- printf "http://%s-stackstorm-ha-st2auth.%s.svc.cluster.local:9100" .Release.Name .Release.Namespace }}
+{{- printf "http://%s-st2auth.%s.svc.cluster.local:9100" .Release.Name .Release.Namespace }}
 {{- else }}
 {{- .Values.stackstorm.authUrl | required "stackstorm.authUrl is required when stackstorm.chart.enabled is false" }}
 {{- end }}
