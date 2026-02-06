@@ -675,7 +675,7 @@
 
         async function loadActions() {
             const pack = document.getElementById('pack-filter').value;
-            const url = pack ? `/api/stackstorm/actions?pack=${pack}` : '/api/v1/stackstorm/actions';
+            const url = pack ? `/api/v1/stackstorm/actions?pack=${pack}` : '/api/v1/stackstorm/actions';
             const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('actions-table');
@@ -755,7 +755,8 @@
                     r.name.toLowerCase().includes(searchTerm) ||
                     r.query.toLowerCase().includes(searchTerm) ||
                     r.group.toLowerCase().includes(searchTerm) ||
-                    r.file.toLowerCase().includes(searchTerm)
+                    (r.file && r.file.toLowerCase().includes(searchTerm)) ||
+                    (r.crd && r.crd.toLowerCase().includes(searchTerm))
                 );
             }
 
@@ -768,10 +769,12 @@
                 const stateClass = rule.state === 'firing' ? 'status-failed' :
                                  rule.state === 'pending' ? 'status-running' : 'status-success';
                 const canEdit = settings.prometheus_use_crds || settings.git_enabled;
+                // Use crd field if present (CRD mode), otherwise use file field (Prometheus API mode)
+                const fileOrCrd = rule.crd || rule.file || '';
                 const editBtn = canEdit ?
                     `<div style="display: flex; gap: 4px; white-space: nowrap;">
                         <button class="btn btn-primary btn-sm" onclick='editPrometheusRule(${JSON.stringify(rule)})'>Edit</button>
-                        <button class="btn btn-danger btn-sm" onclick='deletePrometheusRule("${rule.name}", "${rule.group}", "${rule.file}")'>Delete</button>
+                        <button class="btn btn-danger btn-sm" onclick='deletePrometheusRule("${rule.name}", "${rule.group}", "${fileOrCrd}")'>Delete</button>
                     </div>` :
                     '<span style="color: #999; font-size: 11px;">No backend</span>';
 
@@ -793,9 +796,10 @@
             document.getElementById('rule-name').value = rule.name;
             document.getElementById('rule-name').disabled = true;
             document.getElementById('rule-group').value = rule.group;
-            document.getElementById('rule-file').value = rule.file;
+            // Use crd field if present (CRD mode), otherwise use file field (Prometheus API mode)
+            document.getElementById('rule-file').value = rule.crd || rule.file || '';
             document.getElementById('rule-expr').value = rule.query;
-            document.getElementById('rule-for').value = `${rule.duration}s`;
+            document.getElementById('rule-for').value = rule.duration || '';
 
             // Clear and populate labels
             const labelsContainer = document.getElementById('rule-labels-container');

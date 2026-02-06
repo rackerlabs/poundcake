@@ -1,0 +1,200 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "poundcake.fullname" . }}-gateway-listener
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-listener
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: {{ include "poundcake.fullname" . }}-gateway-listener
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway-listener
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      containers:
+      - name: gateway-listener
+        image: bitnami/kubectl:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+
+          echo "=========================================="
+          echo "Gateway Listener Configuration"
+          echo "=========================================="
+          echo "Gateway: {{ .Values.gateway.gatewayName }}"
+          echo "Namespace: {{ .Values.gateway.gatewayNamespace }}"
+          echo "Listener: {{ .Values.gateway.listener.name }}"
+          echo "Hostname: {{ .Values.gateway.listener.hostname }}"
+          echo "=========================================="
+
+          # Check if Gateway exists
+          if ! kubectl get gateway {{ .Values.gateway.gatewayName }} -n {{ .Values.gateway.gatewayNamespace }} &>/dev/null; then
+            echo "✗ ERROR: Gateway '{{ .Values.gateway.gatewayName }}' not found in namespace '{{ .Values.gateway.gatewayNamespace }}'"
+            echo "Please create the Gateway first or disable gateway.enabled in values.yaml"
+            exit 1
+          fi
+
+          echo "✓ Gateway exists"
+
+          # Check if listener already exists
+          LISTENER_EXISTS=$(kubectl get gateway {{ .Values.gateway.gatewayName }} -n {{ .Values.gateway.gatewayNamespace }} -o jsonpath='{.spec.listeners[?(@.name=="{{ .Values.gateway.listener.name }}")].name}')
+
+          if [ -n "$LISTENER_EXISTS" ]; then
+            echo "✓ Listener '{{ .Values.gateway.listener.name }}' already exists"
+            echo "Verifying listener configuration..."
+
+            # Get current listener config
+            CURRENT_HOSTNAME=$(kubectl get gateway {{ .Values.gateway.gatewayName }} -n {{ .Values.gateway.gatewayNamespace }} -o jsonpath='{.spec.listeners[?(@.name=="{{ .Values.gateway.listener.name }}")].hostname}')
+            CURRENT_PORT=$(kubectl get gateway {{ .Values.gateway.gatewayName }} -n {{ .Values.gateway.gatewayNamespace }} -o jsonpath='{.spec.listeners[?(@.name=="{{ .Values.gateway.listener.name }}")].port}')
+            CURRENT_PROTOCOL=$(kubectl get gateway {{ .Values.gateway.gatewayName }} -n {{ .Values.gateway.gatewayNamespace }} -o jsonpath='{.spec.listeners[?(@.name=="{{ .Values.gateway.listener.name }}")].protocol}')
+
+            echo "  Current hostname: $CURRENT_HOSTNAME"
+            echo "  Current port: $CURRENT_PORT"
+            echo "  Current protocol: $CURRENT_PROTOCOL"
+            echo "  Expected hostname: {{ .Values.gateway.listener.hostname }}"
+            echo "  Expected port: {{ .Values.gateway.listener.port }}"
+            echo "  Expected protocol: {{ .Values.gateway.listener.protocol }}"
+
+            {{- if .Values.gateway.listener.updateIfExists }}
+            if [ "$CURRENT_HOSTNAME" != "{{ .Values.gateway.listener.hostname }}" ] || \
+               [ "$CURRENT_PORT" != "{{ .Values.gateway.listener.port }}" ] || \
+               [ "$CURRENT_PROTOCOL" != "{{ .Values.gateway.listener.protocol }}" ]; then
+              echo "⚠ Configuration mismatch detected, updating listener..."
+              NEEDS_UPDATE=true
+            else
+              echo "✓ Listener configuration matches, no update needed"
+              NEEDS_UPDATE=false
+            fi
+            {{- else }}
+            echo "✓ Listener exists, updateIfExists=false, skipping update"
+            NEEDS_UPDATE=false
+            {{- end }}
+          else
+            echo "Listener '{{ .Values.gateway.listener.name }}' does not exist, creating..."
+            NEEDS_UPDATE=true
+          fi
+
+          if [ "$NEEDS_UPDATE" = "true" ]; then
+            # Create patch JSON for the listener
+            cat > /tmp/listener-patch.json <<'EOF'
+          {
+            "spec": {
+              "listeners": [
+                {
+                  "name": "{{ .Values.gateway.listener.name }}",
+                  "hostname": "{{ .Values.gateway.listener.hostname }}",
+                  "port": {{ .Values.gateway.listener.port }},
+                  "protocol": "{{ .Values.gateway.listener.protocol }}",
+                  {{- if eq .Values.gateway.listener.protocol "HTTPS" }}
+                  "tls": {
+                    "mode": "Terminate",
+                    "certificateRefs": [
+                      {
+                        "kind": "Secret",
+                        "name": "{{ .Values.gateway.listener.tlsSecretName }}"
+                      }
+                    ]
+                  },
+                  {{- end }}
+                  "allowedRoutes": {
+                    "namespaces": {
+                      "from": "{{ .Values.gateway.listener.allowedNamespaces }}"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+          EOF
+
+            echo "Patch content:"
+            cat /tmp/listener-patch.json
+
+            # Get current listeners
+            kubectl get gateway {{ .Values.gateway.gatewayName }} -n {{ .Values.gateway.gatewayNamespace }} -o json > /tmp/gateway.json
+
+            # Check if listener already exists in the array
+            LISTENER_INDEX=$(jq '.spec.listeners | map(.name) | index("{{ .Values.gateway.listener.name }}")' /tmp/gateway.json)
+
+            if [ "$LISTENER_INDEX" = "null" ]; then
+              echo "Adding new listener to Gateway..."
+              # Append to listeners array
+              jq '.spec.listeners += [
+                {
+                  "name": "{{ .Values.gateway.listener.name }}",
+                  "hostname": "{{ .Values.gateway.listener.hostname }}",
+                  "port": {{ .Values.gateway.listener.port }},
+                  "protocol": "{{ .Values.gateway.listener.protocol }}",
+                  {{- if eq .Values.gateway.listener.protocol "HTTPS" }}
+                  "tls": {
+                    "mode": "Terminate",
+                    "certificateRefs": [
+                      {
+                        "kind": "Secret",
+                        "name": "{{ .Values.gateway.listener.tlsSecretName }}"
+                      }
+                    ]
+                  },
+                  {{- end }}
+                  "allowedRoutes": {
+                    "namespaces": {
+                      "from": "{{ .Values.gateway.listener.allowedNamespaces }}"
+                    }
+                  }
+                }
+              ]' /tmp/gateway.json > /tmp/gateway-updated.json
+            else
+              echo "Updating existing listener at index $LISTENER_INDEX..."
+              # Update existing listener
+              jq ".spec.listeners[$LISTENER_INDEX] = {
+                \"name\": \"{{ .Values.gateway.listener.name }}\",
+                \"hostname\": \"{{ .Values.gateway.listener.hostname }}\",
+                \"port\": {{ .Values.gateway.listener.port }},
+                \"protocol\": \"{{ .Values.gateway.listener.protocol }}\",
+                {{- if eq .Values.gateway.listener.protocol "HTTPS" }}
+                \"tls\": {
+                  \"mode\": \"Terminate\",
+                  \"certificateRefs\": [
+                    {
+                      \"kind\": \"Secret\",
+                      \"name\": \"{{ .Values.gateway.listener.tlsSecretName }}\"
+                    }
+                  ]
+                },
+                {{- end }}
+                \"allowedRoutes\": {
+                  \"namespaces\": {
+                    \"from\": \"{{ .Values.gateway.listener.allowedNamespaces }}\"
+                  }
+                }
+              }" /tmp/gateway.json > /tmp/gateway-updated.json
+            fi
+
+            # Apply the updated Gateway
+            kubectl apply -f /tmp/gateway-updated.json
+
+            if [ $? -eq 0 ]; then
+              echo "✓ Gateway listener configured successfully"
+            else
+              echo "✗ Failed to configure Gateway listener"
+              exit 1
+            fi
+          fi
+
+          echo "=========================================="
+          echo "Gateway Listener Configuration Complete"
+          echo "=========================================="
+{{- end }}

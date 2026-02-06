@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from api.api.auth import require_auth_if_enabled
 from api.services.prometheus_service import get_prometheus_client
 from api.services.prometheus_rule_manager import get_prometheus_rule_manager
+from api.services.prometheus_crd_manager import PrometheusCRDManager
+from api.core.config import get_settings
 
 logger = get_logger(__name__)
 
@@ -31,11 +33,62 @@ async def list_rules(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """List all Prometheus alert rules."""
-    client = get_prometheus_client()
+    """List all Prometheus alert rules.
+
+    If prometheus.useCrds is enabled, reads from PrometheusRule CRDs.
+    Otherwise, queries the Prometheus API directly.
+    """
+    settings = get_settings()
+
     try:
-        rules = await client.get_rules()
-        return {"rules": rules}
+        if settings.prometheus_use_crds:
+            # Read from Kubernetes PrometheusRule CRDs
+            crd_manager = PrometheusCRDManager()
+            crd_list = await crd_manager.get_prometheus_rules()
+
+            # Flatten CRDs into rule list format similar to Prometheus API
+            rules = []
+            for crd in crd_list:
+                crd_name = crd.get("metadata", {}).get("name", "")
+                crd_namespace = crd.get("metadata", {}).get("namespace", "")
+                spec = crd.get("spec", {})
+                groups = spec.get("groups", [])
+
+                for group in groups:
+                    group_name = group.get("name", "")
+                    group_interval = group.get("interval", "")
+
+                    for rule in group.get("rules", []):
+                        if rule.get("alert"):  # Only include alerting rules
+                            rules.append({
+                                "group": group_name,
+                                "crd": crd_name,
+                                "namespace": crd_namespace,
+                                "interval": group_interval,
+                                "name": rule.get("alert", ""),
+                                "query": rule.get("expr", ""),
+                                "duration": rule.get("for", ""),
+                                "labels": rule.get("labels", {}),
+                                "annotations": rule.get("annotations", {}),
+                                "state": "unknown",  # CRDs don't have runtime state
+                                "health": "unknown",  # CRDs don't have health status
+                            })
+
+            logger.info(
+                "Fetched rules from CRDs",
+                extra={
+                    "req_id": request.state.req_id,
+                    "crd_count": len(crd_list),
+                    "rule_count": len(rules),
+                },
+            )
+            return {"rules": rules, "source": "crds"}
+        else:
+            # Read from Prometheus API
+            client = get_prometheus_client()
+            rules = await client.get_rules()
+            return {"rules": rules, "source": "prometheus-api"}
+
     except Exception as e:
         logger.error(
             "Failed to list rules",
