@@ -32,7 +32,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
-  tag: "7c8bff3"  # Git SHA tag from build workflow
+  tag: "6e46eaa"  # Git SHA tag from build workflow
 
 imagePullSecrets: []
 nameOverride: ""
