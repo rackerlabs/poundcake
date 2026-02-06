@@ -68,7 +68,7 @@ ui:
   image:
     repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
-    tag: "7c8bff3"  # Git SHA tag from build workflow
+    tag: "d5dbf49"  # Git SHA tag from build workflow
   service:
     type: ClusterIP
     port: 80
