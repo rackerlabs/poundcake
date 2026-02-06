@@ -106,6 +106,17 @@ spec:
           echo "Current database revision:"
           alembic -c /app/alembic.ini current
 
+          # Seed default data
+          echo ""
+          echo "Seeding default data..."
+          python3 /app/api/scripts/init_database.py
+
+          if [ $? -eq 0 ]; then
+            echo "✓ Default data seeded successfully"
+          else
+            echo "⚠ Default data seeding failed (non-fatal)"
+          fi
+
           echo "========================================"
           echo "Migration Complete"
           echo "========================================"
