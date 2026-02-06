@@ -412,6 +412,10 @@ prometheus:
   useCrds: true
   crdNamespace: prometheus
 
+  # Allow creating/updating/deleting PrometheusRule CRDs
+  # Set to false for read-only access (can only view rules)
+  allowRuleManagement: true
+
   # IMPORTANT: Labels to apply to PrometheusRule CRDs created by PoundCake
   # These MUST match your Prometheus Operator's ruleSelector, otherwise
   # Prometheus will not load the rules. Check your Prometheus CR with:
