@@ -535,7 +535,7 @@
         // Alert tracking functions
         async function loadAlerts() {
             const status = document.getElementById('status-filter').value;
-            const url = status ? `/alerts?status=${status}` : '/alerts';
+            const url = status ? `/api/v1/alerts?status=${status}` : '/api/v1/alerts';
             const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('alerts-table');
@@ -611,7 +611,7 @@
             }
 
             // Load full alert details
-            const res = await fetch(`/alerts/${fingerprint}`);
+            const res = await fetch(`/api/v1/alerts/${fingerprint}`);
             const data = await res.json();
             const alert = data.alert;
 
