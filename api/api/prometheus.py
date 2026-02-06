@@ -60,19 +60,21 @@ async def list_rules(
 
                     for rule in group.get("rules", []):
                         if rule.get("alert"):  # Only include alerting rules
-                            rules.append({
-                                "group": group_name,
-                                "crd": crd_name,
-                                "namespace": crd_namespace,
-                                "interval": group_interval,
-                                "name": rule.get("alert", ""),
-                                "query": rule.get("expr", ""),
-                                "duration": rule.get("for", ""),
-                                "labels": rule.get("labels", {}),
-                                "annotations": rule.get("annotations", {}),
-                                "state": "unknown",  # CRDs don't have runtime state
-                                "health": "unknown",  # CRDs don't have health status
-                            })
+                            rules.append(
+                                {
+                                    "group": group_name,
+                                    "crd": crd_name,
+                                    "namespace": crd_namespace,
+                                    "interval": group_interval,
+                                    "name": rule.get("alert", ""),
+                                    "query": rule.get("expr", ""),
+                                    "duration": rule.get("for", ""),
+                                    "labels": rule.get("labels", {}),
+                                    "annotations": rule.get("annotations", {}),
+                                    "state": "unknown",  # CRDs don't have runtime state
+                                    "health": "unknown",  # CRDs don't have health status
+                                }
+                            )
 
             logger.info(
                 "Fetched rules from CRDs",
