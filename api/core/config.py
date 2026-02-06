@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     celery_worker_max_tasks_per_child: int = 1000
 
     # ==========================================================================
+    # Component Health Check Settings
+    # ==========================================================================
+    mongodb_enabled: bool = True
+    mongodb_external: bool = False
+    rabbitmq_enabled: bool = True
+    redis_enabled: bool = True
+
+    # ==========================================================================
     # StackStorm Settings
     # ==========================================================================
     stackstorm_url: str = "https://st2web"  # Matches st2 service name

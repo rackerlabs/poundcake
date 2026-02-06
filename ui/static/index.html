@@ -75,8 +75,14 @@
         .metric-value { font-weight: 600; font-size: 16px; }
         .health-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
         .health-indicator.healthy { background: #27ae60; }
-        .health-indicator.unhealthy { background: #e74c3c; }
+        .health-indicator.warning { background: #f39c12; }
+        .health-indicator.error { background: #e74c3c; }
         .health-indicator.unknown { background: #95a5a6; }
+        .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .status-badge.healthy { background: #27ae60; color: white; }
+        .status-badge.warning { background: #f39c12; color: white; }
+        .status-badge.error { background: #e74c3c; color: white; }
+        .dashboard-card.warning { border-left-color: #f39c12; }
         .config-section { margin-bottom: 25px; }
         .config-section h3 { margin-bottom: 15px; font-size: 18px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; }
         .config-item { display: grid; grid-template-columns: 200px 1fr; padding: 12px; background: #f8f9fa; margin-bottom: 8px; border-radius: 4px; }
@@ -1727,9 +1733,20 @@ actions:
 
             // Update dashboard metrics
             const metricsDiv = document.getElementById('dashboard-metrics');
-            const stackstormClass = health.stackstorm === 'healthy' ? 'healthy' : 'error';
-            const stateClass = health.state_store === 'healthy' ? 'healthy' : 'error';
             const overallClass = health.status === 'healthy' ? 'healthy' : (health.status === 'degraded' ? 'warning' : 'error');
+
+            // Helper function to get component status class
+            const getStatusClass = (component) => {
+                if (!component) return 'error';
+                return component.status === 'healthy' ? 'healthy' : (component.status === 'degraded' ? 'warning' : 'error');
+            };
+
+            // Helper function to display component status
+            const getStatusBadge = (component) => {
+                if (!component) return '<span class="status-badge error">UNKNOWN</span>';
+                const statusClass = getStatusClass(component);
+                return `<span class="status-badge ${statusClass}">${component.status.toUpperCase()}</span>`;
+            };
 
             metricsDiv.innerHTML = `
                 <div class="dashboard-card ${overallClass}">
@@ -1739,42 +1756,91 @@ actions:
                         <span class="metric-value">${health.status.toUpperCase()}</span>
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Instance ID</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.instance_id || 'Unknown'}</span>
+                        <span class="metric-label">Version</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.version}</span>
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Handlers</span>
-                        <span class="metric-value">${health.handlers || 0}</span>
+                        <span class="metric-label">Instance ID</span>
+                        <span class="metric-value" style="font-size: 11px;">${health.instance_id || 'Unknown'}</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Last Updated</span>
-                        <span class="metric-value" style="font-size: 12px;">${new Date().toLocaleString()}</span>
+                        <span class="metric-value" style="font-size: 12px;">${new Date(health.timestamp).toLocaleString()}</span>
                     </div>
                 </div>
-                <div class="dashboard-card ${stackstormClass}">
-                    <h3><span class="health-indicator ${stackstormClass}"></span>StackStorm</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Connection</span>
-                        <span class="metric-value">${health.stackstorm ? 'HEALTHY' : 'UNHEALTHY'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">API Accessible</span>
-                        <span class="metric-value">${health.stackstorm ? 'Yes' : 'No'}</span>
-                    </div>
-                </div>
-                <div class="dashboard-card ${stateClass}">
-                    <h3><span class="health-indicator ${stateClass}"></span>State Store</h3>
+                <div class="dashboard-card ${getStatusClass(health.components?.database)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.database)}"></span>Database (MariaDB)</h3>
                     <div class="metric-row">
                         <span class="metric-label">Status</span>
-                        <span class="metric-value">${health.state_store ? 'HEALTHY' : 'UNHEALTHY'}</span>
+                        ${getStatusBadge(health.components?.database)}
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Connection</span>
-                        <span class="metric-value">${health.state_store ? 'Connected' : 'Unavailable'}</span>
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.database?.message || 'N/A'}</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Total Alerts</span>
-                        <span class="metric-value">${stats.total}</span>
+                        <span class="metric-value">${stats.total_alerts || 0}</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.stackstorm)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.stackstorm)}"></span>StackStorm</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.stackstorm)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.stackstorm?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Total Recipes</span>
+                        <span class="metric-value">${stats.total_recipes || 0}</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.mongodb)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.mongodb)}"></span>MongoDB</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.mongodb)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.mongodb?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Used By</span>
+                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.rabbitmq)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.rabbitmq)}"></span>RabbitMQ</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.rabbitmq)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.rabbitmq?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Used By</span>
+                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.redis)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.redis)}"></span>Redis</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.redis)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.redis?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Used By</span>
+                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
                     </div>
                 </div>
             `;
