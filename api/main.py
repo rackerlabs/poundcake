@@ -22,6 +22,7 @@ from api.api.ovens import router as ovens_router
 from api.api.routes import router as alerts_router
 from api.api.prometheus import router as prometheus_router
 from api.api.auth import router as auth_router
+from api.api.settings import router as settings_router
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -70,6 +71,7 @@ async def metrics():
 
 # 1. System & Monitoring
 app.include_router(health_router, prefix="/api/v1", tags=["system"])
+app.include_router(settings_router, prefix="/api/v1", tags=["system"])
 app.include_router(prometheus_router, prefix="/api/v1", tags=["prometheus"])
 
 # 2. Security / Authentication
