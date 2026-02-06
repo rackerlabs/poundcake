@@ -31,7 +31,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/aedan/poundcake
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: ""  # Defaults to chart appVersion
 
 imagePullSecrets: []
