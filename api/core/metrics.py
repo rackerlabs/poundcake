@@ -11,19 +11,19 @@ from prometheus_client import Counter, Histogram, Gauge, Info
 # Application info
 APP_INFO = Info("poundcake", "PoundCake application information")
 
-# Alert metrics
-ALERTS_RECEIVED = Counter(
-    "poundcake_alerts_received_total", "Total number of alerts received", ["alertname", "severity"]
+# Order metrics
+ORDERS_RECEIVED = Counter(
+    "poundcake_orders_received_total", "Total number of orders received", ["group_name", "severity"]
 )
 
-ALERTS_PROCESSED = Counter(
-    "poundcake_alerts_processed_total", "Total number of alerts processed", ["alertname", "status"]
+ORDERS_PROCESSED = Counter(
+    "poundcake_orders_processed_total", "Total number of orders processed", ["group_name", "status"]
 )
 
-ALERTS_PROCESSING_DURATION = Histogram(
-    "poundcake_alert_processing_duration_seconds",
-    "Time spent processing alerts",
-    ["alertname"],
+ORDERS_PROCESSING_DURATION = Histogram(
+    "poundcake_order_processing_duration_seconds",
+    "Time spent processing orders",
+    ["group_name"],
     buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0),
 )
 
@@ -85,7 +85,7 @@ MAPPINGS_TOTAL = Gauge("poundcake_mappings_total", "Total number of configured m
 
 MAPPINGS_MATCHED = Counter(
     "poundcake_mappings_matched_total",
-    "Total number of alerts matched to mappings",
+    "Total number of orders matched to mappings",
     ["mapping_name"],
 )
 
@@ -105,24 +105,24 @@ def init_app_info(app_name: str, version: str) -> None:
     )
 
 
-def record_alert_received(alertname: str, severity: str) -> None:
-    """Record an alert received.
+def record_order_received(group_name: str, severity: str) -> None:
+    """Record an order received.
 
     Args:
-        alertname: Name of the alert
+        group_name: Name of the group (order)
         severity: Severity level
     """
-    ALERTS_RECEIVED.labels(alertname=alertname, severity=severity or "unknown").inc()
+    ORDERS_RECEIVED.labels(group_name=group_name, severity=severity or "unknown").inc()
 
 
-def record_alert_processed(alertname: str, status: str) -> None:
-    """Record an alert processed.
+def record_order_processed(group_name: str, status: str) -> None:
+    """Record an order processed.
 
     Args:
-        alertname: Name of the alert
+        group_name: Name of the group (order)
         status: Processing status (completed, failed, etc.)
     """
-    ALERTS_PROCESSED.labels(alertname=alertname, status=status).inc()
+    ORDERS_PROCESSED.labels(group_name=group_name, status=status).inc()
 
 
 def record_remediation(action: str, status: str, duration: float | None = None) -> None:

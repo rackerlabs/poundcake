@@ -341,7 +341,7 @@ rabbitmq:
 # These will be mounted as ConfigMap
 mappings:
   common.yaml: |
-    alerts:
+    orders:
       HighCPUUsage:
         description: "Remediate high CPU usage"
         handler: yaml_config
@@ -443,7 +443,7 @@ git:
 
   # File organization strategy
   # When true, each alert gets its own file (recommended)
-  # When false, alerts are grouped in files by CRD name
+  # When false, orders are grouped in files by CRD name
   filePerAlert: true
 
   # File naming pattern (used when filePerAlert: true)
@@ -529,11 +529,11 @@ redis:
     secretKey: "redis-password"
 
   # State management settings
-  alertTtlHours: 24  # How long to keep resolved alerts
+  alertTtlHours: 24  # How long to keep resolved orders
   lockTimeoutSeconds: 300  # Distributed lock timeout
 
 # Database configuration (MySQL/MariaDB)
-# Required for persistent storage of alerts, mappings, and execution history
+# Required for persistent storage of orders, mappings, and execution history
 database:
   # Database connection URL
   # Format: mysql+pymysql://user:password@host:port/database
@@ -692,8 +692,8 @@ celery:
   # Worker concurrency (number of parallel tasks)
   concurrency: 4
 
-# Oven service configuration
-# Executor service that polls for ovens and triggers their execution
+# Dish service configuration
+# Executor service that polls for dishes and triggers their execution
 oven:
   enabled: true
   replicaCount: 1
@@ -720,8 +720,8 @@ dispatcher:
       cpu: 50m
       memory: 64Mi
 
-# Oven-service configuration
-# Dispatcher service that converts alerts into oven objects
+# Dish-service configuration
+# Dispatcher service that converts orders into oven objects
 ovenService:
   enabled: true
   replicaCount: 1

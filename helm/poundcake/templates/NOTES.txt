@@ -35,10 +35,10 @@ COMPONENTS DEPLOYED:
   - UI: {{ include "poundcake.fullname" . }}-ui
 {{- end }}
 {{- if .Values.oven.enabled }}
-  - Oven Executor: {{ include "poundcake.fullname" . }}-oven ({{ .Values.oven.replicaCount }} replica(s))
+  - Dish Executor: {{ include "poundcake.fullname" . }}-oven ({{ .Values.oven.replicaCount }} replica(s))
 {{- end }}
 {{- if .Values.ovenService.enabled }}
-  - Oven Dispatcher: {{ include "poundcake.fullname" . }}-oven-service ({{ .Values.ovenService.replicaCount }} replica(s))
+  - Dish Dispatcher: {{ include "poundcake.fullname" . }}-oven-service ({{ .Values.ovenService.replicaCount }} replica(s))
 {{- end }}
 {{- if .Values.timer.enabled }}
   - Timer Monitor: {{ include "poundcake.fullname" . }}-timer ({{ .Values.timer.replicaCount }} replica(s))

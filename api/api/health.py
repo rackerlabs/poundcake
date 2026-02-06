@@ -9,7 +9,7 @@
 import os
 import socket
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 import httpx
@@ -17,7 +17,7 @@ import httpx
 from api.core.database import get_db
 from api.core.config import get_settings
 from api.schemas.schemas import HealthResponse, ComponentHealth, StatsResponse
-from api.models.models import Alert, Recipe, Oven
+from api.models.models import Order, Recipe, Dish
 from api.services.stackstorm_service import get_stackstorm_client
 from api.core.logging import get_logger
 
@@ -25,6 +25,7 @@ router = APIRouter()
 settings = get_settings()
 logger = get_logger(__name__)
 SYSTEM_REQ_ID = "SYSTEM-HEALTH"
+BOOTSTRAP_DONE_FILE = "/tmp/poundcake_bootstrap.done"
 
 
 async def check_mongodb() -> ComponentHealth:
@@ -34,7 +35,7 @@ async def check_mongodb() -> ComponentHealth:
 
     try:
         # Try to connect to MongoDB
-        mongodb_host = os.getenv("MONGODB_HOST", "poundcake-mongodb")
+        mongodb_host = os.getenv("MONGODB_HOST", "stackstorm-mongodb")
         mongodb_port = int(os.getenv("MONGODB_PORT", "27017"))
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -56,14 +57,16 @@ async def check_rabbitmq() -> ComponentHealth:
         return ComponentHealth(status="healthy", message="External or disabled")
 
     try:
-        rabbitmq_host = os.getenv("RABBITMQ_HOST", "poundcake-rabbitmq")
+        rabbitmq_host = os.getenv("RABBITMQ_HOST", "stackstorm-rabbitmq")
         rabbitmq_port = int(os.getenv("RABBITMQ_MANAGEMENT_PORT", "15672"))
+        rabbitmq_user = os.getenv("RABBITMQ_USER", "stackstorm")
+        rabbitmq_password = os.getenv("RABBITMQ_PASSWORD", "password")
 
         # Try management API
         async with httpx.AsyncClient(timeout=2.0) as client:
             response = await client.get(
                 f"http://{rabbitmq_host}:{rabbitmq_port}/api/healthchecks/node",
-                auth=("guest", "guest"),
+                auth=(rabbitmq_user, rabbitmq_password),
             )
             if response.status_code == 200:
                 return ComponentHealth(status="healthy", message="Management API accessible")
@@ -92,7 +95,7 @@ async def check_redis() -> ComponentHealth:
         return ComponentHealth(status="healthy", message="External or disabled")
 
     try:
-        redis_host = os.getenv("REDIS_HOST", "poundcake-redis")
+        redis_host = os.getenv("REDIS_HOST", "stackstorm-redis")
         redis_port = int(os.getenv("REDIS_PORT", "6379"))
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -109,7 +112,7 @@ async def check_redis() -> ComponentHealth:
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
+async def health_check(response: Response, db: Session = Depends(get_db)) -> HealthResponse:
     """Comprehensive health check for all PoundCake components."""
     components = {}
 
@@ -142,6 +145,16 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
     # Check Redis (used by StackStorm for coordination)
     components["redis"] = await check_redis()
 
+    # Check PoundCake bootstrap completion
+    if os.path.exists(BOOTSTRAP_DONE_FILE):
+        components["poundcake_bootstrap"] = ComponentHealth(
+            status="healthy", message="Bootstrap completed"
+        )
+    else:
+        components["poundcake_bootstrap"] = ComponentHealth(
+            status="unhealthy", message="Bootstrap not completed"
+        )
+
     # Determine overall status
     unhealthy_count = sum(1 for c in components.values() if c.status == "unhealthy")
     degraded_count = sum(1 for c in components.values() if c.status == "degraded")
@@ -152,6 +165,9 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
         overall_status = "degraded"
     else:
         overall_status = "healthy"
+
+    if overall_status != "healthy":
+        response.status_code = 503
 
     # Get instance ID (pod name in Kubernetes, hostname otherwise)
     instance_id = os.getenv("HOSTNAME", socket.gethostname())
@@ -168,36 +184,36 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
 @router.get("/stats", response_model=StatsResponse)
 def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
-    total_alerts = db.query(func.count(Alert.id)).scalar() or 0
+    total_orders = db.query(func.count(Order.id)).scalar() or 0
     total_recipes = db.query(func.count(Recipe.id)).scalar() or 0
-    total_executions = db.query(func.count(Oven.id)).scalar() or 0
+    total_dishes = db.query(func.count(Dish.id)).scalar() or 0
 
     # Grouping queries
-    alerts_by_status = dict(
-        db.query(Alert.processing_status, func.count(Alert.id))
-        .group_by(Alert.processing_status)
+    orders_by_status = dict(
+        db.query(Order.processing_status, func.count(Order.id))
+        .group_by(Order.processing_status)
         .all()
     )
 
-    # Mapping Alert.alert_status (firing/resolved)
-    alerts_by_alert = dict(
-        db.query(Alert.alert_status, func.count(Alert.id)).group_by(Alert.alert_status).all()
+    # Mapping Order.alert_status (firing/resolved)
+    orders_by_alert = dict(
+        db.query(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status).all()
     )
 
-    # Mapping Oven.processing_status
-    executions_by_status = dict(
-        db.query(Oven.processing_status, func.count(Oven.id)).group_by(Oven.processing_status).all()
+    # Mapping Dish.processing_status
+    dishes_by_status = dict(
+        db.query(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status).all()
     )
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    recent = db.query(func.count(Alert.id)).filter(Alert.created_at >= cutoff).scalar() or 0
+    recent = db.query(func.count(Order.id)).filter(Order.created_at >= cutoff).scalar() or 0
 
     return StatsResponse(
-        total_alerts=total_alerts,
+        total_orders=total_orders,
         total_recipes=total_recipes,
-        total_executions=total_executions,
-        alerts_by_processing_status=alerts_by_status,
-        alerts_by_alert_status=alerts_by_alert,
-        executions_by_status=executions_by_status,
-        recent_alerts=recent,
+        total_dishes=total_dishes,
+        orders_by_processing_status=orders_by_status,
+        orders_by_alert_status=orders_by_alert,
+        dishes_by_status=dishes_by_status,
+        recent_orders=recent,
     )

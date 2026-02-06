@@ -191,7 +191,7 @@ def load_all_mappings(mappings_path: Path) -> dict[str, Any]:
     for pattern in ["*.yaml", "*.yml"]:
         for yaml_file in mappings_path.glob(pattern):
             file_mappings = load_yaml_config(yaml_file)
-            if "alerts" in file_mappings:
-                for alert_name, config in file_mappings["alerts"].items():
-                    mappings[alert_name] = config
+            if "orders" in file_mappings:
+                for order_name, config in file_mappings["orders"].items():
+                    mappings[order_name] = config
     return mappings

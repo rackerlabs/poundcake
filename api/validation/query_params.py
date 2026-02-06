@@ -17,13 +17,16 @@ from fastapi import Query
 
 
 class ProcessingStatus(str, Enum):
-    """Valid processing status values for alerts and ovens."""
+    """Valid processing status values for orders and dishes."""
 
     NEW = "new"
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETE = "complete"
     FAILED = "failed"
+    CANCELED = "canceled"
+    TIMEOUT = "timeout"
+    ABANDONED = "abandoned"
 
 
 class AlertStatus(str, Enum):

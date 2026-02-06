@@ -5,3 +5,7 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """CLI command modules."""
+
+from . import orders, rules
+
+__all__ = ["orders", "rules"]

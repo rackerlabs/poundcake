@@ -1,0 +1,310 @@
+#  ____                        _  ____      _
+# |  _ \\ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \\| | | | '_ \\ / _` | |   / _` | |/ / _ \\
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \\___/ \\__,_|_| |_|\\__,_|\\____\\__,_|_|\\_\\___|
+#
+"""Dishwasher service: sync StackStorm actions into Ingredients/Recipes."""
+
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timezone
+from typing import Any
+
+import yaml
+
+from api.core.database import SessionLocal
+from api.core.logging import get_logger
+from api.models.models import Ingredient, Recipe, RecipeIngredient
+from api.services.stackstorm_service import get_action_manager
+
+logger = get_logger(__name__)
+
+DEFAULT_DURATION = int(os.getenv("DISHWASHER_DEFAULT_DURATION", "60"))
+DEFAULT_TIMEOUT = int(os.getenv("DISHWASHER_DEFAULT_TIMEOUT", "300"))
+PRUNE_MISSING = os.getenv("DISHWASHER_PRUNE_MISSING", "false").lower() == "true"
+STRICT_RECIPE_SYNC = os.getenv("DISHWASHER_STRICT_RECIPE_SYNC", "false").lower() == "true"
+BOOTSTRAP_DONE_FILE = "/tmp/poundcake_bootstrap.done"
+
+
+async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
+    """Sync StackStorm actions/workflows into Ingredients/Recipes."""
+    manager = get_action_manager()
+    actions = await manager.list_non_orquesta_actions(limit=1000)
+    workflows = await manager.list_orquesta_actions(limit=1000)
+
+    with SessionLocal() as db:
+        ingredient_stats = upsert_ingredients(db, actions)
+        recipe_stats = upsert_recipes(db, workflows)
+
+    stats = {"ingredients": ingredient_stats, "recipes": recipe_stats}
+
+    if mark_bootstrap:
+        try:
+            with open(BOOTSTRAP_DONE_FILE, "w") as f:
+                f.write(datetime.now(timezone.utc).isoformat())
+            stats["bootstrap_marked"] = True
+        except Exception as e:
+            logger.warning(
+                "Failed to mark bootstrap completion",
+                extra={"error": str(e), "file": BOOTSTRAP_DONE_FILE},
+            )
+            stats["bootstrap_marked"] = False
+
+    return stats
+
+
+def upsert_ingredients(db, actions: list[dict]) -> dict[str, int]:
+    created = 0
+    updated = 0
+    pruned = 0
+    now = datetime.now(timezone.utc)
+
+    existing = {ing.task_id: ing for ing in db.query(Ingredient).all()}
+    action_refs = set()
+
+    for action in actions:
+        action_ref = action.get("ref") or action.get("name")
+        if not action_ref:
+            continue
+        action_refs.add(action_ref)
+
+        ing = existing.get(action_ref)
+        payload = json.dumps(action)
+        parameters = action.get("parameters") or {}
+
+        if ing is None:
+            ing = Ingredient(
+                task_id=action_ref,
+                task_name=action.get("name") or action_ref,
+                action_id=action.get("id"),
+                action_payload=payload,
+                action_parameters=parameters,
+                is_blocking=True,
+                expected_duration_sec=DEFAULT_DURATION,
+                timeout_duration_sec=DEFAULT_TIMEOUT,
+                retry_count=0,
+                retry_delay=5,
+                on_failure="stop",
+                deleted=False,
+                deleted_at=None,
+                updated_at=now,
+            )
+            db.add(ing)
+            created += 1
+        else:
+            ing.task_name = action.get("name") or ing.task_name
+            ing.action_id = action.get("id")
+            ing.action_payload = payload
+            ing.action_parameters = parameters
+            ing.deleted = False
+            ing.deleted_at = None
+            ing.updated_at = now
+            updated += 1
+
+    if PRUNE_MISSING:
+        for ref, ing in existing.items():
+            if ref not in action_refs:
+                ing.deleted = True
+                ing.deleted_at = now
+                ing.updated_at = now
+                pruned += 1
+
+    db.commit()
+    return {"created": created, "updated": updated, "pruned": pruned}
+
+
+def upsert_recipes(db, actions: list[dict]) -> dict[str, int]:
+    created = 0
+    updated = 0
+    now = datetime.now(timezone.utc)
+
+    existing = {rec.workflow_id: rec for rec in db.query(Recipe).all() if rec.workflow_id}
+
+    for action in actions:
+        workflow_id = action.get("ref")
+        if not workflow_id:
+            continue
+
+        name = action.get("name") or workflow_id
+        description = action.get("description")
+        workflow_payload = action.get("data")
+        if isinstance(workflow_payload, str):
+            try:
+                workflow_payload = yaml.safe_load(workflow_payload) or {}
+            except Exception:
+                workflow_payload = None
+        workflow_parameters = action.get("parameters") or {}
+
+        rec = existing.get(workflow_id)
+        if rec is None:
+            rec = Recipe(
+                name=name,
+                description=description,
+                enabled=True,
+                workflow_id=workflow_id,
+                workflow_payload=workflow_payload,
+                workflow_parameters=workflow_parameters,
+                deleted=False,
+                deleted_at=None,
+                updated_at=now,
+            )
+            db.add(rec)
+            created += 1
+        else:
+            rec.name = name
+            rec.description = description
+            rec.workflow_payload = workflow_payload
+            rec.workflow_parameters = workflow_parameters
+            rec.deleted = False
+            rec.deleted_at = None
+            rec.updated_at = now
+            updated += 1
+
+        if workflow_payload:
+            ok = sync_recipe_ingredients_from_yaml(
+                db, rec, workflow_payload, strict=STRICT_RECIPE_SYNC
+            )
+            if not ok and STRICT_RECIPE_SYNC:
+                logger.warning(
+                    "Recipe sync failed due to missing ingredients",
+                    extra={"workflow_id": workflow_id, "recipe_id": rec.id},
+                )
+
+    db.commit()
+    return {"created": created, "updated": updated}
+
+
+def sync_recipe_ingredients_from_yaml(
+    db,
+    recipe: Recipe,
+    yaml_payload: dict[str, Any] | str,
+    strict: bool = False,
+) -> bool:
+    """
+    Parse Orquesta YAML tasks and build recipe_ingredients.
+    Returns False if missing ingredients and strict=True.
+    """
+    try:
+        workflow = json.loads(json.dumps(yaml_payload))
+        if isinstance(yaml_payload, str):
+            workflow = yaml.safe_load(yaml_payload) or {}
+    except Exception as e:
+        logger.warning(
+            "Failed to parse Orquesta YAML",
+            extra={"recipe_id": recipe.id, "error": str(e)},
+        )
+        return not strict
+
+    tasks = workflow.get("tasks", {}) if isinstance(workflow, dict) else {}
+    if not isinstance(tasks, dict) or not tasks:
+        return not strict
+
+    edges: dict[str, list[str]] = {}
+    indegree: dict[str, int] = {}
+    task_actions: dict[str, str] = {}
+
+    for task_name, task_def in tasks.items():
+        action_ref = (task_def or {}).get("action")
+        if not action_ref:
+            continue
+        task_actions[task_name] = action_ref
+        indegree.setdefault(task_name, 0)
+        edges.setdefault(task_name, [])
+        for nxt in (task_def or {}).get("next", []) or []:
+            nxt_name = nxt.get("do")
+            if nxt_name:
+                edges.setdefault(task_name, []).append(nxt_name)
+                indegree[nxt_name] = indegree.get(nxt_name, 0) + 1
+
+    queue = [t for t, deg in indegree.items() if deg == 0]
+    ordered_tasks = []
+    depth_map = {t: 0 for t in queue}
+    while queue:
+        t = queue.pop(0)
+        ordered_tasks.append(t)
+        for nxt in edges.get(t, []):
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                depth_map[nxt] = max(depth_map.get(nxt, 0), depth_map.get(t, 0) + 1)
+                queue.append(nxt)
+
+    if not ordered_tasks:
+        ordered_tasks = list(task_actions.keys())
+        for t in ordered_tasks:
+            depth_map.setdefault(t, 0)
+
+    existing_ingredients = {ing.task_id: ing for ing in db.query(Ingredient).all()}
+    missing = []
+    for task_name in ordered_tasks:
+        action_ref = task_actions.get(task_name)
+        if not action_ref:
+            continue
+        if action_ref not in existing_ingredients:
+            if strict:
+                missing.append(action_ref)
+                continue
+            stub = Ingredient(
+                task_id=action_ref,
+                task_name=action_ref,
+                action_id=None,
+                action_payload=None,
+                action_parameters={},
+                is_blocking=True,
+                expected_duration_sec=DEFAULT_DURATION,
+                timeout_duration_sec=DEFAULT_TIMEOUT,
+                retry_count=0,
+                retry_delay=5,
+                on_failure="stop",
+                deleted=False,
+                deleted_at=None,
+            )
+            db.add(stub)
+            db.flush()
+            existing_ingredients[action_ref] = stub
+            logger.warning(
+                "Created stub ingredient for missing action",
+                extra={"recipe_id": recipe.id, "action_ref": action_ref},
+            )
+
+    if missing and strict:
+        logger.warning(
+            "Missing ingredients for recipe sync",
+            extra={"recipe_id": recipe.id, "missing": missing},
+        )
+        return False
+
+    depth_counts: dict[int, int] = {}
+    for t in ordered_tasks:
+        depth = depth_map.get(t, 0)
+        depth_counts[depth] = depth_counts.get(depth, 0) + 1
+
+    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).delete()
+
+    step_order = 1
+    for task_name in ordered_tasks:
+        action_ref = task_actions.get(task_name)
+        if not action_ref:
+            continue
+        ing = existing_ingredients.get(action_ref)
+        if not ing:
+            continue
+        depth = depth_map.get(task_name, 0)
+        if depth_counts.get(depth, 0) > 1:
+            ing.is_blocking = False
+            ing.updated_at = datetime.now(timezone.utc)
+        db.add(
+            RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=ing.id,
+                step_order=step_order,
+                on_success="continue",
+                parallel_group=depth,
+                depth=depth,
+            )
+        )
+        step_order += 1
+
+    return True

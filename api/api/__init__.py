@@ -6,7 +6,18 @@
 #
 """API routes and endpoints for PoundCake."""
 
-# Use relative imports to avoid circular import issues
-from . import routes, health, auth, stackstorm, prometheus
+# Keep package imports minimal to avoid circular import issues.
+from . import health, auth, cook, prometheus, recipes, dishes, orders, ingredients, webhook, settings
 
-__all__ = ["routes", "health", "auth", "stackstorm", "prometheus"]
+__all__ = [
+    "health",
+    "auth",
+    "cook",
+    "prometheus",
+    "recipes",
+    "dishes",
+    "orders",
+    "ingredients",
+    "webhook",
+    "settings",
+]

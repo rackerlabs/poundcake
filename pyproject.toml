@@ -90,7 +90,7 @@ module = [
     "api.api.routes",
     "api.api.recipes",
     "api.api.auth",
-    "api.api.ovens",
+    "api.api.dishes",
     "api.api.v1.*",
     "api.models.models",
     "api.validation.query_params",

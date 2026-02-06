@@ -79,7 +79,7 @@ def seed_default_recipes() -> None:
 
         # Default recipe with ingredients
         default_recipe = Recipe(
-            name="default", description="Default recipe for unmatched alerts", enabled=True
+            name="default", description="Default recipe for unmatched orders", enabled=True
         )
 
         # Add default ingredients

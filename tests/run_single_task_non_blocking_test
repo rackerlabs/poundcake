@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+API_URL=${API_URL:-http://localhost:8000/api/v1}
+TEST_TS=${TEST_TS:-$(date +%s)}
+TEST_RECIPE=${TEST_RECIPE:-AutomatedTestRecipe-${TEST_TS}}
+REQ_ID=${REQ_ID:-AUTOMATED-${TEST_TS}}
+
+export API_URL TEST_RECIPE REQ_ID
+
+IS_BLOCKING=false "$(dirname "$0")/test_create_recipe_single_step.sh"
+"$(dirname "$0")/test_post_webhook.sh"
+"$(dirname "$0")/test_wait_for_order.sh"
+"$(dirname "$0")/test_wait_for_dishes.sh"
+EXPECTED_COUNT=1 "$(dirname "$0")/test_assert_dish_count.sh"

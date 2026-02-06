@@ -133,10 +133,15 @@ def require_auth_if_enabled(
         "/api/v1/health",
         "/api/v1/auth/login",
         "/metrics",
-        "/api/v1/alerts",
+        "/api/v1/orders",
+        "/api/v1/webhook",
     ]
 
-    if request.url.path in public_paths or request.url.path.startswith("/static/"):
+    if (
+        request.url.path in public_paths
+        or request.url.path.startswith("/static/")
+        or request.url.path.startswith("/api/v1/cook/")
+    ):
         return None
 
     username = validate_session(session_token)

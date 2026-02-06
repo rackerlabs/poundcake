@@ -15,14 +15,17 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from api.core.config import settings
 from api.core.middleware import PreHeatMiddleware
 from api.core.logging import setup_logging, get_logger
+from api.core.startup_checks import wait_for_stackstorm_ready
 from api.api.health import router as health_router
-from api.api.stackstorm import router as st2_bridge_router
+from api.api.cook import router as cook_router
 from api.api.recipes import router as recipes_router
-from api.api.ovens import router as ovens_router
-from api.api.routes import router as alerts_router
+from api.api.dishes import router as dishes_router
+from api.api.orders import router as orders_router
 from api.api.prometheus import router as prometheus_router
 from api.api.auth import router as auth_router
 from api.api.settings import router as settings_router
+from api.api.ingredients import router as ingredients_router
+from api.api.webhook import router as webhook_router
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -33,6 +36,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     # init_db() is removed from here
     logger.info("PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
+    await wait_for_stackstorm_ready()
     yield
     logger.info("Powering down PoundCake", extra={"req_id": "SYSTEM-SHUTDOWN"})
 
@@ -78,14 +82,16 @@ app.include_router(prometheus_router, prefix="/api/v1", tags=["prometheus"])
 app.include_router(auth_router, prefix="/api/v1", tags=["security"])
 
 # 3. Infrastructure & Automation
-app.include_router(st2_bridge_router, prefix="/api/v1", tags=["infrastructure"])
+app.include_router(cook_router, prefix="/api/v1", tags=["infrastructure"])
 
 # 4. Business Logic
 app.include_router(recipes_router, prefix="/api/v1", tags=["logic"])
-app.include_router(ovens_router, prefix="/api/v1", tags=["executor"])
+app.include_router(ingredients_router, prefix="/api/v1", tags=["logic"])
+app.include_router(dishes_router, prefix="/api/v1", tags=["executor"])
 
 # 5. Alert Ingestion (webhook)
-app.include_router(alerts_router, prefix="/api/v1", tags=["ingestion"])
+app.include_router(webhook_router, prefix="/api/v1", tags=["ingestion"])
+app.include_router(orders_router, prefix="/api/v1", tags=["ingestion"])
 
 
 @app.get("/")

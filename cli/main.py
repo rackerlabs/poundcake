@@ -12,7 +12,7 @@ from typing import Optional
 import click
 
 from poundcake_cli.client import PoundCakeClient
-from poundcake_cli.commands import alerts, rules
+from poundcake_cli.commands import orders, rules
 
 
 @click.group()
@@ -50,7 +50,7 @@ def cli(
     format: str,
     verbose: bool,
 ) -> None:
-    """PoundCake CLI - Manage alerts, rules, and remediations."""
+    """PoundCake CLI - Manage orders, rules, and remediations."""
     ctx.ensure_object(dict)
     ctx.obj["client"] = PoundCakeClient(url, api_key)
     ctx.obj["format"] = format
@@ -58,7 +58,7 @@ def cli(
 
 
 # Register subcommands
-cli.add_command(alerts.alerts)
+cli.add_command(orders.orders)
 cli.add_command(rules.rules)
 
 
