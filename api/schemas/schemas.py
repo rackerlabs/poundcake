@@ -15,12 +15,18 @@ from datetime import datetime
 # =============================================================================
 
 
+class ComponentHealth(BaseModel):
+    status: str  # healthy, degraded, unhealthy
+    message: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+
 class HealthResponse(BaseModel):
-    status: str
+    status: str  # overall: healthy, degraded, unhealthy
     version: str
-    database: str
-    stackstorm: str
+    instance_id: str
     timestamp: datetime
+    components: Dict[str, ComponentHealth]  # database, stackstorm, mongodb, rabbitmq, redis
 
 
 class StatsResponse(BaseModel):

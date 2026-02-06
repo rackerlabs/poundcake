@@ -6,45 +6,162 @@
 #
 """Health check and statistics endpoints."""
 
+import os
+import socket
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
+import httpx
 
 from api.core.database import get_db
 from api.core.config import get_settings
-from api.schemas.schemas import HealthResponse, StatsResponse
+from api.schemas.schemas import HealthResponse, ComponentHealth, StatsResponse
 from api.models.models import Alert, Recipe, Oven
 from api.services.stackstorm_service import get_stackstorm_client
+from api.core.logging import get_logger
 
 router = APIRouter()
 settings = get_settings()
+logger = get_logger(__name__)
 SYSTEM_REQ_ID = "SYSTEM-HEALTH"
+
+
+async def check_mongodb() -> ComponentHealth:
+    """Check MongoDB connection."""
+    if not settings.mongodb_enabled or settings.mongodb_external:
+        return ComponentHealth(status="healthy", message="External or disabled")
+
+    try:
+        # Try to connect to MongoDB
+        mongodb_host = os.getenv("MONGODB_HOST", "poundcake-mongodb")
+        mongodb_port = int(os.getenv("MONGODB_PORT", "27017"))
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex((mongodb_host, mongodb_port))
+        sock.close()
+
+        if result == 0:
+            return ComponentHealth(status="healthy", message="Connected")
+        else:
+            return ComponentHealth(status="unhealthy", message="Cannot connect to port")
+    except Exception as e:
+        return ComponentHealth(status="unhealthy", message=str(e))
+
+
+async def check_rabbitmq() -> ComponentHealth:
+    """Check RabbitMQ connection."""
+    if not settings.rabbitmq_enabled:
+        return ComponentHealth(status="healthy", message="External or disabled")
+
+    try:
+        rabbitmq_host = os.getenv("RABBITMQ_HOST", "poundcake-rabbitmq")
+        rabbitmq_port = int(os.getenv("RABBITMQ_MANAGEMENT_PORT", "15672"))
+
+        # Try management API
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(
+                f"http://{rabbitmq_host}:{rabbitmq_port}/api/healthchecks/node",
+                auth=("guest", "guest"),
+            )
+            if response.status_code == 200:
+                return ComponentHealth(status="healthy", message="Management API accessible")
+            else:
+                return ComponentHealth(status="degraded", message=f"HTTP {response.status_code}")
+    except Exception:
+        # Fall back to TCP check
+        try:
+            rabbitmq_port = int(os.getenv("RABBITMQ_PORT", "5672"))
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex((rabbitmq_host, rabbitmq_port))
+            sock.close()
+
+            if result == 0:
+                return ComponentHealth(status="healthy", message="AMQP port accessible")
+            else:
+                return ComponentHealth(status="unhealthy", message="Cannot connect")
+        except Exception as e2:
+            return ComponentHealth(status="unhealthy", message=str(e2))
+
+
+async def check_redis() -> ComponentHealth:
+    """Check Redis connection."""
+    if not settings.redis_enabled:
+        return ComponentHealth(status="healthy", message="External or disabled")
+
+    try:
+        redis_host = os.getenv("REDIS_HOST", "poundcake-redis")
+        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex((redis_host, redis_port))
+        sock.close()
+
+        if result == 0:
+            return ComponentHealth(status="healthy", message="Connected")
+        else:
+            return ComponentHealth(status="unhealthy", message="Cannot connect")
+    except Exception as e:
+        return ComponentHealth(status="unhealthy", message=str(e))
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
-    """Health check using the existing StackStorm client health_check method."""
-    # Check Database
+    """Comprehensive health check for all PoundCake components."""
+    components = {}
+
+    # Check MariaDB/MySQL Database
     try:
         db.execute(text("SELECT 1"))
-        db_status = "healthy"
+        components["database"] = ComponentHealth(status="healthy", message="Connected")
     except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
+        components["database"] = ComponentHealth(status="unhealthy", message=str(e))
 
-    # Check StackStorm via existing async client
-    st2_client = get_stackstorm_client()
-    is_st2_healthy = await st2_client.health_check(req_id=SYSTEM_REQ_ID)
-    st2_status = "healthy" if is_st2_healthy else "unhealthy"
+    # Check StackStorm
+    try:
+        st2_client = get_stackstorm_client()
+        is_st2_healthy = await st2_client.health_check(req_id=SYSTEM_REQ_ID)
+        if is_st2_healthy:
+            components["stackstorm"] = ComponentHealth(status="healthy", message="API accessible")
+        else:
+            components["stackstorm"] = ComponentHealth(
+                status="unhealthy", message="API not responding"
+            )
+    except Exception as e:
+        components["stackstorm"] = ComponentHealth(status="unhealthy", message=str(e))
 
-    overall_status = "healthy" if db_status == "healthy" and is_st2_healthy else "degraded"
+    # Check MongoDB (used by StackStorm)
+    components["mongodb"] = await check_mongodb()
+
+    # Check RabbitMQ (used by StackStorm)
+    components["rabbitmq"] = await check_rabbitmq()
+
+    # Check Redis (used by StackStorm for coordination)
+    components["redis"] = await check_redis()
+
+    # Determine overall status
+    unhealthy_count = sum(1 for c in components.values() if c.status == "unhealthy")
+    degraded_count = sum(1 for c in components.values() if c.status == "degraded")
+
+    if unhealthy_count > 0:
+        overall_status = "unhealthy"
+    elif degraded_count > 0:
+        overall_status = "degraded"
+    else:
+        overall_status = "healthy"
+
+    # Get instance ID (pod name in Kubernetes, hostname otherwise)
+    instance_id = os.getenv("HOSTNAME", socket.gethostname())
 
     return HealthResponse(
         status=overall_status,
         version=settings.app_version,
-        database=db_status,
-        stackstorm=st2_status,
+        instance_id=instance_id,
         timestamp=datetime.now(timezone.utc),
+        components=components,
     )
 
 
