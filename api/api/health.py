@@ -63,7 +63,7 @@ async def check_rabbitmq() -> ComponentHealth:
         async with httpx.AsyncClient(timeout=2.0) as client:
             response = await client.get(
                 f"http://{rabbitmq_host}:{rabbitmq_port}/api/healthchecks/node",
-                auth=("guest", "guest")
+                auth=("guest", "guest"),
             )
             if response.status_code == 200:
                 return ComponentHealth(status="healthy", message="Management API accessible")
@@ -127,7 +127,9 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
         if is_st2_healthy:
             components["stackstorm"] = ComponentHealth(status="healthy", message="API accessible")
         else:
-            components["stackstorm"] = ComponentHealth(status="unhealthy", message="API not responding")
+            components["stackstorm"] = ComponentHealth(
+                status="unhealthy", message="API not responding"
+            )
     except Exception as e:
         components["stackstorm"] = ComponentHealth(status="unhealthy", message=str(e))
 
