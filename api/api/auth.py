@@ -116,7 +116,7 @@ def verify_credentials(username: str, password: str) -> bool:
 
 
 def require_auth_if_enabled(
-    request: Request, session: str | None = Cookie(default=None)
+    request: Request, session_token: str | None = Cookie(default=None)
 ) -> str | None:
     """Dependency for FastAPI routes. Checks if auth is enabled and validates session."""
     settings = get_settings()
@@ -139,7 +139,7 @@ def require_auth_if_enabled(
     if request.url.path in public_paths or request.url.path.startswith("/static/"):
         return None
 
-    username = validate_session(session)
+    username = validate_session(session_token)
     if not username:
         if "text/html" in request.headers.get("accept", ""):
             raise HTTPException(
