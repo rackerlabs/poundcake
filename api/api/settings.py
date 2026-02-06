@@ -32,19 +32,15 @@ async def get_application_settings(
     return {
         # Authentication
         "auth_enabled": settings.auth_enabled,
-
         # Prometheus configuration
         "prometheus_use_crds": settings.prometheus_use_crds,
         "prometheus_crd_namespace": settings.prometheus_crd_namespace,
         "prometheus_url": settings.prometheus_url,
-
         # Git integration
         "git_enabled": settings.git_enabled,
         "git_provider": settings.git_provider if settings.git_enabled else None,
-
         # StackStorm configuration
         "stackstorm_enabled": True,  # Always enabled in this setup
-
         # Version info
         "version": "2.0.42",
     }
