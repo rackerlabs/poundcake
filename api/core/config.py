@@ -15,6 +15,8 @@ import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from api.version import __version__
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -31,7 +33,7 @@ class Settings(BaseSettings):
     # Application Settings
     # ==========================================================================
     app_name: str = "PoundCake"
-    app_version: str = "2.0.53"
+    app_version: str = Field(default=__version__)
     debug: bool = False
 
     # API Server

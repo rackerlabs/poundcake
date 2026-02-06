@@ -42,5 +42,5 @@ async def get_application_settings(
         # StackStorm configuration
         "stackstorm_enabled": True,  # Always enabled in this setup
         # Version info
-        "version": "2.0.53",
+        "version": settings.app_version,
     }
