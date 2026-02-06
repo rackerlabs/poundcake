@@ -45,10 +45,19 @@ def test_health_endpoint_structure(client):
     response = client.get("/api/v1/health")
     data = response.json()
 
-    # Check all required fields
-    required_fields = ["status", "version", "database", "stackstorm", "timestamp"]
+    # Check all required top-level fields
+    required_fields = ["status", "version", "instance_id", "timestamp", "components"]
     for field in required_fields:
         assert field in data, f"Missing field: {field}"
+
+    # Check components structure
+    assert isinstance(data["components"], dict), "components should be a dictionary"
+    expected_components = ["database", "stackstorm", "mongodb", "rabbitmq", "redis"]
+    for component in expected_components:
+        assert component in data["components"], f"Missing component: {component}"
+        # Each component should have status and message
+        assert "status" in data["components"][component], f"{component} missing status"
+        assert "message" in data["components"][component], f"{component} missing message"
 
 
 def test_root_endpoint(client):
