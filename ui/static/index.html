@@ -94,6 +94,27 @@
     </style>
 </head>
 <body>
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h2 style="margin-bottom: 20px;">PoundCake Login</h2>
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <div id="login-error" style="color: #e74c3c; margin-bottom: 15px; display: none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application (hidden until authenticated) -->
+    <div id="app-container" style="display: none;">
     <header>
         <div class="container">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -102,7 +123,7 @@
                     <div class="header-stats" id="header-stats"></div>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <span class="version-display">v2.0.30</span>
+                    <span class="version-display">v2.0.38</span>
                     <button class="btn" onclick="logout()" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Logout</button>
                 </div>
             </div>
@@ -1803,6 +1824,67 @@ actions:
         script.src = 'https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js';
         document.head.appendChild(script);
 
+        // Authentication functions
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/v1/settings');
+                if (res.status === 401) {
+                    showLoginModal();
+                    return false;
+                }
+                if (res.ok) {
+                    hideLoginModal();
+                    return true;
+                }
+                showLoginModal();
+                return false;
+            } catch (err) {
+                console.error('Auth check failed:', err);
+                showLoginModal();
+                return false;
+            }
+        }
+
+        function showLoginModal() {
+            document.getElementById('login-modal').classList.add('active');
+            document.getElementById('app-container').style.display = 'none';
+            document.getElementById('login-error').style.display = 'none';
+        }
+
+        function hideLoginModal() {
+            document.getElementById('login-modal').classList.remove('active');
+            document.getElementById('app-container').style.display = 'block';
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('login-error');
+
+            try {
+                const res = await fetch('/api/v1/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (res.ok) {
+                    hideLoginModal();
+                    loadDashboard();
+                    toggleAutoRefresh();
+                } else {
+                    const data = await res.json();
+                    errorDiv.textContent = data.detail || 'Invalid credentials';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Login failed. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+        }
+
         // Logout function
         async function logout() {
             if (!confirm('Are you sure you want to logout?')) return;
@@ -1813,7 +1895,8 @@ actions:
                 });
 
                 if (res.ok) {
-                    window.location.href = '/login';
+                    showLoginModal();
+                    document.getElementById('login-form').reset();
                 } else {
                     alert('Failed to logout. Please try again.');
                 }
@@ -1822,11 +1905,25 @@ actions:
             }
         }
 
+        // Global fetch wrapper to handle 401 responses
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch(...args);
+            if (response.status === 401) {
+                showLoginModal();
+            }
+            return response;
+        };
+
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadDashboard(); // Load dashboard by default
-            toggleAutoRefresh(); // Start auto-refresh
+        document.addEventListener('DOMContentLoaded', async () => {
+            const isAuthenticated = await checkAuth();
+            if (isAuthenticated) {
+                loadDashboard(); // Load dashboard by default
+                toggleAutoRefresh(); // Start auto-refresh
+            }
         });
     </script>
+    </div> <!-- End app-container -->
 </body>
 </html>
