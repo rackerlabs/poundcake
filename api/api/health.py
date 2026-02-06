@@ -69,7 +69,7 @@ async def check_rabbitmq() -> ComponentHealth:
                 return ComponentHealth(status="healthy", message="Management API accessible")
             else:
                 return ComponentHealth(status="degraded", message=f"HTTP {response.status_code}")
-    except Exception as e:
+    except Exception:
         # Fall back to TCP check
         try:
             rabbitmq_port = int(os.getenv("RABBITMQ_PORT", "5672"))
