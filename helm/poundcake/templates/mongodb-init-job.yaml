@@ -23,8 +23,23 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      securityContext:
+        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: mongodb-init
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsUser: 999
+          seccompProfile:
+            type: RuntimeDefault
         image: mongo:7.0.28
         imagePullPolicy: IfNotPresent
         command:

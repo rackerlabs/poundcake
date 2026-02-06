@@ -21,8 +21,12 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
       - name: gateway-listener
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
         image: bitnami/kubectl:latest
         imagePullPolicy: IfNotPresent
         command:
