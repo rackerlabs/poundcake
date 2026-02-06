@@ -11,7 +11,7 @@ import base64
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import Cookie, HTTPException, Request, status, APIRouter
+from fastapi import Cookie, HTTPException, Request, status, APIRouter, Response
 
 from api.core.config import get_settings
 from api.core.logging import get_logger
@@ -156,7 +156,7 @@ def require_auth_if_enabled(
 
 
 @router.post("/auth/login", response_model=SessionResponse)
-async def login(request: Request) -> SessionResponse:
+async def login(request: Request, response: Response) -> SessionResponse:
     """Simple login endpoint to set session."""
     req_id = request.state.req_id
 
@@ -170,6 +170,15 @@ async def login(request: Request) -> SessionResponse:
         if verify_credentials(username, password):
             token = create_session(username)
             session_data = _sessions[token]
+
+            # Set session cookie
+            response.set_cookie(
+                key="session_token",
+                value=token,
+                httponly=True,
+                samesite="lax",
+                max_age=get_settings().auth_session_timeout,
+            )
 
             logger.info("Login successful", extra={"req_id": req_id, "username": username})
 
@@ -188,3 +197,22 @@ async def login(request: Request) -> SessionResponse:
     except Exception as e:
         logger.error("Login failed", extra={"req_id": req_id, "error": str(e)}, exc_info=True)
         raise HTTPException(status_code=400, detail="Malformed request")
+
+
+@router.post("/auth/logout")
+async def logout(request: Request, response: Response) -> dict[str, str]:
+    """Logout and destroy session."""
+    req_id = request.state.req_id
+    session_token = request.cookies.get("session_token")
+
+    if session_token:
+        username = _sessions.get(session_token, {}).get("username", "unknown")
+        destroy_session(session_token)
+        logger.info("User logged out", extra={"req_id": req_id, "username": username})
+    else:
+        logger.info("Logout attempted without session", extra={"req_id": req_id})
+
+    # Clear the session cookie
+    response.delete_cookie(key="session_token")
+
+    return {"message": "Logged out successfully"}
