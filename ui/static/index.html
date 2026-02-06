@@ -75,8 +75,14 @@
         .metric-value { font-weight: 600; font-size: 16px; }
         .health-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
         .health-indicator.healthy { background: #27ae60; }
-        .health-indicator.unhealthy { background: #e74c3c; }
+        .health-indicator.warning { background: #f39c12; }
+        .health-indicator.error { background: #e74c3c; }
         .health-indicator.unknown { background: #95a5a6; }
+        .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .status-badge.healthy { background: #27ae60; color: white; }
+        .status-badge.warning { background: #f39c12; color: white; }
+        .status-badge.error { background: #e74c3c; color: white; }
+        .dashboard-card.warning { border-left-color: #f39c12; }
         .config-section { margin-bottom: 25px; }
         .config-section h3 { margin-bottom: 15px; font-size: 18px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; }
         .config-item { display: grid; grid-template-columns: 200px 1fr; padding: 12px; background: #f8f9fa; margin-bottom: 8px; border-radius: 4px; }
@@ -94,6 +100,27 @@
     </style>
 </head>
 <body>
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h2 style="margin-bottom: 20px;">PoundCake Login</h2>
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <div id="login-error" style="color: #e74c3c; margin-bottom: 15px; display: none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application (hidden until authenticated) -->
+    <div id="app-container" style="display: none;">
     <header>
         <div class="container">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -102,7 +129,7 @@
                     <div class="header-stats" id="header-stats"></div>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <span class="version-display">v1.0.1</span>
+                    <span class="version-display" id="header-version">v2.0.53</span>
                     <button class="btn" onclick="logout()" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Logout</button>
                 </div>
             </div>
@@ -514,7 +541,7 @@
         // Alert tracking functions
         async function loadAlerts() {
             const status = document.getElementById('status-filter').value;
-            const url = status ? `/alerts?status=${status}` : '/alerts';
+            const url = status ? `/api/v1/alerts?status=${status}` : '/api/v1/alerts';
             const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('alerts-table');
@@ -554,20 +581,21 @@
             const res = await fetch('/api/v1/stats');
             const data = await res.json();
 
-            // Update header stats
+            // Update header stats (API returns total_alerts and alerts_by_processing_status, not total and by_status)
             const headerStats = document.getElementById('header-stats');
             headerStats.innerHTML = `
-                <span>Total: ${data.total}</span>
-                ${Object.entries(data.by_status).map(([k, v]) => `<span>${k}: ${v}</span>`).join('')}
+                <span>Total Alerts: ${data.total_alerts || 0}</span>
+                <span>Total Recipes: ${data.total_recipes || 0}</span>
+                <span>Total Executions: ${data.total_executions || 0}</span>
             `;
 
             // Update stats bar
             const statsBar = document.getElementById('stats-bar');
             statsBar.innerHTML = '';
 
-            const statusOrder = ['received', 'remediating', 'remediated', 'resolved'];
+            const statusOrder = ['new', 'processing', 'complete', 'failed'];
             statusOrder.forEach(status => {
-                const count = data.by_status[status] || 0;
+                const count = data.alerts_by_processing_status?.[status] || 0;
                 if (count > 0 || status === 'received' || status === 'remediating') {
                     statsBar.innerHTML += `
                         <div class="stat-item">
@@ -589,7 +617,7 @@
             }
 
             // Load full alert details
-            const res = await fetch(`/alerts/${fingerprint}`);
+            const res = await fetch(`/api/v1/alerts/${fingerprint}`);
             const data = await res.json();
             const alert = data.alert;
 
@@ -640,20 +668,21 @@
         }
 
         async function loadMappings() {
-            const res = await fetch('/api/v1/mappings');
+            const res = await fetch('/api/v1/recipes/');
             const data = await res.json();
             const tbody = document.getElementById('mappings-table');
             tbody.innerHTML = '';
 
-            for (const [name, config] of Object.entries(data.mappings)) {
-                const actions = config.actions ? config.actions.length : 0;
+            // data is now an array of recipes, not an object with mappings
+            for (const recipe of data) {
+                const actions = recipe.ingredients ? recipe.ingredients.length : 0;
                 tbody.innerHTML += `
                     <tr>
-                        <td>${name}</td>
-                        <td>${config.handler || 'yaml_config'}</td>
+                        <td>${recipe.name}</td>
+                        <td>${recipe.description || 'N/A'}</td>
                         <td>${actions}</td>
                         <td>
-                            <button class="btn btn-primary" onclick="editMapping('${name}')">Edit</button>
+                            <button class="btn btn-primary" onclick="editMapping('${recipe.name}')">Edit</button>
                             <button class="btn btn-danger" onclick="deleteMapping('${name}')">Delete</button>
                         </td>
                     </tr>
@@ -673,7 +702,7 @@
 
         async function loadActions() {
             const pack = document.getElementById('pack-filter').value;
-            const url = pack ? `/api/stackstorm/actions?pack=${pack}` : '/api/v1/stackstorm/actions';
+            const url = pack ? `/api/v1/stackstorm/actions?pack=${pack}` : '/api/v1/stackstorm/actions';
             const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('actions-table');
@@ -753,7 +782,8 @@
                     r.name.toLowerCase().includes(searchTerm) ||
                     r.query.toLowerCase().includes(searchTerm) ||
                     r.group.toLowerCase().includes(searchTerm) ||
-                    r.file.toLowerCase().includes(searchTerm)
+                    (r.file && r.file.toLowerCase().includes(searchTerm)) ||
+                    (r.crd && r.crd.toLowerCase().includes(searchTerm))
                 );
             }
 
@@ -766,10 +796,12 @@
                 const stateClass = rule.state === 'firing' ? 'status-failed' :
                                  rule.state === 'pending' ? 'status-running' : 'status-success';
                 const canEdit = settings.prometheus_use_crds || settings.git_enabled;
+                // Use crd field if present (CRD mode), otherwise use file field (Prometheus API mode)
+                const fileOrCrd = rule.crd || rule.file || '';
                 const editBtn = canEdit ?
                     `<div style="display: flex; gap: 4px; white-space: nowrap;">
                         <button class="btn btn-primary btn-sm" onclick='editPrometheusRule(${JSON.stringify(rule)})'>Edit</button>
-                        <button class="btn btn-danger btn-sm" onclick='deletePrometheusRule("${rule.name}", "${rule.group}", "${rule.file}")'>Delete</button>
+                        <button class="btn btn-danger btn-sm" onclick='deletePrometheusRule("${rule.name}", "${rule.group}", "${fileOrCrd}")'>Delete</button>
                     </div>` :
                     '<span style="color: #999; font-size: 11px;">No backend</span>';
 
@@ -791,9 +823,10 @@
             document.getElementById('rule-name').value = rule.name;
             document.getElementById('rule-name').disabled = true;
             document.getElementById('rule-group').value = rule.group;
-            document.getElementById('rule-file').value = rule.file;
+            // Use crd field if present (CRD mode), otherwise use file field (Prometheus API mode)
+            document.getElementById('rule-file').value = rule.crd || rule.file || '';
             document.getElementById('rule-expr').value = rule.query;
-            document.getElementById('rule-for').value = `${rule.duration}s`;
+            document.getElementById('rule-for').value = rule.duration || '';
 
             // Clear and populate labels
             const labelsContainer = document.getElementById('rule-labels-container');
@@ -1451,16 +1484,16 @@
             const tbody = document.getElementById('history-table');
             tbody.innerHTML = '';
 
-            data.remediations.forEach(r => {
-                const statusClass = r.status === 'success' ? 'status-success' :
-                                   r.status === 'failed' ? 'status-failed' : 'status-running';
+            data.forEach(r => {
+                const statusClass = r.processing_status === 'complete' ? 'status-success' :
+                                   r.processing_status === 'failed' ? 'status-failed' : 'status-running';
                 tbody.innerHTML += `
                     <tr>
-                        <td>${r.alert_name}</td>
-                        <td>${r.action_name}</td>
-                        <td><span class="status ${statusClass}">${r.status}</span></td>
-                        <td>${new Date(r.started_at).toLocaleString()}</td>
-                        <td>${r.execution_id || '-'}</td>
+                        <td>${r.task_name || 'Unknown'}</td>
+                        <td>${r.st2_action || 'N/A'}</td>
+                        <td><span class="status ${statusClass}">${r.processing_status}</span></td>
+                        <td>${r.started_at ? new Date(r.started_at).toLocaleString() : 'Pending'}</td>
+                        <td>${r.action_id || '-'}</td>
                     </tr>
                 `;
             });
@@ -1698,11 +1731,28 @@ actions:
 
                 console.log('Dashboard data:', { health, stats, history });
 
+            // Update header version from health API
+            const headerVersion = document.getElementById('header-version');
+            if (headerVersion && health.version) {
+                headerVersion.textContent = `v${health.version}`;
+            }
+
             // Update dashboard metrics
             const metricsDiv = document.getElementById('dashboard-metrics');
-            const stackstormClass = health.stackstorm === 'healthy' ? 'healthy' : 'error';
-            const stateClass = health.state_store === 'healthy' ? 'healthy' : 'error';
             const overallClass = health.status === 'healthy' ? 'healthy' : (health.status === 'degraded' ? 'warning' : 'error');
+
+            // Helper function to get component status class
+            const getStatusClass = (component) => {
+                if (!component) return 'error';
+                return component.status === 'healthy' ? 'healthy' : (component.status === 'degraded' ? 'warning' : 'error');
+            };
+
+            // Helper function to display component status
+            const getStatusBadge = (component) => {
+                if (!component) return '<span class="status-badge error">UNKNOWN</span>';
+                const statusClass = getStatusClass(component);
+                return `<span class="status-badge ${statusClass}">${component.status.toUpperCase()}</span>`;
+            };
 
             metricsDiv.innerHTML = `
                 <div class="dashboard-card ${overallClass}">
@@ -1712,58 +1762,107 @@ actions:
                         <span class="metric-value">${health.status.toUpperCase()}</span>
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Instance ID</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.instance_id || 'Unknown'}</span>
+                        <span class="metric-label">Version</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.version}</span>
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Handlers</span>
-                        <span class="metric-value">${health.handlers || 0}</span>
+                        <span class="metric-label">Instance ID</span>
+                        <span class="metric-value" style="font-size: 11px;">${health.instance_id || 'Unknown'}</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Last Updated</span>
-                        <span class="metric-value" style="font-size: 12px;">${new Date().toLocaleString()}</span>
+                        <span class="metric-value" style="font-size: 12px;">${new Date(health.timestamp).toLocaleString()}</span>
                     </div>
                 </div>
-                <div class="dashboard-card ${stackstormClass}">
-                    <h3><span class="health-indicator ${stackstormClass}"></span>StackStorm</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Connection</span>
-                        <span class="metric-value">${health.stackstorm ? 'HEALTHY' : 'UNHEALTHY'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">API Accessible</span>
-                        <span class="metric-value">${health.stackstorm ? 'Yes' : 'No'}</span>
-                    </div>
-                </div>
-                <div class="dashboard-card ${stateClass}">
-                    <h3><span class="health-indicator ${stateClass}"></span>State Store</h3>
+                <div class="dashboard-card ${getStatusClass(health.components?.database)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.database)}"></span>Database (MariaDB)</h3>
                     <div class="metric-row">
                         <span class="metric-label">Status</span>
-                        <span class="metric-value">${health.state_store ? 'HEALTHY' : 'UNHEALTHY'}</span>
+                        ${getStatusBadge(health.components?.database)}
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Connection</span>
-                        <span class="metric-value">${health.state_store ? 'Connected' : 'Unavailable'}</span>
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.database?.message || 'N/A'}</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Total Alerts</span>
-                        <span class="metric-value">${stats.total}</span>
+                        <span class="metric-value">${stats.total_alerts || 0}</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.stackstorm)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.stackstorm)}"></span>StackStorm</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.stackstorm)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.stackstorm?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Total Recipes</span>
+                        <span class="metric-value">${stats.total_recipes || 0}</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.mongodb)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.mongodb)}"></span>MongoDB</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.mongodb)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.mongodb?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Used By</span>
+                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.rabbitmq)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.rabbitmq)}"></span>RabbitMQ</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.rabbitmq)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.rabbitmq?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Used By</span>
+                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
+                    </div>
+                </div>
+                <div class="dashboard-card ${getStatusClass(health.components?.redis)}">
+                    <h3><span class="health-indicator ${getStatusClass(health.components?.redis)}"></span>Redis</h3>
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        ${getStatusBadge(health.components?.redis)}
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Message</span>
+                        <span class="metric-value" style="font-size: 12px;">${health.components?.redis?.message || 'N/A'}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Used By</span>
+                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
                     </div>
                 </div>
             `;
 
-            // Update recent activity
+            // Update recent activity (history is now an array of ovens, not an object with remediations)
             const activityDiv = document.getElementById('recent-activity');
-            if (history.remediations.length === 0) {
+            if (!history || history.length === 0) {
                 activityDiv.innerHTML = '<p style="color: #666; text-align: center;">No recent activity</p>';
             } else {
-                activityDiv.innerHTML = history.remediations.slice(0, 5).map(r => {
-                    const statusClass = r.status === 'success' ? 'success' : 'failed';
-                    const time = new Date(r.started_at).toLocaleString();
+                activityDiv.innerHTML = history.slice(0, 5).map(r => {
+                    const statusClass = r.processing_status === 'complete' ? 'success' : (r.processing_status === 'failed' ? 'failed' : 'pending');
+                    const time = r.started_at ? new Date(r.started_at).toLocaleString() : new Date(r.created_at).toLocaleString();
                     return `
                         <div class="activity-item ${statusClass}">
-                            <div><strong>${r.alert_name}</strong> → ${r.action_name}</div>
-                            <div class="time">${time}</div>
+                            <div><strong>${r.task_name || 'Unknown Task'}</strong> → ${r.st2_action || 'N/A'}</div>
+                            <div class="time">${time} - ${r.processing_status}</div>
                         </div>
                     `;
                 }).join('');
@@ -1774,15 +1873,15 @@ actions:
             quickStatsDiv.innerHTML = `
                 <div class="metric-row">
                     <span class="metric-label">Active Alerts</span>
-                    <span class="metric-value">${stats.by_status?.remediating || 0}</span>
+                    <span class="metric-value">${stats.alerts_by_processing_status?.processing || stats.alerts_by_processing_status?.new || 0}</span>
                 </div>
                 <div class="metric-row">
-                    <span class="metric-label">Resolved Today</span>
-                    <span class="metric-value">${stats.by_status?.resolved || 0}</span>
+                    <span class="metric-label">Total Executions</span>
+                    <span class="metric-value">${stats.total_executions || 0}</span>
                 </div>
                 <div class="metric-row">
-                    <span class="metric-label">Total Tracked</span>
-                    <span class="metric-value">${stats.total || 0}</span>
+                    <span class="metric-label">Total Alerts</span>
+                    <span class="metric-value">${stats.total_alerts || 0}</span>
                 </div>
             `;
             } catch (error) {
@@ -1797,17 +1896,79 @@ actions:
         script.src = 'https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js';
         document.head.appendChild(script);
 
+        // Authentication functions
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/v1/settings');
+                if (res.status === 401) {
+                    showLoginModal();
+                    return false;
+                }
+                if (res.ok) {
+                    hideLoginModal();
+                    return true;
+                }
+                showLoginModal();
+                return false;
+            } catch (err) {
+                console.error('Auth check failed:', err);
+                showLoginModal();
+                return false;
+            }
+        }
+
+        function showLoginModal() {
+            document.getElementById('login-modal').classList.add('active');
+            document.getElementById('app-container').style.display = 'none';
+            document.getElementById('login-error').style.display = 'none';
+        }
+
+        function hideLoginModal() {
+            document.getElementById('login-modal').classList.remove('active');
+            document.getElementById('app-container').style.display = 'block';
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('login-error');
+
+            try {
+                const res = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (res.ok) {
+                    hideLoginModal();
+                    loadDashboard();
+                    toggleAutoRefresh();
+                } else {
+                    const data = await res.json();
+                    errorDiv.textContent = data.detail || 'Invalid credentials';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Login failed. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+        }
+
         // Logout function
         async function logout() {
             if (!confirm('Are you sure you want to logout?')) return;
 
             try {
-                const res = await fetch('/api/v1/logout', {
+                const res = await fetch('/api/v1/auth/logout', {
                     method: 'POST'
                 });
 
                 if (res.ok) {
-                    window.location.href = '/login';
+                    showLoginModal();
+                    document.getElementById('login-form').reset();
                 } else {
                     alert('Failed to logout. Please try again.');
                 }
@@ -1816,11 +1977,32 @@ actions:
             }
         }
 
+        // Global fetch wrapper to handle 401 responses
+        // Skip showing login for auth check and login/logout endpoints
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch(...args);
+            const url = args[0];
+
+            // Don't show login modal for these endpoints - they handle 401 themselves
+            const skipUrls = ['/api/v1/settings', '/api/v1/auth/login', '/api/v1/auth/logout'];
+            const shouldSkip = typeof url === 'string' && skipUrls.some(skip => url.includes(skip));
+
+            if (response.status === 401 && !shouldSkip) {
+                showLoginModal();
+            }
+            return response;
+        };
+
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadDashboard(); // Load dashboard by default
-            toggleAutoRefresh(); // Start auto-refresh
+        document.addEventListener('DOMContentLoaded', async () => {
+            const isAuthenticated = await checkAuth();
+            if (isAuthenticated) {
+                loadDashboard(); // Load dashboard by default
+                toggleAutoRefresh(); // Start auto-refresh
+            }
         });
     </script>
+    </div> <!-- End app-container -->
 </body>
 </html>

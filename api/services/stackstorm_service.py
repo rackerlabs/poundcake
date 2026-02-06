@@ -224,33 +224,34 @@ class StackStormClient:
             headers["X-Request-ID"] = req_id
 
         with silence_httpx():
-            try:
-                start_time = time.time()
-                response = await request_with_retry(
-                    "GET",
-                    f"{self.base_url}/v1/actions",
-                    headers=headers,
-                    params={"limit": 1},
-                    timeout=httpx.Timeout(10),
-                    verify=self.verify_ssl,
-                )
-                return response.status_code == 200
-            except Exception as e:
-                latency_ms = int((time.time() - start_time) * 1000)
-                logger.error(
-                    "StackStorm health check failed",
-                    extra=(
-                        {
-                            "req_id": req_id,
-                            "method": "GET",
-                            "latency_ms": latency_ms,
-                            "error": str(e),
-                        }
-                        if req_id
-                        else {"method": "GET", "error": str(e)}
-                    ),
-                )
-                return False
+            async with httpx.AsyncClient(
+                verify=self.verify_ssl,
+                timeout=httpx.Timeout(10),
+            ) as client:
+                try:
+                    start_time = time.time()
+                    response = await client.get(
+                        f"{self.base_url}/v1/actions",
+                        headers=headers,
+                        params={"limit": 1},
+                    )
+                    return response.status_code == 200
+                except Exception as e:
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    logger.error(
+                        "StackStorm health check failed",
+                        extra=(
+                            {
+                                "req_id": req_id,
+                                "method": "GET",
+                                "latency_ms": latency_ms,
+                                "error": str(e),
+                            }
+                            if req_id
+                            else {"method": "GET", "error": str(e)}
+                        ),
+                    )
+                    return False
 
 
 class StackStormActionManager:

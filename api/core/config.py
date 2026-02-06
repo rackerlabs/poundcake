@@ -15,6 +15,8 @@ import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from api.version import __version__
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -31,7 +33,7 @@ class Settings(BaseSettings):
     # Application Settings
     # ==========================================================================
     app_name: str = "PoundCake"
-    app_version: str = "1.0.0"
+    app_version: str = Field(default=__version__)
     debug: bool = False
 
     # API Server
@@ -61,6 +63,14 @@ class Settings(BaseSettings):
     celery_task_time_limit: int = 300
     celery_worker_prefetch_multiplier: int = 4
     celery_worker_max_tasks_per_child: int = 1000
+
+    # ==========================================================================
+    # Component Health Check Settings
+    # ==========================================================================
+    mongodb_enabled: bool = True
+    mongodb_external: bool = False
+    rabbitmq_enabled: bool = True
+    redis_enabled: bool = True
 
     # ==========================================================================
     # StackStorm Settings

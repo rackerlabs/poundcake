@@ -23,8 +23,21 @@ spec:
     spec:
       securityContext:
         fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: mongodb
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsUser: 999
+          seccompProfile:
+            type: RuntimeDefault
         image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
         imagePullPolicy: {{ .Values.mongodb.image.pullPolicy }}
         ports:

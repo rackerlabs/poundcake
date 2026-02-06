@@ -32,7 +32,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
-  tag: ""  # Defaults to chart appVersion
+  tag: "d5dbf49"  # Git SHA tag from build workflow
 
 imagePullSecrets: []
 nameOverride: ""
@@ -68,7 +68,7 @@ ui:
   image:
     repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
-    tag: ""  # Defaults to chart appVersion
+    tag: "d5dbf49"  # Git SHA tag from build workflow
   service:
     type: ClusterIP
     port: 80
@@ -95,6 +95,66 @@ ingress:
   #  - secretName: poundcake-tls
   #    hosts:
   #      - poundcake.local
+
+# Envoy Gateway API HTTPRoute configuration
+# Use this instead of ingress for Envoy Gateway deployments
+#
+# This configuration will:
+# 1. Check if a Gateway listener exists for PoundCake
+# 2. Create or update the listener if needed (idempotent)
+# 3. Create an HTTPRoute that attaches to that listener
+gateway:
+  enabled: false
+
+  # Gateway reference (required if enabled)
+  # The Gateway resource must already exist (created by infrastructure team)
+  gatewayName: ""  # Example: flex-gateway
+  gatewayNamespace: ""  # Example: envoy-gateway
+
+  # Gateway Listener Configuration
+  # This will be automatically created/updated in the Gateway
+  listener:
+    # Listener name - will be used as sectionName in HTTPRoute
+    name: ""  # Example: poundcake-https
+
+    # Full hostname for your PoundCake deployment
+    hostname: ""  # Example: poundcake.api.ord.cloudmunchers.net
+
+    # Listener port and protocol
+    port: 443
+    protocol: "HTTPS"  # HTTPS or HTTP
+
+    # TLS certificate secret (required if protocol is HTTPS)
+    # This secret must exist in the same namespace as the Gateway
+    tlsSecretName: ""  # Example: poundcake-gw-tls-secret
+
+    # Namespace access control for HTTPRoutes
+    # "All" allows HTTPRoutes from any namespace to attach
+    # "Same" restricts to same namespace as Gateway
+    # "Selector" uses namespaceSelector (not configured here)
+    allowedNamespaces: "All"
+
+    # Update listener if it already exists but config differs
+    # Set to false to skip updates if listener already exists
+    updateIfExists: true
+
+  # HTTPRoute Configuration
+  # Hostnames for the HTTPRoute (should match listener.hostname)
+  hostnames: []
+    # - poundcake.api.ord.cloudmunchers.net
+
+  # Optional annotations for HTTPRoute
+  annotations: {}
+    # application: gateway-api
+    # route: poundcake
+
+  # Session persistence configuration
+  sessionPersistence:
+    enabled: true
+    timeout: "300s"
+    cookieLifetimeType: "Permanent"  # or "Session"
+    cookieName: "PoundcakeSession"
+    uiCookieName: "PoundcakeUISession"
 
 resources:
   limits:
@@ -352,6 +412,10 @@ prometheus:
   useCrds: true
   crdNamespace: prometheus
 
+  # Allow creating/updating/deleting PrometheusRule CRDs
+  # Set to false for read-only access (can only view rules)
+  allowRuleManagement: true
+
   # IMPORTANT: Labels to apply to PrometheusRule CRDs created by PoundCake
   # These MUST match your Prometheus Operator's ruleSelector, otherwise
   # Prometheus will not load the rules. Check your Prometheus CR with:
@@ -410,7 +474,7 @@ git:
 # Authentication configuration
 auth:
   # Enable authentication for web UI and API
-  enabled: false
+  enabled: true
   # Session timeout in seconds (default: 24 hours)
   sessionTimeout: 86400
   # Secret name will be: <release-name>-poundcake-admin

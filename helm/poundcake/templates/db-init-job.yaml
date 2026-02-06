@@ -22,12 +22,16 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
       - name: db-init
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command:
@@ -105,6 +109,17 @@ spec:
           echo ""
           echo "Current database revision:"
           alembic -c /app/alembic.ini current
+
+          # Seed default data
+          echo ""
+          echo "Seeding default data..."
+          python3 /app/api/scripts/init_database.py
+
+          if [ $? -eq 0 ]; then
+            echo "✓ Default data seeded successfully"
+          else
+            echo "⚠ Default data seeding failed (non-fatal)"
+          fi
 
           echo "========================================"
           echo "Migration Complete"
