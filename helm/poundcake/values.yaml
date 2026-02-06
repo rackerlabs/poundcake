@@ -31,8 +31,8 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/aedan/poundcake
-  pullPolicy: Always
-  tag: ""  # Defaults to chart appVersion
+  pullPolicy: IfNotPresent
+  tag: "460370b"  # Git SHA tag from build workflow
 
 imagePullSecrets: []
 nameOverride: ""
@@ -68,7 +68,7 @@ ui:
   image:
     repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
-    tag: ""  # Defaults to chart appVersion
+    tag: "460370b"  # Git SHA tag from build workflow
   service:
     type: ClusterIP
     port: 80
