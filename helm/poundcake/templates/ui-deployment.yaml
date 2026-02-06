@@ -19,9 +19,13 @@ spec:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: ui
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         - name: wait-for-api
           image: curlimages/curl:latest
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           command:
           - /bin/sh
           - -c
@@ -48,6 +52,8 @@ spec:
             exit 1
       containers:
         - name: ui
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
           ports:
