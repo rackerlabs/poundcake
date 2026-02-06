@@ -177,6 +177,8 @@ async def login(request: Request, response: Response) -> SessionResponse:
                 value=token,
                 httponly=True,
                 samesite="lax",
+                secure=False,  # Set to True if using HTTPS
+                path="/",  # Make cookie available to all paths
                 max_age=get_settings().auth_session_timeout,
             )
 
@@ -213,6 +215,6 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
         logger.info("Logout attempted without session", extra={"req_id": req_id})
 
     # Clear the session cookie
-    response.delete_cookie(key="session_token")
+    response.delete_cookie(key="session_token", path="/")
 
     return {"message": "Logged out successfully"}
