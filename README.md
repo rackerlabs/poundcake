@@ -146,6 +146,21 @@ helm install poundcake poundcake/poundcake \
   --set database.url="mysql+pymysql://user:pass@mysql:3306/poundcake"
 ```
 
+#### Hardened Kubernetes Environments (Talos, etc.)
+
+PoundCake automatically configures namespace-level Pod Security Standards during Helm install/upgrade. This eliminates PodSecurity warnings in hardened Kubernetes distributions without requiring manual namespace configuration.
+
+The Helm chart includes a pre-install/pre-upgrade hook that sets:
+```yaml
+pod-security.kubernetes.io/enforce: baseline
+pod-security.kubernetes.io/audit: baseline
+pod-security.kubernetes.io/warn: baseline
+```
+
+The `baseline` Pod Security Standard is appropriate for common workloads including databases, web servers, and application containers, providing strong security while maintaining compatibility with standard container images.
+
+**Note**: If you see PodSecurity warnings during deployment, they are informational only and do not prevent the chart from installing successfully. The namespace configuration job handles this automatically on the next install/upgrade.
+
 ## Features
 
 - **Fast Response**: Webhook returns 202 Accepted immediately, processes asynchronously
