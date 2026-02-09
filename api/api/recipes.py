@@ -7,7 +7,9 @@
 """API endpoints for recipe and ingredient management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from api.core.database import get_db
@@ -29,14 +31,15 @@ logger = get_logger(__name__)
 
 @router.post("/recipes/", response_model=RecipeDetailResponse, status_code=201)
 async def create_recipe(
-    request: Request, recipe: RecipeCreate, db: Session = Depends(get_db)
+    request: Request, recipe: RecipeCreate, db: AsyncSession = Depends(get_db)
 ) -> RecipeDetailResponse:
     """Create a new recipe with ingredients."""
     req_id = request.state.req_id
 
     logger.info("Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name})
 
-    existing = db.query(Recipe).filter(Recipe.name == recipe.name).first()
+    result = await db.execute(select(Recipe).where(Recipe.name == recipe.name))
+    existing = result.scalars().first()
     if existing:
         logger.warning(
             "Recipe already exists",
@@ -46,7 +49,7 @@ async def create_recipe(
 
     db_recipe = Recipe(name=recipe.name, description=recipe.description, enabled=recipe.enabled)
     db.add(db_recipe)
-    db.flush()  # Get the ID before adding ingredients
+    await db.flush()  # Get the ID before adding ingredients
 
     for ingredient_data in recipe.ingredients:
         db_ingredient = Ingredient(
@@ -65,8 +68,14 @@ async def create_recipe(
         )
         db.add(db_ingredient)
 
-    db.commit()
-    db.refresh(db_recipe)
+    await db.commit()
+    await db.refresh(db_recipe)
+
+    # Re-fetch with ingredients eagerly loaded to avoid lazy-load during response serialization.
+    result = await db.execute(
+        select(Recipe).options(joinedload(Recipe.ingredients)).where(Recipe.id == db_recipe.id)
+    )
+    db_recipe = result.scalars().first()
 
     logger.info(
         "Recipe created successfully",
@@ -85,7 +94,7 @@ async def create_recipe(
 async def list_recipes(
     request: Request,
     params: RecipeQueryParams = Depends(validate_query_params(RecipeQueryParams)),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List recipes with optional filtering and nested ingredients.
@@ -98,25 +107,25 @@ async def list_recipes(
 
     Returns 422 Unprocessable Entity if unknown or invalid query parameters are provided.
     """
-    query = db.query(Recipe).options(joinedload(Recipe.ingredients))
+    query = select(Recipe).options(joinedload(Recipe.ingredients))
 
     if params.name is not None:
-        query = query.filter(Recipe.name == params.name)
+        query = query.where(Recipe.name == params.name)
     if params.enabled is not None:
-        query = query.filter(Recipe.enabled == params.enabled)
+        query = query.where(Recipe.enabled == params.enabled)
 
-    return query.limit(params.limit).offset(params.offset).all()
+    query = query.limit(params.limit).offset(params.offset)
+    result = await db.execute(query)
+    return result.scalars().all()
 
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
-async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
+async def get_recipe(recipe_id: int, db: AsyncSession = Depends(get_db)):
     """Get a recipe with all its ingredients."""
-    recipe = (
-        db.query(Recipe)
-        .options(joinedload(Recipe.ingredients))
-        .filter(Recipe.id == recipe_id)
-        .first()
+    result = await db.execute(
+        select(Recipe).options(joinedload(Recipe.ingredients)).where(Recipe.id == recipe_id)
     )
+    recipe = result.scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
@@ -124,14 +133,12 @@ async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/recipes/by-name/{recipe_name}", response_model=RecipeDetailResponse)
-async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
+async def get_recipe_by_name(recipe_name: str, db: AsyncSession = Depends(get_db)):
     """Get a recipe by name (matches alert.group_name)."""
-    recipe = (
-        db.query(Recipe)
-        .options(joinedload(Recipe.ingredients))
-        .filter(Recipe.name == recipe_name)
-        .first()
+    result = await db.execute(
+        select(Recipe).options(joinedload(Recipe.ingredients)).where(Recipe.name == recipe_name)
     )
+    recipe = result.scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
 
@@ -140,21 +147,22 @@ async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
 
 @router.delete("/recipes/{recipe_id}", response_model=DeleteResponse)
 async def delete_recipe(
-    request: Request, recipe_id: int, db: Session = Depends(get_db)
+    request: Request, recipe_id: int, db: AsyncSession = Depends(get_db)
 ) -> DeleteResponse:
     """Delete a recipe and all its ingredients."""
     req_id = request.state.req_id
 
     logger.info("Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
 
-    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    result = await db.execute(select(Recipe).where(Recipe.id == recipe_id))
+    recipe = result.scalars().first()
     if not recipe:
         logger.warning("Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id})
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     recipe_name = recipe.name
     db.delete(recipe)
-    db.commit()
+    await db.commit()
 
     logger.info(
         "Recipe deleted successfully",
@@ -170,12 +178,13 @@ async def delete_recipe(
 
 
 @router.get("/ingredients/{ingredient_id}", response_model=IngredientResponse)
-async def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)):
+async def get_ingredient(ingredient_id: int, db: AsyncSession = Depends(get_db)):
     """
     Fetch a single ingredient.
     Crucial for oven-executor (oven.py) to resolve task details.
     """
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    result = await db.execute(select(Ingredient).where(Ingredient.id == ingredient_id))
+    ingredient = result.scalars().first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     return ingredient

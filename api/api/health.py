@@ -166,31 +166,36 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
 
 
 @router.get("/stats", response_model=StatsResponse)
-def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
+async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
-    total_alerts = db.query(func.count(Alert.id)).scalar() or 0
-    total_recipes = db.query(func.count(Recipe.id)).scalar() or 0
-    total_executions = db.query(func.count(Oven.id)).scalar() or 0
+    result = await db.execute(select(func.count(Alert.id)))
+    total_alerts = result.scalar() or 0
+    result = await db.execute(select(func.count(Recipe.id)))
+    total_recipes = result.scalar() or 0
+    result = await db.execute(select(func.count(Oven.id)))
+    total_executions = result.scalar() or 0
 
     # Grouping queries
-    alerts_by_status = dict(
-        db.query(Alert.processing_status, func.count(Alert.id))
-        .group_by(Alert.processing_status)
-        .all()
+    result = await db.execute(
+        select(Alert.processing_status, func.count(Alert.id)).group_by(Alert.processing_status)
     )
+    alerts_by_status = dict(result.all())
 
     # Mapping Alert.alert_status (firing/resolved)
-    alerts_by_alert = dict(
-        db.query(Alert.alert_status, func.count(Alert.id)).group_by(Alert.alert_status).all()
+    result = await db.execute(
+        select(Alert.alert_status, func.count(Alert.id)).group_by(Alert.alert_status)
     )
+    alerts_by_alert = dict(result.all())
 
     # Mapping Oven.processing_status
-    executions_by_status = dict(
-        db.query(Oven.processing_status, func.count(Oven.id)).group_by(Oven.processing_status).all()
+    result = await db.execute(
+        select(Oven.processing_status, func.count(Oven.id)).group_by(Oven.processing_status)
     )
+    executions_by_status = dict(result.all())
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    recent = db.query(func.count(Alert.id)).filter(Alert.created_at >= cutoff).scalar() or 0
+    result = await db.execute(select(func.count(Alert.id)).where(Alert.created_at >= cutoff))
+    recent = result.scalar() or 0
 
     return StatsResponse(
         total_alerts=total_alerts,

@@ -8,7 +8,7 @@
 
 from typing import Any, Optional, cast
 
-import httpx
+from api.core.http_client import request_with_retry_sync
 
 
 class PoundCakeClient:
@@ -51,16 +51,16 @@ class PoundCakeClient:
             httpx.HTTPError: If request fails
         """
         url = f"{self.base_url}{path}"
-        with httpx.Client(timeout=30.0) as client:
-            response = client.request(
-                method=method,
-                url=url,
-                headers=self.headers,
-                json=json,
-                params=params,
-            )
-            response.raise_for_status()
-            return response.json()  # type: ignore[no-any-return]
+        response = request_with_retry_sync(
+            method=method,
+            url=url,
+            headers=self.headers,
+            json=json,
+            params=params,
+            timeout=30.0,
+            raise_for_status=True,
+        )
+        return response.json()  # type: ignore[no-any-return]
 
     # Alert management
 

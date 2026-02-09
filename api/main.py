@@ -15,6 +15,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from api.core.config import settings
 from api.core.middleware import PreHeatMiddleware
 from api.core.logging import setup_logging, get_logger
+from api.core.http_client import close_async_http_client, close_sync_http_client
 from api.api.health import router as health_router
 from api.api.stackstorm import router as st2_bridge_router
 from api.api.recipes import router as recipes_router
@@ -34,6 +35,8 @@ async def lifespan(app: FastAPI):
     # init_db() is removed from here
     logger.info("PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
     yield
+    await close_async_http_client()
+    close_sync_http_client()
     logger.info("Powering down PoundCake", extra={"req_id": "SYSTEM-SHUTDOWN"})
 
 
