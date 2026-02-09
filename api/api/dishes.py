@@ -45,7 +45,7 @@ async def cook_dishes(
 
     recipe = (
         db.query(Recipe)
-        .filter(Recipe.name == order.alert_group_name, Recipe.enabled == True)
+        .filter(Recipe.name == order.alert_group_name, Recipe.enabled)
         .first()
     )
 
@@ -311,7 +311,7 @@ async def list_dish_ingredients(
 
     records = (
         db.query(DishIngredient)
-        .filter(DishIngredient.dish_id == dish_id, DishIngredient.deleted == False)
+        .filter(DishIngredient.dish_id == dish_id, ~DishIngredient.deleted)
         # Execution order: started_at -> completed_at, then created_at/id as tiebreakers.
         .order_by(
             DishIngredient.started_at.is_(None),
