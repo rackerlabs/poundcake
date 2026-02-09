@@ -49,8 +49,9 @@ RUN useradd -m -u 1000 appuser
 # Copy the virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy only the Python application code (not tests, helm, docs, etc.)
+# Copy only the Python application code (not tests, helm, docs, ui, etc.)
 COPY --chown=appuser:appuser api/ /app/api/
+COPY --chown=appuser:appuser kitchen/ /app/kitchen/
 COPY --chown=appuser:appuser scripts/ /app/scripts/
 
 # Make scripts executable
