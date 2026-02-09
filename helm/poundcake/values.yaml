@@ -748,3 +748,115 @@ timer:
     requests:
       cpu: 50m
       memory: 64Mi
+
+# Bakery service configuration
+# API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)
+bakery:
+  # Enable Bakery deployment
+  # Disabled by default - enable only when ticketing integration is needed
+  enabled: false
+
+  # Number of Bakery replicas
+  replicaCount: 1
+
+  # Bakery image configuration
+  image:
+    repository: ghcr.io/aedan/poundcake-bakery
+    pullPolicy: IfNotPresent
+    tag: ""  # Defaults to chart appVersion if not specified
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8000
+
+  # Resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Environment configuration
+  config:
+    # Application settings
+    environment: production
+    logLevel: INFO
+
+    # Message queue settings
+    messageRetentionHours: 24
+    maxMessagesPerPoll: 100
+
+    # Adapter settings
+    adapterTimeoutSec: 30
+    adapterMaxRetries: 3
+
+  # ServiceNow configuration
+  servicenow:
+    url: ""
+    username: ""
+    password: ""
+    # Reference to existing secret
+    existingSecret: ""
+    secretKeys:
+      url: "servicenow-url"
+      username: "servicenow-username"
+      password: "servicenow-password"
+
+  # Jira configuration
+  jira:
+    url: ""
+    username: ""
+    apiToken: ""
+    # Reference to existing secret
+    existingSecret: ""
+    secretKeys:
+      url: "jira-url"
+      username: "jira-username"
+      apiToken: "jira-api-token"
+
+  # GitHub configuration
+  github:
+    token: ""
+    # Reference to existing secret
+    existingSecret: ""
+    secretKeys:
+      token: "github-token"
+
+  # PagerDuty configuration
+  pagerduty:
+    apiKey: ""
+    # Reference to existing secret
+    existingSecret: ""
+    secretKeys:
+      apiKey: "pagerduty-api-key"
+
+  # Rackspace Core configuration
+  rackspaceCore:
+    url: ""
+    username: ""
+    password: ""
+    # Reference to existing secret
+    existingSecret: ""
+    secretKeys:
+      url: "rackspace-core-url"
+      username: "rackspace-core-username"
+      password: "rackspace-core-password"
+
+  # MariaDB database configuration for Bakery
+  # Uses MariaDB Operator to create dedicated database
+  database:
+    # Database name
+    name: bakery
+    # User configuration
+    user:
+      name: bakery
+      password: ""  # Auto-generated if not provided
+      passwordSecret: ""
+      passwordSecretKey: "password"
+      maxUserConnections: 20
+    # Server configuration (inherits from mariadbOperator.server)
+    # Set to false to use existing MariaDB instance
+    createServer: true

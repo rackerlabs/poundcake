@@ -7,7 +7,18 @@
 """API routes and endpoints for PoundCake."""
 
 # Keep package imports minimal to avoid circular import issues.
-from . import health, auth, cook, prometheus, recipes, dishes, orders, ingredients, webhook, settings
+from . import (
+    health,
+    auth,
+    cook,
+    prometheus,
+    recipes,
+    dishes,
+    orders,
+    ingredients,
+    webhook,
+    settings,
+)
 
 __all__ = [
     "health",

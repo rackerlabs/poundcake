@@ -26,7 +26,7 @@ POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 SYSTEM_REQ_ID = "SYSTEM-CHEF"
 
 
-def run_chef():
+def run_chef() -> None:
     """Main chef loop - polls for dishes and executes workflows."""
     wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger)
 

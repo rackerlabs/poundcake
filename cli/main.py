@@ -11,8 +11,8 @@ from typing import Optional
 
 import click
 
-from poundcake_cli.client import PoundCakeClient
-from poundcake_cli.commands import orders, rules
+from poundcake_cli.client import PoundCakeClient  # type: ignore[import-not-found]
+from poundcake_cli.commands import orders, rules  # type: ignore[import-not-found]
 
 
 @click.group()

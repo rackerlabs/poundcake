@@ -79,9 +79,7 @@ async def fetch_orders(
 
 
 @router.post("/orders", response_model=OrderResponse, status_code=201)
-async def create_order(
-    request: Request, payload: OrderCreate, db: Session = Depends(get_db)
-):
+async def create_order(request: Request, payload: OrderCreate, db: Session = Depends(get_db)):
     """Create an order manually (non-Alertmanager ingestion)."""
     req_id = request.state.req_id
 
@@ -145,7 +143,7 @@ async def update_order(
     for key, value in update_data.items():
         setattr(order, key, value)
 
-    order.updated_at = datetime.now(timezone.utc)
+    order.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
     db.commit()
     db.refresh(order)
 

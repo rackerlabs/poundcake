@@ -208,9 +208,7 @@ async def register_st2_workflow(
         raise HTTPException(status_code=503, detail="StackStorm API key not available")
 
     try:
-        workflow_id = await register_workflow_to_st2(
-            settings.stackstorm_url, api_key, payload
-        )
+        workflow_id = await register_workflow_to_st2(settings.stackstorm_url, api_key, payload)
         return {"workflow_id": workflow_id}
     except Exception as e:
         logger.error(

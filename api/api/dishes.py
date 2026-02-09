@@ -43,11 +43,7 @@ async def cook_dishes(
         logger.warning("Order not found", extra={"req_id": req_id, "order_id": order_id})
         raise HTTPException(status_code=404, detail="Order not found")
 
-    recipe = (
-        db.query(Recipe)
-        .filter(Recipe.name == order.alert_group_name, Recipe.enabled == True)
-        .first()
-    )
+    recipe = db.query(Recipe).filter(Recipe.name == order.alert_group_name, Recipe.enabled).first()
 
     if not recipe:
         order.processing_status = "complete"
@@ -60,10 +56,7 @@ async def cook_dishes(
         return CookResponse(status="ignored", reason=f"No recipe for {order.alert_group_name}")
 
     existing_dish = (
-        db.query(Dish)
-        .filter(Dish.order_id == order.id)
-        .order_by(Dish.created_at.desc())
-        .first()
+        db.query(Dish).filter(Dish.order_id == order.id).order_by(Dish.created_at.desc()).first()
     )
 
     now = datetime.now(timezone.utc)
@@ -311,7 +304,7 @@ async def list_dish_ingredients(
 
     records = (
         db.query(DishIngredient)
-        .filter(DishIngredient.dish_id == dish_id, DishIngredient.deleted == False)
+        .filter(DishIngredient.dish_id == dish_id, ~DishIngredient.deleted)
         # Execution order: started_at -> completed_at, then created_at/id as tiebreakers.
         .order_by(
             DishIngredient.started_at.is_(None),
@@ -327,6 +320,8 @@ async def list_dish_ingredients(
         extra={"req_id": req_id, "dish_id": dish_id, "count": len(records)},
     )
     return records
+
+
 @router.put("/dishes/{dish_id}", response_model=DishResponse)
 @router.patch("/dishes/{dish_id}", response_model=DishResponse)
 async def update_dish(

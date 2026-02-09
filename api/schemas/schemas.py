@@ -30,13 +30,13 @@ class HealthResponse(BaseModel):
 
 
 class StatsResponse(BaseModel):
-    total_orders: int
+    total_alerts: int
     total_recipes: int
-    total_dishes: int
-    orders_by_processing_status: Dict[str, int]
-    orders_by_alert_status: Dict[str, int]
-    dishes_by_status: Dict[str, int]
-    recent_orders: int
+    total_executions: int
+    alerts_by_processing_status: Dict[str, int]
+    alerts_by_alert_status: Dict[str, int]
+    executions_by_status: Dict[str, int]
+    recent_alerts: int
 
 
 # =============================================================================
@@ -323,6 +323,7 @@ class DishIngredientResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class OrderDetailResponse(OrderResponse):
     """Schema for detailed order responses (includes dishes)."""
 
@@ -362,7 +363,9 @@ class ExecutionResponse(BaseModel):
     id: str  # Execution ID
     status: str  # pending, running, succeeded, failed, etc.
     action: Dict[str, Any]  # Action reference and details
-    parameters: Dict[str, Any] = Field(default_factory=dict)  # Execution parameters (optional in ST2 responses)
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict
+    )  # Execution parameters (optional in ST2 responses)
     result: Optional[Dict[str, Any]] = None
     start_timestamp: Optional[str] = None
     end_timestamp: Optional[str] = None
