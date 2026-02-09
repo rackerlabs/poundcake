@@ -8,9 +8,10 @@
 
 import os
 import time
-import httpx
+from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
+from api.core.config import get_settings
 from kitchen.service_helpers import wait_for_api
 
 # Initialize logging with standardized configuration
@@ -24,6 +25,7 @@ POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 
 # System request ID for polling operations
 SYSTEM_REQ_ID = "SYSTEM-CHEF"
+POLLER_RETRIES = get_settings().poller_http_retries
 
 
 def run_chef():
@@ -39,12 +41,14 @@ def run_chef():
         try:
             # Fetch next 'new' dish
             start_time = time.time()
-            with httpx.Client(timeout=10) as client:
-                resp = client.get(
-                    f"{API_BASE_URL}/dishes",
-                    params={"processing_status": "new", "limit": 1},
-                    headers={"X-Request-ID": SYSTEM_REQ_ID},
-                )
+            resp = request_with_retry_sync(
+                "GET",
+                f"{API_BASE_URL}/dishes",
+                params={"processing_status": "new", "limit": 1},
+                headers={"X-Request-ID": SYSTEM_REQ_ID},
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
             latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code != 200:
                 logger.error(
@@ -69,11 +73,13 @@ def run_chef():
             req_id = dish.get("req_id") or "UNKNOWN"
 
             # Step 1: claim dish atomically
-            with httpx.Client(timeout=10) as client:
-                claim_resp = client.post(
-                    f"{API_BASE_URL}/dishes/{dish_id}/claim",
-                    headers={"X-Request-ID": req_id},
-                )
+            claim_resp = request_with_retry_sync(
+                "POST",
+                f"{API_BASE_URL}/dishes/{dish_id}/claim",
+                headers={"X-Request-ID": req_id},
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
             if claim_resp.status_code == 409:
                 time.sleep(POLL_INTERVAL)
                 continue
@@ -97,68 +103,80 @@ def run_chef():
 
             # Step 2: if workflow_id exists, confirm in ST2
             if workflow_id:
-                with httpx.Client(timeout=10) as client:
-                    resp = client.get(
-                        f"{API_BASE_URL}/cook/actions/{workflow_id}",
-                        headers={"X-Request-ID": req_id},
-                    )
+                resp = request_with_retry_sync(
+                    "GET",
+                    f"{API_BASE_URL}/cook/actions/{workflow_id}",
+                    headers={"X-Request-ID": req_id},
+                    timeout=10,
+                    retries=POLLER_RETRIES,
+                )
                 if resp.status_code != 200:
                     workflow_id = None
 
             # Step 3/4: register workflow if missing
             if not workflow_id:
                 try:
-                    with httpx.Client(timeout=30) as client:
-                        reg_resp = client.post(
-                            f"{API_BASE_URL}/cook/workflows/register",
-                            json=recipe,
-                            headers={"X-Request-ID": req_id},
-                        )
+                    reg_resp = request_with_retry_sync(
+                        "POST",
+                        f"{API_BASE_URL}/cook/workflows/register",
+                        json=recipe,
+                        headers={"X-Request-ID": req_id},
+                        timeout=30,
+                        retries=POLLER_RETRIES,
+                    )
                     if reg_resp.status_code not in (200, 201):
                         raise Exception(reg_resp.text)
                     workflow_id = reg_resp.json().get("workflow_id")
 
                     # Store workflow_id (and generated payload if needed)
-                    with httpx.Client(timeout=10) as client:
-                        client.patch(
-                            f"{API_BASE_URL}/recipes/{recipe.get('id')}",
-                            json={
-                                "workflow_id": workflow_id,
-                            },
-                            headers={"X-Request-ID": req_id},
-                        )
+                    request_with_retry_sync(
+                        "PATCH",
+                        f"{API_BASE_URL}/recipes/{recipe.get('id')}",
+                        json={
+                            "workflow_id": workflow_id,
+                        },
+                        headers={"X-Request-ID": req_id},
+                        timeout=10,
+                        retries=POLLER_RETRIES,
+                    )
                 except Exception as e:
                     logger.error(
                         "Failed to register workflow",
                         extra={"req_id": req_id, "dish_id": dish_id, "error": str(e)},
                     )
-                    with httpx.Client(timeout=10) as client:
-                        client.patch(
-                            f"{API_BASE_URL}/dishes/{dish_id}",
-                            json={"processing_status": "failed", "error_message": str(e)},
-                            headers={"X-Request-ID": req_id},
-                        )
+                    request_with_retry_sync(
+                        "PATCH",
+                        f"{API_BASE_URL}/dishes/{dish_id}",
+                        json={"processing_status": "failed", "error_message": str(e)},
+                        headers={"X-Request-ID": req_id},
+                        timeout=10,
+                        retries=POLLER_RETRIES,
+                    )
                     time.sleep(POLL_INTERVAL)
                     continue
 
             # Execute workflow
             try:
-                with httpx.Client(timeout=30) as client:
-                    exec_resp = client.post(
-                        f"{API_BASE_URL}/cook/execute",
-                        json={"action": workflow_id, "parameters": workflow_parameters},
-                        headers={"X-Request-ID": req_id},
-                    )
+                exec_resp = request_with_retry_sync(
+                    "POST",
+                    f"{API_BASE_URL}/cook/execute",
+                    json={"action": workflow_id, "parameters": workflow_parameters},
+                    headers={"X-Request-ID": req_id},
+                    timeout=30,
+                    retries=POLLER_RETRIES,
+                )
                 if exec_resp.status_code not in (200, 201):
                     raise Exception(exec_resp.text)
                 st2_exec_id = exec_resp.json().get("id")
 
-                with httpx.Client(timeout=10) as client:
-                    client.patch(
-                        f"{API_BASE_URL}/dishes/{dish_id}",
-                        json={"workflow_execution_id": st2_exec_id},
-                        headers={"X-Request-ID": req_id},
-                    )
+                request_with_retry_sync(
+                    "PATCH",
+                    f"{API_BASE_URL}/dishes/{dish_id}",
+                    json={"workflow_execution_id": st2_exec_id},
+                    headers={"X-Request-ID": req_id},
+                    timeout=10,
+                    retries=POLLER_RETRIES,
+                )
 
                 logger.info(
                     "Workflow execution started",
@@ -175,12 +193,14 @@ def run_chef():
                     "Workflow execution failed",
                     extra={"req_id": req_id, "dish_id": dish_id, "error": str(e)},
                 )
-                with httpx.Client(timeout=10) as client:
-                    client.patch(
-                        f"{API_BASE_URL}/dishes/{dish_id}",
-                        json={"processing_status": "failed", "error_message": str(e)},
-                        headers={"X-Request-ID": req_id},
-                    )
+                request_with_retry_sync(
+                    "PATCH",
+                    f"{API_BASE_URL}/dishes/{dish_id}",
+                    json={"processing_status": "failed", "error_message": str(e)},
+                    headers={"X-Request-ID": req_id},
+                    timeout=10,
+                    retries=POLLER_RETRIES,
+                )
 
         except Exception as e:
             logger.error(

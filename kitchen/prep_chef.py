@@ -9,9 +9,10 @@
 
 import os
 import time
-import httpx
+from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
+from api.core.config import get_settings
 from kitchen.service_helpers import wait_for_api
 
 # Initialize logging with standardized configuration
@@ -24,6 +25,7 @@ OVEN_INTERVAL = int(os.getenv("OVEN_INTERVAL", "5"))
 
 # System request ID for prep chef operations
 SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
+POLLER_RETRIES = get_settings().poller_http_retries
 
 
 def prep_loop():
@@ -38,10 +40,13 @@ def prep_loop():
         try:
             # Fetch orders with processing_status = 'new'
             start_time = time.time()
-            with httpx.Client(timeout=10) as client:
-                resp = client.get(
-                    f"{API_URL}/orders", params={"processing_status": "new"}
-                )
+            resp = request_with_retry_sync(
+                "GET",
+                f"{API_URL}/orders",
+                params={"processing_status": "new"},
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
             latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code != 200:
                 logger.error(
@@ -70,10 +75,13 @@ def prep_loop():
                 )
 
                 start_time = time.time()
-                with httpx.Client(timeout=15) as client:
-                    cook_resp = client.post(
-                        f"{API_URL}/dishes/cook/{order_id}", headers=headers
-                    )
+                cook_resp = request_with_retry_sync(
+                    "POST",
+                    f"{API_URL}/dishes/cook/{order_id}",
+                    headers=headers,
+                    timeout=15,
+                    retries=POLLER_RETRIES,
+                )
                 latency_ms = int((time.time() - start_time) * 1000)
 
                 if cook_resp.status_code in [200, 201]:
@@ -101,9 +109,7 @@ def prep_loop():
                     )
 
         except Exception as e:
-            logger.error(
-                "Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
-            )
+            logger.error("Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)})
 
         time.sleep(OVEN_INTERVAL)
 

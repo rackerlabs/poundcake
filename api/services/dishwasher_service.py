@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import yaml
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import SessionLocal
 from api.core.logging import get_logger
@@ -35,9 +37,9 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
     actions = await manager.list_non_orquesta_actions(limit=1000)
     workflows = await manager.list_orquesta_actions(limit=1000)
 
-    with SessionLocal() as db:
-        ingredient_stats = upsert_ingredients(db, actions)
-        recipe_stats = upsert_recipes(db, workflows)
+    async with SessionLocal() as db:
+        ingredient_stats = await upsert_ingredients(db, actions)
+        recipe_stats = await upsert_recipes(db, workflows)
 
     stats = {"ingredients": ingredient_stats, "recipes": recipe_stats}
 
@@ -56,13 +58,14 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
     return stats
 
 
-def upsert_ingredients(db, actions: list[dict]) -> dict[str, int]:
+async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str, int]:
     created = 0
     updated = 0
     pruned = 0
     now = datetime.now(timezone.utc)
 
-    existing = {ing.task_id: ing for ing in db.query(Ingredient).all()}
+    result = await db.execute(select(Ingredient))
+    existing = {ing.task_id: ing for ing in result.scalars().all()}
     action_refs = set()
 
     for action in actions:
@@ -112,16 +115,17 @@ def upsert_ingredients(db, actions: list[dict]) -> dict[str, int]:
                 ing.updated_at = now
                 pruned += 1
 
-    db.commit()
+    await db.commit()
     return {"created": created, "updated": updated, "pruned": pruned}
 
 
-def upsert_recipes(db, actions: list[dict]) -> dict[str, int]:
+async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int]:
     created = 0
     updated = 0
     now = datetime.now(timezone.utc)
 
-    existing = {rec.workflow_id: rec for rec in db.query(Recipe).all() if rec.workflow_id}
+    result = await db.execute(select(Recipe))
+    existing = {rec.workflow_id: rec for rec in result.scalars().all() if rec.workflow_id}
 
     for action in actions:
         workflow_id = action.get("ref")
@@ -152,6 +156,7 @@ def upsert_recipes(db, actions: list[dict]) -> dict[str, int]:
                 updated_at=now,
             )
             db.add(rec)
+            await db.flush()
             created += 1
         else:
             rec.name = name
@@ -164,7 +169,7 @@ def upsert_recipes(db, actions: list[dict]) -> dict[str, int]:
             updated += 1
 
         if workflow_payload:
-            ok = sync_recipe_ingredients_from_yaml(
+            ok = await sync_recipe_ingredients_from_yaml(
                 db, rec, workflow_payload, strict=STRICT_RECIPE_SYNC
             )
             if not ok and STRICT_RECIPE_SYNC:
@@ -173,12 +178,12 @@ def upsert_recipes(db, actions: list[dict]) -> dict[str, int]:
                     extra={"workflow_id": workflow_id, "recipe_id": rec.id},
                 )
 
-    db.commit()
+    await db.commit()
     return {"created": created, "updated": updated}
 
 
-def sync_recipe_ingredients_from_yaml(
-    db,
+async def sync_recipe_ingredients_from_yaml(
+    db: AsyncSession,
     recipe: Recipe,
     yaml_payload: dict[str, Any] | str,
     strict: bool = False,
@@ -236,7 +241,8 @@ def sync_recipe_ingredients_from_yaml(
         for t in ordered_tasks:
             depth_map.setdefault(t, 0)
 
-    existing_ingredients = {ing.task_id: ing for ing in db.query(Ingredient).all()}
+    result = await db.execute(select(Ingredient))
+    existing_ingredients = {ing.task_id: ing for ing in result.scalars().all()}
     missing = []
     for task_name in ordered_tasks:
         action_ref = task_actions.get(task_name)
@@ -262,7 +268,7 @@ def sync_recipe_ingredients_from_yaml(
                 deleted_at=None,
             )
             db.add(stub)
-            db.flush()
+            await db.flush()
             existing_ingredients[action_ref] = stub
             logger.warning(
                 "Created stub ingredient for missing action",
@@ -281,7 +287,7 @@ def sync_recipe_ingredients_from_yaml(
         depth = depth_map.get(t, 0)
         depth_counts[depth] = depth_counts.get(depth, 0) + 1
 
-    db.query(RecipeIngredient).filter(RecipeIngredient.recipe_id == recipe.id).delete()
+    await db.execute(delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id))
 
     step_order = 1
     for task_name in ordered_tasks:

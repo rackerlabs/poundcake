@@ -36,7 +36,7 @@ class RecipeIngredient(Base):
     step_order = Column(Integer, default=1, nullable=False)
 
     # Logic gates for Orquesta (e.g., "on-success", "on-failure")
-    on_success = Column(String(50), default="continue") 
+    on_success = Column(String(50), default="continue")
     # Parallel grouping (same depth implies parallel tasks)
     parallel_group = Column(Integer, default=0, nullable=False)
     # Depth in the task graph (for parallel/linear ordering)

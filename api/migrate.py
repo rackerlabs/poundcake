@@ -16,6 +16,7 @@ from alembic import command
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.core.config import settings
+from api.core.database import get_sync_database_url
 
 
 def get_alembic_config():
@@ -24,7 +25,7 @@ def get_alembic_config():
     alembic_ini = os.path.join(current_dir, "alembic.ini")
 
     config = Config(alembic_ini)
-    config.set_main_option("sqlalchemy.url", settings.database_url)
+    config.set_main_option("sqlalchemy.url", get_sync_database_url())
 
     return config
 
@@ -95,7 +96,8 @@ def stamp(revision="head"):
 
 def show_help():
     """Show help message."""
-    print("""
+    print(
+        """
 PoundCake Database Migration Manager
 
 Usage: python scripts/migrate.py <command> [args]
@@ -122,7 +124,8 @@ Examples:
 Environment Variables:
     DATABASE_URL            Database connection string
                             (default from config: {settings.database_url})
-    """)
+    """
+    )
 
 
 def main():

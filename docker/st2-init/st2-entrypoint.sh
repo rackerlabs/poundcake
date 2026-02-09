@@ -1,4 +1,9 @@
 #!/bin/bash
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 # StackStorm Service Entrypoint with Runtime Config Templating
 # This script substitutes environment variables into st2.conf before starting the service
 

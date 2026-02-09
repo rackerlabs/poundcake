@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+# Test: Create a single-step recipe with ingredient and task, without creating an order
 set -euo pipefail
 
 API_URL=${API_URL:-http://localhost:8000/api/v1}

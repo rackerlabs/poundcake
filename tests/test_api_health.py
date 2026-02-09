@@ -7,7 +7,7 @@
 """Basic API health tests for PoundCake."""
 
 import pytest
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import patch, MagicMock, Mock, AsyncMock
 from fastapi.testclient import TestClient
 from api.main import app
 
@@ -22,22 +22,24 @@ def client():
 def mock_database():
     """Mock database connection for all tests."""
     with patch("api.core.database.SessionLocal") as mock_session:
-        mock_db = MagicMock()
-        mock_session.return_value.__enter__.return_value = mock_db
-        mock_session.return_value.__exit__.return_value = None
-        mock_db.execute.return_value = None
+        mock_db = AsyncMock()
+        mock_result = Mock()
+        mock_result.scalar.return_value = 0
+        mock_result.all.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_session.return_value.__aenter__.return_value = mock_db
+        mock_session.return_value.__aexit__.return_value = AsyncMock(return_value=None)
         yield mock_db
 
 
 @pytest.fixture(autouse=True)
 def mock_stackstorm():
     """Mock StackStorm API calls for all tests."""
-    with patch("requests.get") as mock_get:
-        mock_response = Mock()
-        mock_response.status_code = 401  # 401 means API is responding
-        mock_response.json.return_value = {}
-        mock_get.return_value = mock_response
-        yield mock_get
+    with patch("api.services.stackstorm_service.get_stackstorm_client") as mock_client:
+        client = Mock()
+        client.health_check = AsyncMock(return_value=True)
+        mock_client.return_value = client
+        yield mock_client
 
 
 def test_health_endpoint_structure(client):
@@ -84,13 +86,13 @@ def test_stats_endpoint(client):
 
     # Check all required fields
     required_fields = [
-        "total_alerts",
+        "total_orders",
         "total_recipes",
-        "total_executions",
-        "alerts_by_processing_status",
-        "alerts_by_alert_status",
-        "executions_by_status",
-        "recent_alerts",
+        "total_dishes",
+        "orders_by_processing_status",
+        "orders_by_alert_status",
+        "dishes_by_status",
+        "recent_orders",
     ]
     for field in required_fields:
         assert field in data, f"Missing field: {field}"

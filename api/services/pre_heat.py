@@ -6,7 +6,8 @@
 #
 """Pre-heat service - Creates new orders or increments existing ones."""
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 from dateutil import parser as dateutil_parser
 from api.models.models import Order
@@ -15,7 +16,7 @@ from api.core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
+async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
     """
     Intake Handler: Solely responsible for Order table management.
 
@@ -55,15 +56,15 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
         },
     )
 
-    existing = (
-        db.query(Order)
-        .filter(
+    result = await db.execute(
+        select(Order)
+        .where(
             Order.fingerprint == fingerprint,
             Order.processing_status.notin_(["complete", "canceled"]),
         )
         .order_by(Order.created_at.desc())
-        .first()
     )
+    existing = result.scalars().first()
 
     if alert_status == "firing":
         if not existing:
@@ -93,8 +94,8 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
                 starts_at=starts_at,
             )
             db.add(new_order)
-            db.commit()
-            db.refresh(new_order)
+            await db.commit()
+            await db.refresh(new_order)
 
             logger.info(
                 "New order created",
@@ -110,7 +111,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
             # Order already exists; increment counter
             existing.counter += 1
             existing.updated_at = datetime.now(timezone.utc)
-            db.commit()
+            await db.commit()
 
             logger.info(
                 "Order counter incremented",
@@ -129,7 +130,7 @@ def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
         existing.ends_at = ends_at
         existing.processing_status = "canceled"
         existing.updated_at = datetime.now(timezone.utc)
-        db.commit()
+        await db.commit()
 
         logger.info("Order resolved", extra={"req_id": req_id, "order_id": existing.id})
         return {"status": "resolved", "order_id": existing.id}

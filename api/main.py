@@ -16,6 +16,7 @@ from api.core.config import settings
 from api.core.middleware import PreHeatMiddleware
 from api.core.logging import setup_logging, get_logger
 from api.core.startup_checks import wait_for_stackstorm_ready
+from api.core.http_client import close_async_http_client, close_sync_http_client
 from api.api.health import router as health_router
 from api.api.cook import router as cook_router
 from api.api.recipes import router as recipes_router
@@ -38,6 +39,8 @@ async def lifespan(app: FastAPI):
     logger.info("PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
     await wait_for_stackstorm_ready()
     yield
+    await close_async_http_client()
+    close_sync_http_client()
     logger.info("Powering down PoundCake", extra={"req_id": "SYSTEM-SHUTDOWN"})
 
 
