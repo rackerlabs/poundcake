@@ -184,36 +184,36 @@ async def health_check(response: Response, db: Session = Depends(get_db)) -> Hea
 @router.get("/stats", response_model=StatsResponse)
 def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
-    total_orders = db.query(func.count(Order.id)).scalar() or 0
+    total_alerts = db.query(func.count(Order.id)).scalar() or 0
     total_recipes = db.query(func.count(Recipe.id)).scalar() or 0
-    total_dishes = db.query(func.count(Dish.id)).scalar() or 0
+    total_executions = db.query(func.count(Dish.id)).scalar() or 0
 
     # Grouping queries
-    orders_by_status = dict(
+    alerts_by_processing_status = dict(
         db.query(Order.processing_status, func.count(Order.id))
         .group_by(Order.processing_status)
         .all()
     )
 
     # Mapping Order.alert_status (firing/resolved)
-    orders_by_alert = dict(
+    alerts_by_alert_status = dict(
         db.query(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status).all()
     )
 
     # Mapping Dish.processing_status
-    dishes_by_status = dict(
+    executions_by_status = dict(
         db.query(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status).all()
     )
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    recent = db.query(func.count(Order.id)).filter(Order.created_at >= cutoff).scalar() or 0
+    recent_alerts = db.query(func.count(Order.id)).filter(Order.created_at >= cutoff).scalar() or 0
 
     return StatsResponse(
-        total_orders=total_orders,
+        total_alerts=total_alerts,
         total_recipes=total_recipes,
-        total_dishes=total_dishes,
-        orders_by_processing_status=orders_by_status,
-        orders_by_alert_status=orders_by_alert,
-        dishes_by_status=dishes_by_status,
-        recent_orders=recent,
+        total_executions=total_executions,
+        alerts_by_processing_status=alerts_by_processing_status,
+        alerts_by_alert_status=alerts_by_alert_status,
+        executions_by_status=executions_by_status,
+        recent_alerts=recent_alerts,
     )

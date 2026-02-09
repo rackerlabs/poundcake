@@ -30,13 +30,13 @@ class HealthResponse(BaseModel):
 
 
 class StatsResponse(BaseModel):
-    total_orders: int
+    total_alerts: int
     total_recipes: int
-    total_dishes: int
-    orders_by_processing_status: Dict[str, int]
-    orders_by_alert_status: Dict[str, int]
-    dishes_by_status: Dict[str, int]
-    recent_orders: int
+    total_executions: int
+    alerts_by_processing_status: Dict[str, int]
+    alerts_by_alert_status: Dict[str, int]
+    executions_by_status: Dict[str, int]
+    recent_alerts: int
 
 
 # =============================================================================
