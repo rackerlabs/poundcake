@@ -42,8 +42,8 @@ def update_dish(
     Calculates actual_duration_sec based on started_at and now.
     """
     dish_id = dish.get("id")
-    payload = {}
-    extra = {"req_id": req_id}
+    payload: dict[str, Any] = {}
+    extra: dict[str, Any] = {"req_id": req_id}
 
     if processing_status:
         payload["processing_status"] = processing_status
@@ -116,11 +116,12 @@ def cancel_execution(execution_id: str, req_id: str) -> bool:
     return False
 
 
-def check_for_timeouts(dish: dict[str, Any], req_id: str) -> None:
+def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
     """
     Evaluates timeouts.
     SLA Warning: expected_duration_sec * (1 + buffer)
     Hard Timeout: expected_duration_sec * 5 (Safety net)
+    Returns True if dish timed out and was cancelled.
     """
     started_at_str = dish.get("started_at") or dish.get("created_at")
     if not started_at_str:
@@ -143,7 +144,9 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> None:
         logger.critical(
             f"Dish {dish['id']} exceeded safety timeout ({int(elapsed)}s). Killing.", extra=extra
         )
-        cancel_execution(dish.get("workflow_execution_id"), req_id)
+        exec_id = dish.get("workflow_execution_id")
+        if exec_id:
+            cancel_execution(exec_id, req_id)
         update_dish(
             dish,
             req_id,
