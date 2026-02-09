@@ -70,13 +70,6 @@ HTTP_REQUEST_DURATION = Histogram(
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
 
-# HTTP retry metrics
-HTTP_RETRIES = Counter(
-    "poundcake_http_retries_total",
-    "Total HTTP request retries",
-    ["method", "endpoint", "reason"],
-)
-
 # Database metrics
 DB_CONNECTIONS = Gauge("poundcake_db_connections", "Number of active database connections")
 
@@ -169,17 +162,6 @@ def record_http_request(method: str, endpoint: str, status_code: int, duration: 
     """
     HTTP_REQUESTS.labels(method=method, endpoint=endpoint, status_code=status_code).inc()
     HTTP_REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
-
-
-def record_http_retry(method: str, endpoint: str, reason: str) -> None:
-    """Record an HTTP retry attempt.
-
-    Args:
-        method: HTTP method
-        endpoint: Request endpoint
-        reason: Retry reason (status/exception)
-    """
-    HTTP_RETRIES.labels(method=method, endpoint=endpoint, reason=reason).inc()
 
 
 def update_active_tasks(count: int) -> None:

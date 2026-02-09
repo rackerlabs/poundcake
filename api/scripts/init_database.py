@@ -6,11 +6,8 @@
 #
 """Initialize database with new Recipe/Oven/Alert schema."""
 
-import asyncio
 import sys
 from pathlib import Path
-
-from sqlalchemy import select, func
 
 # Add the parent of api directory to path for absolute imports
 # When run from container: /app/api/scripts/init_database.py
@@ -24,7 +21,11 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Now use absolute imports like the rest of the codebase
-from api.core.database import Base, engine, SessionLocal  # noqa: E402
+from api.core.database import (  # noqa: E402
+    Base,
+    engine,
+    SessionLocal,
+)
 from api.models.models import (  # noqa: E402
     Recipe,
     Ingredient,
@@ -38,13 +39,12 @@ setup_logging()
 logger = get_logger(__name__)
 
 
-async def init_database() -> None:
+def init_database() -> None:
     """Initialize database tables."""
     logger.info("Creating database tables", extra={"req_id": "SYSTEM-DB-INIT"})
 
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        Base.metadata.create_all(bind=engine)
 
         tables = list(Base.metadata.tables.keys())
         logger.info(
@@ -61,76 +61,78 @@ async def init_database() -> None:
         sys.exit(1)
 
 
-async def seed_default_recipes() -> None:
+def seed_default_recipes() -> None:
     """Seed database with default recipes and their ingredients."""
     logger.info("Starting", extra={"req_id": "SYSTEM-DB-INIT"})
 
-    async with SessionLocal() as db:
-        try:
-            # Check if recipes already exist
-            result = await db.execute(select(func.count(Recipe.id)))
-            existing_count = result.scalar() or 0
-            if existing_count > 0:
-                logger.info(
-                    "Recipes already exist, skipping",
-                    extra={"req_id": "SYSTEM-DB-INIT", "existing_count": existing_count},
-                )
-                return
+    db = SessionLocal()
 
-            # Default recipe with ingredients
-            default_recipe = Recipe(
-                name="default", description="Default recipe for unmatched alerts", enabled=True
-            )
-
-            # Add default ingredients
-            default_ingredients = [
-                Ingredient(
-                    task_id="log_alert",
-                    task_name="Log Alert Information",
-                    task_order=1,
-                    is_blocking=True,
-                    st2_action="core.echo",
-                    parameters={"message": "Alert received and logged"},
-                    expected_time_to_completion=5,
-                    timeout=30,
-                    retry_count=0,
-                    on_failure="continue",
-                ),
-                Ingredient(
-                    task_id="notify_team",
-                    task_name="Notify Team",
-                    task_order=2,
-                    is_blocking=False,
-                    st2_action="core.sendmail",
-                    parameters={"to": "ops@example.com", "subject": "Alert Notification"},
-                    expected_time_to_completion=10,
-                    timeout=60,
-                    retry_count=1,
-                    retry_delay=5,
-                    on_failure="continue",
-                ),
-            ]
-
-            default_recipe.ingredients = default_ingredients
-            db.add(default_recipe)
-            await db.commit()
-
+    try:
+        # Check if recipes already exist
+        existing_count = db.query(Recipe).count()
+        if existing_count > 0:
             logger.info(
-                "Default recipe created successfully",
-                extra={
-                    "req_id": "SYSTEM-DB-INIT",
-                    "recipe_name": "default",
-                    "ingredient_count": len(default_ingredients),
-                },
+                "Recipes already exist, skipping",
+                extra={"req_id": "SYSTEM-DB-INIT", "existing_count": existing_count},
             )
+            return
 
-        except Exception as e:
-            logger.error(
-                "Failed to seed recipes",
-                extra={"req_id": "SYSTEM-DB-INIT", "error": str(e)},
-                exc_info=True,
-            )
-            await db.rollback()
+        # Default recipe with ingredients
+        default_recipe = Recipe(
+            name="default", description="Default recipe for unmatched alerts", enabled=True
+        )
+
+        # Add default ingredients
+        default_ingredients = [
+            Ingredient(
+                task_id="log_alert",
+                task_name="Log Alert Information",
+                task_order=1,
+                is_blocking=True,
+                st2_action="core.echo",
+                parameters={"message": "Alert received and logged"},
+                expected_time_to_completion=5,
+                timeout=30,
+                retry_count=0,
+                on_failure="continue",
+            ),
+            Ingredient(
+                task_id="notify_team",
+                task_name="Notify Team",
+                task_order=2,
+                is_blocking=False,
+                st2_action="core.sendmail",
+                parameters={"to": "ops@example.com", "subject": "Alert Notification"},
+                expected_time_to_completion=10,
+                timeout=60,
+                retry_count=1,
+                retry_delay=5,
+                on_failure="continue",
+            ),
+        ]
+
+        default_recipe.ingredients = default_ingredients
+        db.add(default_recipe)
+        db.commit()
+
+        logger.info(
+            "Default recipe created successfully",
+            extra={
+                "req_id": "SYSTEM-DB-INIT",
+                "recipe_name": "default",
+                "ingredient_count": len(default_ingredients),
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            "Failed to seed recipes",
+            extra={"req_id": "SYSTEM-DB-INIT", "error": str(e)},
+            exc_info=True,
+        )
+        db.rollback()
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":
@@ -139,10 +141,10 @@ if __name__ == "__main__":
     logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
 
     # Initialize tables
-    asyncio.run(init_database())
+    init_database()
 
     # Seed default recipes
-    asyncio.run(seed_default_recipes())
+    seed_default_recipes()
 
     logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
     logger.info("Database initialization complete", extra={"req_id": "SYSTEM-DB-INIT"})

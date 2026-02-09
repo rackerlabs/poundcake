@@ -9,9 +9,9 @@
 
 import os
 import time
+import httpx
 
 from api.core.logging import setup_logging, get_logger
-from api.core.http_client import request_with_retry_sync
 
 # Initialize logging with standardized configuration
 setup_logging()
@@ -37,11 +37,8 @@ def wait_for_api():
     while attempt < max_attempts:
         try:
             start_time = time.time()
-            resp = request_with_retry_sync(
-                "GET",
-                f"{API_URL}/health",
-                timeout=5,
-            )
+            with httpx.Client(timeout=5) as client:
+                resp = client.get(f"{API_URL}/health")
             latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code == 200:
                 logger.info(
@@ -80,12 +77,10 @@ def prep_loop():
         try:
             # Fetch alerts.process_status of 'new' (crawler)
             start_time = time.time()
-            resp = request_with_retry_sync(
-                "GET",
-                f"{API_URL}/alerts",
-                params={"processing_status": "new"},
-                timeout=10,
-            )
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(
+                    f"{API_URL}/alerts", params={"processing_status": "new"}
+                )
             latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code != 200:
                 logger.error(
@@ -114,12 +109,10 @@ def prep_loop():
                 )
 
                 start_time = time.time()
-                bake_resp = request_with_retry_sync(
-                    "POST",
-                    f"{API_URL}/ovens/bake/{alert_id}",
-                    headers=headers,
-                    timeout=15,
-                )
+                with httpx.Client(timeout=15) as client:
+                    bake_resp = client.post(
+                        f"{API_URL}/ovens/bake/{alert_id}", headers=headers
+                    )
                 latency_ms = int((time.time() - start_time) * 1000)
 
                 if bake_resp.status_code in [200, 201]:
@@ -147,7 +140,9 @@ def prep_loop():
                     )
 
         except Exception as e:
-            logger.error("Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)})
+            logger.error(
+                "Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
+            )
 
         time.sleep(OVEN_INTERVAL)
 

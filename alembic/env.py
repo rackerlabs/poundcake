@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Import Base and all models
-from api.core.database import Base, get_sync_database_url
+from api.core.database import Base
 from api.core.config import settings
 
 # this is the Alembic Config object, which provides
@@ -26,7 +26,7 @@ config = context.config
 
 # Override sqlalchemy.url from settings if available
 if settings.database_url:
-    config.set_main_option("sqlalchemy.url", get_sync_database_url())
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

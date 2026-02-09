@@ -16,7 +16,6 @@ import httpx
 
 from api.core.config import get_settings
 from api.core.logging import get_logger
-from api.core.http_client import request_with_retry
 
 logger = get_logger(__name__)
 
@@ -288,33 +287,28 @@ class GitManager:
                 "base": self.settings.git_branch,
             }
 
-            response = await request_with_retry(
-                "POST",
-                api_url,
-                headers=headers,
-                json=data,
-                timeout=httpx.Timeout(30),
-            )
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(api_url, headers=headers, json=data)
 
-            if response.status_code == 201:
-                pr_data = response.json()
-                logger.info(
-                    "Created GitHub PR",
-                    extra={
-                        "pr_number": pr_data.get("number"),
-                        "url": pr_data.get("html_url"),
-                    },
-                )
-                return pr_data
-            else:
-                logger.error(
-                    "Failed to create GitHub PR",
-                    extra={
-                        "status": response.status_code,
-                        "response": response.text,
-                    },
-                )
-                return None
+                if response.status_code == 201:
+                    pr_data = response.json()
+                    logger.info(
+                        "Created GitHub PR",
+                        extra={
+                            "pr_number": pr_data.get("number"),
+                            "url": pr_data.get("html_url"),
+                        },
+                    )
+                    return pr_data
+                else:
+                    logger.error(
+                        "Failed to create GitHub PR",
+                        extra={
+                            "status": response.status_code,
+                            "response": response.text,
+                        },
+                    )
+                    return None
         except Exception as e:
             logger.error("Error creating GitHub PR", extra={"error": str(e)})
             return None
@@ -341,33 +335,28 @@ class GitManager:
                 "description": description,
             }
 
-            response = await request_with_retry(
-                "POST",
-                api_url,
-                headers=headers,
-                json=data,
-                timeout=httpx.Timeout(30),
-            )
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(api_url, headers=headers, json=data)
 
-            if response.status_code == 201:
-                mr_data = response.json()
-                logger.info(
-                    "Created GitLab MR",
-                    extra={
-                        "mr_iid": mr_data.get("iid"),
-                        "url": mr_data.get("web_url"),
-                    },
-                )
-                return mr_data
-            else:
-                logger.error(
-                    "Failed to create GitLab MR",
-                    extra={
-                        "status": response.status_code,
-                        "response": response.text,
-                    },
-                )
-                return None
+                if response.status_code == 201:
+                    mr_data = response.json()
+                    logger.info(
+                        "Created GitLab MR",
+                        extra={
+                            "mr_iid": mr_data.get("iid"),
+                            "url": mr_data.get("web_url"),
+                        },
+                    )
+                    return mr_data
+                else:
+                    logger.error(
+                        "Failed to create GitLab MR",
+                        extra={
+                            "status": response.status_code,
+                            "response": response.text,
+                        },
+                    )
+                    return None
         except Exception as e:
             logger.error("Error creating GitLab MR", extra={"error": str(e)})
             return None
@@ -394,33 +383,28 @@ class GitManager:
                 "base": self.settings.git_branch,
             }
 
-            response = await request_with_retry(
-                "POST",
-                api_url,
-                headers=headers,
-                json=data,
-                timeout=httpx.Timeout(30),
-            )
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(api_url, headers=headers, json=data)
 
-            if response.status_code == 201:
-                pr_data = response.json()
-                logger.info(
-                    "Created Gitea PR",
-                    extra={
-                        "pr_number": pr_data.get("number"),
-                        "url": pr_data.get("html_url"),
-                    },
-                )
-                return pr_data
-            else:
-                logger.error(
-                    "Failed to create Gitea PR",
-                    extra={
-                        "status": response.status_code,
-                        "response": response.text,
-                    },
-                )
-                return None
+                if response.status_code == 201:
+                    pr_data = response.json()
+                    logger.info(
+                        "Created Gitea PR",
+                        extra={
+                            "pr_number": pr_data.get("number"),
+                            "url": pr_data.get("html_url"),
+                        },
+                    )
+                    return pr_data
+                else:
+                    logger.error(
+                        "Failed to create Gitea PR",
+                        extra={
+                            "status": response.status_code,
+                            "response": response.text,
+                        },
+                    )
+                    return None
         except Exception as e:
             logger.error("Error creating Gitea PR", extra={"error": str(e)})
             return None
