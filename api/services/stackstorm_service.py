@@ -603,7 +603,6 @@ class StackStormActionManager:
         return False
 
 
-
 def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
     """
     Converts a Recipe (model or dict) and its RecipeIngredients into a StackStorm
@@ -679,9 +678,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                     next_step_order = next_step.step_order
 
             if next_task_name_raw is not None and next_step_order is not None:
-                next_task_name = (
-                    f"step_{next_step_order}_{next_task_name_raw.replace('.', '_')}"
-                )
+                next_task_name = f"step_{next_step_order}_{next_task_name_raw.replace('.', '_')}"
                 if is_blocking:
                     task_def["next"] = [{"when": "<% succeeded() %>", "do": next_task_name}]
                 else:
@@ -731,8 +728,8 @@ async def register_workflow_to_st2(
     pack_yaml = pack_root / "pack.yaml"
     if not pack_yaml.exists():
         pack_yaml.write_text(
-            "name: {}\nversion: \"0.1.0\"\ndescription: \"PoundCake generated pack\"\n"
-            "author: \"PoundCake\"\n".format(pack_name)
+            'name: {}\nversion: "0.1.0"\ndescription: "PoundCake generated pack"\n'
+            'author: "PoundCake"\n'.format(pack_name)
         )
 
     workflows_dir.mkdir(parents=True, exist_ok=True)
@@ -750,9 +747,9 @@ async def register_workflow_to_st2(
             if isinstance(recipe, dict)
             else (recipe.workflow_parameters or {})
         ),
-        "description": recipe.get("description")
-        if isinstance(recipe, dict)
-        else recipe.description,
+        "description": (
+            recipe.get("description") if isinstance(recipe, dict) else recipe.description
+        ),
     }
 
     async with httpx.AsyncClient() as client:

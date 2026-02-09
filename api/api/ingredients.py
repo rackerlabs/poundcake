@@ -14,7 +14,12 @@ from datetime import datetime, timezone
 from api.core.database import get_db
 from api.core.logging import get_logger
 from api.models.models import Ingredient, Recipe, RecipeIngredient
-from api.schemas.schemas import IngredientCreate, IngredientUpdate, IngredientResponse, DeleteResponse
+from api.schemas.schemas import (
+    IngredientCreate,
+    IngredientUpdate,
+    IngredientResponse,
+    DeleteResponse,
+)
 from api.schemas.query_params import IngredientQueryParams, validate_query_params
 
 router = APIRouter()

@@ -55,9 +55,7 @@ async def create_recipe(
     db.flush()  # Get the ID before adding recipe_ingredients
 
     ingredient_ids = [ri.ingredient_id for ri in recipe.recipe_ingredients]
-    ingredients = (
-        db.query(Ingredient).filter(Ingredient.id.in_(ingredient_ids)).all()  # noqa: E711
-    )
+    ingredients = db.query(Ingredient).filter(Ingredient.id.in_(ingredient_ids)).all()  # noqa: E711
     found_ids = {ing.id for ing in ingredients}
     missing = [ing_id for ing_id in ingredient_ids if ing_id not in found_ids]
     if missing:
@@ -183,9 +181,7 @@ async def delete_recipe(
 
 @router.put("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 @router.patch("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
-async def update_recipe(
-    recipe_id: int, payload: RecipeUpdate, db: Session = Depends(get_db)
-):
+async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: Session = Depends(get_db)):
     """Update a recipe (used to store workflow_id/payload/parameters)."""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:

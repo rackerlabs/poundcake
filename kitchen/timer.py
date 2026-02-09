@@ -259,21 +259,23 @@ def monitor_dishes():
                             )
                         if children_resp.status_code == 200:
                             children = children_resp.json()
-                            tasks_result = _sort_tasks_by_execution([
-                                {
-                                    "id": child.get("id"),
-                                    "task_id": (
-                                        child.get("context", {})
-                                        .get("orquesta", {})
-                                        .get("task_id")
-                                    ),
-                                    "status": child.get("status"),
-                                    "result": child.get("result"),
-                                    "start_timestamp": child.get("start_timestamp"),
-                                    "end_timestamp": child.get("end_timestamp"),
-                                }
-                                for child in children
-                            ])
+                            tasks_result = _sort_tasks_by_execution(
+                                [
+                                    {
+                                        "id": child.get("id"),
+                                        "task_id": (
+                                            child.get("context", {})
+                                            .get("orquesta", {})
+                                            .get("task_id")
+                                        ),
+                                        "status": child.get("status"),
+                                        "result": child.get("result"),
+                                        "start_timestamp": child.get("start_timestamp"),
+                                        "end_timestamp": child.get("end_timestamp"),
+                                    }
+                                    for child in children
+                                ]
+                            )
                     except Exception:
                         pass
 
@@ -288,21 +290,23 @@ def monitor_dishes():
                             )
                         if children_resp.status_code == 200:
                             children = children_resp.json()
-                            tasks_result = _sort_tasks_by_execution([
-                                {
-                                    "id": child.get("id"),
-                                    "task_id": (
-                                        child.get("context", {})
-                                        .get("orquesta", {})
-                                        .get("task_id")
-                                    ),
-                                    "status": child.get("status"),
-                                    "result": child.get("result"),
-                                    "start_timestamp": child.get("start_timestamp"),
-                                    "end_timestamp": child.get("end_timestamp"),
-                                }
-                                for child in children
-                            ])
+                            tasks_result = _sort_tasks_by_execution(
+                                [
+                                    {
+                                        "id": child.get("id"),
+                                        "task_id": (
+                                            child.get("context", {})
+                                            .get("orquesta", {})
+                                            .get("task_id")
+                                        ),
+                                        "status": child.get("status"),
+                                        "result": child.get("result"),
+                                        "start_timestamp": child.get("start_timestamp"),
+                                        "end_timestamp": child.get("end_timestamp"),
+                                    }
+                                    for child in children
+                                ]
+                            )
                     except Exception:
                         tasks_result = None
 

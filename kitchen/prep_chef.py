@@ -39,9 +39,7 @@ def prep_loop():
             # Fetch orders with processing_status = 'new'
             start_time = time.time()
             with httpx.Client(timeout=10) as client:
-                resp = client.get(
-                    f"{API_URL}/orders", params={"processing_status": "new"}
-                )
+                resp = client.get(f"{API_URL}/orders", params={"processing_status": "new"})
             latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code != 200:
                 logger.error(
@@ -71,9 +69,7 @@ def prep_loop():
 
                 start_time = time.time()
                 with httpx.Client(timeout=15) as client:
-                    cook_resp = client.post(
-                        f"{API_URL}/dishes/cook/{order_id}", headers=headers
-                    )
+                    cook_resp = client.post(f"{API_URL}/dishes/cook/{order_id}", headers=headers)
                 latency_ms = int((time.time() - start_time) * 1000)
 
                 if cook_resp.status_code in [200, 201]:
@@ -101,9 +97,7 @@ def prep_loop():
                     )
 
         except Exception as e:
-            logger.error(
-                "Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)}
-            )
+            logger.error("Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)})
 
         time.sleep(OVEN_INTERVAL)
 

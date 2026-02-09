@@ -79,9 +79,7 @@ async def fetch_orders(
 
 
 @router.post("/orders", response_model=OrderResponse, status_code=201)
-async def create_order(
-    request: Request, payload: OrderCreate, db: Session = Depends(get_db)
-):
+async def create_order(request: Request, payload: OrderCreate, db: Session = Depends(get_db)):
     """Create an order manually (non-Alertmanager ingestion)."""
     req_id = request.state.req_id
 
