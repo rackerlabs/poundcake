@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Alert management commands."""
+"""Order management commands."""
 
 from typing import Optional
 
@@ -15,12 +15,12 @@ from poundcake_cli.utils import print_error, print_output, print_success
 
 
 @click.group()
-def alerts() -> None:
-    """Manage alerts and remediations."""
+def orders() -> None:
+    """Manage orders and remediations."""
     pass
 
 
-@alerts.command()
+@orders.command()
 @click.option(
     "--status",
     "-s",
@@ -38,35 +38,35 @@ def list(
     status: Optional[str],
     severity: Optional[str],
 ) -> None:
-    """List all alerts."""
+    """List all orders."""
     client: PoundCakeClient = ctx.obj["client"]
     format: str = ctx.obj["format"]
 
     try:
-        alerts = client.list_alerts(status=status, severity=severity)
-        print_output(alerts, format)
+        orders = client.list_orders(status=status, severity=severity)
+        print_output(orders, format)
     except Exception as e:
-        print_error(f"Failed to list alerts: {e}")
+        print_error(f"Failed to list orders: {e}")
         raise click.Abort()
 
 
-@alerts.command()
-@click.argument("fingerprint")
+@orders.command()
+@click.argument("order_id", type=int)
 @click.pass_context
-def get(ctx: click.Context, fingerprint: str) -> None:
-    """Get details of a specific alert by fingerprint."""
+def get(ctx: click.Context, order_id: int) -> None:
+    """Get details of a specific order by ID."""
     client: PoundCakeClient = ctx.obj["client"]
     format: str = ctx.obj["format"]
 
     try:
-        alert = client.get_alert(fingerprint)
-        print_output(alert, format)
+        order = client.get_order(order_id)
+        print_output(order, format)
     except Exception as e:
-        print_error(f"Failed to get alert: {e}")
+        print_error(f"Failed to get order: {e}")
         raise click.Abort()
 
 
-@alerts.command()
+@orders.command()
 @click.option(
     "--status",
     "-s",
@@ -82,7 +82,7 @@ def get(ctx: click.Context, fingerprint: str) -> None:
     "--watch",
     "-w",
     is_flag=True,
-    help="Watch for new alerts (refreshes every 5 seconds)",
+    help="Watch for new orders (refreshes every 5 seconds)",
 )
 @click.pass_context
 def watch(
@@ -91,7 +91,7 @@ def watch(
     severity: Optional[str],
     watch: bool,
 ) -> None:
-    """Watch alerts in real-time."""
+    """Watch orders in real-time."""
     import time
 
     client: PoundCakeClient = ctx.obj["client"]
@@ -100,15 +100,15 @@ def watch(
     try:
         while True:
             click.clear()
-            alerts = client.list_alerts(status=status, severity=severity)
-            click.echo(f"Alerts (refreshed at {time.strftime('%H:%M:%S')})")
+            orders = client.list_orders(status=status, severity=severity)
+            click.echo(f"Orders (refreshed at {time.strftime('%H:%M:%S')})")
             click.echo("=" * 80)
-            print_output(alerts, format)
+            print_output(orders, format)
             if not watch:
                 break
             time.sleep(5)
     except KeyboardInterrupt:
-        print_success("Stopped watching alerts")
+        print_success("Stopped watching orders")
     except Exception as e:
-        print_error(f"Failed to watch alerts: {e}")
+        print_error(f"Failed to watch orders: {e}")
         raise click.Abort()

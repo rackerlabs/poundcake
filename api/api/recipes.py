@@ -4,19 +4,20 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""API endpoints for recipe and ingredient management."""
+"""API endpoints for recipe management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 from typing import List
+from datetime import datetime, timezone
 
 from api.core.database import get_db
 from api.core.logging import get_logger
-from api.models.models import Recipe, Ingredient
+from api.models.models import Recipe, RecipeIngredient, Ingredient
 from api.schemas.schemas import (
     RecipeCreate,
+    RecipeUpdate,
     RecipeDetailResponse,
-    IngredientResponse,
     DeleteResponse,
 )
 from api.schemas.query_params import RecipeQueryParams, validate_query_params
@@ -24,14 +25,12 @@ from api.schemas.query_params import RecipeQueryParams, validate_query_params
 router = APIRouter()
 logger = get_logger(__name__)
 
-# --- Recipe Endpoints ---
-
 
 @router.post("/recipes/", response_model=RecipeDetailResponse, status_code=201)
 async def create_recipe(
     request: Request, recipe: RecipeCreate, db: Session = Depends(get_db)
 ) -> RecipeDetailResponse:
-    """Create a new recipe with ingredients."""
+    """Create a new recipe with recipe_ingredients."""
     req_id = request.state.req_id
 
     logger.info("Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name})
@@ -44,29 +43,43 @@ async def create_recipe(
         )
         raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
 
-    db_recipe = Recipe(name=recipe.name, description=recipe.description, enabled=recipe.enabled)
+    db_recipe = Recipe(
+        name=recipe.name,
+        description=recipe.description,
+        enabled=recipe.enabled,
+        workflow_id=recipe.workflow_id,
+        workflow_payload=recipe.workflow_payload,
+        workflow_parameters=recipe.workflow_parameters,
+    )
     db.add(db_recipe)
-    db.flush()  # Get the ID before adding ingredients
+    db.flush()  # Get the ID before adding recipe_ingredients
 
-    for ingredient_data in recipe.ingredients:
-        db_ingredient = Ingredient(
+    ingredient_ids = [ri.ingredient_id for ri in recipe.recipe_ingredients]
+    ingredients = (
+        db.query(Ingredient).filter(Ingredient.id.in_(ingredient_ids)).all()  # noqa: E711
+    )
+    found_ids = {ing.id for ing in ingredients}
+    missing = [ing_id for ing_id in ingredient_ids if ing_id not in found_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
+
+    for ri in recipe.recipe_ingredients:
+        db_recipe_ingredient = RecipeIngredient(
             recipe_id=db_recipe.id,
-            task_id=ingredient_data.task_id,
-            task_name=ingredient_data.task_name,
-            task_order=ingredient_data.task_order,
-            is_blocking=ingredient_data.is_blocking,
-            st2_action=ingredient_data.st2_action,
-            parameters=ingredient_data.parameters,
-            expected_time_to_completion=ingredient_data.expected_time_to_completion,
-            timeout=ingredient_data.timeout,
-            retry_count=ingredient_data.retry_count,
-            retry_delay=ingredient_data.retry_delay,
-            on_failure=ingredient_data.on_failure,
+            ingredient_id=ri.ingredient_id,
+            step_order=ri.step_order,
+            on_success=ri.on_success,
         )
-        db.add(db_ingredient)
+        db.add(db_recipe_ingredient)
 
     db.commit()
-    db.refresh(db_recipe)
+
+    db_recipe = (
+        db.query(Recipe)
+        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
+        .filter(Recipe.id == db_recipe.id)
+        .first()
+    )
 
     logger.info(
         "Recipe created successfully",
@@ -74,7 +87,7 @@ async def create_recipe(
             "req_id": req_id,
             "recipe_id": db_recipe.id,
             "recipe_name": db_recipe.name,
-            "ingredient_count": len(recipe.ingredients),
+            "ingredient_count": len(recipe.recipe_ingredients),
         },
     )
 
@@ -88,7 +101,7 @@ async def list_recipes(
     db: Session = Depends(get_db),
 ):
     """
-    List recipes with optional filtering and nested ingredients.
+    List recipes with optional filtering and nested recipe_ingredients.
 
     Query Parameters:
     - name: Filter by recipe name
@@ -98,7 +111,9 @@ async def list_recipes(
 
     Returns 422 Unprocessable Entity if unknown or invalid query parameters are provided.
     """
-    query = db.query(Recipe).options(joinedload(Recipe.ingredients))
+    query = db.query(Recipe).options(
+        joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient)
+    )
 
     if params.name is not None:
         query = query.filter(Recipe.name == params.name)
@@ -110,10 +125,10 @@ async def list_recipes(
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
-    """Get a recipe with all its ingredients."""
+    """Get a recipe with all its recipe_ingredients."""
     recipe = (
         db.query(Recipe)
-        .options(joinedload(Recipe.ingredients))
+        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
         .filter(Recipe.id == recipe_id)
         .first()
     )
@@ -125,10 +140,10 @@ async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 @router.get("/recipes/by-name/{recipe_name}", response_model=RecipeDetailResponse)
 async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
-    """Get a recipe by name (matches alert.group_name)."""
+    """Get a recipe by name (matches order.alert_group_name)."""
     recipe = (
         db.query(Recipe)
-        .options(joinedload(Recipe.ingredients))
+        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
         .filter(Recipe.name == recipe_name)
         .first()
     )
@@ -142,7 +157,7 @@ async def get_recipe_by_name(recipe_name: str, db: Session = Depends(get_db)):
 async def delete_recipe(
     request: Request, recipe_id: int, db: Session = Depends(get_db)
 ) -> DeleteResponse:
-    """Delete a recipe and all its ingredients."""
+    """Delete a recipe and its recipe_ingredients."""
     req_id = request.state.req_id
 
     logger.info("Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
@@ -166,16 +181,28 @@ async def delete_recipe(
     )
 
 
-# --- Ingredient Endpoints ---
+@router.put("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
+@router.patch("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
+async def update_recipe(
+    recipe_id: int, payload: RecipeUpdate, db: Session = Depends(get_db)
+):
+    """Update a recipe (used to store workflow_id/payload/parameters)."""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
 
+    update_data = payload.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(recipe, key, value)
+    recipe.updated_at = datetime.now(timezone.utc)
 
-@router.get("/ingredients/{ingredient_id}", response_model=IngredientResponse)
-async def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)):
-    """
-    Fetch a single ingredient.
-    Crucial for oven-executor (oven.py) to resolve task details.
-    """
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
-    if not ingredient:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
-    return ingredient
+    db.commit()
+
+    recipe = (
+        db.query(Recipe)
+        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
+        .filter(Recipe.id == recipe_id)
+        .first()
+    )
+
+    return recipe

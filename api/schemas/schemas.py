@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Pydantic schemas for PoundCake API - CORRECTED to match models."""
+"""Pydantic schemas for PoundCake API."""
 
 from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any
@@ -30,17 +30,17 @@ class HealthResponse(BaseModel):
 
 
 class StatsResponse(BaseModel):
-    total_alerts: int
+    total_orders: int
     total_recipes: int
-    total_executions: int
-    alerts_by_processing_status: Dict[str, int]
-    alerts_by_alert_status: Dict[str, int]
-    executions_by_status: Dict[str, int]
-    recent_alerts: int
+    total_dishes: int
+    orders_by_processing_status: Dict[str, int]
+    orders_by_alert_status: Dict[str, int]
+    dishes_by_status: Dict[str, int]
+    recent_orders: int
 
 
 # =============================================================================
-# Ingredient Schemas
+# Ingredient Schemas (Global)
 # =============================================================================
 
 
@@ -49,19 +49,21 @@ class IngredientBase(BaseModel):
 
     task_id: str = Field(..., max_length=100)
     task_name: str = Field(..., max_length=255)
-    task_order: int = Field(..., ge=1)
+
+    action_id: Optional[str] = Field(None, max_length=100)
+    action_payload: Optional[str] = None
+    action_parameters: Optional[Dict[str, Any]] = None
+
     is_blocking: bool = True
-    st2_action: str = Field(..., max_length=255)
-    parameters: Optional[Dict[str, Any]] = None
-    expected_time_to_completion: int = Field(..., gt=0)
-    timeout: int = Field(default=300, gt=0)
+    expected_duration_sec: int = Field(..., gt=0)
+    timeout_duration_sec: int = Field(default=300, gt=0)
     retry_count: int = Field(default=0, ge=0)
     retry_delay: int = Field(default=5, ge=0)
     on_failure: str = Field(default="stop", max_length=50)
 
 
 class IngredientCreate(IngredientBase):
-    """Schema for creating a new ingredient (used in recipe creation)."""
+    """Schema for creating a new global ingredient."""
 
     pass
 
@@ -71,12 +73,12 @@ class IngredientUpdate(BaseModel):
 
     task_id: Optional[str] = Field(None, max_length=100)
     task_name: Optional[str] = Field(None, max_length=255)
-    task_order: Optional[int] = Field(None, ge=1)
+    action_id: Optional[str] = Field(None, max_length=100)
+    action_payload: Optional[str] = None
+    action_parameters: Optional[Dict[str, Any]] = None
     is_blocking: Optional[bool] = None
-    st2_action: Optional[str] = Field(None, max_length=255)
-    parameters: Optional[Dict[str, Any]] = None
-    expected_time_to_completion: Optional[int] = Field(None, gt=0)
-    timeout: Optional[int] = Field(None, gt=0)
+    expected_duration_sec: Optional[int] = Field(None, gt=0)
+    timeout_duration_sec: Optional[int] = Field(None, gt=0)
     retry_count: Optional[int] = Field(None, ge=0)
     retry_delay: Optional[int] = Field(None, ge=0)
     on_failure: Optional[str] = Field(None, max_length=50)
@@ -86,9 +88,35 @@ class IngredientResponse(IngredientBase):
     """Schema for ingredient responses (includes DB fields)."""
 
     id: int
-    recipe_id: int
     created_at: datetime
     updated_at: datetime
+    deleted: bool
+    deleted_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# RecipeIngredient Schemas (Junction)
+# =============================================================================
+
+
+class RecipeIngredientBase(BaseModel):
+    ingredient_id: int = Field(..., ge=1)
+    step_order: int = Field(..., ge=1)
+    on_success: str = Field(default="continue", max_length=50)
+    parallel_group: int = Field(default=0, ge=0)
+    depth: int = Field(default=0, ge=0)
+
+
+class RecipeIngredientCreate(RecipeIngredientBase):
+    pass
+
+
+class RecipeIngredientResponse(RecipeIngredientBase):
+    id: int
+    recipe_id: int
+    ingredient: Optional[IngredientResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,12 +132,15 @@ class RecipeBase(BaseModel):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     enabled: bool = True
+    workflow_id: Optional[str] = Field(None, max_length=255)
+    workflow_payload: Optional[Dict[str, Any]] = None
+    workflow_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeCreate(RecipeBase):
-    """Schema for creating a recipe with ingredients."""
+    """Schema for creating a recipe with recipe_ingredients."""
 
-    ingredients: List[IngredientCreate] = Field(..., min_length=1)
+    recipe_ingredients: List[RecipeIngredientCreate] = Field(..., min_length=1)
 
 
 class RecipeUpdate(BaseModel):
@@ -118,6 +149,9 @@ class RecipeUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     enabled: Optional[bool] = None
+    workflow_id: Optional[str] = Field(None, max_length=255)
+    workflow_payload: Optional[Dict[str, Any]] = None
+    workflow_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeResponse(RecipeBase):
@@ -126,59 +160,58 @@ class RecipeResponse(RecipeBase):
     id: int
     created_at: datetime
     updated_at: datetime
+    deleted: bool
+    deleted_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class RecipeDetailResponse(RecipeResponse):
-    """Schema for detailed recipe responses (includes ingredients)."""
+    """Schema for detailed recipe responses (includes recipe_ingredients)."""
 
-    ingredients: List[IngredientResponse] = []
+    recipe_ingredients: List[RecipeIngredientResponse] = []
 
 
 # =============================================================================
-# Oven Schemas
+# Dish Schemas
 # =============================================================================
 
 
-class OvenBase(BaseModel):
-    """Base schema for Oven."""
+class DishBase(BaseModel):
+    """Base schema for Dish."""
 
     req_id: str = Field(..., max_length=100)
     processing_status: str = Field(default="new", max_length=50)
 
 
-class OvenUpdate(BaseModel):
-    """Schema for updating an oven (used by timer service)."""
+class DishUpdate(BaseModel):
+    """Schema for updating a dish."""
 
     processing_status: Optional[str] = Field(None, max_length=50)
-    action_id: Optional[str] = Field(None, max_length=255)
-    st2_status: Optional[str] = Field(None, max_length=50)
-    expected_duration: Optional[int] = None
-    actual_duration: Optional[int] = None
+    status: Optional[str] = Field(None, max_length=50)
+    workflow_execution_id: Optional[str] = Field(None, max_length=100)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    action_result: Optional[Dict[str, Any]] = None
+    expected_duration_sec: Optional[int] = None
+    actual_duration_sec: Optional[int] = None
+    result: Optional[Any] = None
     error_message: Optional[str] = None
     retry_attempt: Optional[int] = None
 
 
-class OvenResponse(OvenBase):
-    """Schema for oven responses."""
+class DishResponse(DishBase):
+    """Schema for dish responses."""
 
     id: int
-    alert_id: Optional[int] = None
+    order_id: Optional[int] = None
     recipe_id: int
-    ingredient_id: int
-    task_order: int
-    is_blocking: bool
-    action_id: Optional[str] = None
-    st2_status: Optional[str] = None
-    expected_duration: Optional[int] = None
-    actual_duration: Optional[int] = None
+    workflow_execution_id: Optional[str] = None
+    status: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    action_result: Optional[Dict[str, Any]] = None
+    expected_duration_sec: Optional[int] = None
+    actual_duration_sec: Optional[int] = None
+    result: Optional[Any] = None
     error_message: Optional[str] = None
     retry_attempt: int
     created_at: datetime
@@ -187,79 +220,113 @@ class OvenResponse(OvenBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class OvenDetailResponse(OvenResponse):
-    """Schema for detailed oven responses (includes ingredient info)."""
+class DishDetailResponse(DishResponse):
+    """Schema for detailed dish responses (includes recipe)."""
 
-    ingredient: IngredientResponse
+    recipe: Optional[RecipeDetailResponse] = None
 
 
 # =============================================================================
-# Alert Schemas
+# Order Schemas
 # =============================================================================
 
 
-class AlertBase(BaseModel):
-    """Base schema for Alert."""
+class OrderBase(BaseModel):
+    """Base schema for Order."""
 
     req_id: str = Field(..., max_length=100)
     fingerprint: str = Field(..., max_length=255)
     alert_status: str = Field(..., max_length=50)
-    alert_name: str = Field(..., max_length=255)
+    alert_group_name: str = Field(..., max_length=255)
     labels: Dict[str, Any]
     starts_at: datetime
 
 
-class AlertCreate(AlertBase):
-    """Schema for creating an alert."""
+class OrderCreate(OrderBase):
+    """Schema for creating an order."""
 
     processing_status: str = Field(default="new", max_length=50)
-    group_name: Optional[str] = Field(None, max_length=255)
     severity: Optional[str] = Field(None, max_length=50)
     instance: Optional[str] = Field(None, max_length=255)
-    prometheus: Optional[str] = Field(None, max_length=255)
-    annotations: Optional[Dict[str, Any]] = None
-    ends_at: Optional[datetime] = None
-    generator_url: Optional[str] = None
     counter: int = 1
-    ticket_number: Optional[str] = Field(None, max_length=100)
+    annotations: Optional[Dict[str, Any]] = None
     raw_data: Optional[Dict[str, Any]] = None
+    ends_at: Optional[datetime] = None
 
 
-class AlertUpdate(BaseModel):
-    """Schema for updating an alert (all fields optional)."""
+class OrderUpdate(BaseModel):
+    """Schema for updating an order (all fields optional)."""
 
     alert_status: Optional[str] = Field(None, max_length=50)
     processing_status: Optional[str] = Field(None, max_length=50)
     ends_at: Optional[datetime] = None
-    counter: Optional[int] = None
-    ticket_number: Optional[str] = Field(None, max_length=100)
 
 
-class AlertResponse(AlertBase):
-    """Schema for alert responses."""
+class OrderResponse(OrderBase):
+    """Schema for order responses."""
 
     id: int
     processing_status: str
-    group_name: Optional[str] = None
     severity: Optional[str] = None
     instance: Optional[str] = None
-    prometheus: Optional[str] = None
-    annotations: Optional[Dict[str, Any]] = None
-    ends_at: Optional[datetime] = None
-    generator_url: Optional[str] = None
     counter: int
-    ticket_number: Optional[str] = None
+    annotations: Optional[Dict[str, Any]] = None
     raw_data: Optional[Dict[str, Any]] = None
+    ends_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class AlertDetailResponse(AlertResponse):
-    """Schema for detailed alert responses (includes ovens)."""
+class DishIngredientUpsert(BaseModel):
+    """Upsert payload for dish ingredient execution results."""
 
-    ovens: List[OvenResponse] = []
+    st2_execution_id: Optional[str] = None
+    task_id: Optional[str] = None
+    status: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    result: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DishIngredientBulkUpsert(BaseModel):
+    """Bulk upsert payload for dish ingredient executions."""
+
+    items: List[DishIngredientUpsert]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DishIngredientResponse(BaseModel):
+    """Dish ingredient execution record."""
+
+    id: int
+    dish_id: int
+    recipe_ingredient_id: Optional[int] = None
+    task_id: Optional[str] = None
+    st2_execution_id: Optional[str] = None
+    status: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    result: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+    deleted: bool
+    deleted_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderDetailResponse(OrderResponse):
+    """Schema for detailed order responses (includes dishes)."""
+
+    dishes: List[DishResponse] = []
 
 
 # ============================================================================
@@ -271,17 +338,17 @@ class WebhookResponse(BaseModel):
     """Response from webhook endpoint."""
 
     status: str  # created, counter_incremented, resolved, ignored, no_alerts
-    alert_id: Optional[int] = None
+    order_id: Optional[int] = None
     message: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class BakeResponse(BaseModel):
-    """Response from bake ovens endpoint."""
+class CookResponse(BaseModel):
+    """Response from cook dishes endpoint."""
 
-    status: str  # baked, ignored
-    ovens_created: Optional[int] = None
+    status: str  # cooked, ignored
+    dishes_created: Optional[int] = None
     recipe_id: Optional[int] = None
     recipe_name: Optional[str] = None
     reason: Optional[str] = None
@@ -295,7 +362,7 @@ class ExecutionResponse(BaseModel):
     id: str  # Execution ID
     status: str  # pending, running, succeeded, failed, etc.
     action: Dict[str, Any]  # Action reference and details
-    parameters: Dict[str, Any]  # Execution parameters
+    parameters: Dict[str, Any] = Field(default_factory=dict)  # Execution parameters (optional in ST2 responses)
     result: Optional[Dict[str, Any]] = None
     start_timestamp: Optional[str] = None
     end_timestamp: Optional[str] = None

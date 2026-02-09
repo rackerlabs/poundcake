@@ -21,24 +21,77 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     sleep 5
 done
 
-# Authenticate to get a token
+# Authenticate to get a token (retry until available)
 echo "Authenticating as ${ST2_AUTH_USER}..."
-ST2_TOKEN=$(st2 auth "${ST2_AUTH_USER}" -p "${ST2_AUTH_PASSWORD}" -t)
-export ST2_AUTH_TOKEN=$ST2_TOKEN
+AUTH_RETRIES=12
+AUTH_COUNT=0
+ST2_TOKEN=""
+while [ $AUTH_COUNT -lt $AUTH_RETRIES ]; do
+    set +e
+    ST2_TOKEN=$(st2 auth "${ST2_AUTH_USER}" -p "${ST2_AUTH_PASSWORD}" -t 2>/dev/null)
+    set -e
+    if [ -n "$ST2_TOKEN" ]; then
+        export ST2_AUTH_TOKEN=$ST2_TOKEN
+        break
+    fi
+    AUTH_COUNT=$((AUTH_COUNT + 1))
+    sleep 5
+done
+if [ -z "$ST2_TOKEN" ]; then
+    echo "[ERROR] Failed to authenticate to StackStorm API."
+    exit 1
+fi
+
+create_api_key() {
+    local key
+    key=$(st2 apikey create -k -m '{"description": "PoundCake-Internal"}' 2>/dev/null || true)
+    if [ -n "$key" ] && [[ "$key" != ERROR:* ]]; then
+        echo "$key"
+        return 0
+    fi
+    return 1
+}
 
 # 3. Idempotent API Key Creation
 # Check if key exists AND is still valid in the DB
 if [ -f "/app/config/st2_api_key" ] && [ -s "/app/config/st2_api_key" ]; then
     OLD_KEY=$(cat /app/config/st2_api_key)
-    if curl -s -k -H "St2-Api-Key: $OLD_KEY" http://stackstorm-api:9101/v1/actions > /dev/null 2>&1; then
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -k -H "St2-Api-Key: $OLD_KEY" http://stackstorm-api:9101/v1/actions || echo "000")
+    if [ "$HTTP_CODE" = "200" ]; then
         echo "[OK] Existing API Key is valid. Skipping creation."
     else
-        echo "[WARN] Key file found but invalid. Re-generating..."
-        st2 apikey create -k -m '{"description": "PoundCake-Internal"}' > /app/config/st2_api_key
+        echo "[WARN] Key file found but invalid (HTTP $HTTP_CODE). Re-generating..."
+        KEY_RETRIES=10
+        KEY_COUNT=0
+        while [ $KEY_COUNT -lt $KEY_RETRIES ]; do
+            if NEW_KEY=$(create_api_key); then
+                echo "$NEW_KEY" > /app/config/st2_api_key
+                break
+            fi
+            KEY_COUNT=$((KEY_COUNT + 1))
+            sleep 3
+        done
+        if [ ! -s "/app/config/st2_api_key" ]; then
+            echo "[ERROR] Failed to generate API key."
+            exit 1
+        fi
     fi
 else
     echo "Generating new API Key..."
-    st2 apikey create -k -m '{"description": "PoundCake-Internal"}' > /app/config/st2_api_key
+    KEY_RETRIES=10
+    KEY_COUNT=0
+    while [ $KEY_COUNT -lt $KEY_RETRIES ]; do
+        if NEW_KEY=$(create_api_key); then
+            echo "$NEW_KEY" > /app/config/st2_api_key
+            break
+        fi
+        KEY_COUNT=$((KEY_COUNT + 1))
+        sleep 3
+    done
+    if [ ! -s "/app/config/st2_api_key" ]; then
+        echo "[ERROR] Failed to generate API key."
+        exit 1
+    fi
 fi
 
 # 4. Register Content (packs will be installed later if needed)

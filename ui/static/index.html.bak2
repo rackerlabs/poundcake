@@ -112,7 +112,7 @@
     <div class="container" style="max-width: 95%; margin: 0 auto;">
         <div class="tabs">
             <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
-            <button class="tab" onclick="showTab('alerts')">Alert Status</button>
+            <button class="tab" onclick="showTab('orders')">Alert Status</button>
             <button class="tab" onclick="showTab('prometheus')">Prometheus Rules</button>
             <button class="tab" onclick="showTab('mappings')">Mappings</button>
             <button class="tab" onclick="showTab('actions')">StackStorm Actions</button>
@@ -134,7 +134,7 @@
             </div>
         </div>
 
-        <div id="alerts" class="panel">
+        <div id="orders" class="panel">
             <div class="filter-bar">
                 <select id="status-filter" onchange="loadAlerts()">
                     <option value="">All Statuses</option>
@@ -162,13 +162,13 @@
                         <th>Attempts</th>
                     </tr>
                 </thead>
-                <tbody id="alerts-table"></tbody>
+                <tbody id="orders-table"></tbody>
             </table>
         </div>
 
         <div id="prometheus" class="panel">
             <div class="filter-bar">
-                <input type="text" id="prom-search" placeholder="Search alerts..." style="width: 250px;" oninput="loadPrometheusRules()">
+                <input type="text" id="prom-search" placeholder="Search orders..." style="width: 250px;" oninput="loadPrometheusRules()">
                 <select id="prom-state-filter" onchange="loadPrometheusRules()">
                     <option value="">All States</option>
                     <option value="firing">Firing</option>
@@ -256,7 +256,7 @@
             <form id="mapping-form" onsubmit="saveMapping(event)">
                 <div class="form-group">
                     <label>Alert Name</label>
-                    <input type="text" id="alert-name" required>
+                    <input type="text" id="order-name" required>
                 </div>
                 <div class="form-group">
                     <label>Configuration (YAML)</label>
@@ -504,7 +504,7 @@
             document.getElementById(tab).classList.add('active');
 
             if (tab === 'dashboard') loadDashboard();
-            if (tab === 'alerts') { loadAlerts(); loadStats(); }
+            if (tab === 'orders') { loadAlerts(); loadStats(); }
             if (tab === 'prometheus') loadPrometheusRules();
             if (tab === 'mappings') loadMappings();
             if (tab === 'actions') { loadPacks(); loadActions(); }
@@ -514,34 +514,34 @@
         // Alert tracking functions
         async function loadAlerts() {
             const status = document.getElementById('status-filter').value;
-            const url = status ? `/alerts?status=${status}` : '/alerts';
+            const url = status ? `/orders?status=${status}` : '/orders';
             const res = await fetch(url);
             const data = await res.json();
-            const tbody = document.getElementById('alerts-table');
+            const tbody = document.getElementById('orders-table');
             tbody.innerHTML = '';
 
-            if (data.alerts.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #666;">No alerts found</td></tr>';
+            if (data.orders.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #666;">No orders found</td></tr>';
                 return;
             }
 
-            data.alerts.forEach(alert => {
-                const statusClass = `status-${alert.status}`;
-                const attempts = `${alert.successful_attempts}/${alert.total_attempts}`;
-                const attemptsStyle = alert.failed_attempts > 0 ? 'color: #e74c3c;' : '';
+            data.orders.forEach(order => {
+                const statusClass = `status-${order.status}`;
+                const attempts = `${order.successful_attempts}/${order.total_attempts}`;
+                const attemptsStyle = order.failed_attempts > 0 ? 'color: #e74c3c;' : '';
 
                 tbody.innerHTML += `
-                    <tr class="expandable" onclick="toggleDetails('${alert.fingerprint}')">
-                        <td><strong>${alert.alertname}</strong></td>
-                        <td>${alert.instance || '-'}</td>
-                        <td>${alert.severity || '-'}</td>
-                        <td><span class="status ${statusClass}">${alert.status}</span></td>
-                        <td>${new Date(alert.received_at).toLocaleString()}</td>
+                    <tr class="expandable" onclick="toggleDetails('${order.fingerprint}')">
+                        <td><strong>${order.alertname}</strong></td>
+                        <td>${order.instance || '-'}</td>
+                        <td>${order.severity || '-'}</td>
+                        <td><span class="status ${statusClass}">${order.status}</span></td>
+                        <td>${new Date(order.received_at).toLocaleString()}</td>
                         <td style="${attemptsStyle}">${attempts}</td>
                     </tr>
-                    <tr class="details-row" id="details-${alert.fingerprint}">
+                    <tr class="details-row" id="details-${order.fingerprint}">
                         <td colspan="6">
-                            <div class="details-content" id="content-${alert.fingerprint}">
+                            <div class="details-content" id="content-${order.fingerprint}">
                                 Loading...
                             </div>
                         </td>
@@ -588,15 +588,15 @@
                 return;
             }
 
-            // Load full alert details
-            const res = await fetch(`/alerts/${fingerprint}`);
+            // Load full order details
+            const res = await fetch(`/orders/${fingerprint}`);
             const data = await res.json();
-            const alert = data.alert;
+            const order = data.order;
 
             let attemptsHtml = '';
-            if (alert.remediation_attempts && alert.remediation_attempts.length > 0) {
+            if (order.remediation_attempts && order.remediation_attempts.length > 0) {
                 attemptsHtml = '<div class="attempt-list"><strong>Remediation Attempts:</strong>';
-                alert.remediation_attempts.forEach(attempt => {
+                order.remediation_attempts.forEach(attempt => {
                     const statusClass = attempt.status === 'success' ? 'success' : 'failed';
                     attemptsHtml += `
                         <div class="attempt-item ${statusClass}">
@@ -611,11 +611,11 @@
             }
 
             content.innerHTML = `
-                <div><strong>Fingerprint:</strong> ${alert.fingerprint}</div>
-                <div><strong>Status Changed:</strong> ${new Date(alert.status_changed_at).toLocaleString()}</div>
-                ${alert.resolved_at ? `<div><strong>Resolved:</strong> ${new Date(alert.resolved_at).toLocaleString()}</div>` : ''}
-                ${alert.processed_by ? `<div><strong>Processed By:</strong> ${alert.processed_by}</div>` : ''}
-                ${alert.last_error ? `<div style="color: #e74c3c;"><strong>Last Error:</strong> ${alert.last_error}</div>` : ''}
+                <div><strong>Fingerprint:</strong> ${order.fingerprint}</div>
+                <div><strong>Status Changed:</strong> ${new Date(order.status_changed_at).toLocaleString()}</div>
+                ${order.resolved_at ? `<div><strong>Resolved:</strong> ${new Date(order.resolved_at).toLocaleString()}</div>` : ''}
+                ${order.processed_by ? `<div><strong>Processed By:</strong> ${order.processed_by}</div>` : ''}
+                ${order.last_error ? `<div style="color: #e74c3c;"><strong>Last Error:</strong> ${order.last_error}</div>` : ''}
                 ${attemptsHtml}
             `;
 
@@ -626,7 +626,7 @@
             const checkbox = document.getElementById('auto-refresh');
             if (checkbox.checked) {
                 autoRefreshInterval = setInterval(() => {
-                    if (document.getElementById('alerts').classList.contains('active')) {
+                    if (document.getElementById('orders').classList.contains('active')) {
                         loadAlerts();
                         loadStats();
                     }
@@ -947,7 +947,7 @@
                 expr = document.getElementById('promql-preview').textContent.trim();
                 // Remove comment lines (lines starting with #)
                 if (expr.startsWith('#')) {
-                    alert('Please complete the PromQL builder or switch to Raw mode to enter a query manually.');
+                    order('Please complete the PromQL builder or switch to Raw mode to enter a query manually.');
                     return;
                 }
             }
@@ -972,7 +972,7 @@
 
             try {
                 const ruleData = {
-                    alert: ruleName,
+                    order: ruleName,
                     expr: expr,
                     for: forDuration || undefined,
                     labels: Object.keys(labels).length > 0 ? labels : undefined,
@@ -1002,7 +1002,7 @@
 
                 if (!res.ok) {
                     const error = await res.json();
-                    alert(`Failed to ${isCreate ? 'create' : 'update'} rule: ${error.detail || res.statusText}`);
+                    order(`Failed to ${isCreate ? 'create' : 'update'} rule: ${error.detail || res.statusText}`);
                     return;
                 }
 
@@ -1036,9 +1036,9 @@
                     message += `⚠ Git error: ${result.git_error}\n`;
                 }
 
-                alert(message);
+                order(message);
             } catch (err) {
-                alert(`Error: ${err.message}`);
+                order(`Error: ${err.message}`);
             }
         }
 
@@ -1077,10 +1077,10 @@
                     message += `⚠ Git error: ${result.git_error}\n`;
                 }
 
-                alert(message);
+                order(message);
             } else {
                 const error = await res.json();
-                alert(`Failed to delete rule: ${error.detail || res.statusText}`);
+                order(`Failed to delete rule: ${error.detail || res.statusText}`);
             }
         }
 
@@ -1446,7 +1446,7 @@
         }
 
         async function loadHistory() {
-            const res = await fetch('/api/v1/ovens?limit=50');
+            const res = await fetch('/api/v1/dishes?limit=50');
             const data = await res.json();
             const tbody = document.getElementById('history-table');
             tbody.innerHTML = '';
@@ -1469,8 +1469,8 @@
         function showCreateModal() {
             editMode = false;
             document.getElementById('modal-title').textContent = 'Create Mapping';
-            document.getElementById('alert-name').value = '';
-            document.getElementById('alert-name').disabled = false;
+            document.getElementById('order-name').value = '';
+            document.getElementById('order-name').disabled = false;
             document.getElementById('mapping-config').value = `handler: yaml_config
 actions:
   - name: example_action
@@ -1488,15 +1488,15 @@ actions:
             const data = await res.json();
 
             document.getElementById('modal-title').textContent = 'Edit Mapping';
-            document.getElementById('alert-name').value = name;
-            document.getElementById('alert-name').disabled = true;
+            document.getElementById('order-name').value = name;
+            document.getElementById('order-name').disabled = true;
             document.getElementById('mapping-config').value = jsyaml.dump(data.config);
             document.getElementById('edit-modal').classList.add('active');
         }
 
         async function saveMapping(e) {
             e.preventDefault();
-            const name = document.getElementById('alert-name').value;
+            const name = document.getElementById('order-name').value;
             const config = jsyaml.load(document.getElementById('mapping-config').value);
 
             const url = editMode ? `/api/mappings/${name}` : '/api/v1/mappings';
@@ -1543,7 +1543,7 @@ actions:
             });
 
             const data = await res.json();
-            alert(`Imported: ${data.imported}, Skipped: ${data.skipped}`);
+            order(`Imported: ${data.imported}, Skipped: ${data.skipped}`);
             closeImportModal();
             loadMappings();
         }
@@ -1637,7 +1637,7 @@ actions:
                     });
                     if (!res.ok) {
                         const error = await res.json();
-                        alert(`Failed to update action: ${error.detail || res.statusText}`);
+                        order(`Failed to update action: ${error.detail || res.statusText}`);
                         return;
                     }
                 } else {
@@ -1648,16 +1648,16 @@ actions:
                     });
                     if (!res.ok) {
                         const error = await res.json();
-                        alert(`Failed to create action: ${error.detail || res.statusText}`);
+                        order(`Failed to create action: ${error.detail || res.statusText}`);
                         return;
                     }
                 }
 
                 closeEditActionModal();
                 loadActions();
-                alert('Action saved successfully!');
+                order('Action saved successfully!');
             } catch (err) {
-                alert(`Error: ${err.message}`);
+                order(`Error: ${err.message}`);
             }
         }
 
@@ -1670,10 +1670,10 @@ actions:
 
             if (res.ok) {
                 loadActions();
-                alert('Action deleted successfully!');
+                order('Action deleted successfully!');
             } else {
                 const error = await res.json();
-                alert(`Failed to delete action: ${error.detail || res.statusText}`);
+                order(`Failed to delete action: ${error.detail || res.statusText}`);
             }
         }
 
@@ -1688,12 +1688,12 @@ actions:
                 const healthRes = await fetch('/api/v1/health');
                 const health = await healthRes.json();
 
-                // Load alert stats
+                // Load order stats
                 const statsRes = await fetch('/api/v1/stats');
                 const stats = await statsRes.json();
 
                 // Load recent history
-                const historyRes = await fetch('/api/v1/ovens?limit=10');
+                const historyRes = await fetch('/api/v1/dishes?limit=10');
                 const history = await historyRes.json();
 
                 console.log('Dashboard data:', { health, stats, history });
@@ -1746,7 +1746,7 @@ actions:
                         <span class="metric-value">${health.state_store ? 'Connected' : 'Unavailable'}</span>
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Total Alerts</span>
+                        <span class="metric-label">Total Orders</span>
                         <span class="metric-value">${stats.total}</span>
                     </div>
                 </div>
@@ -1773,7 +1773,7 @@ actions:
             const quickStatsDiv = document.getElementById('quick-stats');
             quickStatsDiv.innerHTML = `
                 <div class="metric-row">
-                    <span class="metric-label">Active Alerts</span>
+                    <span class="metric-label">Active Orders</span>
                     <span class="metric-value">${stats.by_status?.remediating || 0}</span>
                 </div>
                 <div class="metric-row">
@@ -1809,10 +1809,10 @@ actions:
                 if (res.ok) {
                     window.location.href = '/login';
                 } else {
-                    alert('Failed to logout. Please try again.');
+                    order('Failed to logout. Please try again.');
                 }
             } catch (err) {
-                alert('An error occurred during logout.');
+                order('An error occurred during logout.');
             }
         }
 

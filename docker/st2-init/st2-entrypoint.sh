@@ -13,6 +13,13 @@ log() {
 export PYTHONPATH=$PYTHONPATH:/opt/stackstorm/st2/lib/python3.10/site-packages
 export PATH=$PATH:/opt/stackstorm/st2/bin
 
+# Make ST2_API_KEY available in interactive shells if the key file exists
+if [ -f "/app/config/st2_api_key" ]; then
+    if ! grep -q "export ST2_API_KEY=" /root/.bashrc 2>/dev/null; then
+        echo "export ST2_API_KEY=\$(cat /app/config/st2_api_key)" >> /root/.bashrc
+    fi
+fi
+
 # Install envsubst if not available
 if ! command -v envsubst &> /dev/null; then
     log "envsubst not found, installing gettext-base..."

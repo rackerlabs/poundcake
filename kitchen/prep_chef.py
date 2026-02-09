@@ -5,13 +5,14 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Prep Chef: Polls for new alerts and triggers the /bake API"""
+"""Prep Chef: Polls for new orders and triggers the /dishes/cook API"""
 
 import os
 import time
 import httpx
 
 from api.core.logging import setup_logging, get_logger
+from kitchen.service_helpers import wait_for_api
 
 # Initialize logging with standardized configuration
 setup_logging()
@@ -25,49 +26,9 @@ OVEN_INTERVAL = int(os.getenv("OVEN_INTERVAL", "5"))
 SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
 
 
-def wait_for_api():
-    """Wait for API to be ready before starting main loop."""
-    logger.info(
-        "Waiting for API to be ready",
-        extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL},
-    )
-    max_attempts = 30
-    attempt = 0
-
-    while attempt < max_attempts:
-        try:
-            start_time = time.time()
-            with httpx.Client(timeout=5) as client:
-                resp = client.get(f"{API_URL}/health")
-            latency_ms = int((time.time() - start_time) * 1000)
-            if resp.status_code == 200:
-                logger.info(
-                    "API is ready! Starting prep chef...",
-                    extra={
-                        "req_id": SYSTEM_REQ_ID,
-                        "method": "GET",
-                        "status_code": resp.status_code,
-                        "latency_ms": latency_ms,
-                    },
-                )
-                return True
-        except Exception:
-            pass
-
-        attempt += 1
-        if attempt < max_attempts:
-            time.sleep(2)  # Check every 2 seconds
-
-    logger.warning(
-        "API did not become ready. Starting anyway...",
-        extra={"req_id": SYSTEM_REQ_ID, "max_attempts": max_attempts},
-    )
-    return False
-
-
 def prep_loop():
-    """Main prep chef loop - polls for new alerts and triggers baking."""
-    wait_for_api()
+    """Main prep chef loop - polls for new orders and triggers cooking."""
+    wait_for_api(API_URL, SYSTEM_REQ_ID, logger)
     logger.info(
         "Starting prep chef",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": OVEN_INTERVAL},
@@ -75,16 +36,16 @@ def prep_loop():
 
     while True:
         try:
-            # Fetch alerts.process_status of 'new' (crawler)
+            # Fetch orders with processing_status = 'new'
             start_time = time.time()
             with httpx.Client(timeout=10) as client:
                 resp = client.get(
-                    f"{API_URL}/alerts", params={"processing_status": "new"}
+                    f"{API_URL}/orders", params={"processing_status": "new"}
                 )
             latency_ms = int((time.time() - start_time) * 1000)
             if resp.status_code != 200:
                 logger.error(
-                    "Failed to fetch new alerts",
+                    "Failed to fetch new orders",
                     extra={
                         "req_id": SYSTEM_REQ_ID,
                         "method": "GET",
@@ -94,48 +55,48 @@ def prep_loop():
                 )
                 time.sleep(OVEN_INTERVAL)
                 continue
-            alerts = resp.json()
+            orders = resp.json()
 
-            for alert in alerts:
-                req_id = alert.get("req_id", "UNKNOWN")
-                alert_id = alert.get("id")
+            for order in orders:
+                req_id = order.get("req_id", "UNKNOWN")
+                order_id = order.get("id")
 
                 # Pass the original Request ID to the next hop
                 headers = {"X-Request-ID": req_id}
 
                 logger.info(
-                    f"Preparing alert with id {alert_id} for baking",
-                    extra={"req_id": req_id, "alert_id": alert_id},
+                    "Preparing order for cooking",
+                    extra={"req_id": req_id, "order_id": order_id},
                 )
 
                 start_time = time.time()
                 with httpx.Client(timeout=15) as client:
-                    bake_resp = client.post(
-                        f"{API_URL}/ovens/bake/{alert_id}", headers=headers
+                    cook_resp = client.post(
+                        f"{API_URL}/dishes/cook/{order_id}", headers=headers
                     )
                 latency_ms = int((time.time() - start_time) * 1000)
 
-                if bake_resp.status_code in [200, 201]:
+                if cook_resp.status_code in [200, 201]:
                     logger.info(
-                        f"Successfully prepared alert with id {alert_id} for oven",
+                        "Successfully prepared order for dish",
                         extra={
                             "req_id": req_id,
-                            "alert_id": alert_id,
+                            "order_id": order_id,
                             "method": "POST",
-                            "status_code": bake_resp.status_code,
+                            "status_code": cook_resp.status_code,
                             "latency_ms": latency_ms,
                         },
                     )
                 else:
                     logger.error(
-                        "Bake preparation failed",
+                        "Cook preparation failed",
                         extra={
                             "req_id": req_id,
-                            "alert_id": alert_id,
+                            "order_id": order_id,
                             "method": "POST",
-                            "status_code": bake_resp.status_code,
+                            "status_code": cook_resp.status_code,
                             "latency_ms": latency_ms,
-                            "response": bake_resp.text,
+                            "response": cook_resp.text,
                         },
                     )
 

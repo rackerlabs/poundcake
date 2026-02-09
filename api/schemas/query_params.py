@@ -18,12 +18,6 @@ def validate_query_params(model_class: Type[BaseModel]) -> Callable[[Request], B
     Dependency factory that validates query parameters against a Pydantic model.
 
     Rejects unknown query parameters with 422 error.
-
-    Usage:
-        @router.get("/endpoint")
-        async def my_endpoint(
-            params: OvenQueryParams = Depends(validate_query_params(OvenQueryParams)),
-        ):
     """
 
     def dependency(request: Request) -> BaseModel:
@@ -52,8 +46,8 @@ def validate_query_params(model_class: Type[BaseModel]) -> Callable[[Request], B
     return dependency
 
 
-class OvenQueryParams(BaseModel):
-    """Query parameters for GET /api/v1/ovens endpoint."""
+class DishQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/dishes endpoint."""
 
     model_config = ConfigDict(extra="forbid")  # Reject unknown parameters in body
 
@@ -63,13 +57,12 @@ class OvenQueryParams(BaseModel):
     req_id: Optional[str] = Field(
         None, min_length=1, max_length=100, description="Filter by request ID"
     )
-    alert_id: Optional[int] = Field(None, ge=1, description="Filter by alert ID (positive integer)")
-    action_id: Optional[str] = Field(
+    order_id: Optional[int] = Field(None, ge=1, description="Filter by order ID (positive integer)")
+    workflow_execution_id: Optional[str] = Field(
         None,
-        min_length=24,
-        max_length=24,
-        pattern=r"^[a-f0-9]{24}$",
-        description="Filter by StackStorm action/execution ID (24-character hex string)",
+        min_length=1,
+        max_length=100,
+        description="Filter by StackStorm workflow execution ID",
     )
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
@@ -92,8 +85,25 @@ class RecipeQueryParams(BaseModel):
     offset: int = Field(0, ge=0, description="Number of results to skip for pagination")
 
 
-class AlertQueryParams(BaseModel):
-    """Query parameters for GET /api/v1/alerts endpoint."""
+class IngredientQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/ingredients endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: Optional[str] = Field(
+        None, min_length=1, max_length=100, description="Filter by task_id (action ref)"
+    )
+    task_name: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="Filter by task name"
+    )
+    limit: int = Field(
+        100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
+    )
+    offset: int = Field(0, ge=0, description="Number of results to skip for pagination")
+
+
+class OrderQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/orders endpoint."""
 
     model_config = ConfigDict(extra="forbid")  # Reject unknown parameters in body
 
@@ -106,8 +116,8 @@ class AlertQueryParams(BaseModel):
     req_id: Optional[str] = Field(
         None, min_length=1, max_length=100, description="Filter by request ID"
     )
-    alert_name: Optional[str] = Field(
-        None, min_length=1, max_length=255, description="Filter by alert name"
+    group_name: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="Filter by group name"
     )
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"

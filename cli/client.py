@@ -62,24 +62,24 @@ class PoundCakeClient:
             response.raise_for_status()
             return response.json()  # type: ignore[no-any-return]
 
-    # Alert management
+    # Order management
 
-    def list_alerts(
+    def list_orders(
         self,
         status: Optional[str] = None,
         severity: Optional[str] = None,
     ) -> list[dict[str, Any]]:
-        """List alerts with optional filters."""
+        """List orders with optional filters."""
         params = {}
         if status:
             params["status"] = status
         if severity:
             params["severity"] = severity
-        return cast(list[dict[str, Any]], self._request("GET", "/api/v1/alerts", params=params))
+        return cast(list[dict[str, Any]], self._request("GET", "/api/v1/orders", params=params))
 
-    def get_alert(self, fingerprint: str) -> dict[str, Any]:
-        """Get a specific alert by fingerprint."""
-        return self._request("GET", f"/api/v1/alerts/{fingerprint}")
+    def get_order(self, order_id: int) -> dict[str, Any]:
+        """Get a specific order by ID."""
+        return self._request("GET", f"/api/v1/orders/{order_id}")
 
     # Prometheus rule management
 
@@ -137,7 +137,7 @@ class PoundCakeClient:
     # Mapping management
 
     def list_mappings(self) -> dict[str, Any]:
-        """List all alert-to-action mappings."""
+        """List all order-to-action mappings."""
         return self._request("GET", "/api/v1/mappings")
 
     def get_mapping(self, alert_name: str) -> dict[str, Any]:
