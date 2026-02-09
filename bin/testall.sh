@@ -53,6 +53,58 @@ print_warning() {
     echo -e "${YELLOW}⚠ $1${NC}"
 }
 
+# Install pre-push hook if it doesn't exist
+PRE_PUSH_HOOK="$PROJECT_ROOT/.git/hooks/pre-push"
+if [ ! -f "$PRE_PUSH_HOOK" ]; then
+    print_section "Installing Git pre-push hook"
+    cat > "$PRE_PUSH_HOOK" << 'HOOK_EOF'
+#!/bin/bash
+# PoundCake Git Pre-Push Hook
+# Runs testall.sh before allowing push
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║           Running Pre-Push Tests & Checks                     ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$PROJECT_ROOT"
+
+if [ ! -f "$PROJECT_ROOT/bin/testall.sh" ]; then
+    echo -e "${RED}✗ Error: bin/testall.sh not found${NC}"
+    exit 1
+fi
+
+if "$PROJECT_ROOT/bin/testall.sh"; then
+    echo ""
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║           ✓ All checks passed - Pushing to GitHub             ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    exit 0
+else
+    echo ""
+    echo -e "${RED}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║           ✗ Tests failed - Push aborted                       ║${NC}"
+    echo -e "${RED}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}Fix the errors above and try again.${NC}"
+    echo -e "${YELLOW}To bypass this check (not recommended): git push --no-verify${NC}"
+    echo ""
+    exit 1
+fi
+HOOK_EOF
+    chmod +x "$PRE_PUSH_HOOK"
+    print_success "Git pre-push hook installed"
+    echo "  → The hook will run these checks automatically before every push"
+fi
+
 # Check if Python 3.11+ is available
 print_section "Checking Python version"
 if ! command -v python3 &> /dev/null; then

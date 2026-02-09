@@ -13,13 +13,14 @@ Runs all tests and checks that mirror the GitHub Actions workflow.
 ```
 
 **What it does:**
-1. Checks Python version (requires 3.11+)
-2. Creates/activates virtual environment at `.venv`
-3. Installs PoundCake with dev dependencies
-4. Runs pytest with coverage
-5. Runs ruff linting
-6. Runs black formatting check
-7. Runs mypy type checking
+1. Installs Git pre-push hook (if not already installed) to run checks automatically before every push
+2. Checks Python version (requires 3.11+)
+3. Creates/activates virtual environment at `.venv`
+4. Installs PoundCake with dev dependencies
+5. Runs pytest with coverage
+6. Runs ruff linting (checks: api, kitchen, cli, tests, alembic)
+7. Runs black formatting check (checks: api, kitchen, cli, tests, alembic)
+8. Runs mypy type checking (checks: api, kitchen, cli)
 
 **Requirements:**
 - Python 3.11 or higher
@@ -28,6 +29,11 @@ Runs all tests and checks that mirror the GitHub Actions workflow.
 **Virtual Environment:**
 The script creates a `.venv` directory in the project root if it doesn't exist.
 This directory is already in `.gitignore` and will not be committed.
+
+**Pre-Push Hook:**
+The first time you run `testall.sh`, it automatically installs a Git pre-push hook that will run all checks before every `git push`. This prevents broken code from being pushed to GitHub.
+
+To bypass the pre-push hook in emergencies: `git push --no-verify`
 
 ## Installation Scripts
 
