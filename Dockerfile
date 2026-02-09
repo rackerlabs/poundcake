@@ -4,38 +4,64 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-FROM python:3.11-slim
 
-WORKDIR /app
+# ============================================================================
+# Stage 1: Builder - Install dependencies in a virtual environment
+# ============================================================================
+FROM python:3.11-slim AS builder
 
-# Install system dependencies
+WORKDIR /build
+
+# Install build dependencies (needed for compiling Python packages)
 RUN apt-get update && apt-get install -y \
     gcc \
-    curl \
     default-libmysqlclient-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
+# Create virtual environment
+RUN python -m venv /opt/venv
+
+# Activate venv and upgrade pip
+ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# 1. Create user FIRST so we can use it for COPY
-RUN useradd -m -u 1000 appuser
-
-# 2. Install requirements
+# Install Python dependencies into the venv
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Copy EVERYTHING and set ownership to appuser immediately
-# This avoids most "Permission Denied" errors at runtime
-COPY --chown=appuser:appuser . .
+# ============================================================================
+# Stage 2: Runtime - Minimal production image
+# ============================================================================
+FROM python:3.11-slim
 
-# 4. Make scripts executable as root before switching
+WORKDIR /app
+
+# Install only runtime dependencies (no build tools)
+RUN apt-get update && apt-get install -y \
+    curl \
+    default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
+# Copy the virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy only the Python application code (not tests, helm, docs, etc.)
+COPY --chown=appuser:appuser api/ /app/api/
+COPY --chown=appuser:appuser scripts/ /app/scripts/
+
+# Make scripts executable
 RUN chmod +x /app/api/scripts/entrypoint-auto-migrate.sh \
     && chmod +x /app/scripts/automated-setup.sh
 
-# Switch to the restricted user
+# Switch to non-root user
 USER appuser
 
+# Use the venv
+ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
