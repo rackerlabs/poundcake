@@ -26,7 +26,7 @@ OVEN_INTERVAL = int(os.getenv("OVEN_INTERVAL", "5"))
 SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
 
 
-def prep_loop():
+def prep_loop() -> None:
     """Main prep chef loop - polls for new orders and triggers cooking."""
     wait_for_api(API_URL, SYSTEM_REQ_ID, logger)
     logger.info(

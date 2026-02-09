@@ -684,7 +684,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                 else:
                     task_def["next"] = [{"do": next_task_name}]
 
-        workflow["tasks"][task_name] = task_def
+        workflow["tasks"][task_name] = task_def  # type: ignore[index]
 
     # Capture the final task result as workflow output for easier consumption.
     if last_task_name:

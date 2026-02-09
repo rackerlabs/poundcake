@@ -143,7 +143,7 @@ async def update_order(
     for key, value in update_data.items():
         setattr(order, key, value)
 
-    order.updated_at = datetime.now(timezone.utc)
+    order.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
     db.commit()
     db.refresh(order)
 

@@ -9,6 +9,7 @@
 
 import os
 import time
+from typing import Any, Optional
 import httpx
 from datetime import datetime, timezone
 from api.core.logging import setup_logging, get_logger
@@ -27,15 +28,15 @@ logger = get_logger("timer")
 
 
 def update_dish(
-    dish,
-    req_id,
-    processing_status=None,
-    status=None,
-    error_msg=None,
-    final_status=False,
-    result=None,
-    started_at=None,
-):
+    dish: dict[str, Any],
+    req_id: str,
+    processing_status: Optional[str] = None,
+    status: Optional[str] = None,
+    error_msg: Optional[str] = None,
+    final_status: bool = False,
+    result: Optional[Any] = None,
+    started_at: Optional[str] = None,
+) -> bool:
     """
     Centralized helper to update Dish records.
     Calculates actual_duration_sec based on started_at and now.
@@ -90,7 +91,7 @@ def update_dish(
         return False
 
 
-def cancel_execution(execution_id, req_id):
+def cancel_execution(execution_id: str, req_id: str) -> bool:
     """Instructs API to stop an execution."""
     try:
         start_time = time.time()
@@ -115,7 +116,7 @@ def cancel_execution(execution_id, req_id):
     return False
 
 
-def check_for_timeouts(dish, req_id):
+def check_for_timeouts(dish: dict[str, Any], req_id: str) -> None:
     """
     Evaluates timeouts.
     SLA Warning: expected_duration_sec * (1 + buffer)
@@ -162,7 +163,7 @@ def check_for_timeouts(dish, req_id):
     return False
 
 
-def monitor_dishes():
+def monitor_dishes() -> None:
     """Polls for processing dishes and updates terminal states."""
     try:
         start_time = time.time()
@@ -226,7 +227,7 @@ def monitor_dishes():
                         tasks_result = None
 
                 # If tasks lack timestamps, prefer child execution list for richer details
-                def _tasks_missing_timestamps(tasks):
+                def _tasks_missing_timestamps(tasks: Any) -> bool:
                     if not isinstance(tasks, list) or not tasks:
                         return True
                     for task in tasks:
@@ -236,11 +237,11 @@ def monitor_dishes():
                             return False
                     return True
 
-                def _sort_tasks_by_execution(tasks):
+                def _sort_tasks_by_execution(tasks: Any) -> Any:
                     if not isinstance(tasks, list):
                         return tasks
 
-                    def _key(item):
+                    def _key(item: Any) -> tuple[str, str]:
                         if not isinstance(item, dict):
                             return ("", "")
                         start_ts = item.get("start_timestamp") or item.get("end_timestamp") or ""

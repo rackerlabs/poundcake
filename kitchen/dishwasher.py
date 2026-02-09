@@ -25,7 +25,7 @@ MARK_BOOTSTRAP = os.getenv("POUNDCAKE_BOOTSTRAP_MARK", "false").lower() == "true
 SYSTEM_REQ_ID = "SYSTEM-DISHWASHER"
 
 
-def run_sync():
+def run_sync() -> bool:
     params = {"mark_bootstrap": "true"} if MARK_BOOTSTRAP else {}
     try:
         start_time = time.time()
@@ -64,7 +64,7 @@ def run_sync():
         return False
 
 
-def main():
+def main() -> None:
     wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger, require_healthy=False)
 
     if DISHWASHER_INTERVAL <= 0:

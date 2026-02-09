@@ -150,7 +150,7 @@ async def update_ingredient(
     for key, value in update_data.items():
         setattr(ingredient, key, value)
 
-    ingredient.updated_at = datetime.now(timezone.utc)
+    ingredient.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
     db.commit()
     db.refresh(ingredient)
 
