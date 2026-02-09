@@ -110,29 +110,38 @@ fi
 
 # Run linting with ruff
 print_section "Running linting with ruff"
-if ruff check api tests; then
+# Note: GitHub Actions only checks 'api tests', but we check more directories locally
+echo "Checking: api/ kitchen/ cli/ tests/ alembic/"
+if ruff check api kitchen cli tests alembic; then
     print_success "Ruff linting passed"
 else
     print_error "Ruff linting failed"
+    print_warning "Note: GitHub Actions only checks 'api tests' but we check all Python code locally"
     exit 1
 fi
 
 # Run formatting check with black
 print_section "Running formatting check with black"
-if black --check api tests; then
+# Note: GitHub Actions only checks 'api tests', but we check more directories locally
+echo "Checking: api/ kitchen/ cli/ tests/ alembic/"
+if black --check api kitchen cli tests alembic; then
     print_success "Black formatting check passed"
 else
     print_error "Black formatting check failed"
-    print_warning "Run 'black api tests' to fix formatting"
+    print_warning "Run 'black api kitchen cli tests alembic' to fix formatting"
+    print_warning "Note: GitHub Actions only checks 'api tests' but we check all Python code locally"
     exit 1
 fi
 
 # Run type checking with mypy
 print_section "Running type checking with mypy"
-if mypy api; then
+# Note: GitHub Actions only checks 'api', but we check more directories locally
+echo "Checking: api/ kitchen/ cli/"
+if mypy api kitchen cli; then
     print_success "Type checking passed"
 else
     print_error "Type checking failed"
+    print_warning "Note: GitHub Actions only checks 'api' but we check all Python code locally"
     exit 1
 fi
 
