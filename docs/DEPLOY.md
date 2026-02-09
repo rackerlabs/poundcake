@@ -4,8 +4,8 @@
 
 ```bash
 # 1. Extract
-# tar -xzf poundcake-complete.tar.gz
-# cd poundcake-complete
+tar -xzf poundcake-complete.tar.gz
+cd poundcake-complete
 
 # 2. Configure environment
 cp .env.example .env
@@ -17,11 +17,11 @@ docker compose up -d
 # 4. Check health
 docker compose ps
 
-# 5. (Optional) Run database migrations manually if needed
-# docker exec poundcake-api python api/migrate.py upgrade
+# 5. Run database migrations
+docker exec poundcake-api alembic upgrade head
 
 # 6. Create your first recipe
-curl -X POST http://localhost:8000/api/v1/recipes/ \
+curl -X POST http://localhost:8000/api/recipes/ \
   -H "Content-Type: application/json" \
   -d @examples/recipe-hostdown.json
 ```
@@ -29,15 +29,13 @@ curl -X POST http://localhost:8000/api/v1/recipes/ \
 ## Architecture
 
 ```
-Webhook → API → pre_heat → Creates Ovens (status="new")
+Webhook → API → Pre-heat → Creates Ovens (status="new")
                                ↓
-Prep Chef → bakes ovens for new alerts
+Oven Service → Starts ST2 Executions (respects is_blocking)
                                ↓
-Chef → starts StackStorm executions (respects is_blocking)
+Timer Service → Monitors & Completes
                                ↓
-Timer → monitors & completes
-                               ↓
-Alert Status → complete
+Alert Status → Complete
 ```
 
 ## Services
@@ -45,12 +43,11 @@ Alert Status → complete
 | Service | Port | Purpose |
 |---------|------|---------|
 | poundcake-api | 8000 | Main API |
-| poundcake-prep-chef | - | Dispatcher (alerts → ovens) |
-| poundcake-chef | - | Executor (ovens → ST2 actions) |
+| poundcake-oven | - | Starts ST2 executions |
 | poundcake-timer | - | Monitors completions |
 | stackstorm-api | 9101 | StackStorm API |
 | mariadb | 3306 | Database |
-| stackstorm-mongodb | 27017 | StackStorm data |
+| mongodb | 27017 | StackStorm data |
 
 ## Function-Level Logging
 
@@ -58,25 +55,13 @@ All services log with function names:
 
 ```bash
 # View timer logs
-docker logs poundcake-timer | grep "update_oven"
+docker logs poundcake-timer | grep "update_oven_completion"
 
-# View chef logs
-docker logs poundcake-chef | grep "Cooking action"
+# View oven logs
+docker logs poundcake-oven | grep "can_start_oven"
 
 # View all logs
 docker compose logs -f
-```
-
-## Reading Logs
-
-PoundCake logs are structured so you can trace a request end‑to‑end with `req_id`.
-
-```bash
-# Grab the req_id from a webhook response
-curl -i -X POST http://localhost:8000/api/v1/webhook -H "Content-Type: application/json" -d @payload.json
-
-# Follow that req_id across services
-docker compose logs -f api prep-chef chef timer | grep "<REQ_ID>"
 ```
 
 ## Configuration
@@ -87,7 +72,6 @@ MYSQL_PASSWORD=secure_password
 ST2_API_KEY=your_st2_api_key
 TIMER_INTERVAL=10
 OVEN_INTERVAL=5
-OVEN_POLL_INTERVAL=5
 ```
 
 ## Monitoring
@@ -113,4 +97,4 @@ curl http://localhost:8000/api/v1/alerts?processing_status=processing | jq
 
 ---
 
-Ready for production.
+**Ready for Production!** 🎂

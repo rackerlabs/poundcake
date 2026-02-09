@@ -7,8 +7,7 @@
 """API routes for Alert management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
 
@@ -25,7 +24,7 @@ logger = get_logger(__name__)
 
 @router.post("/webhook", response_model=WebhookResponse, status_code=202)
 async def alertmanager_webhook(
-    request: Request, payload: dict = Body(...), db: AsyncSession = Depends(get_db)
+    request: Request, payload: dict = Body(...), db: Session = Depends(get_db)
 ) -> WebhookResponse:
     """Entry point for Alertmanager webhooks. Handled by pre_heat service.
 
@@ -39,7 +38,7 @@ async def alertmanager_webhook(
         extra={"req_id": req_id, "alert_count": alert_count},
     )
 
-    result = await pre_heat(payload, db, req_id)
+    result = pre_heat(payload, db, req_id)
 
     logger.info(
         "Webhook processed successfully",
@@ -61,7 +60,7 @@ async def alertmanager_webhook(
 async def get_alerts(
     request: Request,
     params: AlertQueryParams = Depends(validate_query_params(AlertQueryParams)),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Get alerts with optional filtering.
@@ -93,20 +92,18 @@ async def get_alerts(
         },
     )
 
-    query = select(Alert)
+    query = db.query(Alert)
 
     if params.processing_status:
-        query = query.where(Alert.processing_status == params.processing_status.value)
+        query = query.filter(Alert.processing_status == params.processing_status.value)
     if params.alert_status:
-        query = query.where(Alert.alert_status == params.alert_status.value)
+        query = query.filter(Alert.alert_status == params.alert_status.value)
     if params.req_id:
-        query = query.where(Alert.req_id == params.req_id)
+        query = query.filter(Alert.req_id == params.req_id)
     if params.alert_name:
-        query = query.where(Alert.alert_name == params.alert_name)
+        query = query.filter(Alert.alert_name == params.alert_name)
 
-    query = query.order_by(Alert.created_at.desc()).limit(params.limit).offset(params.offset)
-    result = await db.execute(query)
-    alerts = result.scalars().all()
+    alerts = query.order_by(Alert.created_at.desc()).limit(params.limit).offset(params.offset).all()
 
     logger.debug(
         "Alerts fetched successfully",
@@ -117,14 +114,13 @@ async def get_alerts(
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
-async def get_alert(request: Request, alert_id: int, db: AsyncSession = Depends(get_db)):
+async def get_alert(request: Request, alert_id: int, db: Session = Depends(get_db)):
     """Retrieve a specific alert by ID."""
     req_id = request.state.req_id
 
     logger.debug("Fetching alert by ID", extra={"req_id": req_id, "alert_id": alert_id})
 
-    result = await db.execute(select(Alert).where(Alert.id == alert_id))
-    alert = result.scalars().first()
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
 
     if not alert:
         logger.warning("Alert not found", extra={"req_id": req_id, "alert_id": alert_id})
@@ -135,15 +131,14 @@ async def get_alert(request: Request, alert_id: int, db: AsyncSession = Depends(
 
 @router.put("/alerts/{alert_id}", response_model=AlertResponse)
 async def update_alert(
-    request: Request, alert_id: int, payload: AlertUpdate, db: AsyncSession = Depends(get_db)
+    request: Request, alert_id: int, payload: AlertUpdate, db: Session = Depends(get_db)
 ):
     """Used by Timer to set status to 'complete' or Oven Service to 'processing'."""
     req_id = request.state.req_id
 
     logger.info("Updating alert", extra={"req_id": req_id, "alert_id": alert_id})
 
-    result = await db.execute(select(Alert).where(Alert.id == alert_id))
-    alert = result.scalars().first()
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         logger.warning(
             "Alert not found for update",
@@ -156,8 +151,8 @@ async def update_alert(
         setattr(alert, key, value)
 
     alert.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(alert)
+    db.commit()
+    db.refresh(alert)
 
     logger.info(
         "Alert updated successfully",

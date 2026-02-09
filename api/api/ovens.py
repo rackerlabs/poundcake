@@ -7,9 +7,7 @@
 """API routes for Oven (task execution) management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
 
@@ -25,15 +23,14 @@ logger = get_logger(__name__)
 
 @router.post("/ovens/bake/{alert_id}", response_model=BakeResponse)
 async def bake_ovens(
-    request: Request, alert_id: int, db: AsyncSession = Depends(get_db)
+    request: Request, alert_id: int, db: Session = Depends(get_db)
 ) -> BakeResponse:
     """Creates individual Oven tasks from a Recipe."""
     req_id = request.state.req_id
 
     logger.info("Starting", extra={"req_id": req_id, "alert_id": alert_id})
 
-    result = await db.execute(select(Alert).where(Alert.id == alert_id))
-    alert = result.scalars().first()
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         logger.warning("Alert not found", extra={"req_id": req_id, "alert_id": alert_id})
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -41,14 +38,13 @@ async def bake_ovens(
     # Match group_name to Recipe
     logger.debug("Looking for recipe", extra={"req_id": req_id, "group_name": alert.group_name})
 
-    result = await db.execute(select(Recipe).where(Recipe.name == alert.group_name, Recipe.enabled))
-    recipe = result.scalars().first()
+    recipe = db.query(Recipe).filter(Recipe.name == alert.group_name, Recipe.enabled).first()
 
     if not recipe:
         # Close alert if no recipe exists
         alert.processing_status = "complete"
         alert.updated_at = datetime.now(timezone.utc)
-        await db.commit()
+        db.commit()
 
         logger.error(
             "No recipe found, alert closed",
@@ -57,10 +53,12 @@ async def bake_ovens(
         return BakeResponse(status="ignored", reason=f"No recipe for {alert.group_name}")
 
     # Fetch ingredients
-    result = await db.execute(
-        select(Ingredient).where(Ingredient.recipe_id == recipe.id).order_by(Ingredient.task_order)
+    ingredients = (
+        db.query(Ingredient)
+        .filter(Ingredient.recipe_id == recipe.id)
+        .order_by(Ingredient.task_order)
+        .all()
     )
-    ingredients = result.scalars().all()
 
     logger.info(
         "Recipe matched, creating ovens",
@@ -88,7 +86,7 @@ async def bake_ovens(
 
     # Move alert to processing so Oven Service doesn't bake it again
     alert.processing_status = "processing"
-    await db.commit()
+    db.commit()
 
     logger.info(
         "Ovens created successfully",
@@ -109,7 +107,7 @@ async def bake_ovens(
 async def list_ovens(
     request: Request,
     params: OvenQueryParams = Depends(validate_query_params(OvenQueryParams)),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Used by oven.py to find executable tasks and Timer to monitor status.
@@ -142,20 +140,18 @@ async def list_ovens(
     )
 
     # Eager load ingredient relationship for oven executor
-    query = select(Oven).options(selectinload(Oven.ingredient))
+    query = db.query(Oven).join(Ingredient)
 
     if params.processing_status:
-        query = query.where(Oven.processing_status == params.processing_status.value)
+        query = query.filter(Oven.processing_status == params.processing_status.value)
     if params.req_id:
-        query = query.where(Oven.req_id == params.req_id)
+        query = query.filter(Oven.req_id == params.req_id)
     if params.alert_id:
-        query = query.where(Oven.alert_id == params.alert_id)
+        query = query.filter(Oven.alert_id == params.alert_id)
     if params.action_id:
-        query = query.where(Oven.action_id == params.action_id)
+        query = query.filter(Oven.action_id == params.action_id)
 
-    query = query.order_by(Oven.created_at.desc()).limit(params.limit).offset(params.offset)
-    result = await db.execute(query)
-    ovens = result.scalars().all()
+    ovens = query.order_by(Oven.created_at.desc()).limit(params.limit).offset(params.offset).all()
 
     logger.debug("Ovens fetched", extra={"req_id": request_id, "count": len(ovens)})
 
@@ -165,15 +161,14 @@ async def list_ovens(
 @router.put("/ovens/{oven_id}", response_model=OvenResponse)
 @router.patch("/ovens/{oven_id}", response_model=OvenResponse)
 async def update_oven(
-    request: Request, oven_id: int, payload: OvenUpdate, db: AsyncSession = Depends(get_db)
+    request: Request, oven_id: int, payload: OvenUpdate, db: Session = Depends(get_db)
 ):
     """Updates oven status/action_id from oven.py or results from Timer."""
     req_id = request.state.req_id
 
     logger.info("Starting", extra={"req_id": req_id, "oven_id": oven_id})
 
-    result = await db.execute(select(Oven).where(Oven.id == oven_id))
-    oven = result.scalars().first()
+    oven = db.query(Oven).filter(Oven.id == oven_id).first()
     if not oven:
         logger.warning("Oven not found", extra={"req_id": req_id, "oven_id": oven_id})
         raise HTTPException(status_code=404, detail="Oven not found")
@@ -182,8 +177,8 @@ async def update_oven(
     for key, value in update_data.items():
         setattr(oven, key, value)
 
-    await db.commit()
-    await db.refresh(oven)
+    db.commit()
+    db.refresh(oven)
 
     # --- Parent Alert Status Synchronization ---
     # List of terminal statuses that count as "finished"
@@ -191,18 +186,18 @@ async def update_oven(
 
     if oven.processing_status in terminal_statuses:
         # Check if any other ovens for this alert are still active
-        result = await db.execute(
-            select(func.count(Oven.id)).where(
+        remaining_active = (
+            db.query(Oven)
+            .filter(
                 Oven.alert_id == oven.alert_id,
                 Oven.processing_status.notin_(terminal_statuses),
                 Oven.id != oven.id,
             )
+            .count()
         )
-        remaining_active = result.scalar() or 0
 
         if remaining_active == 0:
-            result = await db.execute(select(Alert).where(Alert.id == oven.alert_id))
-            alert = result.scalars().first()
+            alert = db.query(Alert).filter(Alert.id == oven.alert_id).first()
             if alert and alert.processing_status != "complete":
                 logger.info(
                     "All ovens finished. Closing alert.",
@@ -210,7 +205,7 @@ async def update_oven(
                 )
                 alert.processing_status = "complete"
                 alert.updated_at = datetime.now(timezone.utc)
-                await db.commit()
+                db.commit()
 
     logger.info(
         "Oven updated successfully",

@@ -7,54 +7,34 @@
 """Database configuration and session management."""
 
 import time
-from typing import AsyncGenerator
-
 from api.core.logging import get_logger
+from typing import Generator
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from api.core.config import settings
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 logger = get_logger(__name__)
 
-
-def get_sync_database_url() -> str:
-    """Return a sync DB URL for tooling like Alembic."""
-    url = settings.database_url
-    if "+aiomysql" in url:
-        return url.replace("+aiomysql", "+pymysql")
-    return url
-
-
-def get_async_database_url() -> str:
-    """Return an async DB URL for the runtime engine."""
-    url = settings.database_url
-    if "+pymysql" in url:
-        return url.replace("+pymysql", "+aiomysql")
-    return url
-
-
-# Create async engine
-engine = create_async_engine(
-    get_async_database_url(),
+# Create engine
+engine = create_engine(
+    settings.database_url,
     echo=settings.database_echo,
     pool_pre_ping=True,  # Validates connections before using them
     pool_size=10,
     max_overflow=20,
 )
 
-SessionLocal = async_sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine,
-    expire_on_commit=False,
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+def get_db() -> Generator[Session, None, None]:
     """Database session dependency for FastAPI."""
-    async with SessionLocal() as db:
+    db = SessionLocal()
+    try:
         yield db
+    finally:
+        db.close()
 
 
 def init_db() -> None:
@@ -68,7 +48,9 @@ def init_db() -> None:
     alembic_ini_path = os.path.join(current_dir, "alembic.ini")
 
     alembic_cfg = Config(alembic_ini_path)
-    alembic_cfg.set_main_option("sqlalchemy.url", get_sync_database_url())
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+
+    engine.dispose()
 
     max_retries = 10
     retry_interval = 5

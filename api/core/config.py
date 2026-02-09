@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # Database Settings
     # ==========================================================================
     # Pointing to the 'mariadb' service in docker-compose
-    database_url: str = "mysql+aiomysql://poundcake:poundcake@mariadb:3306/poundcake"
+    database_url: str = "mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake"
     database_echo: bool = False
 
     # ==========================================================================
@@ -139,15 +139,6 @@ class Settings(BaseSettings):
     mappings_path: Path = Field(default=Path("config/mappings"))
     default_timeout: int = 300
     max_concurrent_remediations: int = 10
-    httpx_timeout_seconds: int = 30
-    httpx_connect_timeout_seconds: int = 10
-    httpx_read_timeout_seconds: int = 30
-    httpx_write_timeout_seconds: int = 30
-    httpx_max_connections: int = 100
-    httpx_max_keepalive: int = 20
-    httpx_retries: int = 2
-    httpx_retry_backoff_seconds: float = 0.5
-    httpx_retry_statuses: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
 
     log_level: str = "INFO"
     log_format: str = "console"  # Change to 'json' for production/Helm

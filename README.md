@@ -13,8 +13,8 @@ sequenceDiagram
     participant AM as Alertmanager
     participant API as PoundCake API
     participant DB as MariaDB
-    participant OD as Prep Chef
-    participant OE as Chef
+    participant OD as Oven Dispatcher
+    participant OE as Oven Executor
     participant ST2 as StackStorm
     participant T as Timer
 
@@ -23,13 +23,13 @@ sequenceDiagram
     API->>DB: Store Alert (processing_status: new)
     API-->>AM: 202 Accepted
 
-    Note over DB, OD: Phase 2: Dispatching (prep-chef)
+    Note over DB, OD: Phase 2: Dispatching (oven_service)
     OD->>API: GET /api/v1/alerts?processing_status=new
     OD->>API: POST /api/v1/ovens/bake/{alert_id} (with X-Request-ID)
     API->>DB: Create Oven tasks from Recipe Ingredients
     API->>DB: Update Alert (processing_status: processing)
 
-    Note over DB, OE: Phase 3: Execution (chef)
+    Note over DB, OE: Phase 3: Execution (oven)
     OE->>API: GET /api/v1/ovens?processing_status=new (returns OvenDetailResponse with ingredient data)
     OE->>API: POST /api/v1/stackstorm/execute (st2_action + parameters from ingredient)
     API->>ST2: POST /v1/executions (Start Action)
@@ -49,8 +49,8 @@ sequenceDiagram
 ### Components
 
 - **PoundCake API**: FastAPI entry point for webhooks, recipe management, and StackStorm bridge. Returns 202 Accepted for async processing.
-- **Prep Chef (prep-chef)**: Background service that polls for new alerts, matches them to recipes, and "bakes" them into oven tasks by creating one oven per ingredient.
-- **Chef (chef)**: Worker that polls for new oven tasks, respects is_blocking dependencies, and triggers StackStorm actions via the API bridge.
+- **Oven Dispatcher (oven-service)**: Background service that polls for new alerts, matches them to recipes, and "bakes" them into oven tasks by creating one oven per ingredient.
+- **Oven Executor (oven)**: Worker that polls for new oven tasks, respects is_blocking dependencies, and triggers StackStorm actions via the API bridge.
 - **Timer**: Monitor service that polls StackStorm for execution completion status and updates oven records with final results.
 - **StackStorm (st2)**: The automation engine that performs the actual remediation actions (accessed via PoundCake API bridge).
 - **MariaDB**: Central state store for alerts, recipes, ingredients, and oven task tracking with full audit trail via req_id.
@@ -70,14 +70,14 @@ sequenceDiagram
          │ Polls API
          ↓
 ┌──────────────────┐
-│ prep-chef        │  Dispatcher: alerts → ovens
-│ (prep_chef.py)   │
+│ oven-service     │  Dispatcher: alerts → ovens
+│ (oven_service.py)│
 └────────┬─────────┘
          │ Polls API
          ↓
 ┌──────────────────┐    ┌──────────────┐
-│  chef            │───→│  StackStorm  │
-│  (chef.py)       │    │  (Full Stack)│
+│  oven            │───→│  StackStorm  │
+│  (oven.py)       │    │  (Full Stack)│
 └────────┬─────────┘    └──────────────┘
          │                      ↑
          ↓                      │
@@ -105,18 +105,20 @@ docker compose up -d
 curl http://localhost:8000/api/v1/health
 
 # View logs
-docker compose logs -f api prep-chef chef timer
+docker compose logs -f api oven-service oven timer
 ```
 
 Containers:
 - **poundcake-api** - API server (webhooks, recipes, ST2 bridge)
-- **poundcake-prep-chef** - Dispatcher (alerts → ovens)
-- **poundcake-chef** - Executor (ovens → ST2 actions)
+- **poundcake-ui** - Web UI (nginx-based frontend)
+- **poundcake-oven-service** - Dispatcher (alerts → ovens)
+- **poundcake-oven** - Executor (ovens → ST2 actions)
 - **poundcake-timer** - Monitor (tracks completions)
 - Plus: MariaDB, StackStorm (MongoDB, Redis, RabbitMQ, API, Auth, Workers)
 
 Services:
 - PoundCake API: http://localhost:8000
+- PoundCake UI: http://localhost:8080
 - API Documentation: http://localhost:8000/docs
 - StackStorm API: http://localhost:9101 (requires ST2_API_KEY)
 - RabbitMQ Management: http://localhost:15672 (guest/guest)
@@ -169,7 +171,7 @@ The `baseline` Pod Security Standard is appropriate for common workloads includi
 - **Service Separation**: Dedicated containers for dispatching, execution, and monitoring
 - **Clean Startup**: Health checks with startup waits, no noisy error logs
 - **API Bridge**: Unified StackStorm access through PoundCake API (no direct ST2 credentials in workers)
-- **Health Checks**: Built-in endpoint for container health probes
+- **Health Checks**: Built-in endpoints for container health and readiness probes
 - **API Documentation**: Interactive Swagger docs at `/docs`
 
 ## Database Setup
@@ -178,13 +180,13 @@ PoundCake uses Alembic for database schema management.
 
 ```bash
 # Run migrations (creates all tables)
-python api/migrate.py upgrade
+python scripts/migrate.py upgrade
 
 # Check current version
-python api/migrate.py current
+python scripts/migrate.py current
 
 # Create new migration
-python api/migrate.py create "description"
+python scripts/migrate.py create "description"
 ```
 
 See [docs/DATABASE_MIGRATIONS.md](docs/DATABASE_MIGRATIONS.md) for details.
@@ -208,14 +210,13 @@ POUNDCAKE_LOG_LEVEL=INFO
 POUNDCAKE_APP_VERSION=1.0.0
 ```
 
-**Oven Services (prep-chef, chef, timer):**
+**Oven Services (oven-service, oven, timer):**
 ```bash
 # API endpoint
 POUNDCAKE_API_URL=http://api:8000
 
 # Polling intervals
-OVEN_INTERVAL=5          # Prep Chef poll interval (seconds)
-OVEN_POLL_INTERVAL=5     # Chef poll interval (seconds)
+OVEN_INTERVAL=5     # Dispatcher and executor poll interval (seconds)
 TIMER_INTERVAL=10   # Timer poll interval (seconds)
 
 # Logging
@@ -292,21 +293,22 @@ curl -X POST http://localhost:8000/api/v1/recipes/ \
   }'
 ```
 
-Recipe matching: Alert's `group_name` field matches Recipe's `name` field. By default, `group_name` is set from `labels.alertname` in the Alertmanager payload.
+Recipe matching: Alert's `group_name` field matches Recipe's `name` field.
 
 ## API Endpoints
 
 ### Core Endpoints
 
 - `POST /api/v1/webhook` - Receive Alertmanager webhooks (returns 202 Accepted)
-- `GET /api/v1/alerts` - Query alerts with filters (processing_status, req_id, alert_name, etc.)
+- `GET /api/v1/alerts` - Query alerts with filters (processing_status, req_id, etc.)
 - `GET /api/v1/alerts/{id}` - Get specific alert
-- `PUT /api/v1/alerts/{id}` - Update alert status
+- `PATCH /api/v1/alerts/{id}` - Update alert status
 
 ### Oven (Task) Management
 
 - `POST /api/v1/ovens/bake/{alert_id}` - Create ovens from recipe ingredients
 - `GET /api/v1/ovens` - List ovens with filters (processing_status, req_id, etc.)
+- `GET /api/v1/ovens/{id}` - Get specific oven (includes ingredient details)
 - `PATCH /api/v1/ovens/{id}` - Update oven status
 - `PUT /api/v1/ovens/{id}` - Update oven (alternative to PATCH)
 
@@ -315,19 +317,19 @@ Recipe matching: Alert's `group_name` field matches Recipe's `name` field. By de
 - `POST /api/v1/recipes/` - Create recipe with ingredients
 - `GET /api/v1/recipes/` - List all recipes
 - `GET /api/v1/recipes/{id}` - Get recipe by ID (includes ingredients)
-- `GET /api/v1/recipes/by-name/{recipe_name}` - Get recipe by name
+- `PUT /api/v1/recipes/{id}` - Update recipe
 - `DELETE /api/v1/recipes/{id}` - Delete recipe
 
 ### StackStorm Bridge
 
 - `POST /api/v1/stackstorm/execute` - Execute ST2 action (proxy to StackStorm)
+- `GET /api/v1/stackstorm/executions/{id}` - Get execution status
 
 ### Health & Monitoring
 
 - `GET /api/v1/health` - Service health check (includes ST2 status)
-- `GET /api/v1/stats` - System statistics
-- `POST /api/v1/auth/login` - Create session (when auth is enabled)
-- `GET /metrics` - Prometheus metrics (when enabled)
+- `GET /api/v1/sessions` - List active sessions
+- `DELETE /api/v1/sessions/{session_id}` - Delete session
 
 See [docs/API_ENDPOINTS.md](docs/API_ENDPOINTS.md) for complete API documentation.
 
@@ -345,10 +347,10 @@ pre_heat creates Alert (processing_status="new")
 Return 202 Accepted immediately (< 10ms)
 ```
 
-### 2. Alert Dispatching (prep-chef)
+### 2. Alert Dispatching (oven-service)
 
 ```
-prep-chef polls: GET /alerts?processing_status=new
+oven-service polls: GET /alerts?processing_status=new
     ↓
 For each alert:
   - Match alert.group_name to recipe.name
@@ -357,10 +359,10 @@ For each alert:
   - Updates alert (processing_status="processing")
 ```
 
-### 3. Task Execution (chef)
+### 3. Task Execution (oven)
 
 ```
-chef polls: GET /ovens?processing_status=new
+oven polls: GET /ovens?processing_status=new
     ↓
 For each oven (respecting is_blocking dependencies):
   - Extract ingredient.st2_action and parameters
@@ -441,9 +443,8 @@ pip install -r requirements.txt
 # Run unit tests
 pytest tests/
 
-# Test specific files
-pytest tests/test_api_health.py
-pytest tests/test_models.py
+# Test specific file
+pytest tests/test_api.py
 
 # With coverage
 pytest --cov=api tests/
@@ -456,6 +457,7 @@ pytest --cov=api tests/
 - [Database Migrations](docs/DATABASE_MIGRATIONS.md) - Alembic migration guide
 - [Alembic Quick Reference](docs/ALEMBIC_QUICKREF.md) - Common migration commands
 - [CLI Documentation](docs/CLI.md) - Command-line interface
+- [StackStorm Integration](docs/STACKSTORM_INTEGRATION.md) - Integration details
 - [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
 ## Development
@@ -467,7 +469,7 @@ pytest --cov=api tests/
 pip install -e ".[dev]"
 
 # Run migrations
-python api/migrate.py upgrade
+python scripts/migrate.py upgrade
 
 # Start development server
 uvicorn api.main:app --reload
@@ -487,9 +489,10 @@ poundcake/
 │   ├── schemas/           # Pydantic schemas (request/response models)
 │   ├── services/          # Business logic (pre_heat, stackstorm_service)
 │   └── scripts/           # Entrypoint scripts (entrypoint-auto-migrate.sh)
-├── kitchen/               # Background workers
-│   ├── prep_chef.py       # Dispatcher (alerts → ovens)
-│   ├── chef.py            # Executor (ovens → stackstorm)
+├── oven/                  # Oven services
+│   ├── oven_service.py    # Dispatcher (alerts → ovens)
+│   └── oven.py            # Executor (ovens → stackstorm)
+├── timer/                 # Monitoring service
 │   └── timer.py           # Status monitor (tracks ST2 completions)
 ├── alembic/               # Database migrations
 │   └── versions/          # Migration scripts (2026_02_03_1600_initial_schema.py)
@@ -502,8 +505,6 @@ poundcake/
 ├── tests/                 # Test files
 │   ├── test_webhook.sh    # Webhook integration test
 │   └── test_flow.sh       # End-to-end flow test
-│   ├── test_models.py     # Model unit tests
-│   └── test_api_health.py # API health unit tests
 ├── examples/              # Example recipes
 ├── docker-compose.yml     # Full stack deployment
 ├── Dockerfile             # Multi-service container image
@@ -524,7 +525,7 @@ poundcake/
 StackStorm requires:
 - Redis for coordination and locking
 - RabbitMQ for task distribution
-- MongoDB for data storage
+- MySQL/MariaDB for data storage
 
 ## Configuration Examples
 
@@ -600,18 +601,18 @@ tasks:
 mysqldump -u poundcake -p poundcake > backup.sql
 
 # Test on staging
-python api/migrate.py upgrade
+python scripts/migrate.py upgrade
 
 # Apply to production
-python api/migrate.py upgrade
+python scripts/migrate.py upgrade
 ```
 
 ### Application Upgrades
 
 ```bash
 # Docker Compose
-docker compose pull
-docker compose up -d
+docker-compose pull
+docker-compose up -d
 
 # Kubernetes
 helm upgrade poundcake poundcake/poundcake --version <new-version>
@@ -619,46 +620,13 @@ helm upgrade poundcake poundcake/poundcake --version <new-version>
 
 ## Troubleshooting
 
-## Reading Logs
-
-PoundCake logs are structured and include consistent fields so you can trace a request end‑to‑end.
-
-**Key fields**
-- `req_id`: Correlates a webhook through alerts → ovens → StackStorm execution
-- `method`, `status_code`, `latency_ms`: HTTP diagnostics
-- `alert_id`, `oven_id`, `recipe_name`: Domain identifiers for the workflow
-
-**Follow a single alert end‑to‑end**
-```bash
-# 1) Find the req_id from the webhook response header
-curl -i -X POST http://localhost:8000/api/v1/webhook -H "Content-Type: application/json" -d @payload.json
-
-# 2) Tail logs and filter by req_id
-docker compose logs -f api prep-chef chef timer | grep "<REQ_ID>"
-```
-
-**Service‑specific views**
-```bash
-# API (webhook, recipes, alerts, ovens)
-docker compose logs -f api
-
-# Prep Chef (alert → ovens)
-docker compose logs -f prep-chef
-
-# Chef (ovens → StackStorm)
-docker compose logs -f chef
-
-# Timer (execution completion)
-docker compose logs -f timer
-```
-
 ### Common Issues
 
 **Issue**: Webhook returns 500 error
 **Solution**: Check database connectivity and StackStorm API availability
 
 **Issue**: Alerts not processing
-**Solution**: Check alert `processing_status` and prep-chef/chef logs to ensure alerts are being baked and ovens are being executed
+**Solution**: Call `POST /api/v1/alerts/process` or check processing_status
 
 **Issue**: StackStorm executions failing
 **Solution**: Verify Redis and RabbitMQ are running and accessible

@@ -6,8 +6,7 @@
 #
 """Pre-heat service - Creates new alerts or increments existing ones."""
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from dateutil import parser as dateutil_parser
 from api.models.models import Alert
@@ -16,7 +15,7 @@ from api.core.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
+def pre_heat(payload: dict, db: Session, req_id: str) -> dict:
     """
     Intake Handler: Solely responsible for Alert table management.
 
@@ -55,13 +54,14 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
         },
     )
 
-    query = (
-        select(Alert)
-        .where(Alert.fingerprint == fingerprint, Alert.processing_status != "complete")
+    existing = (
+        db.query(Alert)
+        .filter(
+            Alert.fingerprint == fingerprint, Alert.processing_status != "complete"
+        )  # pyright: ignore[reportOptionalCall]
         .order_by(Alert.created_at.desc())
+        .first()
     )
-    result = await db.execute(query)
-    existing = result.scalars().first()
 
     if alert_status == "firing":
         if not existing:
@@ -92,8 +92,8 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                 counter=1,
             )
             db.add(new_alert)
-            await db.commit()
-            await db.refresh(new_alert)
+            db.commit()
+            db.refresh(new_alert)
 
             logger.info(
                 "New alert created",
@@ -108,7 +108,7 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
         else:
             # Alert already exists, increment counter
             existing.counter += 1
-            await db.commit()
+            db.commit()
 
             logger.info(
                 "Alert counter incremented",
@@ -119,7 +119,7 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
     elif alert_status == "resolved" and existing:
         existing.alert_status = "resolved"
         existing.ends_at = alert_data.get("endsAt")
-        await db.commit()
+        db.commit()
 
         logger.info("Alert resolved", extra={"req_id": req_id, "alert_id": existing.id})
         return {"status": "resolved", "alert_id": existing.id}

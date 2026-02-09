@@ -18,7 +18,6 @@ import httpx
 
 from api.core.config import get_settings
 from api.core.httpx_utils import silence_httpx
-from api.core.http_client import request_with_retry
 
 logger = get_logger(__name__)
 SYSTEM_REQ_ID = "SYSTEM-PROM"
@@ -40,44 +39,45 @@ class PrometheusClient:
             List of alert rule groups with their rules
         """
         try:
-            start_time = time.time()
-            response = await request_with_retry(
-                "GET",
-                f"{self.base_url}/api/v1/rules",
-                params={"type": "alert"},
-                timeout=httpx.Timeout(30),
+            async with httpx.AsyncClient(
                 verify=self.verify_ssl,
-            )
-            latency_ms = int((time.time() - start_time) * 1000)
+                timeout=httpx.Timeout(30),
+            ) as client:
+                start_time = time.time()
+                response = await client.get(
+                    f"{self.base_url}/api/v1/rules",
+                    params={"type": "alert"},
+                )
+                latency_ms = int((time.time() - start_time) * 1000)
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "success":
-                    groups = data.get("data", {}).get("groups", [])
-                    return self._flatten_rules(groups)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "success":
+                        groups = data.get("data", {}).get("groups", [])
+                        return self._flatten_rules(groups)
+                    else:
+                        logger.error(
+                            "Prometheus API returned error",
+                            extra={
+                                "req_id": SYSTEM_REQ_ID,
+                                "method": "GET",
+                                "status_code": response.status_code,
+                                "latency_ms": latency_ms,
+                                "error": data.get("error"),
+                            },
+                        )
+                        return []
                 else:
                     logger.error(
-                        "Prometheus API returned error",
+                        "Failed to fetch Prometheus rules",
                         extra={
                             "req_id": SYSTEM_REQ_ID,
                             "method": "GET",
                             "status_code": response.status_code,
                             "latency_ms": latency_ms,
-                            "error": data.get("error"),
                         },
                     )
                     return []
-            else:
-                logger.error(
-                    "Failed to fetch Prometheus rules",
-                    extra={
-                        "req_id": SYSTEM_REQ_ID,
-                        "method": "GET",
-                        "status_code": response.status_code,
-                        "latency_ms": latency_ms,
-                    },
-                )
-                return []
         except Exception as e:
             logger.error(
                 "Error fetching Prometheus rules",
@@ -120,42 +120,41 @@ class PrometheusClient:
     async def get_rule_groups(self) -> list[dict[str, Any]]:
         """Get all rule groups with their full structure."""
         try:
-            start_time = time.time()
-            response = await request_with_retry(
-                "GET",
-                f"{self.base_url}/api/v1/rules",
-                timeout=httpx.Timeout(30),
+            async with httpx.AsyncClient(
                 verify=self.verify_ssl,
-            )
-            latency_ms = int((time.time() - start_time) * 1000)
+                timeout=httpx.Timeout(30),
+            ) as client:
+                start_time = time.time()
+                response = await client.get(f"{self.base_url}/api/v1/rules")
+                latency_ms = int((time.time() - start_time) * 1000)
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "success":
-                    return data.get("data", {}).get("groups", [])
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "success":
+                        return data.get("data", {}).get("groups", [])
+                    else:
+                        logger.error(
+                            "Prometheus API returned error",
+                            extra={
+                                "req_id": SYSTEM_REQ_ID,
+                                "method": "GET",
+                                "status_code": response.status_code,
+                                "latency_ms": latency_ms,
+                                "error": data.get("error"),
+                            },
+                        )
+                        return []
                 else:
                     logger.error(
-                        "Prometheus API returned error",
+                        "Failed to fetch Prometheus rule groups",
                         extra={
                             "req_id": SYSTEM_REQ_ID,
                             "method": "GET",
                             "status_code": response.status_code,
                             "latency_ms": latency_ms,
-                            "error": data.get("error"),
                         },
                     )
                     return []
-            else:
-                logger.error(
-                    "Failed to fetch Prometheus rule groups",
-                    extra={
-                        "req_id": SYSTEM_REQ_ID,
-                        "method": "GET",
-                        "status_code": response.status_code,
-                        "latency_ms": latency_ms,
-                    },
-                )
-                return []
         except Exception as e:
             logger.error(
                 "Error fetching Prometheus rule groups",
@@ -171,20 +170,19 @@ class PrometheusClient:
         """Check if Prometheus is reachable."""
         try:
             with silence_httpx():
-                start_time = time.time()
-                response = await request_with_retry(
-                    "GET",
-                    f"{self.base_url}/-/healthy",
-                    timeout=httpx.Timeout(10),
+                async with httpx.AsyncClient(
                     verify=self.verify_ssl,
-                )
-                latency_ms = int((time.time() - start_time) * 1000)
-                return {
-                    "status": "healthy" if response.status_code == 200 else "unhealthy",
-                    "url": self.base_url,
-                    "status_code": response.status_code,
-                    "latency_ms": latency_ms,
-                }
+                    timeout=httpx.Timeout(10),
+                ) as client:
+                    start_time = time.time()
+                    response = await client.get(f"{self.base_url}/-/healthy")
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    return {
+                        "status": "healthy" if response.status_code == 200 else "unhealthy",
+                        "url": self.base_url,
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                    }
         except Exception as e:
             return {
                 "status": "unhealthy",
@@ -212,45 +210,44 @@ class PrometheusClient:
                 else f"{self.base_url}/-/reload"
             )
 
-            start_time = time.time()
-            response = await request_with_retry(
-                "POST",
-                reload_url,
-                timeout=httpx.Timeout(30),
+            async with httpx.AsyncClient(
                 verify=self.verify_ssl,
-            )
-            latency_ms = int((time.time() - start_time) * 1000)
+                timeout=httpx.Timeout(30),
+            ) as client:
+                start_time = time.time()
+                response = await client.post(reload_url)
+                latency_ms = int((time.time() - start_time) * 1000)
 
-            if response.status_code == 200:
-                logger.info(
-                    "Prometheus configuration reloaded successfully",
-                    extra={
-                        "req_id": SYSTEM_REQ_ID,
-                        "method": "POST",
-                        "status_code": response.status_code,
-                        "latency_ms": latency_ms,
-                    },
-                )
-                return {
-                    "status": "success",
-                    "message": "Prometheus configuration reloaded",
-                }
-            else:
-                logger.error(
-                    "Failed to reload Prometheus",
-                    extra={
-                        "req_id": SYSTEM_REQ_ID,
-                        "method": "POST",
-                        "status_code": response.status_code,
-                        "latency_ms": latency_ms,
-                        "error": response.text,
-                    },
-                )
-                return {
-                    "status": "error",
-                    "message": f"Failed to reload: {response.status_code}",
-                    "detail": response.text,
-                }
+                if response.status_code == 200:
+                    logger.info(
+                        "Prometheus configuration reloaded successfully",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "POST",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
+                        },
+                    )
+                    return {
+                        "status": "success",
+                        "message": "Prometheus configuration reloaded",
+                    }
+                else:
+                    logger.error(
+                        "Failed to reload Prometheus",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "POST",
+                            "status_code": response.status_code,
+                            "latency_ms": latency_ms,
+                            "error": response.text,
+                        },
+                    )
+                    return {
+                        "status": "error",
+                        "message": f"Failed to reload: {response.status_code}",
+                        "detail": response.text,
+                    }
         except Exception as e:
             logger.error(
                 "Error reloading Prometheus",
@@ -268,42 +265,43 @@ class PrometheusClient:
     async def get_metric_names(self) -> list[str]:
         """Fetch all available metric names from Prometheus."""
         try:
-            start_time = time.time()
-            response = await request_with_retry(
-                "GET",
-                f"{self.base_url}/api/v1/label/__name__/values",
-                timeout=httpx.Timeout(30),
+            async with httpx.AsyncClient(
                 verify=self.verify_ssl,
-            )
-            latency_ms = int((time.time() - start_time) * 1000)
+                timeout=httpx.Timeout(30),
+            ) as client:
+                start_time = time.time()
+                response = await client.get(
+                    f"{self.base_url}/api/v1/label/__name__/values",
+                )
+                latency_ms = int((time.time() - start_time) * 1000)
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "success":
-                    return data.get("data", [])
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") == "success":
+                        return data.get("data", [])
+                    else:
+                        logger.error(
+                            "Prometheus API returned error",
+                            extra={
+                                "req_id": SYSTEM_REQ_ID,
+                                "method": "GET",
+                                "status_code": response.status_code,
+                                "latency_ms": latency_ms,
+                                "error": data.get("error"),
+                            },
+                        )
+                        return []
                 else:
                     logger.error(
-                        "Prometheus API returned error",
+                        "Failed to fetch metric names",
                         extra={
                             "req_id": SYSTEM_REQ_ID,
                             "method": "GET",
                             "status_code": response.status_code,
                             "latency_ms": latency_ms,
-                            "error": data.get("error"),
                         },
                     )
                     return []
-            else:
-                logger.error(
-                    "Failed to fetch metric names",
-                    extra={
-                        "req_id": SYSTEM_REQ_ID,
-                        "method": "GET",
-                        "status_code": response.status_code,
-                        "latency_ms": latency_ms,
-                    },
-                )
-                return []
         except Exception as e:
             logger.error(
                 "Error fetching metric names",
@@ -318,38 +316,34 @@ class PrometheusClient:
             metric: Optional metric name to get labels for a specific metric
         """
         try:
-            if metric:
-                start_time = time.time()
-                response = await request_with_retry(
-                    "GET",
-                    f"{self.base_url}/api/v1/series",
-                    params={"match[]": metric},
-                    timeout=httpx.Timeout(30),
-                    verify=self.verify_ssl,
-                )
-                latency_ms = int((time.time() - start_time) * 1000)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("status") == "success":
-                        label_names = set()
-                        for series in data.get("data", []):
-                            label_names.update(series.keys())
-                        label_names.discard("__name__")
-                        return sorted(list(label_names))
-            else:
-                start_time = time.time()
-                response = await request_with_retry(
-                    "GET",
-                    f"{self.base_url}/api/v1/labels",
-                    timeout=httpx.Timeout(30),
-                    verify=self.verify_ssl,
-                )
-                latency_ms = int((time.time() - start_time) * 1000)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("status") == "success":
-                        labels = data.get("data", [])
-                        return [label for label in labels if label != "__name__"]
+            async with httpx.AsyncClient(
+                verify=self.verify_ssl,
+                timeout=httpx.Timeout(30),
+            ) as client:
+                if metric:
+                    start_time = time.time()
+                    response = await client.get(
+                        f"{self.base_url}/api/v1/series",
+                        params={"match[]": metric},
+                    )
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("status") == "success":
+                            label_names = set()
+                            for series in data.get("data", []):
+                                label_names.update(series.keys())
+                            label_names.discard("__name__")
+                            return sorted(list(label_names))
+                else:
+                    start_time = time.time()
+                    response = await client.get(f"{self.base_url}/api/v1/labels")
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("status") == "success":
+                            labels = data.get("data", [])
+                            return [label for label in labels if label != "__name__"]
 
                 logger.error(
                     "Failed to fetch label names",
@@ -380,37 +374,35 @@ class PrometheusClient:
             metric: Optional metric name to filter values
         """
         try:
-            if metric:
-                start_time = time.time()
-                response = await request_with_retry(
-                    "GET",
-                    f"{self.base_url}/api/v1/series",
-                    params={"match[]": metric},
-                    timeout=httpx.Timeout(30),
-                    verify=self.verify_ssl,
-                )
-                latency_ms = int((time.time() - start_time) * 1000)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("status") == "success":
-                        values = set()
-                        for series in data.get("data", []):
-                            if label_name in series:
-                                values.add(series[label_name])
-                        return sorted(list(values))
-            else:
-                start_time = time.time()
-                response = await request_with_retry(
-                    "GET",
-                    f"{self.base_url}/api/v1/label/{label_name}/values",
-                    timeout=httpx.Timeout(30),
-                    verify=self.verify_ssl,
-                )
-                latency_ms = int((time.time() - start_time) * 1000)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("status") == "success":
-                        return data.get("data", [])
+            async with httpx.AsyncClient(
+                verify=self.verify_ssl,
+                timeout=httpx.Timeout(30),
+            ) as client:
+                if metric:
+                    start_time = time.time()
+                    response = await client.get(
+                        f"{self.base_url}/api/v1/series",
+                        params={"match[]": metric},
+                    )
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("status") == "success":
+                            values = set()
+                            for series in data.get("data", []):
+                                if label_name in series:
+                                    values.add(series[label_name])
+                            return sorted(list(values))
+                else:
+                    start_time = time.time()
+                    response = await client.get(
+                        f"{self.base_url}/api/v1/label/{label_name}/values",
+                    )
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("status") == "success":
+                            return data.get("data", [])
 
                 logger.error(
                     "Failed to fetch label values",
