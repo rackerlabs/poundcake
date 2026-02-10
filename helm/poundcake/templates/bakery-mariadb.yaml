@@ -1,0 +1,122 @@
+{{- if and .Values.bakery.enabled .Values.bakery.database.createServer .Values.mariadbOperator.enabled }}
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: MariaDB
+metadata:
+  name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+  namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bakery-database
+spec:
+  rootPasswordSecretKeyRef:
+    name: {{ .Values.mariadbOperator.server.rootPasswordSecret | default (printf "%s-bakery-mariadb-root" (include "poundcake.fullname" .)) }}
+    key: {{ .Values.mariadbOperator.server.rootPasswordSecretKey | default "password" }}
+
+  image: {{ .Values.mariadbOperator.server.image.repository }}:{{ .Values.mariadbOperator.server.image.tag }}
+  imagePullPolicy: {{ .Values.mariadbOperator.server.image.pullPolicy }}
+
+  port: 3306
+
+  replicas: {{ .Values.mariadbOperator.server.replicas }}
+
+  storage:
+    size: {{ .Values.mariadbOperator.server.storage.size }}
+    {{- if .Values.mariadbOperator.server.storage.storageClassName }}
+    storageClassName: {{ .Values.mariadbOperator.server.storage.storageClassName }}
+    {{- end }}
+
+  resources:
+    {{- toYaml .Values.mariadbOperator.server.resources | nindent 4 }}
+
+  myCnf: |
+    [mariadb]
+    bind-address=*
+    default_storage_engine=InnoDB
+    binlog_format=row
+    innodb_autoinc_lock_mode=2
+    max_allowed_packet=256M
+    character-set-server=utf8mb4
+    collation-server=utf8mb4_unicode_ci
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.mariadbOperator.server.rootPasswordSecret | default (printf "%s-bakery-mariadb-root" (include "poundcake.fullname" .)) }}
+  namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bakery-database
+type: Opaque
+data:
+  password: {{ .Values.mariadbOperator.server.rootPassword | default (randAlphaNum 32) | b64enc | quote }}
+
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: Database
+metadata:
+  name: {{ include "poundcake.fullname" . }}-bakery-db
+  namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bakery-database
+spec:
+  mariaDbRef:
+    name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+  name: {{ .Values.bakery.database.name }}
+  characterSet: utf8mb4
+  collate: utf8mb4_unicode_ci
+
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: User
+metadata:
+  name: {{ include "poundcake.fullname" . }}-bakery-user
+  namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bakery-database
+spec:
+  mariaDbRef:
+    name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+  name: {{ .Values.bakery.database.user.name }}
+  passwordSecretKeyRef:
+    name: {{ .Values.bakery.database.user.passwordSecret | default (printf "%s-bakery-db" (include "poundcake.fullname" .)) }}
+    key: {{ .Values.bakery.database.user.passwordSecretKey | default "password" }}
+  maxUserConnections: {{ .Values.bakery.database.user.maxUserConnections }}
+  host: "%"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.bakery.database.user.passwordSecret | default (printf "%s-bakery-db" (include "poundcake.fullname" .)) }}
+  namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bakery-database
+type: Opaque
+data:
+  password: {{ .Values.bakery.database.user.password | default (randAlphaNum 32) | b64enc | quote }}
+
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: Grant
+metadata:
+  name: {{ include "poundcake.fullname" . }}-bakery-grant
+  namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bakery-database
+spec:
+  mariaDbRef:
+    name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+  privileges:
+    - "ALL PRIVILEGES"
+  database: {{ .Values.bakery.database.name }}
+  table: "*"
+  username: {{ .Values.bakery.database.user.name }}
+  host: "%"
+  grantOption: false
+{{- end }}

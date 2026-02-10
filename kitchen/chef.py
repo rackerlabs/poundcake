@@ -28,7 +28,7 @@ SYSTEM_REQ_ID = "SYSTEM-CHEF"
 POLLER_RETRIES = get_settings().poller_http_retries
 
 
-def run_chef():
+def run_chef() -> None:
     """Main chef loop - polls for dishes and executes workflows."""
     wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger)
 

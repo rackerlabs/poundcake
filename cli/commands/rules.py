@@ -12,8 +12,8 @@ from typing import Optional
 import click
 import yaml
 
-from poundcake_cli.client import PoundCakeClient
-from poundcake_cli.utils import print_error, print_info, print_output, print_success
+from poundcake_cli.client import PoundCakeClient  # type: ignore[import-not-found]
+from poundcake_cli.utils import print_error, print_info, print_output, print_success  # type: ignore[import-not-found]
 
 
 @click.group()

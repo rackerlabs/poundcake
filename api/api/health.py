@@ -213,11 +213,11 @@ async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     recent = result.scalar() or 0
 
     return StatsResponse(
-        total_orders=total_orders,
+        total_alerts=total_alerts,
         total_recipes=total_recipes,
-        total_dishes=total_dishes,
-        orders_by_processing_status=orders_by_status,
-        orders_by_alert_status=orders_by_alert,
-        dishes_by_status=dishes_by_status,
-        recent_orders=recent,
+        total_executions=total_executions,
+        alerts_by_processing_status=alerts_by_processing_status,
+        alerts_by_alert_status=alerts_by_alert_status,
+        executions_by_status=executions_by_status,
+        recent_alerts=recent_alerts,
     )

@@ -28,7 +28,7 @@ SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
 POLLER_RETRIES = get_settings().poller_http_retries
 
 
-def prep_loop():
+def prep_loop() -> None:
     """Main prep chef loop - polls for new orders and triggers cooking."""
     wait_for_api(API_URL, SYSTEM_REQ_ID, logger)
     logger.info(
