@@ -86,13 +86,13 @@ def test_stats_endpoint(client):
 
     # Check all required fields
     required_fields = [
-        "total_orders",
+        "total_alerts",
         "total_recipes",
-        "total_dishes",
-        "orders_by_processing_status",
-        "orders_by_alert_status",
-        "dishes_by_status",
-        "recent_orders",
+        "total_executions",
+        "alerts_by_processing_status",
+        "alerts_by_alert_status",
+        "executions_by_status",
+        "recent_alerts",
     ]
     for field in required_fields:
         assert field in data, f"Missing field: {field}"
