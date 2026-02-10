@@ -789,9 +789,9 @@ bakery:
     messageRetentionHours: 24
     maxMessagesPerPoll: 100
 
-    # Adapter settings
-    adapterTimeoutSec: 30
-    adapterMaxRetries: 3
+    # Mixer settings
+    mixerTimeoutSec: 30
+    mixerMaxRetries: 3
 
   # ServiceNow configuration
   servicenow:
@@ -835,7 +835,7 @@ bakery:
 
   # Rackspace Core configuration
   rackspaceCore:
-    url: ""
+    url: "https://ws.core.rackspace.com"
     username: ""
     password: ""
     # Reference to existing secret

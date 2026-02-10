@@ -38,14 +38,17 @@ def check_database(db: Session) -> ComponentHealth:
         )
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    summary="Health check",
+    description=(
+        "Returns the health status of Bakery and its dependencies. "
+        "Used by Kubernetes liveness and readiness probes."
+    ),
+)
 async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
-    """
-    Health check endpoint.
-
-    Returns:
-        HealthResponse with overall health and component status
-    """
+    """Health check endpoint."""
     components: Dict[str, ComponentHealth] = {}
 
     # Check database

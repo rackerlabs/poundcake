@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Jira adapter for ticket management."""
+"""Jira mixer for ticket management."""
 
 from typing import Dict, Any
 import httpx
 
 from bakery.config import settings
-from bakery.adapters.base import BaseAdapter
+from bakery.mixer.base import BaseMixer
 
 
-class JiraAdapter(BaseAdapter):
-    """Adapter for Jira ticketing system."""
+class JiraMixer(BaseMixer):
+    """Mixer for Jira ticketing system."""
 
     def __init__(self) -> None:
-        """Initialize Jira adapter."""
+        """Initialize Jira mixer."""
         super().__init__()
         self.base_url = settings.jira_url
         self.username = settings.jira_username
         self.api_token = settings.jira_api_token
-        self.timeout = settings.adapter_timeout_sec
+        self.timeout = settings.mixer_timeout_sec
 
     async def process_request(
         self, action: str, data: Dict[str, Any]
@@ -47,6 +47,8 @@ class JiraAdapter(BaseAdapter):
                 return await self._close_issue(data)
             elif action == "comment":
                 return await self._add_comment(data)
+            elif action == "search":
+                return await self._search_issues(data)
             else:
                 return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -158,6 +160,51 @@ class JiraAdapter(BaseAdapter):
             response.raise_for_status()
 
             return {"success": True, "ticket_id": ticket_id}
+
+    async def _search_issues(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Search Jira issues using JQL.
+
+        Args:
+            data: Search parameters:
+                - jql: JQL query string (required)
+                - limit: Max results to return (default 20)
+                - offset: Starting offset for pagination (default 0)
+                - fields: List of fields to return (optional)
+        """
+        jql = data.get("jql")
+        if not jql:
+            return {"success": False, "error": "jql required for search"}
+
+        limit = data.get("limit", 20)
+        offset = data.get("offset", 0)
+        fields = data.get("fields")
+
+        payload: Dict[str, Any] = {
+            "jql": jql,
+            "maxResults": limit,
+            "startAt": offset,
+        }
+        if fields:
+            payload["fields"] = fields
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/rest/api/3/search",
+                auth=(self.username, self.api_token),
+                json=payload,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            return {
+                "success": True,
+                "data": {
+                    "results": result.get("issues", []),
+                    "count": len(result.get("issues", [])),
+                    "total": result.get("total", 0),
+                },
+            }
 
     async def validate_credentials(self) -> bool:
         """Validate Jira credentials."""

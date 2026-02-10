@@ -2,7 +2,7 @@
 """Pydantic schemas for Bakery API."""
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
@@ -10,13 +10,35 @@ from pydantic import BaseModel, Field
 class TicketRequestBase(BaseModel):
     """Base schema for ticket requests."""
 
-    correlation_id: str = Field(..., description="Unique request identifier")
-    adapter_type: str = Field(
+    correlation_id: str = Field(
         ...,
-        description="servicenow, jira, github, pagerduty, rackspace_core",
+        description="Unique request identifier used to correlate requests with responses",
+        json_schema_extra={"examples": ["550e8400-e29b-41d4-a716-446655440000"]},
     )
-    action: str = Field(..., description="create, update, close, comment, etc")
-    request_data: Dict[str, Any] = Field(..., description="Adapter-specific payload")
+    mixer_type: str = Field(
+        ...,
+        description="Target ticketing system",
+        json_schema_extra={"examples": ["servicenow"]},
+    )
+    action: str = Field(
+        ...,
+        description="Operation to perform on the ticketing system",
+        json_schema_extra={"examples": ["create"]},
+    )
+    request_data: Dict[str, Any] = Field(
+        ...,
+        description="Mixer-specific payload (varies by mixer_type and action)",
+        json_schema_extra={
+            "examples": [
+                {
+                    "title": "Server disk full",
+                    "description": "Root partition at 95%",
+                    "urgency": "2",
+                    "impact": "2",
+                }
+            ]
+        },
+    )
 
 
 class TicketRequestCreate(TicketRequestBase):
@@ -45,7 +67,7 @@ class MessageBase(BaseModel):
     """Base schema for messages."""
 
     correlation_id: str
-    adapter_type: str
+    mixer_type: str
     status: str
     ticket_id: Optional[str] = None
     response_data: Optional[Dict[str, Any]] = None
@@ -105,3 +127,33 @@ class SuccessResponse(BaseModel):
 
     message: str
     data: Optional[Dict[str, Any]] = None
+
+
+# Mixer Schemas
+class MixerInfo(BaseModel):
+    """Information about a single mixer."""
+
+    mixer_type: str = Field(..., description="Mixer identifier")
+    actions: List[str] = Field(
+        ..., description="Supported actions for this mixer"
+    )
+    configured: bool = Field(
+        ..., description="Whether credentials are configured (not necessarily valid)"
+    )
+
+
+class MixerListResponse(BaseModel):
+    """Response for listing available mixers."""
+
+    mixers: List[MixerInfo]
+    count: int = Field(..., description="Number of registered mixers")
+
+
+class MixerValidateResponse(BaseModel):
+    """Response for mixer credential validation."""
+
+    mixer_type: str = Field(..., description="Mixer that was validated")
+    valid: bool = Field(
+        ..., description="Whether credentials are valid and connectivity works"
+    )
+    message: str = Field(..., description="Human-readable validation result")

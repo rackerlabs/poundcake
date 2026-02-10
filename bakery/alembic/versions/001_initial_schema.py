@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("correlation_id", sa.String(length=255), nullable=False),
         sa.Column("ticket_id", sa.String(length=255), nullable=True),
-        sa.Column("adapter_type", sa.String(length=50), nullable=False),
+        sa.Column("mixer_type", sa.String(length=50), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("response_data", mysql.JSON(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
@@ -44,7 +44,7 @@ def upgrade() -> None:
         "ticket_requests",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("correlation_id", sa.String(length=255), nullable=False),
-        sa.Column("adapter_type", sa.String(length=50), nullable=False),
+        sa.Column("mixer_type", sa.String(length=50), nullable=False),
         sa.Column("action", sa.String(length=50), nullable=False),
         sa.Column("request_data", mysql.JSON(), nullable=False),
         sa.Column("ticket_id", sa.String(length=255), nullable=True),
@@ -60,24 +60,24 @@ def upgrade() -> None:
         mysql_comment="Log of all ticket requests processed by Bakery",
     )
 
-    # Create adapter_configs table
+    # Create mixer_configs table
     op.create_table(
-        "adapter_configs",
+        "mixer_configs",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("adapter_type", sa.String(length=50), nullable=False),
+        sa.Column("mixer_type", sa.String(length=50), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False),
         sa.Column("config_data", mysql.JSON(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("adapter_type"),
-        sa.Index("ix_adapter_configs_id", "id"),
-        mysql_comment="Adapter-specific configuration",
+        sa.UniqueConstraint("mixer_type"),
+        sa.Index("ix_mixer_configs_id", "id"),
+        mysql_comment="Mixer-specific configuration",
     )
 
 
 def downgrade() -> None:
     """Drop all tables."""
-    op.drop_table("adapter_configs")
+    op.drop_table("mixer_configs")
     op.drop_table("ticket_requests")
     op.drop_table("messages")

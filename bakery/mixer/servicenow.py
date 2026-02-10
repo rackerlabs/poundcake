@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""ServiceNow adapter for ticket management."""
+"""ServiceNow mixer for ticket management."""
 
 from typing import Dict, Any
 import httpx
 
 from bakery.config import settings
-from bakery.adapters.base import BaseAdapter
+from bakery.mixer.base import BaseMixer
 
 
-class ServiceNowAdapter(BaseAdapter):
-    """Adapter for ServiceNow ticketing system."""
+class ServiceNowMixer(BaseMixer):
+    """Mixer for ServiceNow ticketing system."""
 
     def __init__(self) -> None:
-        """Initialize ServiceNow adapter."""
+        """Initialize ServiceNow mixer."""
         super().__init__()
         self.base_url = settings.servicenow_url
         self.username = settings.servicenow_username
         self.password = settings.servicenow_password
-        self.timeout = settings.adapter_timeout_sec
+        self.timeout = settings.mixer_timeout_sec
 
     async def process_request(
         self, action: str, data: Dict[str, Any]
@@ -47,6 +47,8 @@ class ServiceNowAdapter(BaseAdapter):
                 return await self._close_incident(data)
             elif action == "comment":
                 return await self._add_comment(data)
+            elif action == "search":
+                return await self._search_incidents(data)
             else:
                 return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -135,6 +137,56 @@ class ServiceNowAdapter(BaseAdapter):
             response.raise_for_status()
 
             return {"success": True, "ticket_id": ticket_id}
+
+    async def _search_incidents(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Search ServiceNow incidents.
+
+        Args:
+            data: Search parameters:
+                - query: ServiceNow encoded query string
+                - limit: Max results to return (default 20)
+                - offset: Starting offset for pagination (default 0)
+                - fields: List of fields to return (optional)
+        """
+        query = data.get("query")
+        if not query:
+            return {"success": False, "error": "query required for search"}
+
+        limit = data.get("limit", 20)
+        offset = data.get("offset", 0)
+        fields = data.get("fields")
+
+        params: Dict[str, Any] = {
+            "sysparm_query": query,
+            "sysparm_limit": limit,
+            "sysparm_offset": offset,
+        }
+        if fields:
+            params["sysparm_fields"] = ",".join(fields)
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/api/now/table/incident",
+                auth=(self.username, self.password),
+                params=params,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            results = result.get("result", [])
+            total = int(
+                response.headers.get("X-Total-Count", len(results))
+            )
+
+            return {
+                "success": True,
+                "data": {
+                    "results": results,
+                    "count": len(results),
+                    "total": total,
+                },
+            }
 
     async def validate_credentials(self) -> bool:
         """Validate ServiceNow credentials."""

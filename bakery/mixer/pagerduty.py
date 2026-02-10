@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""PagerDuty adapter for incident management."""
+"""PagerDuty mixer for incident management."""
 
 from typing import Dict, Any
 import httpx
 
 from bakery.config import settings
-from bakery.adapters.base import BaseAdapter
+from bakery.mixer.base import BaseMixer
 
 
-class PagerDutyAdapter(BaseAdapter):
-    """Adapter for PagerDuty incident management."""
+class PagerDutyMixer(BaseMixer):
+    """Mixer for PagerDuty incident management."""
 
     def __init__(self) -> None:
-        """Initialize PagerDuty adapter."""
+        """Initialize PagerDuty mixer."""
         super().__init__()
         self.api_key = settings.pagerduty_api_key
-        self.timeout = settings.adapter_timeout_sec
+        self.timeout = settings.mixer_timeout_sec
         self.base_url = "https://api.pagerduty.com"
 
     async def process_request(
@@ -46,6 +46,8 @@ class PagerDutyAdapter(BaseAdapter):
                 return await self._close_incident(data)
             elif action == "comment":
                 return await self._add_note(data)
+            elif action == "search":
+                return await self._search_incidents(data)
             else:
                 return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -193,6 +195,65 @@ class PagerDutyAdapter(BaseAdapter):
             response.raise_for_status()
 
             return {"success": True, "ticket_id": ticket_id}
+
+    async def _search_incidents(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Search PagerDuty incidents.
+
+        Args:
+            data: Search parameters:
+                - statuses: List of statuses to filter by (optional)
+                    e.g. ["triggered", "acknowledged", "resolved"]
+                - service_ids: List of service IDs to filter by (optional)
+                - since: Start date/time ISO string (optional)
+                - until: End date/time ISO string (optional)
+                - limit: Max results to return (default 20)
+                - offset: Starting offset for pagination (default 0)
+        """
+        limit = data.get("limit", 20)
+        offset = data.get("offset", 0)
+
+        params: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+        }
+
+        statuses = data.get("statuses")
+        if statuses:
+            params["statuses[]"] = statuses
+
+        service_ids = data.get("service_ids")
+        if service_ids:
+            params["service_ids[]"] = service_ids
+
+        since = data.get("since")
+        if since:
+            params["since"] = since
+
+        until = data.get("until")
+        if until:
+            params["until"] = until
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(
+                f"{self.base_url}/incidents",
+                headers=self._get_headers(),
+                params=params,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            incidents = result.get("incidents", [])
+            total = result.get("total", len(incidents))
+
+            return {
+                "success": True,
+                "data": {
+                    "results": incidents,
+                    "count": len(incidents),
+                    "total": total,
+                },
+            }
 
     async def validate_credentials(self) -> bool:
         """Validate PagerDuty credentials."""

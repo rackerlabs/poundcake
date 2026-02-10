@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""GitHub adapter for issue management."""
+"""GitHub mixer for issue management."""
 
 from typing import Dict, Any
 import httpx
 
 from bakery.config import settings
-from bakery.adapters.base import BaseAdapter
+from bakery.mixer.base import BaseMixer
 
 
-class GitHubAdapter(BaseAdapter):
-    """Adapter for GitHub issue management."""
+class GitHubMixer(BaseMixer):
+    """Mixer for GitHub issue management."""
 
     def __init__(self) -> None:
-        """Initialize GitHub adapter."""
+        """Initialize GitHub mixer."""
         super().__init__()
         self.token = settings.github_token
-        self.timeout = settings.adapter_timeout_sec
+        self.timeout = settings.mixer_timeout_sec
         self.base_url = "https://api.github.com"
 
     async def process_request(
@@ -46,6 +46,8 @@ class GitHubAdapter(BaseAdapter):
                 return await self._close_issue(data)
             elif action == "comment":
                 return await self._add_comment(data)
+            elif action == "search":
+                return await self._search_issues(data)
             else:
                 return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -170,6 +172,92 @@ class GitHubAdapter(BaseAdapter):
             response.raise_for_status()
 
             return {"success": True, "ticket_id": ticket_id}
+
+    async def _search_issues(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Search GitHub issues.
+
+        Supports two modes:
+        - Full-text search: provide "query" to search via GitHub search API
+        - List/filter: provide "owner" and "repo" with optional filters
+
+        Args:
+            data: Search parameters:
+                - owner: Repository owner (required)
+                - repo: Repository name (required)
+                - query: Full-text search string (optional, uses search API)
+                - state: Filter by state - open, closed, all (default "open")
+                - labels: Filter by labels (list of strings, optional)
+                - limit: Max results per page (default 20)
+                - page: Page number for pagination (default 1)
+        """
+        owner = data.get("owner")
+        repo = data.get("repo")
+
+        if not owner or not repo:
+            return {
+                "success": False,
+                "error": "owner and repo required for search",
+            }
+
+        query = data.get("query")
+        limit = data.get("limit", 20)
+        page = data.get("page", 1)
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            if query:
+                # Use GitHub search API
+                search_query = f"{query}+repo:{owner}/{repo}"
+                if data.get("state"):
+                    search_query += f"+state:{data['state']}"
+
+                response = await client.get(
+                    f"{self.base_url}/search/issues",
+                    headers=self._get_headers(),
+                    params={
+                        "q": search_query,
+                        "per_page": limit,
+                        "page": page,
+                    },
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                return {
+                    "success": True,
+                    "data": {
+                        "results": result.get("items", []),
+                        "count": len(result.get("items", [])),
+                        "total": result.get("total_count", 0),
+                    },
+                }
+            else:
+                # Use list issues API with filters
+                params: Dict[str, Any] = {
+                    "state": data.get("state", "open"),
+                    "per_page": limit,
+                    "page": page,
+                }
+                labels = data.get("labels")
+                if labels:
+                    params["labels"] = ",".join(labels)
+
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/issues",
+                    headers=self._get_headers(),
+                    params=params,
+                )
+                response.raise_for_status()
+                results = response.json()
+
+                return {
+                    "success": True,
+                    "data": {
+                        "results": results,
+                        "count": len(results),
+                        "total": len(results),
+                    },
+                }
 
     async def validate_credentials(self) -> bool:
         """Validate GitHub credentials."""

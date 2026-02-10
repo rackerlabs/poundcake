@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Base adapter interface for ticketing systems."""
+"""Base mixer interface for ticketing systems."""
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
 
-class BaseAdapter(ABC):
+class BaseMixer(ABC):
     """
-    Abstract base class for ticketing system adapters.
+    Abstract base class for ticketing system mixers.
 
-    All adapters must implement the process_request method.
+    All mixers must implement the process_request method.
     """
 
     def __init__(self) -> None:
-        """Initialize adapter."""
+        """Initialize mixer."""
         pass
 
     @abstractmethod
@@ -24,7 +24,7 @@ class BaseAdapter(ABC):
         Process a ticket request.
 
         Args:
-            action: Action to perform (create, update, close, comment, etc)
+            action: Action to perform (create, update, close, comment, search)
             data: Request data specific to the action
 
         Returns:
@@ -34,11 +34,25 @@ class BaseAdapter(ABC):
                 - data: Any additional response data
                 - error: str error message (if failed)
 
-        Example:
+            For search actions, returns:
+                - success: bool
+                - data: dict with "results" (list), "count" (int), "total" (int)
+
+        Example (single ticket):
             {
                 "success": True,
                 "ticket_id": "INC0012345",
                 "data": {"url": "https://..."},
+            }
+
+        Example (search):
+            {
+                "success": True,
+                "data": {
+                    "results": [...],
+                    "count": 10,
+                    "total": 42,
+                },
             }
         """
         pass
@@ -46,7 +60,7 @@ class BaseAdapter(ABC):
     @abstractmethod
     async def validate_credentials(self) -> bool:
         """
-        Validate adapter credentials.
+        Validate mixer credentials.
 
         Returns:
             True if credentials are valid, False otherwise
