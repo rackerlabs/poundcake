@@ -13,7 +13,7 @@ from bakery.schemas import (
     TicketRequestResponse,
     ErrorResponse,
 )
-from bakery.adapters.factory import get_adapter
+from bakery.mixer.factory import get_mixer, list_mixers
 
 router = APIRouter()
 
@@ -49,11 +49,11 @@ async def process_ticket_request(
         ticket_request.status = "processing"  # type: ignore[assignment]
         db.commit()
 
-        # Get appropriate adapter
-        adapter = get_adapter(ticket_request.adapter_type)
+        # Get appropriate mixer
+        mixer = get_mixer(ticket_request.mixer_type)
 
-        # Process request through adapter
-        result = await adapter.process_request(
+        # Process request through mixer
+        result = await mixer.process_request(
             action=ticket_request.action,
             data=ticket_request.request_data,
         )
@@ -62,7 +62,7 @@ async def process_ticket_request(
         message = Message(
             correlation_id=ticket_request.correlation_id,
             ticket_id=result.get("ticket_id"),
-            adapter_type=ticket_request.adapter_type,
+            mixer_type=ticket_request.mixer_type,
             status="success" if result.get("success") else "error",
             response_data=result,
             error_message=result.get("error"),
@@ -87,7 +87,7 @@ async def process_ticket_request(
             # Create error message in queue
             message = Message(
                 correlation_id=ticket_request.correlation_id,
-                adapter_type=ticket_request.adapter_type,
+                mixer_type=ticket_request.mixer_type,
                 status="error",
                 error_message=str(e),
             )
@@ -98,7 +98,22 @@ async def process_ticket_request(
         db.close()
 
 
-@router.post("/tickets", response_model=TicketRequestResponse, status_code=202)
+@router.post(
+    "/tickets",
+    response_model=TicketRequestResponse,
+    status_code=202,
+    summary="Submit a ticket request",
+    description=(
+        "Submit a ticket operation for asynchronous processing. "
+        "The request is validated and persisted immediately, then processed "
+        "in the background by the appropriate mixer. Poll the messages "
+        "endpoint with the correlation_id to retrieve the result."
+    ),
+    responses={
+        202: {"description": "Request accepted for processing"},
+        400: {"description": "Invalid mixer_type or action", "model": ErrorResponse},
+    },
+)
 async def create_ticket_request(
     request: TicketRequestCreate,
     background_tasks: BackgroundTasks,
@@ -109,30 +124,27 @@ async def create_ticket_request(
 
     The request is processed asynchronously in the background.
     Results are available via the /messages endpoint.
-
-    Args:
-        request: Ticket request data
-        background_tasks: FastAPI background tasks
-        db: Database session
-
-    Returns:
-        Created ticket request with status "pending"
-
-    Raises:
-        HTTPException: If adapter type is invalid
     """
-    # Validate adapter type
-    valid_adapters = ["servicenow", "jira", "github", "pagerduty", "rackspace_core"]
-    if request.adapter_type not in valid_adapters:
+    # Validate mixer type
+    valid_mixer_types = list_mixers()
+    if request.mixer_type not in valid_mixer_types:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid adapter_type. Must be one of: {', '.join(valid_adapters)}",
+            detail=f"Invalid mixer_type. Must be one of: {', '.join(valid_mixer_types)}",
+        )
+
+    # Validate action
+    valid_actions = ["create", "update", "close", "comment", "search"]
+    if request.action not in valid_actions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}",
         )
 
     # Create ticket request record
     ticket_request = TicketRequest(
         correlation_id=request.correlation_id,
-        adapter_type=request.adapter_type,
+        mixer_type=request.mixer_type,
         action=request.action,
         request_data=request.request_data,
         status="pending",
@@ -154,24 +166,21 @@ async def create_ticket_request(
     return TicketRequestResponse.from_orm(ticket_request)
 
 
-@router.get("/tickets/{correlation_id}", response_model=TicketRequestResponse)
+@router.get(
+    "/tickets/{correlation_id}",
+    response_model=TicketRequestResponse,
+    summary="Get ticket request status",
+    description="Retrieve the current status of a ticket request by its correlation ID.",
+    responses={
+        200: {"description": "Ticket request found"},
+        404: {"description": "Ticket request not found", "model": ErrorResponse},
+    },
+)
 async def get_ticket_request(
     correlation_id: str,
     db: Session = Depends(get_db),
 ) -> TicketRequestResponse:
-    """
-    Get ticket request by correlation ID.
-
-    Args:
-        correlation_id: Correlation ID of request
-        db: Database session
-
-    Returns:
-        Ticket request details
-
-    Raises:
-        HTTPException: If request not found
-    """
+    """Get ticket request by correlation ID."""
     ticket_request = (
         db.query(TicketRequest)
         .filter(TicketRequest.correlation_id == correlation_id)

@@ -54,7 +54,11 @@ print_warning() {
 }
 
 # Install pre-push hook if it doesn't exist
-PRE_PUSH_HOOK="$PROJECT_ROOT/.git/hooks/pre-push"
+# Use git rev-parse to find the correct git dir (works in worktrees too)
+GIT_DIR="$(git rev-parse --git-dir)"
+HOOKS_DIR="$GIT_DIR/hooks"
+mkdir -p "$HOOKS_DIR"
+PRE_PUSH_HOOK="$HOOKS_DIR/pre-push"
 if [ ! -f "$PRE_PUSH_HOOK" ]; then
     print_section "Installing Git pre-push hook"
     cat > "$PRE_PUSH_HOOK" << 'HOOK_EOF'

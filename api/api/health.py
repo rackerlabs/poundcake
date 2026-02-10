@@ -187,30 +187,30 @@ async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -
 async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
     result = await db.execute(select(func.count(Order.id)))
-    total_orders = result.scalar() or 0
+    total_alerts = result.scalar() or 0
     result = await db.execute(select(func.count(Recipe.id)))
     total_recipes = result.scalar() or 0
     result = await db.execute(select(func.count(Dish.id)))
-    total_dishes = result.scalar() or 0
+    total_executions = result.scalar() or 0
 
     result = await db.execute(
         select(Order.processing_status, func.count(Order.id)).group_by(Order.processing_status)
     )
-    orders_by_status = dict(result.all())
+    alerts_by_processing_status = dict(result.all())
 
     result = await db.execute(
         select(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status)
     )
-    orders_by_alert = dict(result.all())
+    alerts_by_alert_status = dict(result.all())
 
     result = await db.execute(
         select(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status)
     )
-    dishes_by_status = dict(result.all())
+    executions_by_status = dict(result.all())
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     result = await db.execute(select(func.count(Order.id)).where(Order.created_at >= cutoff))
-    recent = result.scalar() or 0
+    recent_alerts = result.scalar() or 0
 
     return StatsResponse(
         total_alerts=total_alerts,

@@ -22,7 +22,7 @@ class Message(Base):
     ticket_id = Column(
         String(255), nullable=True, index=True, comment="Ticket ID from external system"
     )
-    adapter_type = Column(
+    mixer_type = Column(
         String(50),
         nullable=False,
         comment="servicenow, jira, github, pagerduty, rackspace_core",
@@ -33,7 +33,7 @@ class Message(Base):
         default="pending",
         comment="pending, success, error",
     )
-    response_data = Column(JSON, nullable=True, comment="Full response from adapter")
+    response_data = Column(JSON, nullable=True, comment="Full response from mixer")
     error_message = Column(Text, nullable=True, comment="Error details if failed")
     created_at = Column(
         DateTime,
@@ -59,7 +59,7 @@ class TicketRequest(Base):
     correlation_id = Column(
         String(255), nullable=False, index=True, comment="Unique request identifier"
     )
-    adapter_type = Column(
+    mixer_type = Column(
         String(50),
         nullable=False,
         comment="servicenow, jira, github, pagerduty, rackspace_core",
@@ -93,21 +93,21 @@ class TicketRequest(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
-class AdapterConfig(Base):
+class MixerConfig(Base):
     """
-    Optional table for storing adapter-specific configuration.
+    Optional table for storing mixer-specific configuration.
 
-    Can be used for per-adapter settings that need to be dynamic.
+    Can be used for per-mixer settings that need to be dynamic.
     """
 
-    __tablename__ = "adapter_configs"
+    __tablename__ = "mixer_configs"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    adapter_type = Column(
-        String(50), nullable=False, unique=True, comment="Adapter identifier"
+    mixer_type = Column(
+        String(50), nullable=False, unique=True, comment="Mixer identifier"
     )
     enabled = Column(Boolean, nullable=False, default=True)
-    config_data = Column(JSON, nullable=True, comment="Adapter-specific settings")
+    config_data = Column(JSON, nullable=True, comment="Mixer-specific settings")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,

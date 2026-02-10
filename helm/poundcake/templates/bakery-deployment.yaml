@@ -71,10 +71,10 @@ spec:
               value: {{ .Values.bakery.config.messageRetentionHours | quote }}
             - name: MAX_MESSAGES_PER_POLL
               value: {{ .Values.bakery.config.maxMessagesPerPoll | quote }}
-            - name: ADAPTER_TIMEOUT_SEC
-              value: {{ .Values.bakery.config.adapterTimeoutSec | quote }}
-            - name: ADAPTER_MAX_RETRIES
-              value: {{ .Values.bakery.config.adapterMaxRetries | quote }}
+            - name: MIXER_TIMEOUT_SEC
+              value: {{ .Values.bakery.config.mixerTimeoutSec | quote }}
+            - name: MIXER_MAX_RETRIES
+              value: {{ .Values.bakery.config.mixerMaxRetries | quote }}
             {{- if .Values.bakery.servicenow.existingSecret }}
             - name: SERVICENOW_URL
               valueFrom:

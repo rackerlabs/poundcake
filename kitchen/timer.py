@@ -9,6 +9,8 @@
 
 import os
 import time
+from typing import Any, Optional
+
 from api.core.http_client import request_with_retry_sync
 from datetime import datetime, timezone
 from api.core.logging import setup_logging, get_logger

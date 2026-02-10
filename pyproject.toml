@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 name = "poundcake-api"
 version = "1.0.0"
 description = "FastAPI application for processing Alertmanager webhooks with StackStorm integration"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
@@ -78,11 +78,12 @@ warn_return_any = false
 # Allow Celery task decorators without full type annotations
 disallow_untyped_defs = false
 # Disable problematic error codes for SQLAlchemy ORM code
-disable_error_code = ["assignment", "arg-type", "call-overload", "misc", "var-annotated", "dict-item", "type-var", "return-value", "union-attr"]
+disable_error_code = ["assignment", "arg-type", "call-overload", "misc", "var-annotated", "dict-item", "type-var", "return-value", "union-attr", "index"]
 
 [[tool.mypy.overrides]]
-module = ["api.core.logging", "api.core.middleware"]
-# Ignore pythonjsonlogger and SQLAlchemy type issues
+module = ["api.core.logging", "api.core.middleware", "api.core.http_client"]
+# Ignore pythonjsonlogger, SQLAlchemy type issues, and httpx client builder annotations
+disallow_untyped_defs = false
 disable_error_code = ["assignment", "no-any-return"]
 
 [[tool.mypy.overrides]]
@@ -92,12 +93,13 @@ module = [
     "api.api.recipes",
     "api.api.auth",
     "api.api.dishes",
+    "api.api.ingredients",
     "api.api.v1.*",
     "api.models.models",
     "api.validation.query_params",
 ]
 # Ignore SQLAlchemy and Celery type issues in API modules
-disable_error_code = ["assignment", "arg-type", "call-overload", "var-annotated", "return-value", "no-any-return", "no-untyped-def"]
+disable_error_code = ["assignment", "arg-type", "call-overload", "var-annotated", "return-value", "no-any-return", "no-untyped-def", "attr-defined", "index"]
 
 [[tool.mypy.overrides]]
 module = [

@@ -30,9 +30,9 @@ class Settings:
             os.getenv("MAX_MESSAGES_PER_POLL", "100")
         )
 
-        # Adapter settings
-        self.adapter_timeout_sec: int = int(os.getenv("ADAPTER_TIMEOUT_SEC", "30"))
-        self.adapter_max_retries: int = int(os.getenv("ADAPTER_MAX_RETRIES", "3"))
+        # Mixer settings
+        self.mixer_timeout_sec: int = int(os.getenv("MIXER_TIMEOUT_SEC", "30"))
+        self.mixer_max_retries: int = int(os.getenv("MIXER_MAX_RETRIES", "3"))
 
         # ServiceNow
         self.servicenow_url: Optional[str] = os.getenv("SERVICENOW_URL")
@@ -51,7 +51,9 @@ class Settings:
         self.pagerduty_api_key: Optional[str] = os.getenv("PAGERDUTY_API_KEY")
 
         # Rackspace Core
-        self.rackspace_core_url: Optional[str] = os.getenv("RACKSPACE_CORE_URL")
+        self.rackspace_core_url: Optional[str] = os.getenv(
+            "RACKSPACE_CORE_URL", "https://ws.core.rackspace.com"
+        )
         self.rackspace_core_username: Optional[str] = os.getenv(
             "RACKSPACE_CORE_USERNAME"
         )

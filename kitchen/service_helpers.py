@@ -8,6 +8,8 @@
 """Shared helpers for kitchen services."""
 
 import time
+from typing import Any
+
 from api.core.http_client import request_with_retry_sync
 from api.core.config import get_settings
 

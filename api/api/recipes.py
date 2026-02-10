@@ -176,7 +176,7 @@ async def delete_recipe(
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     recipe_name = recipe.name
-    db.delete(recipe)
+    await db.delete(recipe)
     await db.commit()
 
     logger.info(

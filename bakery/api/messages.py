@@ -14,39 +14,37 @@ from bakery.schemas import MessageListResponse, MessageResponse, SuccessResponse
 router = APIRouter()
 
 
-@router.get("/messages", response_model=MessageListResponse)
+@router.get(
+    "/messages",
+    response_model=MessageListResponse,
+    summary="Poll for response messages",
+    description=(
+        "Retrieve unretrieved messages from the response queue. Messages are "
+        "marked as retrieved once returned, so subsequent polls will not "
+        "include them. Use correlation_id to get the result for a specific "
+        "ticket request."
+    ),
+)
 async def get_messages(
     correlation_id: Optional[str] = Query(
         None, description="Filter by correlation ID"
     ),
-    adapter_type: Optional[str] = Query(None, description="Filter by adapter type"),
-    status: Optional[str] = Query(None, description="Filter by status"),
+    mixer_type: Optional[str] = Query(None, description="Filter by mixer type"),
+    status: Optional[str] = Query(None, description="Filter by status (success, error)"),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of messages to return"
     ),
     db: Session = Depends(get_db),
 ) -> MessageListResponse:
-    """
-    Poll for messages from the queue.
-
-    Args:
-        correlation_id: Optional correlation ID filter
-        adapter_type: Optional adapter type filter
-        status: Optional status filter
-        limit: Maximum messages to return
-        db: Database session
-
-    Returns:
-        List of messages matching filters
-    """
+    """Poll for messages from the response queue."""
     # Build query
     query = db.query(Message).filter(Message.retrieved_at.is_(None))
 
     # Apply filters
     if correlation_id:
         query = query.filter(Message.correlation_id == correlation_id)
-    if adapter_type:
-        query = query.filter(Message.adapter_type == adapter_type)
+    if mixer_type:
+        query = query.filter(Message.mixer_type == mixer_type)
     if status:
         query = query.filter(Message.status == status)
 
@@ -64,24 +62,21 @@ async def get_messages(
     )
 
 
-@router.delete("/messages/{message_id}", response_model=SuccessResponse)
+@router.delete(
+    "/messages/{message_id}",
+    response_model=SuccessResponse,
+    summary="Delete a message",
+    description="Delete a specific message from the response queue by its ID.",
+    responses={
+        200: {"description": "Message deleted"},
+        404: {"description": "Message not found"},
+    },
+)
 async def delete_message(
     message_id: int,
     db: Session = Depends(get_db),
 ) -> SuccessResponse:
-    """
-    Delete a message from the queue.
-
-    Args:
-        message_id: ID of message to delete
-        db: Database session
-
-    Returns:
-        Success response
-
-    Raises:
-        HTTPException: If message not found
-    """
+    """Delete a message from the queue."""
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -95,21 +90,20 @@ async def delete_message(
     )
 
 
-@router.post("/messages/cleanup", response_model=SuccessResponse)
+@router.post(
+    "/messages/cleanup",
+    response_model=SuccessResponse,
+    summary="Clean up old messages",
+    description=(
+        "Delete retrieved messages older than the configured retention period "
+        "(MESSAGE_RETENTION_HOURS, default 24h). Only messages that have "
+        "already been retrieved are eligible for cleanup."
+    ),
+)
 async def cleanup_old_messages(
     db: Session = Depends(get_db),
 ) -> SuccessResponse:
-    """
-    Clean up old messages that have been retrieved.
-
-    Deletes messages older than MESSAGE_RETENTION_HOURS that have been retrieved.
-
-    Args:
-        db: Database session
-
-    Returns:
-        Success response with count of deleted messages
-    """
+    """Clean up old retrieved messages."""
     cutoff_time = datetime.now(timezone.utc) - timedelta(
         hours=settings.message_retention_hours
     )
