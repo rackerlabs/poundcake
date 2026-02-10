@@ -19,9 +19,7 @@ class RackspaceCoreAdapter(BaseAdapter):
         self.password = settings.rackspace_core_password
         self.timeout = settings.adapter_timeout_sec
 
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process Rackspace Core ticket request.
 

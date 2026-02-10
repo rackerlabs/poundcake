@@ -18,9 +18,7 @@ class GitHubAdapter(BaseAdapter):
         self.timeout = settings.adapter_timeout_sec
         self.base_url = "https://api.github.com"
 
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process GitHub issue request.
 

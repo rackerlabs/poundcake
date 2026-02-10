@@ -19,9 +19,7 @@ class ServiceNowAdapter(BaseAdapter):
         self.password = settings.servicenow_password
         self.timeout = settings.adapter_timeout_sec
 
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process ServiceNow ticket request.
 

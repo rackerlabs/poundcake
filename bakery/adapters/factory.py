@@ -9,7 +9,6 @@ from bakery.adapters.github import GitHubAdapter
 from bakery.adapters.pagerduty import PagerDutyAdapter
 from bakery.adapters.rackspace_core import RackspaceCoreAdapter
 
-
 # Registry of available adapters
 ADAPTER_REGISTRY: Dict[str, Type[BaseAdapter]] = {
     "servicenow": ServiceNowAdapter,

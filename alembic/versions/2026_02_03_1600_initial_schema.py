@@ -99,6 +99,7 @@ def upgrade() -> None:
         sa.Column("fingerprint", sa.String(length=255), nullable=False),
         sa.Column("alert_status", sa.String(length=50), nullable=False),
         sa.Column("processing_status", sa.String(length=50), nullable=False),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("alert_group_name", sa.String(length=255), nullable=False),
         sa.Column("severity", sa.String(length=50), nullable=True),
         sa.Column("instance", sa.String(length=255), nullable=True),
@@ -118,6 +119,13 @@ def upgrade() -> None:
     op.create_index(op.f("ix_orders_alert_status"), "orders", ["alert_status"], unique=False)
     op.create_index(
         op.f("ix_orders_processing_status"), "orders", ["processing_status"], unique=False
+    )
+    op.create_index(op.f("ix_orders_is_active"), "orders", ["is_active"], unique=False)
+    op.create_index(
+        "ux_orders_fingerprint_active",
+        "orders",
+        ["fingerprint", "is_active"],
+        unique=True,
     )
     op.create_index(
         op.f("ix_orders_alert_group_name"), "orders", ["alert_group_name"], unique=False

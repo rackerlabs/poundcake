@@ -26,6 +26,7 @@ OVEN_INTERVAL = int(os.getenv("OVEN_INTERVAL", "5"))
 # System request ID for prep chef operations
 SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
 POLLER_RETRIES = get_settings().poller_http_retries
+POLL_LIMIT = int(os.getenv("PREP_CHEF_LIMIT", "1"))
 
 
 def prep_loop() -> None:
@@ -43,7 +44,7 @@ def prep_loop() -> None:
             resp = request_with_retry_sync(
                 "GET",
                 f"{API_URL}/orders",
-                params={"processing_status": "new"},
+                params={"processing_status": "new", "limit": POLL_LIMIT},
                 timeout=10,
                 retries=POLLER_RETRIES,
             )

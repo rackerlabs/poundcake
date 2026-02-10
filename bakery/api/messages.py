@@ -26,14 +26,10 @@ router = APIRouter()
     ),
 )
 async def get_messages(
-    correlation_id: Optional[str] = Query(
-        None, description="Filter by correlation ID"
-    ),
+    correlation_id: Optional[str] = Query(None, description="Filter by correlation ID"),
     mixer_type: Optional[str] = Query(None, description="Filter by mixer type"),
     status: Optional[str] = Query(None, description="Filter by status (success, error)"),
-    limit: int = Query(
-        100, ge=1, le=1000, description="Maximum number of messages to return"
-    ),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of messages to return"),
     db: Session = Depends(get_db),
 ) -> MessageListResponse:
     """Poll for messages from the response queue."""
@@ -104,9 +100,7 @@ async def cleanup_old_messages(
     db: Session = Depends(get_db),
 ) -> SuccessResponse:
     """Clean up old retrieved messages."""
-    cutoff_time = datetime.now(timezone.utc) - timedelta(
-        hours=settings.message_retention_hours
-    )
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=settings.message_retention_hours)
 
     # Delete old retrieved messages
     deleted_count = (

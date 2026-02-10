@@ -55,6 +55,7 @@ async def cook_dishes(
 
     if not recipe:
         order.processing_status = "complete"
+        order.is_active = False
         order.updated_at = datetime.now(timezone.utc)
         await db.commit()
         logger.error(
@@ -364,20 +365,22 @@ async def update_dish(
 
     dish.updated_at = datetime.now(timezone.utc)
 
-    if dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES:
-        if dish.processing_status == "complete" and not dish.status:
-            dish.status = "completed"
-
-    await db.commit()
-    await db.refresh(dish)
-
     if dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES and dish.order_id:
         result = await db.execute(select(Order).where(Order.id == dish.order_id))
         order = result.scalars().first()
         if order and order.processing_status != "complete":
-            order.processing_status = dish.processing_status
-            order.updated_at = datetime.now(timezone.utc)
-            await db.commit()
+            if order.processing_status == "canceled":
+                logger.info(
+                    "Skipping order status update because order is canceled",
+                    extra={"req_id": req_id, "order_id": order.id, "dish_id": dish.id},
+                )
+            else:
+                order.processing_status = dish.processing_status
+                order.is_active = False
+                order.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(dish)
 
     logger.info(
         "Dish updated successfully",

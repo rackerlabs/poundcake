@@ -39,9 +39,7 @@ async def process_ticket_request(
 
     try:
         # Get request from database
-        ticket_request = (
-            db.query(TicketRequest).filter(TicketRequest.id == request_id).first()
-        )
+        ticket_request = db.query(TicketRequest).filter(TicketRequest.id == request_id).first()
         if not ticket_request:
             return
 
@@ -182,9 +180,7 @@ async def get_ticket_request(
 ) -> TicketRequestResponse:
     """Get ticket request by correlation ID."""
     ticket_request = (
-        db.query(TicketRequest)
-        .filter(TicketRequest.correlation_id == correlation_id)
-        .first()
+        db.query(TicketRequest).filter(TicketRequest.correlation_id == correlation_id).first()
     )
 
     if not ticket_request:

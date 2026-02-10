@@ -41,9 +41,7 @@ class Message(Base):
         default=lambda: datetime.now(timezone.utc),
         comment="When message was created",
     )
-    retrieved_at = Column(
-        DateTime, nullable=True, comment="When message was retrieved by API"
-    )
+    retrieved_at = Column(DateTime, nullable=True, comment="When message was retrieved by API")
 
 
 class TicketRequest(Base):
@@ -64,13 +62,9 @@ class TicketRequest(Base):
         nullable=False,
         comment="servicenow, jira, github, pagerduty, rackspace_core",
     )
-    action = Column(
-        String(50), nullable=False, comment="create, update, close, comment, etc"
-    )
+    action = Column(String(50), nullable=False, comment="create, update, close, comment, etc")
     request_data = Column(JSON, nullable=False, comment="Original request payload")
-    ticket_id = Column(
-        String(255), nullable=True, comment="Ticket ID if successfully created"
-    )
+    ticket_id = Column(String(255), nullable=True, comment="Ticket ID if successfully created")
     status = Column(
         String(50),
         nullable=False,
@@ -103,9 +97,7 @@ class MixerConfig(Base):
     __tablename__ = "mixer_configs"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    mixer_type = Column(
-        String(50), nullable=False, unique=True, comment="Mixer identifier"
-    )
+    mixer_type = Column(String(50), nullable=False, unique=True, comment="Mixer identifier")
     enabled = Column(Boolean, nullable=False, default=True)
     config_data = Column(JSON, nullable=True, comment="Mixer-specific settings")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

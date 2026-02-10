@@ -18,9 +18,7 @@ class PagerDutyMixer(BaseMixer):
         self.timeout = settings.mixer_timeout_sec
         self.base_url = "https://api.pagerduty.com"
 
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process PagerDuty incident request.
 

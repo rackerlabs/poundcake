@@ -8,17 +8,17 @@
 # Only includes packages needed for bakery to run in production.
 
 # Web Framework
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
+fastapi>=0.128.7
+uvicorn[standard]>=0.40.0
 
 # Database
-sqlalchemy>=2.0.0
-alembic>=1.13.0
-pymysql>=1.1.0
-cryptography>=41.0.0
+sqlalchemy>=2.0.46
+alembic>=1.18.3
+pymysql>=1.1.2
+cryptography>=46.0.4
 
 # Data Validation
-pydantic>=2.9.0
+pydantic>=2.12.5
 
 # HTTP Client (for mixer API calls)
-httpx>=0.27.0
+httpx>=0.28.1

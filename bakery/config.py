@@ -23,12 +23,8 @@ class Settings:
         self.database_name: str = os.getenv("DATABASE_NAME", "bakery")
 
         # Message queue settings
-        self.message_retention_hours: int = int(
-            os.getenv("MESSAGE_RETENTION_HOURS", "24")
-        )
-        self.max_messages_per_poll: int = int(
-            os.getenv("MAX_MESSAGES_PER_POLL", "100")
-        )
+        self.message_retention_hours: int = int(os.getenv("MESSAGE_RETENTION_HOURS", "24"))
+        self.max_messages_per_poll: int = int(os.getenv("MAX_MESSAGES_PER_POLL", "100"))
 
         # Mixer settings
         self.mixer_timeout_sec: int = int(os.getenv("MIXER_TIMEOUT_SEC", "30"))
@@ -54,12 +50,8 @@ class Settings:
         self.rackspace_core_url: Optional[str] = os.getenv(
             "RACKSPACE_CORE_URL", "https://ws.core.rackspace.com"
         )
-        self.rackspace_core_username: Optional[str] = os.getenv(
-            "RACKSPACE_CORE_USERNAME"
-        )
-        self.rackspace_core_password: Optional[str] = os.getenv(
-            "RACKSPACE_CORE_PASSWORD"
-        )
+        self.rackspace_core_username: Optional[str] = os.getenv("RACKSPACE_CORE_USERNAME")
+        self.rackspace_core_password: Optional[str] = os.getenv("RACKSPACE_CORE_PASSWORD")
 
     @property
     def database_url(self) -> str:

@@ -134,9 +134,7 @@ class MixerInfo(BaseModel):
     """Information about a single mixer."""
 
     mixer_type: str = Field(..., description="Mixer identifier")
-    actions: List[str] = Field(
-        ..., description="Supported actions for this mixer"
-    )
+    actions: List[str] = Field(..., description="Supported actions for this mixer")
     configured: bool = Field(
         ..., description="Whether credentials are configured (not necessarily valid)"
     )
@@ -153,7 +151,5 @@ class MixerValidateResponse(BaseModel):
     """Response for mixer credential validation."""
 
     mixer_type: str = Field(..., description="Mixer that was validated")
-    valid: bool = Field(
-        ..., description="Whether credentials are valid and connectivity works"
-    )
+    valid: bool = Field(..., description="Whether credentials are valid and connectivity works")
     message: str = Field(..., description="Human-readable validation result")

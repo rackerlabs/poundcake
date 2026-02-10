@@ -209,6 +209,7 @@ class Order(Base):
     fingerprint = Column(String(255), nullable=False, index=True)
     alert_status = Column(String(50), nullable=False, index=True)
     processing_status = Column(String(50), default="new", nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
 
     alert_group_name = Column(String(255), nullable=False, index=True)
     severity = Column(String(50), nullable=True, index=True)
@@ -226,3 +227,8 @@ class Order(Base):
     updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
 
     dishes = relationship("Dish", back_populates="order")
+
+    __table_args__ = (
+        Index("ux_orders_fingerprint_active", "fingerprint", "is_active", unique=True),
+        Index("ix_orders_is_active", "is_active"),
+    )

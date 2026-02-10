@@ -17,9 +17,7 @@ class BaseAdapter(ABC):
         pass
 
     @abstractmethod
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process a ticket request.
 
