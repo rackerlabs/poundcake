@@ -97,7 +97,7 @@ def stamp(revision="head"):
 def show_help():
     """Show help message."""
     print(
-        """
+        f"""
 PoundCake Database Migration Manager
 
 Usage: python scripts/migrate.py <command> [args]

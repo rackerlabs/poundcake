@@ -7,7 +7,7 @@
 """Basic API health tests for PoundCake."""
 
 import pytest
-from unittest.mock import patch, MagicMock, Mock, AsyncMock
+from unittest.mock import patch, Mock, AsyncMock
 from fastapi.testclient import TestClient
 from api.main import app
 
