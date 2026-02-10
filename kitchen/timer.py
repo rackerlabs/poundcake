@@ -10,9 +10,11 @@
 import os
 import time
 from typing import Any, Optional
-import httpx
+
+from api.core.http_client import request_with_retry_sync
 from datetime import datetime, timezone
 from api.core.logging import setup_logging, get_logger
+from api.core.config import get_settings
 from api.core.statuses import ST2_TERMINAL_STATUSES, ST2_FAILURE_STATUSES
 from kitchen.service_helpers import wait_for_api
 
@@ -25,6 +27,7 @@ SLA_BUFFER = float(os.getenv("SLA_BUFFER_PERCENT", "0.2"))
 # Configure Logging
 setup_logging()
 logger = get_logger("timer")
+POLLER_RETRIES = get_settings().poller_http_retries
 
 
 def update_dish(
@@ -73,12 +76,14 @@ def update_dish(
 
     try:
         start_time = time.time()
-        with httpx.Client(timeout=10) as client:
-            resp = client.put(
-                f"{API_BASE_URL}/dishes/{dish_id}",
-                json=payload,
-                headers={"X-Request-ID": req_id},
-            )
+        resp = request_with_retry_sync(
+            "PUT",
+            f"{API_BASE_URL}/dishes/{dish_id}",
+            json=payload,
+            headers={"X-Request-ID": req_id},
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
         latency_ms = int((time.time() - start_time) * 1000)
         resp.raise_for_status()
         return True
@@ -95,11 +100,13 @@ def cancel_execution(execution_id: str, req_id: str) -> bool:
     """Instructs API to stop an execution."""
     try:
         start_time = time.time()
-        with httpx.Client(timeout=10) as client:
-            resp = client.put(
-                f"{API_BASE_URL}/cook/executions/{execution_id}",
-                headers={"X-Request-ID": req_id},
-            )
+        resp = request_with_retry_sync(
+            "PUT",
+            f"{API_BASE_URL}/cook/executions/{execution_id}",
+            headers={"X-Request-ID": req_id},
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
         latency_ms = int((time.time() - start_time) * 1000)
         return True
     except Exception as e:
@@ -170,11 +177,13 @@ def monitor_dishes() -> None:
     """Polls for processing dishes and updates terminal states."""
     try:
         start_time = time.time()
-        with httpx.Client(timeout=10) as client:
-            resp = client.get(
-                f"{API_BASE_URL}/dishes",
-                params={"processing_status": "processing"},
-            )
+        resp = request_with_retry_sync(
+            "GET",
+            f"{API_BASE_URL}/dishes",
+            params={"processing_status": "processing"},
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
         latency_ms = int((time.time() - start_time) * 1000)
         if resp.status_code != 200:
             logger.error(
@@ -201,11 +210,13 @@ def monitor_dishes() -> None:
                 continue
 
             st2_start_time = time.time()
-            with httpx.Client(timeout=10) as client:
-                st2_resp = client.get(
-                    f"{API_BASE_URL}/cook/executions/{execution_id}",
-                    headers={"X-Request-ID": req_id},
-                )
+            st2_resp = request_with_retry_sync(
+                "GET",
+                f"{API_BASE_URL}/cook/executions/{execution_id}",
+                headers={"X-Request-ID": req_id},
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
             st2_latency_ms = int((time.time() - st2_start_time) * 1000)
 
             if st2_resp.status_code == 200:
@@ -219,11 +230,13 @@ def monitor_dishes() -> None:
                 else:
                     # Fetch tasks explicitly if not included in execution result
                     try:
-                        with httpx.Client(timeout=10) as client:
-                            tasks_resp = client.get(
-                                f"{API_BASE_URL}/cook/executions/{execution_id}/tasks",
-                                headers={"X-Request-ID": req_id},
-                            )
+                        tasks_resp = request_with_retry_sync(
+                            "GET",
+                            f"{API_BASE_URL}/cook/executions/{execution_id}/tasks",
+                            headers={"X-Request-ID": req_id},
+                            timeout=10,
+                            retries=POLLER_RETRIES,
+                        )
                         if tasks_resp.status_code == 200:
                             tasks_result = tasks_resp.json()
                     except Exception:
@@ -255,12 +268,14 @@ def monitor_dishes() -> None:
 
                 if _tasks_missing_timestamps(tasks_result):
                     try:
-                        with httpx.Client(timeout=10) as client:
-                            children_resp = client.get(
-                                f"{API_BASE_URL}/cook/executions",
-                                params={"parent": execution_id, "limit": 1000},
-                                headers={"X-Request-ID": req_id},
-                            )
+                        children_resp = request_with_retry_sync(
+                            "GET",
+                            f"{API_BASE_URL}/cook/executions",
+                            params={"parent": execution_id, "limit": 1000},
+                            headers={"X-Request-ID": req_id},
+                            timeout=10,
+                            retries=POLLER_RETRIES,
+                        )
                         if children_resp.status_code == 200:
                             children = children_resp.json()
                             tasks_result = _sort_tasks_by_execution(
@@ -286,12 +301,14 @@ def monitor_dishes() -> None:
                 if tasks_result is None:
                     # Fallback: fetch child executions by parent id and store results
                     try:
-                        with httpx.Client(timeout=10) as client:
-                            children_resp = client.get(
-                                f"{API_BASE_URL}/cook/executions",
-                                params={"parent": execution_id, "limit": 1000},
-                                headers={"X-Request-ID": req_id},
-                            )
+                        children_resp = request_with_retry_sync(
+                            "GET",
+                            f"{API_BASE_URL}/cook/executions",
+                            params={"parent": execution_id, "limit": 1000},
+                            headers={"X-Request-ID": req_id},
+                            timeout=10,
+                            retries=POLLER_RETRIES,
+                        )
                         if children_resp.status_code == 200:
                             children = children_resp.json()
                             tasks_result = _sort_tasks_by_execution(
@@ -336,11 +353,13 @@ def monitor_dishes() -> None:
                         items = []
                         existing_status = {}
                         try:
-                            with httpx.Client(timeout=10) as client:
-                                ing_resp = client.get(
-                                    f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients",
-                                    headers={"X-Request-ID": req_id},
-                                )
+                            ing_resp = request_with_retry_sync(
+                                "GET",
+                                f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients",
+                                headers={"X-Request-ID": req_id},
+                                timeout=10,
+                                retries=POLLER_RETRIES,
+                            )
                             if ing_resp.status_code == 200:
                                 for ing in ing_resp.json():
                                     key = (
@@ -381,12 +400,14 @@ def monitor_dishes() -> None:
                             )
 
                         if items:
-                            with httpx.Client(timeout=10) as client:
-                                client.post(
-                                    f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients/bulk",
-                                    json={"items": items},
-                                    headers={"X-Request-ID": req_id},
-                                )
+                            request_with_retry_sync(
+                                "POST",
+                                f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients/bulk",
+                                json={"items": items},
+                                headers={"X-Request-ID": req_id},
+                                timeout=10,
+                                retries=POLLER_RETRIES,
+                            )
                     except Exception:
                         pass
 

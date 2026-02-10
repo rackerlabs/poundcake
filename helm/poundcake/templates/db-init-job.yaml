@@ -69,7 +69,7 @@ spec:
           RETRY_COUNT=0
 
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if python3 -c "from api.core.database import engine; engine.connect()" 2>/dev/null; then
+            if python3 -c "from api.core.database import get_sync_database_url; from sqlalchemy import create_engine; create_engine(get_sync_database_url()).connect()" 2>/dev/null; then
               echo "✓ Database connection successful"
               break
             fi

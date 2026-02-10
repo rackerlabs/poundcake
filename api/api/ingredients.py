@@ -7,7 +7,9 @@
 """API endpoints for ingredient management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from datetime import datetime, timezone
 
@@ -28,7 +30,7 @@ logger = get_logger(__name__)
 
 @router.post("/ingredients/", response_model=IngredientResponse, status_code=201)
 async def create_ingredient(
-    request: Request, ingredient: IngredientCreate, db: Session = Depends(get_db)
+    request: Request, ingredient: IngredientCreate, db: AsyncSession = Depends(get_db)
 ) -> IngredientResponse:
     """Create a new global ingredient."""
     req_id = request.state.req_id
@@ -49,8 +51,8 @@ async def create_ingredient(
         on_failure=ingredient.on_failure,
     )
     db.add(db_ingredient)
-    db.commit()
-    db.refresh(db_ingredient)
+    await db.commit()
+    await db.refresh(db_ingredient)
 
     return db_ingredient
 
@@ -58,23 +60,26 @@ async def create_ingredient(
 @router.get("/ingredients/", response_model=List[IngredientResponse])
 async def list_ingredients(
     params: IngredientQueryParams = Depends(validate_query_params(IngredientQueryParams)),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """List global ingredients with optional filtering."""
-    query = db.query(Ingredient)
+    query = select(Ingredient)
 
     if params.task_id is not None:
-        query = query.filter(Ingredient.task_id == params.task_id)
+        query = query.where(Ingredient.task_id == params.task_id)
     if params.task_name is not None:
-        query = query.filter(Ingredient.task_name == params.task_name)
+        query = query.where(Ingredient.task_name == params.task_name)
 
-    return query.limit(params.limit).offset(params.offset).all()
+    query = query.limit(params.limit).offset(params.offset)
+    result = await db.execute(query)
+    return result.scalars().all()
 
 
 @router.get("/ingredients/{ingredient_id}", response_model=IngredientResponse)
-async def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)):
+async def get_ingredient(ingredient_id: int, db: AsyncSession = Depends(get_db)):
     """Fetch a single ingredient by ID."""
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    result = await db.execute(select(Ingredient).where(Ingredient.id == ingredient_id))
+    ingredient = result.scalars().first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
     return ingredient
@@ -82,17 +87,18 @@ async def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/ingredients/{ingredient_id}", response_model=DeleteResponse)
 async def delete_ingredient(
-    request: Request, ingredient_id: int, db: Session = Depends(get_db)
+    request: Request, ingredient_id: int, db: AsyncSession = Depends(get_db)
 ) -> DeleteResponse:
     """Delete a global ingredient."""
     req_id = request.state.req_id
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    result = await db.execute(select(Ingredient).where(Ingredient.id == ingredient_id))
+    ingredient = result.scalars().first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
 
     task_name = ingredient.task_name
     db.delete(ingredient)
-    db.commit()
+    await db.commit()
 
     logger.info(
         "Ingredient deleted",
@@ -107,14 +113,14 @@ async def delete_ingredient(
 
 
 @router.get("/ingredients/by-name/{recipe_name}", response_model=List[IngredientResponse])
-async def get_ingredients_by_recipe_name(recipe_name: str, db: Session = Depends(get_db)):
+async def get_ingredients_by_recipe_name(recipe_name: str, db: AsyncSession = Depends(get_db)):
     """List ingredients for a recipe name, ordered by step_order."""
-    recipe = (
-        db.query(Recipe)
+    result = await db.execute(
+        select(Recipe)
         .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .filter(Recipe.name == recipe_name)
-        .first()
+        .where(Recipe.name == recipe_name)
     )
+    recipe = result.scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
 
@@ -122,14 +128,14 @@ async def get_ingredients_by_recipe_name(recipe_name: str, db: Session = Depends
 
 
 @router.get("/ingredients/by-recipe/{recipe_id}", response_model=List[IngredientResponse])
-async def get_ingredients_by_recipe_id(recipe_id: int, db: Session = Depends(get_db)):
+async def get_ingredients_by_recipe_id(recipe_id: int, db: AsyncSession = Depends(get_db)):
     """List ingredients for a recipe ID, ordered by step_order."""
-    recipe = (
-        db.query(Recipe)
+    result = await db.execute(
+        select(Recipe)
         .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .filter(Recipe.id == recipe_id)
-        .first()
+        .where(Recipe.id == recipe_id)
     )
+    recipe = result.scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
@@ -139,10 +145,11 @@ async def get_ingredients_by_recipe_id(recipe_id: int, db: Session = Depends(get
 @router.patch("/ingredients/{ingredient_id}", response_model=IngredientResponse)
 @router.put("/ingredients/{ingredient_id}", response_model=IngredientResponse)
 async def update_ingredient(
-    ingredient_id: int, payload: IngredientUpdate, db: Session = Depends(get_db)
+    ingredient_id: int, payload: IngredientUpdate, db: AsyncSession = Depends(get_db)
 ) -> IngredientResponse:
     """Update a global ingredient."""
-    ingredient = db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+    result = await db.execute(select(Ingredient).where(Ingredient.id == ingredient_id))
+    ingredient = result.scalars().first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
 
@@ -151,7 +158,7 @@ async def update_ingredient(
         setattr(ingredient, key, value)
 
     ingredient.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
-    db.commit()
-    db.refresh(ingredient)
+    await db.commit()
+    await db.refresh(ingredient)
 
     return ingredient

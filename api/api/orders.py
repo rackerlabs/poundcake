@@ -7,7 +7,8 @@
 """API routes for Order management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from datetime import datetime, timezone
 
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 async def fetch_orders(
     request: Request,
     params: OrderQueryParams = Depends(validate_query_params(OrderQueryParams)),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get orders with optional filtering.
@@ -57,18 +58,20 @@ async def fetch_orders(
         },
     )
 
-    query = db.query(Order)
+    query = select(Order)
 
     if params.processing_status:
-        query = query.filter(Order.processing_status == params.processing_status.value)
+        query = query.where(Order.processing_status == params.processing_status.value)
     if params.alert_status:
-        query = query.filter(Order.alert_status == params.alert_status.value)
+        query = query.where(Order.alert_status == params.alert_status.value)
     if params.req_id:
-        query = query.filter(Order.req_id == params.req_id)
+        query = query.where(Order.req_id == params.req_id)
     if params.group_name:
-        query = query.filter(Order.alert_group_name == params.group_name)
+        query = query.where(Order.alert_group_name == params.group_name)
 
-    orders = query.order_by(Order.created_at.desc()).limit(params.limit).offset(params.offset).all()
+    query = query.order_by(Order.created_at.desc()).limit(params.limit).offset(params.offset)
+    result = await db.execute(query)
+    orders = result.scalars().all()
 
     logger.debug(
         "Orders fetched successfully",
@@ -79,7 +82,7 @@ async def fetch_orders(
 
 
 @router.post("/orders", response_model=OrderResponse, status_code=201)
-async def create_order(request: Request, payload: OrderCreate, db: Session = Depends(get_db)):
+async def create_order(request: Request, payload: OrderCreate, db: AsyncSession = Depends(get_db)):
     """Create an order manually (non-Alertmanager ingestion)."""
     req_id = request.state.req_id
 
@@ -95,8 +98,8 @@ async def create_order(request: Request, payload: OrderCreate, db: Session = Dep
 
     order = Order(**payload.dict())
     db.add(order)
-    db.commit()
-    db.refresh(order)
+    await db.commit()
+    await db.refresh(order)
 
     logger.info(
         "Order created successfully",
@@ -107,13 +110,14 @@ async def create_order(request: Request, payload: OrderCreate, db: Session = Dep
 
 
 @router.get("/orders/{order_id}", response_model=OrderResponse)
-async def get_order(request: Request, order_id: int, db: Session = Depends(get_db)):
+async def get_order(request: Request, order_id: int, db: AsyncSession = Depends(get_db)):
     """Retrieve a specific order by ID."""
     req_id = request.state.req_id
 
     logger.debug("Fetching order by ID", extra={"req_id": req_id, "order_id": order_id})
 
-    order = db.query(Order).filter(Order.id == order_id).first()
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalars().first()
 
     if not order:
         logger.warning("Order not found", extra={"req_id": req_id, "order_id": order_id})
@@ -124,14 +128,15 @@ async def get_order(request: Request, order_id: int, db: Session = Depends(get_d
 
 @router.put("/orders/{order_id}", response_model=OrderResponse)
 async def update_order(
-    request: Request, order_id: int, payload: OrderUpdate, db: Session = Depends(get_db)
+    request: Request, order_id: int, payload: OrderUpdate, db: AsyncSession = Depends(get_db)
 ):
     """Used by Timer to set status to 'complete' or Chef to 'processing'."""
     req_id = request.state.req_id
 
     logger.info("Updating order", extra={"req_id": req_id, "order_id": order_id})
 
-    order = db.query(Order).filter(Order.id == order_id).first()
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalars().first()
     if not order:
         logger.warning(
             "Order not found for update",
@@ -144,8 +149,8 @@ async def update_order(
         setattr(order, key, value)
 
     order.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
-    db.commit()
-    db.refresh(order)
+    await db.commit()
+    await db.refresh(order)
 
     logger.info(
         "Order updated successfully",

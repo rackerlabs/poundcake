@@ -10,12 +10,12 @@ import os
 import socket
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import func, text
-from sqlalchemy.orm import Session
-import httpx
+from sqlalchemy import func, text, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.config import get_settings
+from api.core.http_client import request_with_retry
 from api.schemas.schemas import HealthResponse, ComponentHealth, StatsResponse
 from api.models.models import Order, Recipe, Dish
 from api.services.stackstorm_service import get_stackstorm_client
@@ -63,15 +63,17 @@ async def check_rabbitmq() -> ComponentHealth:
         rabbitmq_password = os.getenv("RABBITMQ_PASSWORD", "password")
 
         # Try management API
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            response = await client.get(
-                f"http://{rabbitmq_host}:{rabbitmq_port}/api/healthchecks/node",
-                auth=(rabbitmq_user, rabbitmq_password),
-            )
-            if response.status_code == 200:
-                return ComponentHealth(status="healthy", message="Management API accessible")
-            else:
-                return ComponentHealth(status="degraded", message=f"HTTP {response.status_code}")
+        response = await request_with_retry(
+            "GET",
+            f"http://{rabbitmq_host}:{rabbitmq_port}/api/healthchecks/node",
+            auth=(rabbitmq_user, rabbitmq_password),
+            timeout=2.0,
+            retries=0,
+        )
+        if response.status_code == 200:
+            return ComponentHealth(status="healthy", message="Management API accessible")
+        else:
+            return ComponentHealth(status="degraded", message=f"HTTP {response.status_code}")
     except Exception:
         # Fall back to TCP check
         try:
@@ -112,13 +114,13 @@ async def check_redis() -> ComponentHealth:
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(response: Response, db: Session = Depends(get_db)) -> HealthResponse:
+async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -> HealthResponse:
     """Comprehensive health check for all PoundCake components."""
     components = {}
 
     # Check MariaDB/MySQL Database
     try:
-        db.execute(text("SELECT 1"))
+        await db.execute(text("SELECT 1"))
         components["database"] = ComponentHealth(status="healthy", message="Connected")
     except Exception as e:
         components["database"] = ComponentHealth(status="unhealthy", message=str(e))
@@ -182,31 +184,33 @@ async def health_check(response: Response, db: Session = Depends(get_db)) -> Hea
 
 
 @router.get("/stats", response_model=StatsResponse)
-def get_statistics(db: Session = Depends(get_db)) -> StatsResponse:
+async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
-    total_alerts = db.query(func.count(Order.id)).scalar() or 0
-    total_recipes = db.query(func.count(Recipe.id)).scalar() or 0
-    total_executions = db.query(func.count(Dish.id)).scalar() or 0
+    result = await db.execute(select(func.count(Order.id)))
+    total_alerts = result.scalar() or 0
+    result = await db.execute(select(func.count(Recipe.id)))
+    total_recipes = result.scalar() or 0
+    result = await db.execute(select(func.count(Dish.id)))
+    total_executions = result.scalar() or 0
 
-    # Grouping queries
-    alerts_by_processing_status = dict(
-        db.query(Order.processing_status, func.count(Order.id))
-        .group_by(Order.processing_status)
-        .all()
+    result = await db.execute(
+        select(Order.processing_status, func.count(Order.id)).group_by(Order.processing_status)
     )
+    alerts_by_processing_status = dict(result.all())
 
-    # Mapping Order.alert_status (firing/resolved)
-    alerts_by_alert_status = dict(
-        db.query(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status).all()
+    result = await db.execute(
+        select(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status)
     )
+    alerts_by_alert_status = dict(result.all())
 
-    # Mapping Dish.processing_status
-    executions_by_status = dict(
-        db.query(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status).all()
+    result = await db.execute(
+        select(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status)
     )
+    executions_by_status = dict(result.all())
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    recent_alerts = db.query(func.count(Order.id)).filter(Order.created_at >= cutoff).scalar() or 0
+    result = await db.execute(select(func.count(Order.id)).where(Order.created_at >= cutoff))
+    recent_alerts = result.scalar() or 0
 
     return StatsResponse(
         total_alerts=total_alerts,
