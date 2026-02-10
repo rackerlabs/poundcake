@@ -97,7 +97,7 @@ async def delete_ingredient(
         raise HTTPException(status_code=404, detail="Ingredient not found")
 
     task_name = ingredient.task_name
-    db.delete(ingredient)
+    await db.delete(ingredient)
     await db.commit()
 
     logger.info(
