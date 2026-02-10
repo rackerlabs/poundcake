@@ -7,7 +7,7 @@
 """Webhook ingestion routes."""
 
 from fastapi import APIRouter, Depends, Body, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.logging import get_logger
@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 @router.post("/webhook", response_model=WebhookResponse, status_code=202)
 async def alertmanager_webhook(
-    request: Request, payload: dict = Body(...), db: Session = Depends(get_db)
+    request: Request, payload: dict = Body(...), db: AsyncSession = Depends(get_db)
 ) -> WebhookResponse:
     """Entry point for Alertmanager webhooks. Handled by pre_heat service.
 
@@ -34,7 +34,7 @@ async def alertmanager_webhook(
         extra={"req_id": req_id, "alert_count": alert_count},
     )
 
-    result = pre_heat(payload, db, req_id)
+    result = await pre_heat(payload, db, req_id)
 
     logger.info(
         "Webhook processed successfully",

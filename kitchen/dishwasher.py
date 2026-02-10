@@ -9,9 +9,10 @@
 
 import os
 import time
-import httpx
+from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
+from api.core.config import get_settings
 from kitchen.service_helpers import wait_for_api
 
 setup_logging()
@@ -23,18 +24,21 @@ DISHWASHER_INTERVAL = int(os.getenv("DISHWASHER_INTERVAL", "0"))
 MARK_BOOTSTRAP = os.getenv("POUNDCAKE_BOOTSTRAP_MARK", "false").lower() == "true"
 
 SYSTEM_REQ_ID = "SYSTEM-DISHWASHER"
+POLLER_RETRIES = get_settings().poller_http_retries
 
 
 def run_sync() -> bool:
     params = {"mark_bootstrap": "true"} if MARK_BOOTSTRAP else {}
     try:
         start_time = time.time()
-        with httpx.Client(timeout=60) as client:
-            resp = client.post(
-                f"{API_BASE_URL}/cook/sync",
-                params=params,
-                headers={"X-Request-ID": SYSTEM_REQ_ID},
-            )
+        resp = request_with_retry_sync(
+            "POST",
+            f"{API_BASE_URL}/cook/sync",
+            params=params,
+            headers={"X-Request-ID": SYSTEM_REQ_ID},
+            timeout=60,
+            retries=POLLER_RETRIES,
+        )
         latency_ms = int((time.time() - start_time) * 1000)
         if resp.status_code not in (200, 201):
             logger.error(
@@ -68,7 +72,21 @@ def main() -> None:
     wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger, require_healthy=False)
 
     if DISHWASHER_INTERVAL <= 0:
-        run_sync()
+        attempts = int(os.getenv("DISHWASHER_BOOTSTRAP_ATTEMPTS", "10"))
+        retry_delay = float(os.getenv("DISHWASHER_BOOTSTRAP_RETRY_DELAY", "5"))
+        for attempt in range(1, attempts + 1):
+            if run_sync():
+                return
+            if attempt < attempts:
+                logger.warning(
+                    "Dishwasher bootstrap sync failed; retrying",
+                    extra={"req_id": SYSTEM_REQ_ID, "attempt": attempt, "max_attempts": attempts},
+                )
+                time.sleep(retry_delay)
+        logger.error(
+            "Dishwasher bootstrap sync failed after max attempts",
+            extra={"req_id": SYSTEM_REQ_ID, "max_attempts": attempts},
+        )
         return
 
     logger.info(

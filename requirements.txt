@@ -1,9 +1,8 @@
-#  ___                        _  ____      _         
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____ 
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-#
 # PoundCake API Requirements
 
 # Web Framework
@@ -24,6 +23,7 @@ pydantic-settings>=2.5.0
 # HTTP Client
 requests>=2.32.0
 httpx>=0.27.0
+aiomysql>=0.2.0
 
 # Authentication & Security
 python-jose[cryptography]>=3.3.0

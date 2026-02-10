@@ -20,6 +20,7 @@ import httpx
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.httpx_utils import silence_httpx
+from api.core.http_client import request_with_retry
 from api.core.statuses import ST2_TERMINAL_STATUSES
 from api.models.models import Recipe
 
@@ -44,6 +45,7 @@ class StackStormClient:
         settings = get_settings()
         self.base_url = settings.stackstorm_url.rstrip("/")
         self.verify_ssl = settings.stackstorm_verify_ssl
+        self.retries = settings.external_http_retries
         # Don't cache API key - _get_headers() will read it dynamically
         self._auth_token: str | None = settings.stackstorm_auth_token or None
 
@@ -66,6 +68,16 @@ class StackStormClient:
             headers["X-Auth-Token"] = self._auth_token
 
         return headers
+
+    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        retries = kwargs.pop("retries", self.retries)
+        return await request_with_retry(
+            method,
+            f"{self.base_url}{path}",
+            verify=self.verify_ssl,
+            retries=retries,
+            **kwargs,
+        )
 
     async def execute_action(
         self,
@@ -92,84 +104,82 @@ class StackStormClient:
 
         headers = self._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self.verify_ssl,
-            timeout=httpx.Timeout(timeout),
-        ) as client:
-            try:
-                start_time = time.time()
+        start_time = time.time()
+        try:
+            logger.info(
+                "Executing StackStorm action",
+                extra={"req_id": req_id, "action_ref": action_ref, "method": "POST"},
+            )
+
+            response = await self._request(
+                "POST",
+                "/v1/executions",
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+            )
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            if response.status_code == 201:
+                result: dict[str, Any] = response.json()
                 logger.info(
-                    "Executing StackStorm action",
-                    extra={"req_id": req_id, "action_ref": action_ref, "method": "POST"},
-                )
-
-                response = await client.post(
-                    f"{self.base_url}/v1/executions",
-                    headers=headers,
-                    json=payload,
-                )
-                latency_ms = int((time.time() - start_time) * 1000)
-
-                if response.status_code == 201:
-                    result: dict[str, Any] = response.json()
-                    logger.info(
-                        "Action execution started successfully",
-                        extra={
-                            "req_id": req_id,
-                            "action_ref": action_ref,
-                            "method": "POST",
-                            "status_code": response.status_code,
-                            "latency_ms": latency_ms,
-                            "execution_id": result.get("id"),
-                            "status": result.get("status"),
-                        },
-                    )
-                    return result
-                else:
-                    error_msg = f"StackStorm API error: {response.status_code} - {response.text}"
-                    logger.error(
-                        "StackStorm API error",
-                        extra={
-                            "req_id": req_id,
-                            "action_ref": action_ref,
-                            "method": "POST",
-                            "status_code": response.status_code,
-                            "latency_ms": latency_ms,
-                            "error": response.text,
-                        },
-                    )
-                    raise StackStormError(error_msg)
-
-            except httpx.TimeoutException as e:
-                latency_ms = int((time.time() - start_time) * 1000)
-                logger.error(
-                    "StackStorm request timed out",
+                    "Action execution started successfully",
                     extra={
                         "req_id": req_id,
                         "action_ref": action_ref,
                         "method": "POST",
-                        "timeout": timeout,
+                        "status_code": response.status_code,
                         "latency_ms": latency_ms,
-                        "error": str(e),
+                        "execution_id": result.get("id"),
+                        "status": result.get("status"),
                     },
-                    exc_info=True,
                 )
-                raise StackStormError(f"StackStorm request timed out after {timeout}s") from e
+                return result
 
-            except httpx.RequestError as e:
-                latency_ms = int((time.time() - start_time) * 1000)
-                logger.error(
-                    "StackStorm request failed",
-                    extra={
-                        "req_id": req_id,
-                        "action_ref": action_ref,
-                        "method": "POST",
-                        "latency_ms": latency_ms,
-                        "error": str(e),
-                    },
-                    exc_info=True,
-                )
-                raise StackStormError(f"StackStorm request failed: {e}") from e
+            error_msg = f"StackStorm API error: {response.status_code} - {response.text}"
+            logger.error(
+                "StackStorm API error",
+                extra={
+                    "req_id": req_id,
+                    "action_ref": action_ref,
+                    "method": "POST",
+                    "status_code": response.status_code,
+                    "latency_ms": latency_ms,
+                    "error": response.text,
+                },
+            )
+            raise StackStormError(error_msg)
+
+        except httpx.TimeoutException as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "StackStorm request timed out",
+                extra={
+                    "req_id": req_id,
+                    "action_ref": action_ref,
+                    "method": "POST",
+                    "timeout": timeout,
+                    "latency_ms": latency_ms,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
+            raise StackStormError(f"StackStorm request timed out after {timeout}s") from e
+
+        except httpx.RequestError as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "StackStorm request failed",
+                extra={
+                    "req_id": req_id,
+                    "action_ref": action_ref,
+                    "method": "POST",
+                    "latency_ms": latency_ms,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
+            raise StackStormError(f"StackStorm request failed: {e}") from e
 
     async def get_execution(self, execution_id: str) -> dict[str, Any]:
         """Get the status of a StackStorm execution.
@@ -182,81 +192,66 @@ class StackStormClient:
         """
         headers = self._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.get(
-                f"{self.base_url}/v1/executions/{execution_id}",
-                headers=headers,
-            )
+        response = await self._request(
+            "GET",
+            f"/v1/executions/{execution_id}",
+            headers=headers,
+            timeout=30,
+        )
 
-            if response.status_code == 200:
-                result: dict[str, Any] = response.json()
-                return result
-            else:
-                raise StackStormError(
-                    f"Failed to get execution {execution_id}: {response.status_code}"
-                )
+        if response.status_code == 200:
+            result: dict[str, Any] = response.json()
+            return result
+        raise StackStormError(f"Failed to get execution {execution_id}: {response.status_code}")
 
     async def get_execution_tasks(self, execution_id: str) -> list[dict[str, Any]]:
         """Get task results for a StackStorm execution (Orquesta)."""
         headers = self._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.get(
-                f"{self.base_url}/v1/executions/{execution_id}/tasks",
-                headers=headers,
-            )
+        response = await self._request(
+            "GET",
+            f"/v1/executions/{execution_id}/tasks",
+            headers=headers,
+            timeout=30,
+        )
 
-            if response.status_code == 200:
-                result: list[dict[str, Any]] = response.json()
-                return result
-            raise StackStormError(
-                f"Failed to get execution tasks {execution_id}: {response.status_code}"
-            )
+        if response.status_code == 200:
+            result: list[dict[str, Any]] = response.json()
+            return result
+        raise StackStormError(
+            f"Failed to get execution tasks {execution_id}: {response.status_code}"
+        )
 
     async def cancel_execution(self, execution_id: str) -> bool:
         """Cancel a StackStorm execution."""
         headers = self._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.put(
-                f"{self.base_url}/v1/executions/{execution_id}",
-                headers=headers,
-                json={"status": "canceled"},
-            )
+        response = await self._request(
+            "PUT",
+            f"/v1/executions/{execution_id}",
+            headers=headers,
+            json={"status": "canceled"},
+            timeout=30,
+        )
 
-            if response.status_code in (200, 202, 204):
-                return True
-            raise StackStormError(
-                f"Failed to cancel execution {execution_id}: {response.status_code}"
-            )
+        if response.status_code in (200, 202, 204):
+            return True
+        raise StackStormError(f"Failed to cancel execution {execution_id}: {response.status_code}")
 
     async def delete_execution(self, execution_id: str) -> bool:
         """Delete a StackStorm execution record."""
         headers = self._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.delete(
-                f"{self.base_url}/v1/executions/{execution_id}",
-                headers=headers,
-            )
+        response = await self._request(
+            "DELETE",
+            f"/v1/executions/{execution_id}",
+            headers=headers,
+            timeout=30,
+        )
 
-            if response.status_code in (200, 202, 204):
-                return True
-            raise StackStormError(
-                f"Failed to delete execution {execution_id}: {response.status_code}"
-            )
+        if response.status_code in (200, 202, 204):
+            return True
+        raise StackStormError(f"Failed to delete execution {execution_id}: {response.status_code}")
 
     async def wait_for_execution(
         self,
@@ -294,34 +289,33 @@ class StackStormClient:
             headers["X-Request-ID"] = req_id
 
         with silence_httpx():
-            async with httpx.AsyncClient(
-                verify=self.verify_ssl,
-                timeout=httpx.Timeout(10),
-            ) as client:
-                try:
-                    start_time = time.time()
-                    response = await client.get(
-                        f"{self.base_url}/v1/actions",
-                        headers=headers,
-                        params={"limit": 1},
-                    )
-                    return response.status_code == 200
-                except Exception as e:
-                    latency_ms = int((time.time() - start_time) * 1000)
-                    logger.warning(
-                        "StackStorm health check failed",
-                        extra=(
-                            {
-                                "req_id": req_id,
-                                "method": "GET",
-                                "latency_ms": latency_ms,
-                                "error": str(e),
-                            }
-                            if req_id
-                            else {"method": "GET", "error": str(e)}
-                        ),
-                    )
-                    return False
+            try:
+                start_time = time.time()
+                response = await self._request(
+                    "GET",
+                    "/v1/actions",
+                    headers=headers,
+                    params={"limit": 1},
+                    timeout=10,
+                    retries=0,
+                )
+                return response.status_code == 200
+            except Exception as e:
+                latency_ms = int((time.time() - start_time) * 1000)
+                logger.warning(
+                    "StackStorm health check failed",
+                    extra=(
+                        {
+                            "req_id": req_id,
+                            "method": "GET",
+                            "latency_ms": latency_ms,
+                            "error": str(e),
+                        }
+                        if req_id
+                        else {"method": "GET", "error": str(e)}
+                    ),
+                )
+                return False
 
 
 class StackStormActionManager:
@@ -330,6 +324,17 @@ class StackStormActionManager:
     def __init__(self, client: StackStormClient | None = None) -> None:
         """Initialize with a StackStorm client."""
         self._client = client or StackStormClient()
+        self._retries = self._client.retries
+
+    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        retries = kwargs.pop("retries", self._retries)
+        return await request_with_retry(
+            method,
+            f"{self._client.base_url}{path}",
+            verify=self._client.verify_ssl,
+            retries=retries,
+            **kwargs,
+        )
 
     async def list_actions(
         self,
@@ -351,20 +356,18 @@ class StackStormActionManager:
 
         headers = self._client._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.get(
-                f"{self._client.base_url}/v1/actions",
-                headers=headers,
-                params=params,
-            )
+        response = await self._request(
+            "GET",
+            "/v1/actions",
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
 
-            if response.status_code == 200:
-                result: list[dict[str, Any]] = response.json()
-                return result
-            return []
+        if response.status_code == 200:
+            result: list[dict[str, Any]] = response.json()
+            return result
+        return []
 
     async def list_non_orquesta_actions(self, limit: int = 1000) -> list[dict[str, Any]]:
         """List non-Orquesta StackStorm actions (runner_type != orquesta)."""
@@ -382,23 +385,21 @@ class StackStormActionManager:
         actions: list[dict[str, Any]] = []
         offset = 0
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            while True:
-                response = await client.get(
-                    f"{self._client.base_url}/v1/actions",
-                    headers=headers,
-                    params={"limit": limit, "offset": offset},
-                )
-                if response.status_code != 200:
-                    break
-                batch: list[dict[str, Any]] = response.json()
-                if not batch:
-                    break
-                actions.extend(batch)
-                offset += limit
+        while True:
+            response = await self._request(
+                "GET",
+                "/v1/actions",
+                headers=headers,
+                params={"limit": limit, "offset": offset},
+                timeout=30,
+            )
+            if response.status_code != 200:
+                break
+            batch: list[dict[str, Any]] = response.json()
+            if not batch:
+                break
+            actions.extend(batch)
+            offset += limit
 
         return actions
 
@@ -413,19 +414,17 @@ class StackStormActionManager:
         """
         headers = self._client._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.get(
-                f"{self._client.base_url}/v1/actions/{action_ref}",
-                headers=headers,
-            )
+        response = await self._request(
+            "GET",
+            f"/v1/actions/{action_ref}",
+            headers=headers,
+            timeout=30,
+        )
 
-            if response.status_code == 200:
-                result: dict[str, Any] = response.json()
-                return result
-            return None
+        if response.status_code == 200:
+            result: dict[str, Any] = response.json()
+            return result
+        return None
 
     async def list_packs(self) -> list[dict[str, Any]]:
         """List available StackStorm packs.
@@ -435,19 +434,17 @@ class StackStormActionManager:
         """
         headers = self._client._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.get(
-                f"{self._client.base_url}/v1/packs",
-                headers=headers,
-            )
+        response = await self._request(
+            "GET",
+            "/v1/packs",
+            headers=headers,
+            timeout=30,
+        )
 
-            if response.status_code == 200:
-                result: list[dict[str, Any]] = response.json()
-                return result
-            return []
+        if response.status_code == 200:
+            result: list[dict[str, Any]] = response.json()
+            return result
+        return []
 
     async def get_execution_history(
         self,
@@ -472,20 +469,18 @@ class StackStormActionManager:
 
         headers = self._client._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.get(
-                f"{self._client.base_url}/v1/executions",
-                headers=headers,
-                params=params,
-            )
+        response = await self._request(
+            "GET",
+            "/v1/executions",
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
 
-            if response.status_code == 200:
-                result: list[dict[str, Any]] = response.json()
-                return result
-            return []
+        if response.status_code == 200:
+            result: list[dict[str, Any]] = response.json()
+            return result
+        return []
 
     async def update_action(
         self,
@@ -503,33 +498,31 @@ class StackStormActionManager:
         """
         headers = self._client._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.put(
-                f"{self._client.base_url}/v1/actions/{action_ref}",
-                headers=headers,
-                json=action_data,
-            )
+        response = await self._request(
+            "PUT",
+            f"/v1/actions/{action_ref}",
+            headers=headers,
+            json=action_data,
+            timeout=30,
+        )
 
-            if response.status_code == 200:
-                result: dict[str, Any] = response.json()
-                logger.info(
-                    "StackStorm action updated successfully",
-                    extra={"action_ref": action_ref},
-                )
-                return result
-            else:
-                logger.error(
-                    "Failed to update StackStorm action",
-                    extra={
-                        "action_ref": action_ref,
-                        "status_code": response.status_code,
-                        "error": response.text,
-                    },
-                )
-                return None
+        if response.status_code == 200:
+            result: dict[str, Any] = response.json()
+            logger.info(
+                "StackStorm action updated successfully",
+                extra={"action_ref": action_ref},
+            )
+            return result
+        else:
+            logger.error(
+                "Failed to update StackStorm action",
+                extra={
+                    "action_ref": action_ref,
+                    "status_code": response.status_code,
+                    "error": response.text,
+                },
+            )
+            return None
 
     async def create_action(
         self,
@@ -545,29 +538,27 @@ class StackStormActionManager:
         """
         headers = self._client._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.post(
-                f"{self._client.base_url}/v1/actions",
-                headers=headers,
-                json=action_data,
-            )
+        response = await self._request(
+            "POST",
+            "/v1/actions",
+            headers=headers,
+            json=action_data,
+            timeout=30,
+        )
 
-            if response.status_code == 201:
-                result: dict[str, Any] = response.json()
-                logger.info(
-                    "StackStorm action created successfully",
-                    extra={"action_ref": result.get("ref")},
-                )
-                return result
-            else:
-                logger.error(
-                    "Failed to create StackStorm action",
-                    extra={"status_code": response.status_code, "error": response.text},
-                )
-                return None
+        if response.status_code == 201:
+            result: dict[str, Any] = response.json()
+            logger.info(
+                "StackStorm action created successfully",
+                extra={"action_ref": result.get("ref")},
+            )
+            return result
+        else:
+            logger.error(
+                "Failed to create StackStorm action",
+                extra={"status_code": response.status_code, "error": response.text},
+            )
+            return None
 
     async def delete_action(self, action_ref: str) -> bool:
         """Delete a StackStorm action.
@@ -580,26 +571,24 @@ class StackStormActionManager:
         """
         headers = self._client._get_headers()
 
-        async with httpx.AsyncClient(
-            verify=self._client.verify_ssl,
-            timeout=httpx.Timeout(30),
-        ) as client:
-            response = await client.delete(
-                f"{self._client.base_url}/v1/actions/{action_ref}",
-                headers=headers,
-            )
+        response = await self._request(
+            "DELETE",
+            f"/v1/actions/{action_ref}",
+            headers=headers,
+            timeout=30,
+        )
 
-            if response.status_code == 204:
-                logger.info(
-                    "StackStorm action deleted successfully",
-                    extra={"action_ref": action_ref},
-                )
-                return True
-            else:
-                logger.error(
-                    "Failed to delete StackStorm action",
-                    extra={"action_ref": action_ref, "status_code": response.status_code},
-                )
+        if response.status_code == 204:
+            logger.info(
+                "StackStorm action deleted successfully",
+                extra={"action_ref": action_ref},
+            )
+            return True
+        else:
+            logger.error(
+                "Failed to delete StackStorm action",
+                extra={"action_ref": action_ref, "status_code": response.status_code},
+            )
         return False
 
 
@@ -625,11 +614,13 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
         "tasks": {},
     }
     last_task_name: str | None = None
+    task_defs: list[dict[str, Any]] = []
 
     for i, ri in enumerate(sorted_steps):
         if isinstance(recipe_object, dict):
             ingredient = ri.get("ingredient") or {}
             step_order = ri.get("step_order")
+            depth = ri.get("depth") or 0
             task_name_raw = ingredient.get("task_name", "task")
             task_id = ingredient.get("task_id")
             action_parameters = ingredient.get("action_parameters") or {}
@@ -641,6 +632,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             if ingredient is None:
                 continue
             step_order = ri.step_order
+            depth = ri.depth
             task_name_raw = ingredient.task_name
             task_id = ingredient.task_id
             action_parameters = ingredient.action_parameters or {}
@@ -662,29 +654,46 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                 "delay": retry_delay,
             }
 
-        if i < len(sorted_steps) - 1:
-            next_step = sorted_steps[i + 1]
-            if isinstance(recipe_object, dict):
-                next_ing = next_step.get("ingredient") or {}
-                next_task_name_raw = next_ing.get("task_name", "task")
-                next_step_order = next_step.get("step_order")
-            else:
-                next_ing = next_step.ingredient
-                if next_ing is None:
-                    next_task_name_raw = None
-                    next_step_order = None
-                else:
-                    next_task_name_raw = next_ing.task_name
-                    next_step_order = next_step.step_order
+        task_defs.append(
+            {
+                "name": task_name,
+                "def": task_def,
+                "depth": depth,
+                "step_order": step_order,
+                "is_blocking": is_blocking,
+            }
+        )
 
-            if next_task_name_raw is not None and next_step_order is not None:
-                next_task_name = f"step_{next_step_order}_{next_task_name_raw.replace('.', '_')}"
-                if is_blocking:
-                    task_def["next"] = [{"when": "<% succeeded() %>", "do": next_task_name}]
-                else:
-                    task_def["next"] = [{"do": next_task_name}]
+    # Build requires by depth to allow parallel execution within the same depth.
+    tasks_by_depth: dict[int, list[dict[str, Any]]] = {}
+    for t in task_defs:
+        tasks_by_depth.setdefault(t["depth"], []).append(t)
 
-        workflow["tasks"][task_name] = task_def  # type: ignore[index]
+    for depth, tasks in tasks_by_depth.items():
+        if depth <= 0:
+            continue
+        prev_tasks = tasks_by_depth.get(depth - 1, [])
+        requires = [t["name"] for t in prev_tasks if t["is_blocking"]]
+        if not requires:
+            continue
+        for t in tasks:
+            t["def"]["requires"] = requires
+
+    # If no depth info is available (all depth == 0), enforce sequential execution
+    # only for blocking tasks based on step_order. Non-blocking tasks run in parallel.
+    if task_defs and len(tasks_by_depth.keys()) == 1 and 0 in tasks_by_depth:
+        last_blocking: str | None = None
+        for t in sorted(task_defs, key=lambda x: x["step_order"]):
+            if not t["is_blocking"]:
+                continue
+            if last_blocking and last_blocking != t["name"]:
+                t["def"]["requires"] = [last_blocking]
+            last_blocking = t["name"]
+
+    # Emit tasks in a stable order.
+    for t in sorted(task_defs, key=lambda x: (x["depth"], x["step_order"])):
+        workflow["tasks"][t["name"]] = t["def"]
+        last_task_name = t["name"]
 
     # Capture the final task result as workflow output for easier consumption.
     if last_task_name:
@@ -752,20 +761,23 @@ async def register_workflow_to_st2(
         ),
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{st2_url}/v1/actions",
-            json=st2_action_data,
-            headers=headers,
-        )
+    settings = get_settings()
+    response = await request_with_retry(
+        "POST",
+        f"{st2_url}/v1/actions",
+        json=st2_action_data,
+        headers=headers,
+        timeout=30,
+        retries=settings.external_http_retries,
+    )
 
-        if response.status_code in [200, 201]:
-            data = response.json()
-            return data.get("ref")
-        if response.status_code == 409:
-            # Action already exists; return expected ref
-            return f"{pack_name}.{safe_name}"
-        raise StackStormError(f"Failed to register ST2 action: {response.text}")
+    if response.status_code in [200, 201]:
+        data = response.json()
+        return data.get("ref")
+    if response.status_code == 409:
+        # Action already exists; return expected ref
+        return f"{pack_name}.{safe_name}"
+    raise StackStormError(f"Failed to register ST2 action: {response.text}")
 
 
 # Global instances

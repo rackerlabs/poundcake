@@ -1,3 +1,9 @@
+#  ___                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+#
 """initial_schema
 
 Revision ID: 2026_02_03_1600
@@ -177,12 +183,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["recipe_ingredient_id"], ["recipe_ingredients.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_dish_ingredients_dish_id", "dish_ingredients", ["dish_id"], unique=False
-    )
-    op.create_index(
-        "ix_dish_ingredients_task_id", "dish_ingredients", ["task_id"], unique=False
-    )
+    op.create_index("ix_dish_ingredients_dish_id", "dish_ingredients", ["dish_id"], unique=False)
+    op.create_index("ix_dish_ingredients_task_id", "dish_ingredients", ["task_id"], unique=False)
     op.create_index(
         "ix_dish_ingredients_st2_execution_id",
         "dish_ingredients",
@@ -192,9 +194,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_dish_ingredients_st2_execution_id", table_name="dish_ingredients"
-    )
+    op.drop_index("ix_dish_ingredients_st2_execution_id", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_task_id", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_dish_id", table_name="dish_ingredients")
     op.drop_table("dish_ingredients")
