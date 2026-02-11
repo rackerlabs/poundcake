@@ -76,7 +76,7 @@ ui:
 ingress:
   enabled: false
   className: ""
-  annotations: {}
+  annotations:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
@@ -133,11 +133,11 @@ gateway:
 
   # HTTPRoute Configuration
   # Hostnames for the HTTPRoute (should match listener.hostname)
+  # - poundcake.api.ord.cloudmunchers.net
   hostnames: []
-    # - poundcake.api.ord.cloudmunchers.net
 
   # Optional annotations for HTTPRoute
-  annotations: {}
+  annotations:
     # application: gateway-api
     # route: poundcake
 
@@ -268,25 +268,43 @@ stackstorm-chart:
 # Redis configuration (used by StackStorm for coordination and optionally by PoundCake for caching)
 # Uses Redis Operator (OpsTree Labs) to deploy Redis
 redis:
+  # Enable Redis for state management (required for replicaCount > 1)
   enabled: true
-  # Use external Redis or deploy via operator
-  external: false
-  # External Redis settings (if external: true)
-  host: "redis.default.svc.cluster.local"
-  port: 6379
-  password: ""
-  database: 0
-  # Deployment settings (if external: false, uses Redis Operator)
+
+  # Deploy Redis as part of this chart (independent deployment)
+  # Set to false to use an external Redis instance
+  deploy: true
+
+  # External Redis configuration (when deploy: false)
+  external:
+    # Redis connection URL (e.g., redis://my-redis:6379/0)
+    url: "redis://redis.default.svc.cluster.local:6379/0"
+    # Password for external Redis
+    password: ""
+    existingSecret: ""
+    secretKey: "redis-password"
+
+  # Redis image configuration
   image:
     repository: quay.io/opstree/redis
     tag: v7.0.15
     pullPolicy: IfNotPresent
+
+  # Redis authentication
+  password: ""
+  existingSecret: ""
+  secretKey: "redis-password"
+
   auth:
     enabled: false
     password: ""
+
+  # Persistence configuration
   persistence:
+    enabled: true
     size: 1Gi
     storageClassName: ""
+
   resources:
     requests:
       cpu: 100m
@@ -294,11 +312,16 @@ redis:
     limits:
       cpu: 500m
       memory: 512Mi
+
   metrics:
     enabled: false
     image:
       repository: quay.io/opstree/redis-exporter
       tag: v1.44.0
+
+  # State management settings
+  alertTtlHours: 24  # How long to keep resolved orders
+  lockTimeoutSeconds: 300  # Distributed lock timeout
 
 # RabbitMQ configuration (used by StackStorm for task distribution and workflow coordination)
 # Uses RabbitMQ Operator to deploy RabbitMQ cluster
@@ -472,58 +495,6 @@ auth:
   sessionTimeout: 86400
   # Secret name will be: <release-name>-poundcake-admin
   # Get password with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.password}' | base64 -d
-
-# Redis configuration for stateful alert tracking
-# Required for horizontal scaling
-redis:
-  # Enable Redis for state management (required for replicaCount > 1)
-  enabled: false
-
-  # Deploy Redis as part of this chart (independent deployment)
-  # Set to false to use an external Redis instance
-  deploy: true
-
-  # Redis image configuration
-  image:
-    repository: redis
-    tag: "7-alpine"
-    pullPolicy: IfNotPresent
-
-  # Redis authentication
-  password: ""
-  # Reference to existing secret containing Redis password
-  existingSecret: ""
-  secretKey: "redis-password"
-
-  # Redis resource limits
-  resources:
-    limits:
-      cpu: 500m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
-
-  # Persistence configuration
-  persistence:
-    enabled: true
-    # Storage class - leave empty for default storage class
-    storageClass: ""
-    accessMode: ReadWriteOnce
-    size: 1Gi
-
-  # External Redis configuration (when deploy: false)
-  external:
-    # Redis connection URL (e.g., redis://my-redis:6379/0)
-    url: ""
-    # Password for external Redis
-    password: ""
-    existingSecret: ""
-    secretKey: "redis-password"
-
-  # State management settings
-  alertTtlHours: 24  # How long to keep resolved orders
-  lockTimeoutSeconds: 300  # Distributed lock timeout
 
 # Database configuration (MySQL/MariaDB)
 # Required for persistent storage of orders, mappings, and execution history

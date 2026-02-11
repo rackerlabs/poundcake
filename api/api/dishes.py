@@ -359,7 +359,7 @@ async def update_dish(
         logger.warning("Dish not found", extra={"req_id": req_id, "dish_id": dish_id})
         raise HTTPException(status_code=404, detail="Dish not found")
 
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(dish, key, value)
 

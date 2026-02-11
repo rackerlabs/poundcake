@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Mixer management endpoints for Bakery."""
 
-from typing import Dict, Any, List
+from typing import Any, List
 from fastapi import APIRouter, HTTPException
 
-from bakery.mixer.factory import get_mixer, list_mixers, MIXER_REGISTRY
+from bakery.mixer.factory import get_mixer, list_mixers
 from bakery.schemas import MixerListResponse, MixerInfo, MixerValidateResponse
 
 router = APIRouter()

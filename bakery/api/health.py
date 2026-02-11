@@ -2,14 +2,11 @@
 """Health check endpoint for Bakery."""
 
 import os
-import socket
 from datetime import datetime, timezone
-from typing import Dict
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from bakery import __version__
-from bakery.config import settings
 from bakery.database import get_db
 from bakery.schemas import HealthResponse, ComponentHealth
 
@@ -49,7 +46,7 @@ def check_database(db: Session) -> ComponentHealth:
 )
 async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
     """Health check endpoint."""
-    components: Dict[str, ComponentHealth] = {}
+    components: dict[str, ComponentHealth] = {}
 
     # Check database
     components["database"] = check_database(db)

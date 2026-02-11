@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Ticket management endpoints for Bakery."""
 
-import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
