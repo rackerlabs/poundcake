@@ -48,10 +48,8 @@ async def fetch_orders(
         "Fetching orders",
         extra={
             "req_id": request_id,
-            "processing_status": (
-                params.processing_status.value if params.processing_status else None
-            ),
-            "alert_status": params.alert_status.value if params.alert_status else None,
+            "processing_status": params.processing_status,
+            "alert_status": params.alert_status,
             "filter_req_id": params.req_id,
             "group_name": params.group_name,
             "limit": params.limit,
@@ -62,15 +60,15 @@ async def fetch_orders(
     query = select(Order)
 
     if params.processing_status:
-        query = query.where(Order.processing_status == params.processing_status.value)
+        query = query.where(Order.processing_status == params.processing_status)
     if params.alert_status:
-        query = query.where(Order.alert_status == params.alert_status.value)
+        query = query.where(Order.alert_status == params.alert_status)
     if params.req_id:
         query = query.where(Order.req_id == params.req_id)
     if params.group_name:
         query = query.where(Order.alert_group_name == params.group_name)
 
-    if params.processing_status and params.processing_status.value == "new":
+    if params.processing_status and params.processing_status == "new":
         query = query.order_by(asc(Order.created_at))
     else:
         query = query.order_by(desc(Order.created_at))

@@ -161,9 +161,7 @@ async def fetch_dishes(
         "Fetching dishes",
         extra={
             "req_id": request_id,
-            "processing_status": (
-                params.processing_status.value if params.processing_status else None
-            ),
+            "processing_status": params.processing_status,
             "filter_req_id": params.req_id,
             "order_id": params.order_id,
             "workflow_execution_id": params.workflow_execution_id,
@@ -179,7 +177,7 @@ async def fetch_dishes(
     )
 
     if params.processing_status:
-        query = query.where(Dish.processing_status == params.processing_status.value)
+        query = query.where(Dish.processing_status == params.processing_status)
     if params.req_id:
         query = query.where(Dish.req_id == params.req_id)
     if params.order_id:
@@ -187,9 +185,9 @@ async def fetch_dishes(
     if params.workflow_execution_id:
         query = query.where(Dish.workflow_execution_id == params.workflow_execution_id)
 
-    if params.processing_status and params.processing_status.value == "new":
+    if params.processing_status and params.processing_status == "new":
         query = query.order_by(asc(Dish.created_at))
-    elif params.processing_status and params.processing_status.value == "processing":
+    elif params.processing_status and params.processing_status == "processing":
         # MariaDB doesn't support NULLS FIRST, use CASE to sort NULL values first
         query = query.order_by(
             case((Dish.started_at.is_(None), 0), else_=1),
