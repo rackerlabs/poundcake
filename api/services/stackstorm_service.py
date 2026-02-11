@@ -288,9 +288,9 @@ class StackStormClient:
         if req_id:
             headers["X-Request-ID"] = req_id
 
+        start_time = time.time()
         with silence_httpx():
             try:
-                start_time = time.time()
                 response = await self._request(
                     "GET",
                     "/v1/actions",

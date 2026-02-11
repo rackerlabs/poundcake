@@ -7,8 +7,10 @@
 """Database models for PoundCake."""
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, Index, Boolean
-from sqlalchemy.orm import relationship
+from typing import Any, Optional, List
+
+from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, Index, Boolean
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 
 # We use the explicit MariaDB/MySQL JSON type to ensure the dialect handles serialization properly
@@ -16,7 +18,7 @@ from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON
 from api.core.database import Base
 
 
-def get_utc_now():
+def get_utc_now() -> datetime:
     """Helper for timezone-aware UTC, as utcnow is deprecated."""
     return datetime.now(timezone.utc)
 
@@ -28,22 +30,24 @@ class RecipeIngredient(Base):
 
     __tablename__ = "recipe_ingredients"
 
-    id = Column(Integer, primary_key=True, index=True)
-    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
-    ingredient_id = Column(Integer, ForeignKey("ingredients.id"), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    recipe_id: Mapped[int] = mapped_column(Integer, ForeignKey("recipes.id"), nullable=False)
+    ingredient_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("ingredients.id"), nullable=False
+    )
 
     # Determines the position in the ST2 Orquesta workflow
-    step_order = Column(Integer, default=1, nullable=False)
+    step_order: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     # Logic gates for Orquesta (e.g., "on-success", "on-failure")
-    on_success = Column(String(50), default="continue")
+    on_success: Mapped[str] = mapped_column(String(50), default="continue")
     # Parallel grouping (same depth implies parallel tasks)
-    parallel_group = Column(Integer, default=0, nullable=False)
+    parallel_group: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # Depth in the task graph (for parallel/linear ordering)
-    depth = Column(Integer, default=0, nullable=False)
+    depth: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    recipe = relationship("Recipe", back_populates="recipe_ingredients")
-    ingredient = relationship("Ingredient")
+    recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="recipe_ingredients")
+    ingredient: Mapped["Ingredient"] = relationship("Ingredient")
 
     __table_args__ = (Index("idx_recipe_ingredient_order", "recipe_id", "step_order"),)
 
@@ -55,32 +59,34 @@ class Recipe(Base):
 
     __tablename__ = "recipes"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), unique=True, nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    enabled = Column(Boolean, default=True, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Store the ST2 Ref (e.g. 'my_pack.my_workflow')
-    workflow_id = Column(String(255), nullable=True)
-    workflow_payload = Column(MYSQL_JSON, nullable=True)  # Orquesta JSON payload
-    workflow_parameters = Column(MYSQL_JSON, nullable=True)
+    workflow_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    workflow_payload: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
+    workflow_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
 
-    created_at = Column(DateTime, default=get_utc_now, nullable=False)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
-    deleted = Column(Boolean, default=False)
-    deleted_at = Column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Relationships
-    recipe_ingredients = relationship(
+    recipe_ingredients: Mapped[List["RecipeIngredient"]] = relationship(
         "RecipeIngredient",
         back_populates="recipe",
         order_by="RecipeIngredient.step_order",
         cascade="all, delete-orphan",
     )
-    dishes = relationship("Dish", back_populates="recipe")
+    dishes: Mapped[List["Dish"]] = relationship("Dish", back_populates="recipe")
 
     @hybrid_property
-    def total_expected_duration_sec(self):
+    def total_expected_duration_sec(self) -> int:
         """Automatically sums the duration of all ingredients in this recipe."""
         return sum(
             ri.ingredient.expected_duration_sec
@@ -96,25 +102,27 @@ class Ingredient(Base):
 
     __tablename__ = "ingredients"
 
-    id = Column(Integer, primary_key=True, index=True)
-    task_id = Column(String(100), nullable=False, index=True)  # ST2 action.ref (e.g. 'core.local')
-    task_name = Column(String(255), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    task_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    task_name: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    action_id = Column(String(100), nullable=True)  # The ST2 UUID for reuse
-    action_payload = Column(Text, nullable=True)
-    action_parameters = Column(MYSQL_JSON, nullable=True)
+    action_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    action_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    action_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
 
-    is_blocking = Column(Boolean, default=True, nullable=False)
-    expected_duration_sec = Column(Integer, nullable=False)
-    timeout_duration_sec = Column(Integer, default=300, nullable=False)
-    retry_count = Column(Integer, default=0, nullable=False)
-    retry_delay = Column(Integer, default=5, nullable=False)
-    on_failure = Column(String(50), default="stop", nullable=False)
+    is_blocking: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    expected_duration_sec: Mapped[int] = mapped_column(Integer, nullable=False)
+    timeout_duration_sec: Mapped[int] = mapped_column(Integer, default=300, nullable=False)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    retry_delay: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    on_failure: Mapped[str] = mapped_column(String(50), default="stop", nullable=False)
 
-    created_at = Column(DateTime, default=get_utc_now, nullable=False)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
-    deleted = Column(Boolean, default=False)
-    deleted_at = Column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class Dish(Base):
@@ -124,41 +132,47 @@ class Dish(Base):
 
     __tablename__ = "dishes"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
     # Traceability ID from Middleware (X-Request-Id)
-    req_id = Column(String(100), nullable=False, index=True)
+    req_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
 
     # Unique UUID returned by StackStorm for this specific run
-    workflow_execution_id = Column(String(100), nullable=True, index=True)
+    workflow_execution_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, index=True
+    )
 
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
-    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
+    order_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("orders.id"), nullable=True)
+    recipe_id: Mapped[int] = mapped_column(Integer, ForeignKey("recipes.id"), nullable=False)
 
-    processing_status = Column(String(50), default="new", nullable=False, index=True)
-    status = Column(String(50), nullable=True)  # running, succeeded, failed, etc.
+    processing_status: Mapped[str] = mapped_column(
+        String(50), default="new", nullable=False, index=True
+    )
+    status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Snapshot of the expected duration at the time of the order
-    expected_duration_sec = Column(Integer, nullable=True)
+    expected_duration_sec: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Calculation: completed_at - started_at
-    actual_duration_sec = Column(Integer, nullable=True)
+    actual_duration_sec: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Full output payload from ST2
-    result = Column(MYSQL_JSON, nullable=True)
-    error_message = Column(Text, nullable=True)
-    retry_attempt = Column(Integer, default=0, nullable=False)
+    result: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    retry_attempt: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    created_at = Column(DateTime, default=get_utc_now, nullable=False)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
 
     # Relationships
-    recipe = relationship("Recipe", back_populates="dishes")
-    order = relationship("Order", back_populates="dishes")
-    dish_ingredients = relationship(
+    recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="dishes")
+    order: Mapped[Optional["Order"]] = relationship("Order", back_populates="dishes")
+    dish_ingredients: Mapped[List["DishIngredient"]] = relationship(
         "DishIngredient",
         back_populates="dish",
         cascade="all, delete-orphan",
@@ -172,29 +186,35 @@ class DishIngredient(Base):
 
     __tablename__ = "dish_ingredients"
 
-    id = Column(Integer, primary_key=True, index=True)
-    dish_id = Column(Integer, ForeignKey("dishes.id"), nullable=False, index=True)
-    recipe_ingredient_id = Column(Integer, ForeignKey("recipe_ingredients.id"), nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    dish_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("dishes.id"), nullable=False, index=True
+    )
+    recipe_ingredient_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("recipe_ingredients.id"), nullable=True
+    )
 
-    task_id = Column(String(255), nullable=True, index=True)
-    st2_execution_id = Column(String(100), nullable=True, index=True)
+    task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    st2_execution_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
 
-    status = Column(String(50), nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    canceled_at = Column(DateTime, nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    result = Column(MYSQL_JSON, nullable=True)
-    error_message = Column(Text, nullable=True)
+    result: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    deleted = Column(Boolean, default=False, nullable=False)
-    deleted_at = Column(DateTime, nullable=True)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=get_utc_now, nullable=False)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
 
-    dish = relationship("Dish", back_populates="dish_ingredients")
-    recipe_ingredient = relationship("RecipeIngredient")
+    dish: Mapped["Dish"] = relationship("Dish", back_populates="dish_ingredients")
+    recipe_ingredient: Mapped["RecipeIngredient"] = relationship("RecipeIngredient")
 
 
 class Order(Base):
@@ -204,29 +224,35 @@ class Order(Base):
 
     __tablename__ = "orders"
 
-    id = Column(Integer, primary_key=True, index=True)
-    req_id = Column(String(100), nullable=False, index=True)
-    fingerprint = Column(String(255), nullable=False, index=True)
-    alert_status = Column(String(50), nullable=False, index=True)
-    processing_status = Column(String(50), default="new", nullable=False, index=True)
-    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    req_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    fingerprint: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    alert_status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(
+        String(50), default="new", nullable=False, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    alert_group_name = Column(String(255), nullable=False, index=True)
-    severity = Column(String(50), nullable=True, index=True)
-    instance = Column(String(255), nullable=True, index=True)
-    counter = Column(Integer, default=1, nullable=False)
+    alert_group_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    severity: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    instance: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    counter: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
-    labels = Column(MYSQL_JSON, nullable=False)
-    annotations = Column(MYSQL_JSON, nullable=True)
-    raw_data = Column(MYSQL_JSON, nullable=True)
+    labels: Mapped[dict[str, Any]] = mapped_column(MYSQL_JSON, nullable=False)
+    annotations: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
+    raw_data: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
 
-    starts_at = Column(DateTime, nullable=False)
-    ends_at = Column(DateTime, nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=get_utc_now, nullable=False, index=True)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
 
-    dishes = relationship("Dish", back_populates="order")
+    dishes: Mapped[List["Dish"]] = relationship("Dish", back_populates="order")
 
     __table_args__ = (
         Index("ux_orders_fingerprint_active", "fingerprint", "is_active", unique=True),
