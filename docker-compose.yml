@@ -80,7 +80,7 @@ services:
       OVEN_POLL_INTERVAL: ${OVEN_INTERVAL:-5}
       LOG_LEVEL: INFO
       POUNDCAKE_LOG_FORMAT: console
-      SERVICE_NAME: kitchen/chef
+      SERVICE_NAME: chef
     depends_on:
       api:
         condition: service_healthy
@@ -106,7 +106,7 @@ services:
       OVEN_INTERVAL: ${OVEN_INTERVAL:-5}
       LOG_LEVEL: INFO
       POUNDCAKE_LOG_FORMAT: console
-      SERVICE_NAME: kitchen/prep-chef
+      SERVICE_NAME: prep-chef
     depends_on:
       api:
         condition: service_healthy
@@ -133,7 +133,7 @@ services:
       SLA_BUFFER_PERCENT: 0.2
       LOG_LEVEL: INFO
       POUNDCAKE_LOG_FORMAT: console
-      SERVICE_NAME: kitchen/timer
+      SERVICE_NAME: timer
     depends_on:
       api:
         condition: service_healthy
@@ -163,7 +163,7 @@ services:
       DISHWASHER_DEFAULT_TIMEOUT: 300
       DISHWASHER_PRUNE_MISSING: "false"
       DISHWASHER_INTERVAL: ${DISHWASHER_INTERVAL:-300}
-      SERVICE_NAME: kitchen/dishwasher
+      SERVICE_NAME: dishwasher
     depends_on:
       api:
         condition: service_healthy

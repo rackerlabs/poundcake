@@ -83,7 +83,7 @@ async def seed_default_recipes() -> None:
                 Ingredient(
                     task_id="log_alert",
                     task_name="Log Alert Information",
-                    action_id=None,
+                    action_id=None,  # pyright: ignore[reportCallIssue]
                     action_payload=None,
                     action_parameters=None,
                     is_blocking=True,
