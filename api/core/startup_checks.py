@@ -20,10 +20,16 @@ logger = get_logger(__name__)
 ST2_KEY_FILE = Path("/app/config/st2_api_key")
 
 
-async def wait_for_stackstorm_ready(max_attempts: int = 60, delay_sec: float = 2.0) -> bool:
+async def wait_for_stackstorm_ready(max_attempts: int | None = None, delay_sec: float | None = None) -> bool:
     """Wait for StackStorm API key and API health before declaring ready."""
     settings = get_settings()
     client = get_stackstorm_client()
+
+    # Use config values if not explicitly provided
+    if max_attempts is None:
+        max_attempts = settings.stackstorm_startup_max_attempts
+    if delay_sec is None:
+        delay_sec = settings.stackstorm_startup_delay_seconds
 
     for attempt in range(1, max_attempts + 1):
         api_key = settings.get_stackstorm_api_key()
