@@ -282,11 +282,6 @@ async def sync_recipe_ingredients_from_yaml(
         )
         return False
 
-    depth_counts: dict[int, int] = {}
-    for t in ordered_tasks:
-        depth = depth_map.get(t, 0)
-        depth_counts[depth] = depth_counts.get(depth, 0) + 1
-
     await db.execute(delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id))
 
     step_order = 1
@@ -298,9 +293,6 @@ async def sync_recipe_ingredients_from_yaml(
         if not ing:
             continue
         depth = depth_map.get(task_name, 0)
-        if depth_counts.get(depth, 0) > 1:
-            ing.is_blocking = False
-            ing.updated_at = datetime.now(timezone.utc)
         db.add(
             RecipeIngredient(
                 recipe_id=recipe.id,

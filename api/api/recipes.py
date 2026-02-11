@@ -37,47 +37,47 @@ async def create_recipe(
 
     logger.info("Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name})
 
-    result = await db.execute(select(Recipe).where(Recipe.name == recipe.name))
-    existing = result.scalars().first()
-    if existing:
-        logger.warning(
-            "Recipe already exists",
-            extra={"req_id": req_id, "recipe_name": recipe.name},
+    db_recipe: Recipe | None = None
+    async with db.begin():
+        result = await db.execute(select(Recipe).where(Recipe.name == recipe.name))
+        existing = result.scalars().first()
+        if existing:
+            logger.warning(
+                "Recipe already exists",
+                extra={"req_id": req_id, "recipe_name": recipe.name},
+            )
+            raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
+
+        db_recipe = Recipe(
+            name=recipe.name,
+            description=recipe.description,
+            enabled=recipe.enabled,
+            workflow_id=recipe.workflow_id,
+            workflow_payload=recipe.workflow_payload,
+            workflow_parameters=recipe.workflow_parameters,
         )
-        raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
+        db.add(db_recipe)
+        await db.flush()
 
-    db_recipe = Recipe(
-        name=recipe.name,
-        description=recipe.description,
-        enabled=recipe.enabled,
-        workflow_id=recipe.workflow_id,
-        workflow_payload=recipe.workflow_payload,
-        workflow_parameters=recipe.workflow_parameters,
-    )
-    db.add(db_recipe)
-    await db.flush()
+        ingredient_ids = [ri.ingredient_id for ri in recipe.recipe_ingredients]
+        if ingredient_ids:
+            result = await db.execute(select(Ingredient).where(Ingredient.id.in_(ingredient_ids)))
+            ingredients = result.scalars().all()
+        else:
+            ingredients = []
+        found_ids = {ing.id for ing in ingredients}
+        missing = [ing_id for ing_id in ingredient_ids if ing_id not in found_ids]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
 
-    ingredient_ids = [ri.ingredient_id for ri in recipe.recipe_ingredients]
-    if ingredient_ids:
-        result = await db.execute(select(Ingredient).where(Ingredient.id.in_(ingredient_ids)))
-        ingredients = result.scalars().all()
-    else:
-        ingredients = []
-    found_ids = {ing.id for ing in ingredients}
-    missing = [ing_id for ing_id in ingredient_ids if ing_id not in found_ids]
-    if missing:
-        raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
-
-    for ri in recipe.recipe_ingredients:
-        db_recipe_ingredient = RecipeIngredient(
-            recipe_id=db_recipe.id,
-            ingredient_id=ri.ingredient_id,
-            step_order=ri.step_order,
-            on_success=ri.on_success,
-        )
-        db.add(db_recipe_ingredient)
-
-    await db.commit()
+        for ri in recipe.recipe_ingredients:
+            db_recipe_ingredient = RecipeIngredient(
+                recipe_id=db_recipe.id,
+                ingredient_id=ri.ingredient_id,
+                step_order=ri.step_order,
+                on_success=ri.on_success,
+            )
+            db.add(db_recipe_ingredient)
 
     result = await db.execute(
         select(Recipe)
