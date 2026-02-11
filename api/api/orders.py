@@ -7,7 +7,7 @@
 """API routes for Order management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import select, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from datetime import datetime, timezone
@@ -70,7 +70,12 @@ async def fetch_orders(
     if params.group_name:
         query = query.where(Order.alert_group_name == params.group_name)
 
-    query = query.order_by(Order.created_at.desc()).limit(params.limit).offset(params.offset)
+    if params.processing_status and params.processing_status.value == "new":
+        query = query.order_by(asc(Order.created_at))
+    else:
+        query = query.order_by(desc(Order.created_at))
+
+    query = query.limit(params.limit).offset(params.offset)
     result = await db.execute(query)
     orders = result.scalars().all()
 

@@ -150,6 +150,9 @@ class Settings(BaseSettings):
     httpx_retry_statuses: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
     poller_http_retries: int = 0
     external_http_retries: int = 2
+    chef_patch_retries: int = 3
+    chef_patch_retry_backoff_seconds: float = 1.0
+    chef_missing_execution_timeout_seconds: int = 60
 
     log_level: str = "INFO"
     log_format: str = "console"  # Change to 'json' for production/Helm

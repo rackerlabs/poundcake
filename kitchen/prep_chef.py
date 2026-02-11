@@ -86,11 +86,17 @@ def prep_loop() -> None:
                 latency_ms = int((time.time() - start_time) * 1000)
 
                 if cook_resp.status_code in [200, 201]:
+                    cook_status = "unknown"
+                    try:
+                        cook_status = cook_resp.json().get("status", "unknown")
+                    except Exception:
+                        cook_status = "unknown"
                     logger.info(
-                        "Successfully prepared order for dish",
+                        "Order prepared",
                         extra={
                             "req_id": req_id,
                             "order_id": order_id,
+                            "cook_status": cook_status,
                             "method": "POST",
                             "status_code": cook_resp.status_code,
                             "latency_ms": latency_ms,

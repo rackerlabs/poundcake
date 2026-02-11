@@ -26,6 +26,8 @@ POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
 # System request ID for polling operations
 SYSTEM_REQ_ID = "SYSTEM-CHEF"
 POLLER_RETRIES = get_settings().poller_http_retries
+CHEF_PATCH_RETRIES = get_settings().chef_patch_retries
+CHEF_PATCH_RETRY_BACKOFF_SECONDS = get_settings().chef_patch_retry_backoff_seconds
 
 
 def run_chef() -> None:
@@ -169,14 +171,25 @@ def run_chef() -> None:
                     raise Exception(exec_resp.text)
                 st2_exec_id = exec_resp.json().get("id")
 
-                request_with_retry_sync(
+                patch_resp = request_with_retry_sync(
                     "PATCH",
                     f"{API_BASE_URL}/dishes/{dish_id}",
                     json={"workflow_execution_id": st2_exec_id},
                     headers={"X-Request-ID": req_id},
                     timeout=10,
-                    retries=POLLER_RETRIES,
+                    retries=CHEF_PATCH_RETRIES,
+                    retry_backoff_seconds=CHEF_PATCH_RETRY_BACKOFF_SECONDS,
                 )
+                if patch_resp.status_code not in (200, 201):
+                    logger.error(
+                        "Failed to persist workflow execution id",
+                        extra={
+                            "req_id": req_id,
+                            "dish_id": dish_id,
+                            "status_code": patch_resp.status_code,
+                            "response": patch_resp.text,
+                        },
+                    )
 
                 logger.info(
                     "Workflow execution started",
