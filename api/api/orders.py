@@ -141,28 +141,32 @@ async def update_order(
 
     logger.info("Updating order", extra={"req_id": req_id, "order_id": order_id})
 
-    result = await db.execute(select(Order).where(Order.id == order_id))
-    order = result.scalars().first()
-    if not order:
-        logger.warning(
-            "Order not found for update",
-            extra={"req_id": req_id, "order_id": order_id},
-        )
-        raise HTTPException(status_code=404, detail="Order not found")
+    order: Order | None = None
+    async with db.begin():
+        result = await db.execute(select(Order).where(Order.id == order_id).with_for_update())
+        order = result.scalars().first()
+        if not order:
+            logger.warning(
+                "Order not found for update",
+                extra={"req_id": req_id, "order_id": order_id},
+            )
+            raise HTTPException(status_code=404, detail="Order not found")
 
-    update_data = payload.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(order, key, value)
+        update_data = payload.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(order, key, value)
 
-    if (
-        "processing_status" in update_data
-        and update_data["processing_status"] in ORDER_TERMINAL_PROCESSING_STATUSES
-        and "is_active" not in update_data
-    ):
-        order.is_active = False
+        if (
+            "processing_status" in update_data
+            and update_data["processing_status"] in ORDER_TERMINAL_PROCESSING_STATUSES
+            and "is_active" not in update_data
+        ):
+            order.is_active = False
 
-    order.updated_at = datetime.now(timezone.utc)
-    await db.commit()
+        order.updated_at = datetime.now(timezone.utc)
+
+    if order is None:
+        raise HTTPException(status_code=500, detail="Order update failed")
     await db.refresh(order)
 
     logger.info(

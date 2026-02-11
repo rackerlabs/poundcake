@@ -8,6 +8,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, update, func, asc, desc, nullsfirst, and_, or_
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -41,71 +42,79 @@ async def cook_dishes(
 
     logger.info("Starting cook", extra={"req_id": req_id, "order_id": order_id})
 
-    result = await db.execute(select(Order).where(Order.id == order_id))
-    order = result.scalars().first()
-    if not order:
-        logger.warning("Order not found", extra={"req_id": req_id, "order_id": order_id})
-        raise HTTPException(status_code=404, detail="Order not found")
+    new_dish: Dish | None = None
+    async with db.begin():
+        result = await db.execute(select(Order).where(Order.id == order_id).with_for_update())
+        order = result.scalars().first()
+        if not order:
+            logger.warning("Order not found", extra={"req_id": req_id, "order_id": order_id})
+            raise HTTPException(status_code=404, detail="Order not found")
 
-    result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .where(Recipe.name == order.alert_group_name, Recipe.enabled.is_(True))
-    )
-    recipe = result.scalars().first()
-
-    if not recipe:
-        order.processing_status = "complete"
-        order.is_active = False
-        order.updated_at = datetime.now(timezone.utc)
-        await db.commit()
-        logger.error(
-            "No recipe found, order closed",
-            extra={"req_id": req_id, "order_id": order_id, "group_name": order.alert_group_name},
+        result = await db.execute(
+            select(Recipe)
+            .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
+            .where(Recipe.name == order.alert_group_name, Recipe.enabled.is_(True))
         )
-        return CookResponse(status="ignored", reason=f"No recipe for {order.alert_group_name}")
+        recipe = result.scalars().first()
 
-    result = await db.execute(
-        select(Dish).where(Dish.order_id == order.id).order_by(Dish.created_at.desc())
-    )
-    existing_dish = result.scalars().first()
+        if not recipe:
+            order.processing_status = "complete"
+            order.is_active = False
+            order.updated_at = datetime.now(timezone.utc)
+            logger.error(
+                "No recipe found, order closed",
+                extra={
+                    "req_id": req_id,
+                    "order_id": order_id,
+                    "group_name": order.alert_group_name,
+                },
+            )
+            return CookResponse(status="ignored", reason=f"No recipe for {order.alert_group_name}")
 
-    now = datetime.now(timezone.utc)
-    update_result = await db.execute(
-        update(Order)
-        .where(Order.id == order.id, Order.processing_status == "new")
-        .values(processing_status="processing", updated_at=now)
-    )
+        result = await db.execute(
+            select(Dish).where(Dish.order_id == order.id).order_by(Dish.created_at.desc())
+        )
+        existing_dish = result.scalars().first()
 
-    if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
-        reason = f"Order not new (status={order.processing_status})"
-        if existing_dish:
-            reason = "Order already has a dish or is being processed"
-        return CookResponse(
-            status="skipped",
-            dishes_created=0,
+        now = datetime.now(timezone.utc)
+        update_result = await db.execute(
+            update(Order)
+            .where(Order.id == order.id, Order.processing_status == "new")
+            .values(processing_status="processing", updated_at=now)
+        )
+
+        if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
+            reason = f"Order not new (status={order.processing_status})"
+            if existing_dish:
+                reason = "Order already has a dish or is being processed"
+            return CookResponse(
+                status="skipped",
+                dishes_created=0,
+                recipe_id=recipe.id,
+                recipe_name=recipe.name,
+                reason=reason,
+            )
+
+        expected_result = await db.execute(
+            select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
+            .select_from(RecipeIngredient)
+            .join(Ingredient, RecipeIngredient.ingredient_id == Ingredient.id)
+            .where(RecipeIngredient.recipe_id == recipe.id)
+        )
+        expected_duration_sec = expected_result.scalar() or 0
+
+        new_dish = Dish(
+            req_id=order.req_id,
+            order_id=order.id,
             recipe_id=recipe.id,
-            recipe_name=recipe.name,
-            reason=reason,
+            processing_status="new",
+            expected_duration_sec=expected_duration_sec,
         )
+        db.add(new_dish)
+        await db.flush()
 
-    expected_result = await db.execute(
-        select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
-        .select_from(RecipeIngredient)
-        .join(Ingredient, RecipeIngredient.ingredient_id == Ingredient.id)
-        .where(RecipeIngredient.recipe_id == recipe.id)
-    )
-    expected_duration_sec = expected_result.scalar() or 0
-
-    new_dish = Dish(
-        req_id=order.req_id,
-        order_id=order.id,
-        recipe_id=recipe.id,
-        processing_status="new",
-        expected_duration_sec=expected_duration_sec,
-    )
-    db.add(new_dish)
-    await db.commit()
+    if not new_dish:
+        raise HTTPException(status_code=500, detail="Dish creation failed")
     await db.refresh(new_dish)
 
     logger.info(
@@ -291,83 +300,85 @@ async def upsert_dish_ingredients(
     """Upsert dish ingredient executions for a dish."""
     req_id = request.state.req_id
 
-    result = await db.execute(
-        select(Dish)
-        .options(
-            joinedload(Dish.recipe)
-            .joinedload(Recipe.recipe_ingredients)
-            .joinedload(RecipeIngredient.ingredient)
-        )
-        .where(Dish.id == dish_id)
-    )
-    dish = result.scalars().first()
-    if not dish:
-        raise HTTPException(status_code=404, detail="Dish not found")
-
-    task_to_recipe_ingredient = {}
-    if dish.recipe and dish.recipe.recipe_ingredients:
-        for ri in dish.recipe.recipe_ingredients:
-            if ri.ingredient and ri.ingredient.task_name:
-                task_to_recipe_ingredient[ri.ingredient.task_name] = ri.id
-
     updated = 0
     created = 0
-    now = datetime.now(timezone.utc)
-
-    seen_keys: set[tuple[str, str]] = set()
-    for item in payload.items:
-        task_id = item.task_id
-        st2_execution_id = item.st2_execution_id
-        if not task_id and not st2_execution_id:
-            continue
-        dedupe_key = (task_id or "", st2_execution_id or "")
-        if dedupe_key in seen_keys:
-            continue
-        seen_keys.add(dedupe_key)
-
-        record_query = select(DishIngredient).where(DishIngredient.dish_id == dish_id)
-        if st2_execution_id and task_id:
-            record_query = record_query.where(
-                DishIngredient.st2_execution_id == st2_execution_id,
-                DishIngredient.task_id == task_id,
+    async with db.begin():
+        result = await db.execute(
+            select(Dish)
+            .options(
+                joinedload(Dish.recipe)
+                .joinedload(Recipe.recipe_ingredients)
+                .joinedload(RecipeIngredient.ingredient)
             )
-        elif st2_execution_id:
-            record_query = record_query.where(DishIngredient.st2_execution_id == st2_execution_id)
-        else:
-            record_query = record_query.where(DishIngredient.task_id == task_id)
+            .where(Dish.id == dish_id)
+            .with_for_update()
+        )
+        dish = result.scalars().first()
+        if not dish:
+            raise HTTPException(status_code=404, detail="Dish not found")
 
-        record_result = await db.execute(record_query)
-        record = record_result.scalars().first()
-        if record:
-            updated += 1
-        else:
-            record = DishIngredient(dish_id=dish_id)
-            created += 1
+        task_to_recipe_ingredient = {}
+        if dish.recipe and dish.recipe.recipe_ingredients:
+            for ri in dish.recipe.recipe_ingredients:
+                if ri.ingredient and ri.ingredient.task_name:
+                    task_to_recipe_ingredient[ri.ingredient.task_name] = ri.id
 
-        if task_id:
-            record.task_id = task_id
-        if st2_execution_id:
-            record.st2_execution_id = st2_execution_id
-        if item.status is not None:
-            record.status = item.status
-        if item.started_at is not None:
-            record.started_at = item.started_at
-        if item.completed_at is not None:
-            record.completed_at = item.completed_at
-        if item.canceled_at is not None:
-            record.canceled_at = item.canceled_at
-        if item.result is not None:
-            record.result = item.result
-        if item.error_message is not None:
-            record.error_message = item.error_message
-        record.updated_at = now
+        now = datetime.now(timezone.utc)
 
-        if record.recipe_ingredient_id is None and task_id in task_to_recipe_ingredient:
-            record.recipe_ingredient_id = task_to_recipe_ingredient[task_id]
+        seen_keys: set[tuple[str, str]] = set()
+        rows: list[dict] = []
+        for item in payload.items:
+            task_id = item.task_id
+            st2_execution_id = item.st2_execution_id
+            if not task_id and not st2_execution_id:
+                continue
+            dedupe_key = (task_id or "", st2_execution_id or "")
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
 
-        db.add(record)
+            row = {
+                "dish_id": dish_id,
+                "task_id": task_id,
+                "st2_execution_id": st2_execution_id,
+                "status": item.status,
+                "started_at": item.started_at,
+                "completed_at": item.completed_at,
+                "canceled_at": item.canceled_at,
+                "result": item.result,
+                "error_message": item.error_message,
+                "updated_at": now,
+            }
+            if task_id in task_to_recipe_ingredient:
+                row["recipe_ingredient_id"] = task_to_recipe_ingredient[task_id]
+            rows.append(row)
 
-    await db.commit()
+        if rows:
+            insert_stmt = mysql_insert(DishIngredient).values(rows)
+            update_stmt = {
+                "task_id": insert_stmt.inserted.task_id,
+                "st2_execution_id": insert_stmt.inserted.st2_execution_id,
+                "status": insert_stmt.inserted.status,
+                "started_at": insert_stmt.inserted.started_at,
+                "completed_at": insert_stmt.inserted.completed_at,
+                "canceled_at": insert_stmt.inserted.canceled_at,
+                "result": insert_stmt.inserted.result,
+                "error_message": insert_stmt.inserted.error_message,
+                "updated_at": insert_stmt.inserted.updated_at,
+                "recipe_ingredient_id": func.coalesce(
+                    DishIngredient.recipe_ingredient_id,
+                    insert_stmt.inserted.recipe_ingredient_id,
+                ),
+            }
+            result = await db.execute(insert_stmt.on_duplicate_key_update(**update_stmt))
+            if result.rowcount is not None and result.rowcount >= 0:
+                total_rows = len(rows)
+                if result.rowcount >= total_rows:
+                    updated = result.rowcount - total_rows
+                    created = total_rows - updated
+                else:
+                    created = result.rowcount
+                    updated = 0
     logger.debug(
         "Dish ingredients upserted",
         extra={
@@ -423,49 +434,54 @@ async def update_dish(
 
     logger.info("Updating dish", extra={"req_id": req_id, "dish_id": dish_id})
 
-    result = await db.execute(select(Dish).where(Dish.id == dish_id))
-    dish = result.scalars().first()
-    if not dish:
-        logger.warning("Dish not found", extra={"req_id": req_id, "dish_id": dish_id})
-        raise HTTPException(status_code=404, detail="Dish not found")
+    dish: Dish | None = None
+    async with db.begin():
+        result = await db.execute(select(Dish).where(Dish.id == dish_id).with_for_update())
+        dish = result.scalars().first()
+        if not dish:
+            logger.warning("Dish not found", extra={"req_id": req_id, "dish_id": dish_id})
+            raise HTTPException(status_code=404, detail="Dish not found")
 
-    update_data = payload.model_dump(exclude_unset=True)
-    if (
-        dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES
-        and "processing_status" in update_data
-        and update_data["processing_status"] in DISH_TERMINAL_PROCESSING_STATUSES
-        and update_data["processing_status"] != dish.processing_status
-    ):
-        logger.info(
-            "Ignoring terminal status overwrite",
-            extra={
-                "req_id": req_id,
-                "dish_id": dish_id,
-                "current_status": dish.processing_status,
-                "requested_status": update_data["processing_status"],
-            },
-        )
-        return dish
-    for key, value in update_data.items():
-        setattr(dish, key, value)
+        update_data = payload.model_dump(exclude_unset=True)
+        if (
+            dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES
+            and "processing_status" in update_data
+            and update_data["processing_status"] in DISH_TERMINAL_PROCESSING_STATUSES
+            and update_data["processing_status"] != dish.processing_status
+        ):
+            logger.info(
+                "Ignoring terminal status overwrite",
+                extra={
+                    "req_id": req_id,
+                    "dish_id": dish_id,
+                    "current_status": dish.processing_status,
+                    "requested_status": update_data["processing_status"],
+                },
+            )
+            return dish
+        for key, value in update_data.items():
+            setattr(dish, key, value)
 
-    dish.updated_at = datetime.now(timezone.utc)
+        dish.updated_at = datetime.now(timezone.utc)
 
-    if dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES and dish.order_id:
-        result = await db.execute(select(Order).where(Order.id == dish.order_id))
-        order = result.scalars().first()
-        if order and order.processing_status != "complete":
-            if order.processing_status == "canceled":
-                logger.info(
-                    "Skipping order status update because order is canceled",
-                    extra={"req_id": req_id, "order_id": order.id, "dish_id": dish.id},
-                )
-            else:
-                order.processing_status = dish.processing_status
-                order.is_active = False
-                order.updated_at = datetime.now(timezone.utc)
+        if dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES and dish.order_id:
+            result = await db.execute(
+                select(Order).where(Order.id == dish.order_id).with_for_update()
+            )
+            order = result.scalars().first()
+            if order and order.processing_status != "complete":
+                if order.processing_status == "canceled":
+                    logger.info(
+                        "Skipping order status update because order is canceled",
+                        extra={"req_id": req_id, "order_id": order.id, "dish_id": dish.id},
+                    )
+                else:
+                    order.processing_status = dish.processing_status
+                    order.is_active = False
+                    order.updated_at = datetime.now(timezone.utc)
 
-    await db.commit()
+    if dish is None:
+        raise HTTPException(status_code=500, detail="Dish update failed")
     await db.refresh(dish)
 
     logger.info(

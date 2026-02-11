@@ -210,52 +210,53 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                 )
         except IntegrityError:
             await db.rollback()
-            result = await db.execute(
-                select(Order)
-                .where(
-                    Order.fingerprint == fingerprint,
-                    Order.is_active.is_(True),
-                )
-                .order_by(Order.created_at.desc())
-            )
-            existing = result.scalars().first()
-            if existing:
-                await db.execute(
-                    Order.__table__.update()
-                    .where(Order.id == existing.id)
-                    .values(
-                        counter=Order.counter + 1,
-                        updated_at=datetime.now(timezone.utc),
+            async with db.begin():
+                result = await db.execute(
+                    select(Order)
+                    .where(
+                        Order.fingerprint == fingerprint,
+                        Order.is_active.is_(True),
                     )
+                    .order_by(Order.created_at.desc())
+                    .with_for_update()
                 )
-                await db.commit()
-                logger.info(
-                    "Order counter incremented after conflict",
-                    extra={"req_id": req_id, "order_id": existing.id},
-                )
-                results.append(
-                    {
-                        "status": "counter_incremented",
-                        "order_id": existing.id,
-                        "fingerprint": fingerprint,
-                        "alert_name": alert_name,
-                        "alert_status": alert_status,
-                    }
-                )
-            else:
-                logger.error(
-                    "Order conflict without active order",
-                    extra={"req_id": req_id, "fingerprint": fingerprint},
-                )
-                results.append(
-                    {
-                        "status": "conflict",
-                        "order_id": None,
-                        "fingerprint": fingerprint,
-                        "alert_name": alert_name,
-                        "alert_status": alert_status,
-                    }
-                )
+                existing = result.scalars().first()
+                if existing:
+                    await db.execute(
+                        Order.__table__.update()
+                        .where(Order.id == existing.id)
+                        .values(
+                            counter=Order.counter + 1,
+                            updated_at=datetime.now(timezone.utc),
+                        )
+                    )
+                    logger.info(
+                        "Order counter incremented after conflict",
+                        extra={"req_id": req_id, "order_id": existing.id},
+                    )
+                    results.append(
+                        {
+                            "status": "counter_incremented",
+                            "order_id": existing.id,
+                            "fingerprint": fingerprint,
+                            "alert_name": alert_name,
+                            "alert_status": alert_status,
+                        }
+                    )
+                else:
+                    logger.error(
+                        "Order conflict without active order",
+                        extra={"req_id": req_id, "fingerprint": fingerprint},
+                    )
+                    results.append(
+                        {
+                            "status": "conflict",
+                            "order_id": None,
+                            "fingerprint": fingerprint,
+                            "alert_name": alert_name,
+                            "alert_status": alert_status,
+                        }
+                    )
 
     if len(results) == 1:
         return {

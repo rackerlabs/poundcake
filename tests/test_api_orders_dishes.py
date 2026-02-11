@@ -8,7 +8,7 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,6 +35,14 @@ class ScalarResult:
         return self
 
 
+class _BeginContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
@@ -44,6 +52,9 @@ def client():
 def mock_db_session():
     with patch("api.core.database.SessionLocal") as mock_session:
         mock_db = AsyncMock()
+        mock_db.begin = Mock(return_value=_BeginContext())
+        mock_db.refresh = AsyncMock(return_value=None)
+        mock_db.flush = AsyncMock(return_value=None)
         mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
         yield mock_db
