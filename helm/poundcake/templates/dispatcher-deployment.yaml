@@ -72,6 +72,8 @@ spec:
               value: {{ .Values.dispatcher.interval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            - name: SERVICE_NAME
+              value: "prep-chef"
           resources:
             {{- toYaml .Values.dispatcher.resources | nindent 12 }}
           volumeMounts:

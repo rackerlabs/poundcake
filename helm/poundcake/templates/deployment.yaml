@@ -63,6 +63,8 @@ spec:
               value: {{ .Values.config.logLevel | quote }}
             - name: POUNDCAKE_LOG_FORMAT
               value: {{ .Values.config.logFormat | quote }}
+            - name: SERVICE_NAME
+              value: "api"
             - name: POUNDCAKE_METRICS_ENABLED
               value: {{ .Values.config.metricsEnabled | quote }}
             - name: POUNDCAKE_METRICS_PATH

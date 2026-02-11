@@ -76,6 +76,8 @@ spec:
               value: {{ .Values.timer.slaBufferPercent | default "0.2" | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            - name: SERVICE_NAME
+              value: "timer"
           resources:
             {{- toYaml .Values.timer.resources | nindent 12 }}
           volumeMounts:

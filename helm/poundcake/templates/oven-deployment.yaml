@@ -72,6 +72,8 @@ spec:
               value: {{ .Values.oven.pollInterval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            - name: SERVICE_NAME
+              value: "chef"
           resources:
             {{- toYaml .Values.oven.resources | nindent 12 }}
           volumeMounts:

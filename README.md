@@ -41,6 +41,7 @@ sequenceDiagram
 
     Note over ST2, T: Phase 4: Monitoring (timer)
     T->>API: GET /api/v1/dishes?processing_status=processing
+    T->>API: POST /api/v1/dishes/{dish_id}/finalize-claim
     T->>API: GET /api/v1/cook/executions/{workflow_execution_id}/tasks
     T->>API: POST /api/v1/dishes/{dish_id}/ingredients/bulk
     T->>API: PATCH /api/v1/dishes/{id} (processing_status: complete/failed)
@@ -48,6 +49,22 @@ sequenceDiagram
     Note over API, DW: Phase 5: Sync (dishwasher)
     DW->>API: POST /api/v1/cook/sync
     API->>DB: Upsert Ingredients/Recipes
+```
+
+## Concurrency Guarantees (Locks and Claims)
+
+```mermaid
+flowchart TD
+    A["Alertmanager webhook"] --> B["pre_heat: select (fingerprint, is_active) FOR UPDATE"]
+    B --> C["orders (new)"]
+    C --> D["prep-chef: cook_dishes"]
+    D --> E["orders new -> processing (atomic update)"]
+    D --> F["dishes created (new)"]
+    F --> G["chef: claim_dish"]
+    G --> H["dishes new -> processing (atomic update)"]
+    H --> I["timer: finalize-claim"]
+    I --> J["dishes processing -> finalizing (atomic update)"]
+    J --> K["timer: finalize + status update"]
 ```
 
 ## Components
