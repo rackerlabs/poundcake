@@ -110,7 +110,7 @@ async def list_rule_groups(
         groups = await client.get_rule_groups()
         return {"groups": groups}
     except Exception as e:
-        logger.error("Failed to list rule groups: %s", str(e))
+        logger.error("Failed to list rule groups", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -130,7 +130,7 @@ async def list_metrics(
         metrics = await client.get_metric_names()
         return {"metrics": metrics}
     except Exception as e:
-        logger.error("Failed to list metrics: %s", str(e))
+        logger.error("Failed to list metrics", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -146,7 +146,7 @@ async def list_labels(
         labels = await client.get_label_names(metric=metric)
         return {"labels": labels}
     except Exception as e:
-        logger.error("Failed to list labels: %s", str(e))
+        logger.error("Failed to list labels", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -163,7 +163,7 @@ async def list_label_values(
         values = await client.get_label_values(label_name, metric=metric)
         return {"label": label_name, "values": values}
     except Exception as e:
-        logger.error("Failed to list label values: %s", str(e))
+        logger.error("Failed to list label values", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -183,7 +183,7 @@ async def prometheus_health(
         health = await client.health_check()
         return health
     except Exception as e:
-        logger.error("Failed to check Prometheus health: %s", str(e))
+        logger.error("Failed to check Prometheus health", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -202,7 +202,7 @@ async def reload_prometheus(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to reload Prometheus: %s", str(e))
+        logger.error("Failed to reload Prometheus", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -233,7 +233,7 @@ async def create_rule(
             raise HTTPException(status_code=400, detail=result.get("message"))
         return result
     except Exception as e:
-        logger.error("Failed to create rule: %s", str(e))
+        logger.error("Failed to create rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -259,7 +259,7 @@ async def update_rule(
             raise HTTPException(status_code=400, detail=result.get("message"))
         return result
     except Exception as e:
-        logger.error("Failed to update rule: %s", str(e))
+        logger.error("Failed to update rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -283,5 +283,5 @@ async def delete_rule(
             raise HTTPException(status_code=400, detail=result.get("message"))
         return result
     except Exception as e:
-        logger.error("Failed to delete rule: %s", str(e))
+        logger.error("Failed to delete rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))

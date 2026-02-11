@@ -19,9 +19,7 @@ class JiraAdapter(BaseAdapter):
         self.api_token = settings.jira_api_token
         self.timeout = settings.adapter_timeout_sec
 
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process Jira ticket request.
 

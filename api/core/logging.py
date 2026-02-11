@@ -8,8 +8,23 @@
 
 import logging
 import sys
+import os
 from pythonjsonlogger.json import JsonFormatter
 from api.core.config import settings
+
+INSTANCE_ID = os.getenv("POD_NAME") or os.getenv("HOSTNAME") or "local"
+SERVICE_NAME = os.getenv("SERVICE_NAME") or os.getenv("SERVICE") or "unknown"
+
+
+class InstanceIdFilter(logging.Filter):
+    """Inject instance_id into all log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "instance_id"):
+            record.instance_id = INSTANCE_ID
+        if not hasattr(record, "service"):
+            record.service = SERVICE_NAME
+        return True
 
 
 class KeyValueConsoleFormatter(logging.Formatter):
@@ -38,11 +53,15 @@ class KeyValueConsoleFormatter(logging.Formatter):
         "process",
         "message",
         "asctime",
+        "instance_id",
+        "service",
     }
 
     def format(self, record: logging.LogRecord) -> str:
         # Ensure req_id always exists for format string
         req_id = getattr(record, "req_id", "SYSTEM")
+        instance_id = getattr(record, "instance_id", INSTANCE_ID)
+        service = getattr(record, "service", SERVICE_NAME)
         method = getattr(record, "method", None) or getattr(record, "http_method", None) or "NA"
         status_code = (
             getattr(record, "status_code", None) or getattr(record, "http_status", None) or "NA"
@@ -61,7 +80,7 @@ class KeyValueConsoleFormatter(logging.Formatter):
 
         timestamp = self.formatTime(record, self.datefmt)
         base = (
-            f"{timestamp} [{req_id}] [{record.levelname}] [{method}] "
+            f"{timestamp} [{req_id}] [{instance_id}] [{service}] [{record.levelname}] [{method}] "
             f"status={status_code} latency_ms={latency_ms} {record.funcName} - {message}"
         )
         extras = {
@@ -77,6 +96,8 @@ class KeyValueConsoleFormatter(logging.Formatter):
                 "http_status",
                 "latency_ms",
                 "processing_time_ms",
+                "instance_id",
+                "service",
             }
         }
         if not extras:
@@ -98,6 +119,7 @@ def setup_logging() -> None:
 
     # Create console handler
     handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(InstanceIdFilter())
 
     # Configure formatter based on settings
     if settings.log_format == "json":

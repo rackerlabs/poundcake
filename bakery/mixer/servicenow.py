@@ -19,9 +19,7 @@ class ServiceNowMixer(BaseMixer):
         self.password = settings.servicenow_password
         self.timeout = settings.mixer_timeout_sec
 
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process ServiceNow ticket request.
 
@@ -175,9 +173,7 @@ class ServiceNowMixer(BaseMixer):
             result = response.json()
 
             results = result.get("result", [])
-            total = int(
-                response.headers.get("X-Total-Count", len(results))
-            )
+            total = int(response.headers.get("X-Total-Count", len(results)))
 
             return {
                 "success": True,

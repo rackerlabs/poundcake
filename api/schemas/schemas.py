@@ -246,6 +246,7 @@ class OrderCreate(OrderBase):
     """Schema for creating an order."""
 
     processing_status: str = Field(default="new", max_length=50)
+    is_active: bool = True
     severity: Optional[str] = Field(None, max_length=50)
     instance: Optional[str] = Field(None, max_length=255)
     counter: int = 1
@@ -259,6 +260,7 @@ class OrderUpdate(BaseModel):
 
     alert_status: Optional[str] = Field(None, max_length=50)
     processing_status: Optional[str] = Field(None, max_length=50)
+    is_active: Optional[bool] = None
     ends_at: Optional[datetime] = None
 
 
@@ -267,6 +269,7 @@ class OrderResponse(OrderBase):
 
     id: int
     processing_status: str
+    is_active: bool
     severity: Optional[str] = None
     instance: Optional[str] = None
     counter: int
@@ -341,6 +344,7 @@ class WebhookResponse(BaseModel):
     status: str  # created, counter_incremented, resolved, ignored, no_alerts
     order_id: Optional[int] = None
     message: Optional[str] = None
+    results: Optional[List[Dict[str, Any]]] = None
 
     model_config = ConfigDict(from_attributes=True)
 

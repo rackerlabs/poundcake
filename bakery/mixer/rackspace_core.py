@@ -27,9 +27,7 @@ class RackspaceCoreMixer(BaseMixer):
         self.timeout = settings.mixer_timeout_sec
         self._auth_token: Optional[str] = None
 
-    async def process_request(
-        self, action: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process Rackspace Core ticket request.
 
@@ -65,9 +63,7 @@ class RackspaceCoreMixer(BaseMixer):
 
     # ── Authentication ──────────────────────────────────────────────
 
-    async def _authenticate(
-        self, client: httpx.AsyncClient
-    ) -> str:
+    async def _authenticate(self, client: httpx.AsyncClient) -> str:
         """
         Authenticate with CTKAPI and return auth token.
 
@@ -192,10 +188,7 @@ class RackspaceCoreMixer(BaseMixer):
             first = result[0]
             if isinstance(first, dict):
                 ticket_number = str(
-                    first.get("ticket_number")
-                    or first.get("result")
-                    or first.get("id")
-                    or ""
+                    first.get("ticket_number") or first.get("result") or first.get("id") or ""
                 )
 
         return {
@@ -344,9 +337,16 @@ class RackspaceCoreMixer(BaseMixer):
         ticket_number = data.get("ticket_number")
         where_conditions = data.get("where_conditions")
         queue_label = data.get("queue_label")
-        attributes = data.get("attributes", [
-            "ticket_number", "subject", "status", "queue", "created_date",
-        ])
+        attributes = data.get(
+            "attributes",
+            [
+                "ticket_number",
+                "subject",
+                "status",
+                "queue",
+                "created_date",
+            ],
+        )
 
         if ticket_number:
             # Mode 1: Direct ticket lookup
@@ -362,11 +362,13 @@ class RackspaceCoreMixer(BaseMixer):
             # Mode 2: Where-condition search via TicketWhere
             where_list = []
             for cond in where_conditions:
-                where_list.append({
-                    "field": cond["field"],
-                    "op": cond.get("op", "eq"),
-                    "value": cond["value"],
-                })
+                where_list.append(
+                    {
+                        "field": cond["field"],
+                        "op": cond.get("op", "eq"),
+                        "value": cond["value"],
+                    }
+                )
 
             query_set = [
                 {
@@ -390,8 +392,7 @@ class RackspaceCoreMixer(BaseMixer):
             return {
                 "success": False,
                 "error": (
-                    "search requires one of: ticket_number, "
-                    "where_conditions, or queue_label"
+                    "search requires one of: ticket_number, " "where_conditions, or queue_label"
                 ),
             }
 

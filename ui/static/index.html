@@ -165,11 +165,11 @@
             <div class="filter-bar">
                 <select id="status-filter" onchange="loadAlerts()">
                     <option value="">All Statuses</option>
-                    <option value="received">Received</option>
-                    <option value="pending">Pending</option>
-                    <option value="remediating">Remediating</option>
-                    <option value="remediated">Remediated</option>
-                    <option value="resolved">Resolved</option>
+                    <option value="new">New</option>
+                    <option value="processing">Processing</option>
+                    <option value="complete">Complete</option>
+                    <option value="failed">Failed</option>
+                    <option value="canceled">Canceled</option>
                 </select>
                 <button class="btn btn-primary btn-sm" onclick="loadAlerts()">Refresh</button>
                 <div class="auto-refresh">
@@ -184,9 +184,10 @@
                         <th>Alert Name</th>
                         <th>Instance</th>
                         <th>Severity</th>
-                        <th>Status</th>
+                        <th>Processing</th>
+                        <th>Alert Status</th>
                         <th>Received</th>
-                        <th>Attempts</th>
+                        <th>Counter</th>
                     </tr>
                 </thead>
                 <tbody id="orders-table"></tbody>
@@ -541,34 +542,34 @@
         // Alert tracking functions
         async function loadAlerts() {
             const status = document.getElementById('status-filter').value;
-            const url = status ? `/api/v1/orders?status=${status}` : '/api/v1/orders';
+            const url = status ? `/api/v1/orders?processing_status=${status}` : '/api/v1/orders';
             const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('orders-table');
             tbody.innerHTML = '';
 
-            if (data.orders.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #666;">No orders found</td></tr>';
+            const orders = Array.isArray(data) ? data : (data.orders || []);
+            if (orders.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No orders found</td></tr>';
                 return;
             }
 
-            data.orders.forEach(order => {
-                const statusClass = `status-${order.status}`;
-                const attempts = `${order.successful_attempts}/${order.total_attempts}`;
-                const attemptsStyle = order.failed_attempts > 0 ? 'color: #e74c3c;' : '';
+            orders.forEach(order => {
+                const statusClass = `status-${order.processing_status}`;
 
                 tbody.innerHTML += `
-                    <tr class="expandable" onclick="toggleDetails('${order.fingerprint}')">
-                        <td><strong>${order.alertname}</strong></td>
+                    <tr class="expandable" onclick="toggleDetails(${order.id})">
+                        <td><strong>${order.alert_group_name}</strong></td>
                         <td>${order.instance || '-'}</td>
                         <td>${order.severity || '-'}</td>
-                        <td><span class="status ${statusClass}">${order.status}</span></td>
-                        <td>${new Date(order.received_at).toLocaleString()}</td>
-                        <td style="${attemptsStyle}">${attempts}</td>
+                        <td><span class="status ${statusClass}">${order.processing_status}</span></td>
+                        <td>${order.alert_status || '-'}</td>
+                        <td>${new Date(order.created_at).toLocaleString()}</td>
+                        <td>${order.counter ?? 0}</td>
                     </tr>
-                    <tr class="details-row" id="details-${order.fingerprint}">
-                        <td colspan="6">
-                            <div class="details-content" id="content-${order.fingerprint}">
+                    <tr class="details-row" id="details-${order.id}">
+                        <td colspan="7">
+                            <div class="details-content" id="content-${order.id}">
                                 Loading...
                             </div>
                         </td>
@@ -607,9 +608,9 @@
             });
         }
 
-        async function toggleDetails(fingerprint) {
-            const row = document.getElementById(`details-${fingerprint}`);
-            const content = document.getElementById(`content-${fingerprint}`);
+        async function toggleDetails(orderId) {
+            const row = document.getElementById(`details-${orderId}`);
+            const content = document.getElementById(`content-${orderId}`);
 
             if (row.classList.contains('active')) {
                 row.classList.remove('active');
@@ -617,34 +618,19 @@
             }
 
             // Load full order details
-            const res = await fetch(`/api/v1/orders/${fingerprint}`);
-            const data = await res.json();
-            const order = data.order;
-
-            let attemptsHtml = '';
-            if (order.remediation_attempts && order.remediation_attempts.length > 0) {
-                attemptsHtml = '<div class="attempt-list"><strong>Remediation Attempts:</strong>';
-                order.remediation_attempts.forEach(attempt => {
-                    const statusClass = attempt.status === 'success' ? 'success' : 'failed';
-                    attemptsHtml += `
-                        <div class="attempt-item ${statusClass}">
-                            <strong>${attempt.action_name}</strong> (${attempt.stackstorm_action})<br>
-                            Status: ${attempt.status} | Started: ${new Date(attempt.started_at).toLocaleString()}
-                            ${attempt.error ? `<br><span style="color: #e74c3c;">Error: ${attempt.error}</span>` : ''}
-                            ${attempt.execution_id ? `<br>Execution ID: ${attempt.execution_id}` : ''}
-                        </div>
-                    `;
-                });
-                attemptsHtml += '</div>';
-            }
+            const res = await fetch(`/api/v1/orders/${orderId}`);
+            const order = await res.json();
 
             content.innerHTML = `
                 <div><strong>Fingerprint:</strong> ${order.fingerprint}</div>
-                <div><strong>Status Changed:</strong> ${new Date(order.status_changed_at).toLocaleString()}</div>
-                ${order.resolved_at ? `<div><strong>Resolved:</strong> ${new Date(order.resolved_at).toLocaleString()}</div>` : ''}
-                ${order.processed_by ? `<div><strong>Processed By:</strong> ${order.processed_by}</div>` : ''}
-                ${order.last_error ? `<div style="color: #e74c3c;"><strong>Last Error:</strong> ${order.last_error}</div>` : ''}
-                ${attemptsHtml}
+                <div><strong>Alert Status:</strong> ${order.alert_status}</div>
+                <div><strong>Processing Status:</strong> ${order.processing_status}</div>
+                <div><strong>Counter:</strong> ${order.counter}</div>
+                <div><strong>Active:</strong> ${order.is_active}</div>
+                <div><strong>Started:</strong> ${new Date(order.starts_at).toLocaleString()}</div>
+                ${order.ends_at ? `<div><strong>Ended:</strong> ${new Date(order.ends_at).toLocaleString()}</div>` : ''}
+                <div><strong>Created:</strong> ${new Date(order.created_at).toLocaleString()}</div>
+                <div><strong>Updated:</strong> ${new Date(order.updated_at).toLocaleString()}</div>
             `;
 
             row.classList.add('active');

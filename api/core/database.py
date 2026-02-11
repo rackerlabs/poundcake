@@ -75,14 +75,28 @@ def init_db() -> None:
 
     for i in range(max_retries):
         try:
-            logger.info(f"Attempting to run database migrations (Attempt {i+1}/{max_retries})...")
+            logger.info(
+                "Attempting to run database migrations",
+                extra={"attempt": i + 1, "max_attempts": max_retries},
+            )
             command.upgrade(alembic_cfg, "head")
             logger.info("Database migrations applied successfully.")
             return
         except Exception as e:
             if i < max_retries - 1:
-                logger.warning(f"Database migration failed: {e}. Retrying in {retry_interval}s...")
+                logger.warning(
+                    "Database migration failed; retrying",
+                    extra={
+                        "attempt": i + 1,
+                        "max_attempts": max_retries,
+                        "retry_interval": retry_interval,
+                        "error": str(e),
+                    },
+                )
                 time.sleep(retry_interval)
             else:
-                logger.error("Could not apply database migrations after maximum retries.")
+                logger.error(
+                    "Could not apply database migrations after maximum retries",
+                    extra={"max_attempts": max_retries, "error": str(e)},
+                )
                 raise e

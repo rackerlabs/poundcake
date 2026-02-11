@@ -20,6 +20,12 @@ ORDERS_PROCESSED = Counter(
     "poundcake_orders_processed_total", "Total number of orders processed", ["group_name", "status"]
 )
 
+ORDERS_RESOLVED_BEFORE_DISH = Counter(
+    "poundcake_orders_resolved_before_dish_start_total",
+    "Total number of orders resolved before any dish was started",
+    ["group_name", "severity"],
+)
+
 ORDERS_PROCESSING_DURATION = Histogram(
     "poundcake_order_processing_duration_seconds",
     "Time spent processing orders",
@@ -130,6 +136,16 @@ def record_order_processed(group_name: str, status: str) -> None:
         status: Processing status (completed, failed, etc.)
     """
     ORDERS_PROCESSED.labels(group_name=group_name, status=status).inc()
+
+
+def record_order_resolved_before_dish_start(group_name: str, severity: str) -> None:
+    """Record an order resolved before any dish was started.
+
+    Args:
+        group_name: Name of the group (order)
+        severity: Severity level
+    """
+    ORDERS_RESOLVED_BEFORE_DISH.labels(group_name=group_name, severity=severity or "unknown").inc()
 
 
 def record_remediation(action: str, status: str, duration: float | None = None) -> None:

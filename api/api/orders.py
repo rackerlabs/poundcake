@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from api.core.database import get_db
 from api.core.logging import get_logger
+from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
 from api.models.models import Order
 from api.schemas.schemas import OrderCreate, OrderResponse, OrderUpdate
 from api.schemas.query_params import OrderQueryParams, validate_query_params
@@ -147,6 +148,13 @@ async def update_order(
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(order, key, value)
+
+    if (
+        "processing_status" in update_data
+        and update_data["processing_status"] in ORDER_TERMINAL_PROCESSING_STATUSES
+        and "is_active" not in update_data
+    ):
+        order.is_active = False  # type: ignore[assignment]
 
     order.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
     await db.commit()

@@ -66,13 +66,16 @@ class PoundCakeClient:
 
     def list_orders(
         self,
-        status: Optional[str] = None,
+        processing_status: Optional[str] = None,
+        alert_status: Optional[str] = None,
         severity: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """List orders with optional filters."""
         params = {}
-        if status:
-            params["status"] = status
+        if processing_status:
+            params["processing_status"] = processing_status
+        if alert_status:
+            params["alert_status"] = alert_status
         if severity:
             params["severity"] = severity
         return cast(list[dict[str, Any]], self._request("GET", "/api/v1/orders", params=params))

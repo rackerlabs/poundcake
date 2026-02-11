@@ -52,11 +52,17 @@ def get_admin_credentials() -> tuple[str, str] | None:
         username = base64.b64decode(secret.data["username"]).decode("utf-8")
         password = base64.b64decode(secret.data["password"]).decode("utf-8")
 
-        logger.info("Credentials loaded from K8s secret: %s", settings.auth_secret_name)
+        logger.info(
+            "Credentials loaded from K8s secret",
+            extra={"secret_name": settings.auth_secret_name},
+        )
         return (username, password)
 
     except Exception as e:
-        logger.debug("K8s secret fetch skipped or failed (Normal for local dev): %s", str(e))
+        logger.debug(
+            "K8s secret fetch skipped or failed (Normal for local dev)",
+            extra={"error": str(e)},
+        )
 
         # 2. Fallback to environment variables (Docker Compose / Local Dev)
         if settings.auth_dev_username and settings.auth_dev_password:
@@ -78,7 +84,10 @@ def create_session(username: str) -> str:
         "expires_at": expires_at,
     }
 
-    logger.info("Session created for %s, expires at %s", username, expires_at)
+    logger.info(
+        "Session created",
+        extra={"username": username, "expires_at": expires_at},
+    )
     return session_token
 
 

@@ -22,12 +22,14 @@ from kitchen.service_helpers import wait_for_api
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
 API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 TIMER_INTERVAL = int(os.getenv("TIMER_INTERVAL", "10"))
+POLL_LIMIT = int(os.getenv("TIMER_LIMIT", "1"))
 SLA_BUFFER = float(os.getenv("SLA_BUFFER_PERCENT", "0.2"))
 
 # Configure Logging
 setup_logging()
 logger = get_logger("timer")
 POLLER_RETRIES = get_settings().poller_http_retries
+SYSTEM_REQ_ID = "SYSTEM-TIMER"
 
 
 def update_dish(
@@ -92,7 +94,8 @@ def update_dish(
         extra.update({"method": "PUT", "latency_ms": latency_ms})
         if "resp" in locals():
             extra["status_code"] = resp.status_code
-        logger.error(f"Failed to update Dish {dish_id}: {e}", extra=extra)
+        extra.update({"dish_id": dish_id, "error": str(e)})
+        logger.error("Failed to update dish", extra=extra)
         return False
 
 
@@ -148,9 +151,14 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
     extra = {"req_id": req_id}
 
     if elapsed > hard_timeout:
-        logger.critical(
-            f"Dish {dish['id']} exceeded safety timeout ({int(elapsed)}s). Killing.", extra=extra
+        extra.update(
+            {
+                "dish_id": dish["id"],
+                "elapsed_sec": int(elapsed),
+                "hard_timeout_sec": int(hard_timeout),
+            }
         )
+        logger.critical("Dish exceeded safety timeout; killing execution", extra=extra)
         exec_id = dish.get("workflow_execution_id")
         if exec_id:
             cancel_execution(exec_id, req_id)
@@ -165,10 +173,14 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
         return True
 
     if elapsed > sla_threshold:
-        logger.warning(
-            f"Dish {dish['id']} running past SLA buffer ({int(elapsed)}s > {int(sla_threshold)}s)",
-            extra=extra,
+        extra.update(
+            {
+                "dish_id": dish["id"],
+                "elapsed_sec": int(elapsed),
+                "sla_threshold_sec": int(sla_threshold),
+            }
         )
+        logger.warning("Dish running past SLA buffer", extra=extra)
 
     return False
 
@@ -180,7 +192,7 @@ def monitor_dishes() -> None:
         resp = request_with_retry_sync(
             "GET",
             f"{API_BASE_URL}/dishes",
-            params={"processing_status": "processing"},
+            params={"processing_status": "processing", "limit": POLL_LIMIT},
             timeout=10,
             retries=POLLER_RETRIES,
         )
@@ -189,7 +201,7 @@ def monitor_dishes() -> None:
             logger.error(
                 "Failed to fetch processing dishes",
                 extra={
-                    "req_id": "SYSTEM",
+                    "req_id": SYSTEM_REQ_ID,
                     "method": "GET",
                     "status_code": resp.status_code,
                     "latency_ms": latency_ms,
@@ -199,7 +211,7 @@ def monitor_dishes() -> None:
         dishes = resp.json()
 
         for dish in dishes:
-            req_id = dish.get("req_id", "SYSTEM")
+            req_id = dish.get("req_id", SYSTEM_REQ_ID)
             execution_id = dish.get("workflow_execution_id")
             extra = {"req_id": req_id}
 
@@ -422,16 +434,19 @@ def monitor_dishes() -> None:
                         dish,
                         req_id,
                         processing_status=processing_status,
-                        status="completed",
+                        status=st2_status,
                         error_msg=err,
                         final_status=True,
                         result=dish_result,
                         started_at=dish_started_at or dish.get("started_at"),
                     )
                     logger.info(
-                        f"Dish {dish['id']} finalized with ST2 status: {st2_status}",
+                        "Dish finalized with ST2 status",
                         extra={
                             **extra,
+                            "dish_id": dish["id"],
+                            "execution_id": execution_id,
+                            "st2_status": st2_status,
                             "method": "GET",
                             "status_code": st2_resp.status_code,
                             "latency_ms": st2_latency_ms,
@@ -447,7 +462,8 @@ def monitor_dishes() -> None:
                     }
                 )
                 logger.error(
-                    f"Dish {dish['id']} execution {execution_id} not found in ST2.", extra=extra
+                    "Dish execution not found in ST2",
+                    extra={**extra, "dish_id": dish["id"], "execution_id": execution_id},
                 )
                 update_dish(
                     dish,
@@ -459,9 +475,11 @@ def monitor_dishes() -> None:
                 )
             else:
                 logger.error(
-                    f"Dish {dish['id']} execution {execution_id} returned unexpected status from ST2",
+                    "Dish execution returned unexpected status from ST2",
                     extra={
                         **extra,
+                        "dish_id": dish["id"],
+                        "execution_id": execution_id,
                         "method": "GET",
                         "status_code": st2_resp.status_code,
                         "latency_ms": st2_latency_ms,
@@ -471,16 +489,26 @@ def monitor_dishes() -> None:
     except Exception as e:
         latency_ms = int((time.time() - start_time) * 1000)
         logger.error(
-            f"Error in monitor loop: {str(e)}",
-            extra={"req_id": "SYSTEM", "method": "GET", "latency_ms": latency_ms},
+            "Error in monitor loop",
+            extra={
+                "req_id": SYSTEM_REQ_ID,
+                "method": "GET",
+                "latency_ms": latency_ms,
+                "error": str(e),
+            },
         )
 
 
 if __name__ == "__main__":
-    wait_for_api(API_BASE_URL, "SYSTEM", logger)
+    wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger)
     logger.info(
-        f"Timer started. Interval: {TIMER_INTERVAL}s, SLA Buffer: {int(SLA_BUFFER*100)}%",
-        extra={"req_id": "SYSTEM"},
+        "Timer started",
+        extra={
+            "req_id": SYSTEM_REQ_ID,
+            "interval_sec": TIMER_INTERVAL,
+            "sla_buffer_percent": int(SLA_BUFFER * 100),
+            "poll_limit": POLL_LIMIT,
+        },
     )
     while True:
         monitor_dishes()

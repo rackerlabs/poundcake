@@ -22,10 +22,18 @@ def orders() -> None:
 
 @orders.command()
 @click.option(
-    "--status",
+    "--processing-status",
     "-s",
-    type=click.Choice(["received", "pending", "remediating", "remediated", "resolved"]),
-    help="Filter by status",
+    type=click.Choice(
+        ["new", "pending", "processing", "complete", "failed", "canceled", "timeout", "abandoned"]
+    ),
+    help="Filter by processing status",
+)
+@click.option(
+    "--alert-status",
+    "-a",
+    type=click.Choice(["firing", "resolved"]),
+    help="Filter by alert status",
 )
 @click.option(
     "--severity",
@@ -35,7 +43,8 @@ def orders() -> None:
 @click.pass_context
 def list(
     ctx: click.Context,
-    status: Optional[str],
+    processing_status: Optional[str],
+    alert_status: Optional[str],
     severity: Optional[str],
 ) -> None:
     """List all orders."""
@@ -43,7 +52,11 @@ def list(
     format: str = ctx.obj["format"]
 
     try:
-        orders = client.list_orders(status=status, severity=severity)
+        orders = client.list_orders(
+            processing_status=processing_status,
+            alert_status=alert_status,
+            severity=severity,
+        )
         print_output(orders, format)
     except Exception as e:
         print_error(f"Failed to list orders: {e}")
@@ -68,10 +81,18 @@ def get(ctx: click.Context, order_id: int) -> None:
 
 @orders.command()
 @click.option(
-    "--status",
+    "--processing-status",
     "-s",
-    type=click.Choice(["received", "pending", "remediating", "remediated", "resolved"]),
-    help="Filter by status",
+    type=click.Choice(
+        ["new", "pending", "processing", "complete", "failed", "canceled", "timeout", "abandoned"]
+    ),
+    help="Filter by processing status",
+)
+@click.option(
+    "--alert-status",
+    "-a",
+    type=click.Choice(["firing", "resolved"]),
+    help="Filter by alert status",
 )
 @click.option(
     "--severity",
@@ -87,7 +108,8 @@ def get(ctx: click.Context, order_id: int) -> None:
 @click.pass_context
 def watch(
     ctx: click.Context,
-    status: Optional[str],
+    processing_status: Optional[str],
+    alert_status: Optional[str],
     severity: Optional[str],
     watch: bool,
 ) -> None:
@@ -100,7 +122,11 @@ def watch(
     try:
         while True:
             click.clear()
-            orders = client.list_orders(status=status, severity=severity)
+            orders = client.list_orders(
+                processing_status=processing_status,
+                alert_status=alert_status,
+                severity=severity,
+            )
             click.echo(f"Orders (refreshed at {time.strftime('%H:%M:%S')})")
             click.echo("=" * 80)
             print_output(orders, format)

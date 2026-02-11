@@ -9,7 +9,6 @@ from bakery.mixer.github import GitHubMixer
 from bakery.mixer.pagerduty import PagerDutyMixer
 from bakery.mixer.rackspace_core import RackspaceCoreMixer
 
-
 # Registry of available mixers
 MIXER_REGISTRY: Dict[str, Type[BaseMixer]] = {
     "servicenow": ServiceNowMixer,
@@ -36,8 +35,7 @@ def get_mixer(mixer_type: str) -> BaseMixer:
     mixer_class = MIXER_REGISTRY.get(mixer_type)
     if not mixer_class:
         raise ValueError(
-            f"Unknown mixer type: {mixer_type}. "
-            f"Available: {', '.join(MIXER_REGISTRY.keys())}"
+            f"Unknown mixer type: {mixer_type}. " f"Available: {', '.join(MIXER_REGISTRY.keys())}"
         )
 
     return mixer_class()
