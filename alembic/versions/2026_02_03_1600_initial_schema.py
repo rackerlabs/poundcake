@@ -67,7 +67,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_ingredients_id"), "ingredients", ["id"], unique=False)
-    op.create_index(op.f("ix_ingredients_task_id"), "ingredients", ["task_id"], unique=False)
+    op.create_index(op.f("ix_ingredients_task_id"), "ingredients", ["task_id"], unique=True)
 
     # Recipe Ingredients (junction)
     op.create_table(
@@ -181,13 +181,11 @@ def upgrade() -> None:
             "task_id_norm",
             sa.String(length=255),
             sa.Computed("IFNULL(task_id, '')", persisted=True),
-            nullable=False,
         ),
         sa.Column(
             "st2_execution_id_norm",
             sa.String(length=100),
             sa.Computed("IFNULL(st2_execution_id, '')", persisted=True),
-            nullable=False,
         ),
         sa.Column("status", sa.String(length=50), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),

@@ -168,15 +168,15 @@ async def delete_recipe(
 
     logger.info("Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
 
-    result = await db.execute(select(Recipe).where(Recipe.id == recipe_id))
-    recipe = result.scalars().first()
-    if not recipe:
-        logger.warning("Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id})
-        raise HTTPException(status_code=404, detail="Recipe not found")
+    async with db.begin():
+        result = await db.execute(select(Recipe).where(Recipe.id == recipe_id).with_for_update())
+        recipe = result.scalars().first()
+        if not recipe:
+            logger.warning("Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id})
+            raise HTTPException(status_code=404, detail="Recipe not found")
 
-    recipe_name = recipe.name
-    await db.delete(recipe)
-    await db.commit()
+        recipe_name = recipe.name
+        await db.delete(recipe)
 
     logger.info(
         "Recipe deleted successfully",
@@ -192,17 +192,21 @@ async def delete_recipe(
 @router.patch("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession = Depends(get_db)):
     """Update a recipe (used to store workflow_id/payload/parameters)."""
-    result = await db.execute(select(Recipe).where(Recipe.id == recipe_id))
-    recipe = result.scalars().first()
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
+    recipe: Recipe | None = None
+    async with db.begin():
+        result = await db.execute(select(Recipe).where(Recipe.id == recipe_id).with_for_update())
+        recipe = result.scalars().first()
+        if not recipe:
+            raise HTTPException(status_code=404, detail="Recipe not found")
 
-    update_data = payload.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(recipe, key, value)
-    recipe.updated_at = datetime.now(timezone.utc)
+        update_data = payload.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(recipe, key, value)
+        recipe.updated_at = datetime.now(timezone.utc)
 
-    await db.commit()
+    if recipe is None:
+        raise HTTPException(status_code=500, detail="Recipe update failed")
+    await db.refresh(recipe)
 
     result = await db.execute(
         select(Recipe)

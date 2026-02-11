@@ -103,7 +103,7 @@ class Ingredient(Base):
     __tablename__ = "ingredients"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    task_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     action_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

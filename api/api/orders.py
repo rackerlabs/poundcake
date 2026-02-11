@@ -153,15 +153,28 @@ async def update_order(
             raise HTTPException(status_code=404, detail="Order not found")
 
         update_data = payload.model_dump(exclude_unset=True)
+
+        # Check terminal state transitions BEFORE applying updates
+        if update_data.get("processing_status") in ORDER_TERMINAL_PROCESSING_STATUSES:
+            if update_data.get("is_active") is True:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot set is_active=true with terminal processing_status",
+                )
+            # Check if order is already in a different terminal status
+            if (
+                order.processing_status in ORDER_TERMINAL_PROCESSING_STATUSES
+                and order.processing_status != update_data.get("processing_status")
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Order already in terminal status {order.processing_status}",
+                )
+            order.is_active = False
+
+        # Apply updates after validation
         for key, value in update_data.items():
             setattr(order, key, value)
-
-        if (
-            "processing_status" in update_data
-            and update_data["processing_status"] in ORDER_TERMINAL_PROCESSING_STATUSES
-            and "is_active" not in update_data
-        ):
-            order.is_active = False
 
         order.updated_at = datetime.now(timezone.utc)
 
