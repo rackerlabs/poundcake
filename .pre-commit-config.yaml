@@ -1,0 +1,49 @@
+# pre-commit configuration
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        exclude: ^helm/.*/templates/
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        files: ^(api|tests|bakery|cli|kitchen|scripts)/.*\.py$
+
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        args: ["--check"]
+        files: ^(api|tests|bakery|cli|kitchen|scripts)/.*\.py$
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ["-c", ".yamllint.yml", "."]
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy api
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pyright
+        name: pyright
+        entry: pyright
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pytest-unit
+        name: pytest (unit)
+        entry: pytest -m "not integration" tests/ -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

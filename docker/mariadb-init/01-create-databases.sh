@@ -12,11 +12,11 @@ echo "Creating PoundCake databases..."
 mariadb -uroot -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
     -- PoundCake application database
     CREATE DATABASE IF NOT EXISTS poundcake CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    
+
     -- PoundCake user
     CREATE USER IF NOT EXISTS 'poundcake'@'%' IDENTIFIED BY 'poundcake';
     GRANT ALL PRIVILEGES ON poundcake.* TO 'poundcake'@'%';
-    
+
     FLUSH PRIVILEGES;
 EOSQL
 

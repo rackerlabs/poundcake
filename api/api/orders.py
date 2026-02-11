@@ -145,7 +145,7 @@ async def update_order(
         )
         raise HTTPException(status_code=404, detail="Order not found")
 
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(order, key, value)
 
