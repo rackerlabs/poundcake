@@ -76,7 +76,7 @@ async def cook_dishes(
         .values(processing_status="processing", updated_at=now)
     )
 
-    if update_result.rowcount == 0:
+    if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
         reason = f"Order not new (status={order.processing_status})"
         if existing_dish:
             reason = "Order already has a dish or is being processed"
@@ -197,7 +197,7 @@ async def claim_dish(
         .values(processing_status="processing", started_at=now)
     )
 
-    if update_result.rowcount == 0:
+    if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
         logger.info(
             "Dish claim failed",
             extra={"req_id": req_id, "dish_id": dish_id},

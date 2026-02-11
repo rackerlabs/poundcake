@@ -85,18 +85,17 @@ async def create_recipe(
         .where(Recipe.id == db_recipe.id)
     )
     db_recipe = result.scalars().first()
-
     logger.info(
         "Recipe created successfully",
         extra={
             "req_id": req_id,
-            "recipe_id": db_recipe.id,
-            "recipe_name": db_recipe.name,
+            "recipe_id": db_recipe.id if db_recipe else None,
+            "recipe_name": db_recipe.name if db_recipe else None,
             "ingredient_count": len(recipe.recipe_ingredients),
         },
     )
 
-    return db_recipe
+    return db_recipe  # pyright: ignore[reportOptionalMemberAccess]
 
 
 @router.get("/recipes/", response_model=List[RecipeDetailResponse])

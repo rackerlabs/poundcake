@@ -56,8 +56,9 @@ async def check_rabbitmq() -> ComponentHealth:
     if not settings.rabbitmq_enabled:
         return ComponentHealth(status="healthy", message="External or disabled")
 
+    rabbitmq_host = os.getenv("RABBITMQ_HOST", "stackstorm-rabbitmq")
+
     try:
-        rabbitmq_host = os.getenv("RABBITMQ_HOST", "stackstorm-rabbitmq")
         rabbitmq_port = int(os.getenv("RABBITMQ_MANAGEMENT_PORT", "15672"))
         rabbitmq_user = os.getenv("RABBITMQ_USER", "stackstorm")
         rabbitmq_password = os.getenv("RABBITMQ_PASSWORD", "password")
@@ -196,28 +197,32 @@ async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     result = await db.execute(
         select(Order.processing_status, func.count(Order.id)).group_by(Order.processing_status)
     )
-    alerts_by_processing_status = dict(result.all())
+    alerts_by_processing_status = dict(
+        result.all()
+    )  # pyright: ignore[reportCallIssue,reportArgumentType]
 
     result = await db.execute(
         select(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status)
     )
-    alerts_by_alert_status = dict(result.all())
+    alerts_by_alert_status = dict(
+        result.all()
+    )  # pyright: ignore[reportCallIssue,reportArgumentType]
 
     result = await db.execute(
         select(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status)
     )
-    executions_by_status = dict(result.all())
+    executions_by_status = dict(result.all())  # pyright: ignore[reportCallIssue,reportArgumentType]
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     result = await db.execute(select(func.count(Order.id)).where(Order.created_at >= cutoff))
     recent_alerts = result.scalar() or 0
 
-    return StatsResponse(
+    return StatsResponse(  # pyright: ignore[reportArgumentType]
         total_alerts=total_alerts,
         total_recipes=total_recipes,
         total_executions=total_executions,
-        alerts_by_processing_status=alerts_by_processing_status,
-        alerts_by_alert_status=alerts_by_alert_status,
-        executions_by_status=executions_by_status,
+        alerts_by_processing_status=alerts_by_processing_status,  # pyright: ignore[reportArgumentType]
+        alerts_by_alert_status=alerts_by_alert_status,  # pyright: ignore[reportArgumentType]
+        executions_by_status=executions_by_status,  # pyright: ignore[reportArgumentType]
         recent_alerts=recent_alerts,
     )

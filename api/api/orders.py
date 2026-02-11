@@ -154,9 +154,9 @@ async def update_order(
         and update_data["processing_status"] in ORDER_TERMINAL_PROCESSING_STATUSES
         and "is_active" not in update_data
     ):
-        order.is_active = False  # type: ignore[assignment]
+        order.is_active = False
 
-    order.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+    order.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(order)
 

@@ -130,8 +130,7 @@ class GitManager:
             branch_name = f"poundcake-rule-update-{os.urandom(4).hex()}"
             current = repo.head.reference
             new_branch = repo.create_head(branch_name)
-            assert hasattr(new_branch, "checkout")
-            new_branch.checkout()
+            new_branch.checkout()  # pyright: ignore[reportAttributeAccessIssue]
 
             full_path = self.repo_path / file_path
             if full_path.exists():
@@ -153,8 +152,7 @@ class GitManager:
 
             repo.git.push("--set-upstream", "origin", branch_name, env=env)
 
-            assert hasattr(current, "checkout")
-            current.checkout()
+            current.checkout()  # pyright: ignore[reportAttributeAccessIssue]
 
             logger.info(
                 "Committed and pushed file deletion",
@@ -199,8 +197,7 @@ class GitManager:
             branch_name = f"poundcake-rule-update-{os.urandom(4).hex()}"
             current = repo.head.reference
             new_branch = repo.create_head(branch_name)
-            assert hasattr(new_branch, "checkout")
-            new_branch.checkout()
+            new_branch.checkout()  # pyright: ignore[reportAttributeAccessIssue]
 
             full_path = self.repo_path / file_path
             full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -222,8 +219,7 @@ class GitManager:
 
             repo.git.push("--set-upstream", "origin", branch_name, env=env)
 
-            assert hasattr(current, "checkout")
-            current.checkout()
+            current.checkout()  # pyright: ignore[reportAttributeAccessIssue]
 
             logger.info(
                 "Committed and pushed changes",

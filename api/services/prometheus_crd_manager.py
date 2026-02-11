@@ -25,7 +25,7 @@ class PrometheusCRDManager:
 
         if self.settings.prometheus_use_crds:
             try:
-                from kubernetes import client, config
+                from kubernetes import client, config  # pyright: ignore[reportMissingImports]
 
                 try:
                     config.load_incluster_config()

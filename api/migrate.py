@@ -96,7 +96,8 @@ def stamp(revision="head"):
 
 def show_help():
     """Show help message."""
-    print(f"""
+    print(
+        f"""
 PoundCake Database Migration Manager
 
 Usage: python scripts/migrate.py <command> [args]
@@ -123,7 +124,8 @@ Examples:
 Environment Variables:
     DATABASE_URL            Database connection string
                             (default from config: {settings.database_url})
-    """)
+    """
+    )
 
 
 def main():

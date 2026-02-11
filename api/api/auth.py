@@ -36,7 +36,7 @@ def get_admin_credentials() -> tuple[str, str] | None:
 
     # 1. Attempt to load from Kubernetes (Helm/K8s Environment)
     try:
-        from kubernetes import client, config
+        from kubernetes import client, config  # pyright: ignore[reportMissingImports]
 
         try:
             config.load_incluster_config()

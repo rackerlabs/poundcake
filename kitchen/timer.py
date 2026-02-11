@@ -115,12 +115,14 @@ def cancel_execution(execution_id: str, req_id: str) -> bool:
     except Exception as e:
         latency_ms = int((time.time() - start_time) * 1000)
         logger.error(
-            f"Error canceling ST2 execution {execution_id}: {e}",
+            "Error canceling ST2 execution",
             extra={
                 "req_id": req_id,
                 "method": "PUT",
                 "latency_ms": latency_ms,
                 "status_code": resp.status_code if "resp" in locals() else None,
+                "execution_id": execution_id,
+                "error": str(e),
             },
         )
     return False
