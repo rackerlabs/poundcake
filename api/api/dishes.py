@@ -7,7 +7,7 @@
 """API routes for Dish (execution) management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, update, func, asc, desc, nullsfirst, and_, or_
+from sqlalchemy import select, update, func, asc, desc, and_, or_, case
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,8 +190,10 @@ async def fetch_dishes(
     if params.processing_status and params.processing_status.value == "new":
         query = query.order_by(asc(Dish.created_at))
     elif params.processing_status and params.processing_status.value == "processing":
+        # MariaDB doesn't support NULLS FIRST, use CASE to sort NULL values first
         query = query.order_by(
-            nullsfirst(asc(Dish.started_at)),
+            case((Dish.started_at.is_(None), 0), else_=1),
+            asc(Dish.started_at),
             asc(Dish.created_at),
         )
     else:
