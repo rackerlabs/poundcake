@@ -14,6 +14,7 @@ from dateutil import parser as dateutil_parser
 from api.models.models import Order
 from api.core.logging import get_logger
 from api.core.metrics import record_order_resolved_before_dish_start
+from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
 
 logger = get_logger(__name__)
 
@@ -158,7 +159,8 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                         except (ValueError, TypeError):
                             ends_at = datetime.now(timezone.utc)
                     existing.ends_at = ends_at
-                    existing.processing_status = "canceled"
+                    if existing.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
+                        existing.processing_status = "canceled"
                     existing.is_active = False
                     existing.updated_at = datetime.now(timezone.utc)
 

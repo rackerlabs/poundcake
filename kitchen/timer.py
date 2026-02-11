@@ -30,6 +30,7 @@ setup_logging()
 logger = get_logger("timer")
 POLLER_RETRIES = get_settings().poller_http_retries
 SYSTEM_REQ_ID = "SYSTEM-TIMER"
+MISSING_EXECUTION_TIMEOUT_SECONDS = get_settings().chef_missing_execution_timeout_seconds
 
 
 def update_dish(
@@ -190,37 +191,87 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
 def monitor_dishes() -> None:
     """Polls for processing dishes and updates terminal states."""
     try:
-        start_time = time.time()
-        resp = request_with_retry_sync(
-            "GET",
-            f"{API_BASE_URL}/dishes",
-            params={"processing_status": "processing", "limit": POLL_LIMIT},
-            timeout=10,
-            retries=POLLER_RETRIES,
-        )
-        latency_ms = int((time.time() - start_time) * 1000)
-        if resp.status_code != 200:
-            logger.error(
-                "Failed to fetch processing dishes",
-                extra={
-                    "req_id": SYSTEM_REQ_ID,
-                    "method": "GET",
-                    "status_code": resp.status_code,
-                    "latency_ms": latency_ms,
-                },
+        dishes: list[dict[str, Any]] = []
+        for status in ("processing", "finalizing"):
+            start_time = time.time()
+            resp = request_with_retry_sync(
+                "GET",
+                f"{API_BASE_URL}/dishes",
+                params={"processing_status": status, "limit": POLL_LIMIT},
+                timeout=10,
+                retries=POLLER_RETRIES,
             )
-            return
-        dishes = resp.json()
+            latency_ms = int((time.time() - start_time) * 1000)
+            if resp.status_code != 200:
+                logger.error(
+                    "Failed to fetch dishes",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": resp.status_code,
+                        "latency_ms": latency_ms,
+                        "processing_status": status,
+                    },
+                )
+                continue
+            dishes.extend(resp.json())
 
         for dish in dishes:
             req_id = dish.get("req_id", SYSTEM_REQ_ID)
             execution_id = dish.get("workflow_execution_id")
             extra = {"req_id": req_id}
 
+            claim_resp = request_with_retry_sync(
+                "POST",
+                f"{API_BASE_URL}/dishes/{dish.get('id')}/finalize-claim",
+                headers={"X-Request-ID": req_id},
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
+            if claim_resp.status_code == 409:
+                continue
+            if claim_resp.status_code != 200:
+                logger.error(
+                    "Failed to claim dish for finalization",
+                    extra={
+                        "req_id": req_id,
+                        "dish_id": dish.get("id"),
+                        "status_code": claim_resp.status_code,
+                    },
+                )
+                continue
+            dish = claim_resp.json()
+
             if check_for_timeouts(dish, req_id):
                 continue
 
             if not execution_id:
+                start_str = dish.get("started_at") or dish.get("created_at")
+                if start_str:
+                    dt_obj = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                    if dt_obj.tzinfo is None:
+                        start_dt = dt_obj.replace(tzinfo=timezone.utc)
+                    else:
+                        start_dt = dt_obj
+                    elapsed = (datetime.now(timezone.utc) - start_dt).total_seconds()
+                    if elapsed >= MISSING_EXECUTION_TIMEOUT_SECONDS:
+                        logger.error(
+                            "Dish missing workflow execution id past timeout",
+                            extra={
+                                "req_id": req_id,
+                                "dish_id": dish.get("id"),
+                                "elapsed_sec": int(elapsed),
+                                "timeout_sec": MISSING_EXECUTION_TIMEOUT_SECONDS,
+                            },
+                        )
+                        update_dish(
+                            dish,
+                            req_id,
+                            processing_status="failed",
+                            status="abandoned",
+                            error_msg="Missing workflow execution id",
+                            final_status=True,
+                        )
                 continue
 
             st2_start_time = time.time()

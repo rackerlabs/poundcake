@@ -7,13 +7,14 @@
 """API routes for Dish (execution) management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, asc, desc, nullsfirst, and_, or_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from api.core.database import get_db
+from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES
 from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient, Ingredient
@@ -174,7 +175,17 @@ async def fetch_dishes(
     if params.workflow_execution_id:
         query = query.where(Dish.workflow_execution_id == params.workflow_execution_id)
 
-    query = query.order_by(Dish.created_at.desc()).limit(params.limit).offset(params.offset)
+    if params.processing_status and params.processing_status.value == "new":
+        query = query.order_by(asc(Dish.created_at))
+    elif params.processing_status and params.processing_status.value == "processing":
+        query = query.order_by(
+            nullsfirst(asc(Dish.started_at)),
+            asc(Dish.created_at),
+        )
+    else:
+        query = query.order_by(desc(Dish.created_at))
+
+    query = query.limit(params.limit).offset(params.offset)
     result = await db.execute(query)
     dishes = result.unique().scalars().all()
 
@@ -200,6 +211,55 @@ async def claim_dish(
     if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
         logger.info(
             "Dish claim failed",
+            extra={"req_id": req_id, "dish_id": dish_id},
+        )
+        raise HTTPException(status_code=409, detail="Dish already claimed")
+
+    await db.commit()
+
+    result = await db.execute(
+        select(Dish)
+        .options(
+            joinedload(Dish.recipe)
+            .joinedload(Recipe.recipe_ingredients)
+            .joinedload(RecipeIngredient.ingredient)
+        )
+        .where(Dish.id == dish_id)
+    )
+    dish = result.scalars().first()
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    return dish
+
+
+@router.post("/dishes/{dish_id}/finalize-claim", response_model=DishDetailResponse)
+async def claim_dish_for_finalize(
+    request: Request, dish_id: int, db: AsyncSession = Depends(get_db)
+) -> DishDetailResponse:
+    """Atomically claim a processing dish for finalization."""
+    req_id = request.state.req_id
+    now = datetime.now(timezone.utc)
+    settings = get_settings()
+    stale_cutoff = now - timedelta(seconds=settings.lock_timeout_seconds)
+
+    update_result = await db.execute(
+        update(Dish)
+        .where(
+            Dish.id == dish_id,
+            or_(
+                Dish.processing_status == "processing",
+                and_(
+                    Dish.processing_status == "finalizing",
+                    Dish.updated_at < stale_cutoff,
+                ),
+            ),
+        )
+        .values(processing_status="finalizing", updated_at=now)
+    )
+
+    if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
+        logger.info(
+            "Dish finalize claim failed",
             extra={"req_id": req_id, "dish_id": dish_id},
         )
         raise HTTPException(status_code=409, detail="Dish already claimed")
@@ -254,14 +314,24 @@ async def upsert_dish_ingredients(
     created = 0
     now = datetime.now(timezone.utc)
 
+    seen_keys: set[tuple[str, str]] = set()
     for item in payload.items:
         task_id = item.task_id
         st2_execution_id = item.st2_execution_id
         if not task_id and not st2_execution_id:
             continue
+        dedupe_key = (task_id or "", st2_execution_id or "")
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
 
         record_query = select(DishIngredient).where(DishIngredient.dish_id == dish_id)
-        if st2_execution_id:
+        if st2_execution_id and task_id:
+            record_query = record_query.where(
+                DishIngredient.st2_execution_id == st2_execution_id,
+                DishIngredient.task_id == task_id,
+            )
+        elif st2_execution_id:
             record_query = record_query.where(DishIngredient.st2_execution_id == st2_execution_id)
         else:
             record_query = record_query.where(DishIngredient.task_id == task_id)
@@ -360,6 +430,22 @@ async def update_dish(
         raise HTTPException(status_code=404, detail="Dish not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    if (
+        dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES
+        and "processing_status" in update_data
+        and update_data["processing_status"] in DISH_TERMINAL_PROCESSING_STATUSES
+        and update_data["processing_status"] != dish.processing_status
+    ):
+        logger.info(
+            "Ignoring terminal status overwrite",
+            extra={
+                "req_id": req_id,
+                "dish_id": dish_id,
+                "current_status": dish.processing_status,
+                "requested_status": update_data["processing_status"],
+            },
+        )
+        return dish
     for key, value in update_data.items():
         setattr(dish, key, value)
 
