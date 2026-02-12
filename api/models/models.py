@@ -9,7 +9,7 @@
 from datetime import datetime, timezone
 from typing import Any, Optional, List
 
-from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, Index, Boolean
+from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, Index, Boolean, case
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 
@@ -255,6 +255,14 @@ class Order(Base):
     dishes: Mapped[List["Dish"]] = relationship("Dish", back_populates="order")
 
     __table_args__ = (
-        Index("ux_orders_fingerprint_active", "fingerprint", "is_active", unique=True),
+        # Partial unique index: only enforce uniqueness on fingerprint for active orders
+        # Using CASE expression with NULL allows multiple inactive orders with same fingerprint
+        # but only one active order per fingerprint
+        Index(
+            "ux_orders_fingerprint_active",
+            "fingerprint",
+            case((is_active == True, 0), else_=None),
+            unique=True,
+        ),
         Index("ix_orders_is_active", "is_active"),
     )

@@ -23,28 +23,36 @@ fi
 
 echo "Creating single-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
 
-ING_PAYLOAD=$(jq -n \
-  --arg cmd "echo \"alert single task\"" \
-  --argjson is_blocking "$IS_BLOCKING" \
-  '{
-    task_id: "core.local",
-    task_name: "single_echo",
-    action_parameters: {cmd: $cmd},
-    is_blocking: $is_blocking,
-    expected_duration_sec: 30,
-    timeout_duration_sec: 300,
-    retry_count: 0,
-    retry_delay: 5,
-    on_failure: "stop"
-  }')
+# Check if core.local ingredient already exists
+ING_ID=$(curl -sS -X GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
 
-ING_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
-  -H "Content-Type: application/json" \
-  -d "${ING_PAYLOAD}" | jq -r '.id')
+if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
+  echo "Ingredient core.local not found, creating it..."
+  ING_PAYLOAD=$(jq -n \
+    --arg cmd "echo \"alert single task\"" \
+    --argjson is_blocking "$IS_BLOCKING" \
+    '{
+      task_id: "core.local",
+      task_name: "single_echo",
+      action_parameters: {cmd: $cmd},
+      is_blocking: $is_blocking,
+      expected_duration_sec: 30,
+      timeout_duration_sec: 300,
+      retry_count: 0,
+      retry_delay: 5,
+      on_failure: "stop"
+    }')
 
-if [ -z "$ING_ID" ]; then
-  echo "Failed to create ingredient"
-  exit 1
+  ING_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
+    -H "Content-Type: application/json" \
+    -d "${ING_PAYLOAD}" | jq -r '.id')
+
+  if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
+    echo "Failed to create ingredient"
+    exit 1
+  fi
+else
+  echo "Using existing ingredient core.local (ID: $ING_ID)"
 fi
 
 RECIPE_PAYLOAD=$(jq -n \

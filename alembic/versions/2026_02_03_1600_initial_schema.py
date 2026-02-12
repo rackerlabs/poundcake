@@ -121,11 +121,17 @@ def upgrade() -> None:
         op.f("ix_orders_processing_status"), "orders", ["processing_status"], unique=False
     )
     op.create_index(op.f("ix_orders_is_active"), "orders", ["is_active"], unique=False)
-    op.create_index(
-        "ux_orders_fingerprint_active",
-        "orders",
-        ["fingerprint", "is_active"],
-        unique=True,
+    # Create a partial unique index for active orders only
+    # MariaDB doesn't natively support filtered indexes with WHERE clauses,
+    # so we use a workaround: include a column that is NULL for inactive orders
+    # Since NULL values are not considered in unique constraints, this effectively
+    # creates a unique constraint only for active orders (is_active=1)
+    # Multiple inactive orders (is_active=0) with the same fingerprint are allowed
+    op.execute(
+        """
+        CREATE UNIQUE INDEX ux_orders_fingerprint_active
+        ON orders (fingerprint, (CASE WHEN is_active = 1 THEN 0 ELSE NULL END))
+        """
     )
     op.create_index(
         op.f("ix_orders_alert_group_name"), "orders", ["alert_group_name"], unique=False
@@ -234,6 +240,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_orders_instance"), table_name="orders")
     op.drop_index(op.f("ix_orders_severity"), table_name="orders")
     op.drop_index(op.f("ix_orders_alert_group_name"), table_name="orders")
+    op.drop_index("ux_orders_fingerprint_active", table_name="orders")
+    op.drop_index(op.f("ix_orders_is_active"), table_name="orders")
     op.drop_index(op.f("ix_orders_processing_status"), table_name="orders")
     op.drop_index(op.f("ix_orders_alert_status"), table_name="orders")
     op.drop_index(op.f("ix_orders_fingerprint"), table_name="orders")

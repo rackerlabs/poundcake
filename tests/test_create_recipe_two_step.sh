@@ -23,48 +23,40 @@ fi
 
 echo "Creating two-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
 
-ING1_PAYLOAD=$(jq -n \
-  --arg cmd "echo \"alert step one task\"" \
-  --argjson is_blocking "$IS_BLOCKING" \
-  '{
-    task_id: "core.local",
-    task_name: "step_1_echo",
-    action_parameters: {cmd: $cmd},
-    is_blocking: $is_blocking,
-    expected_duration_sec: 30,
-    timeout_duration_sec: 300,
-    retry_count: 0,
-    retry_delay: 5,
-    on_failure: "stop"
-  }')
+# Check if core.local ingredient already exists
+ING1_ID=$(curl -sS -X GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
 
-ING2_PAYLOAD=$(jq -n \
-  --arg cmd "echo \"alert step two task\"" \
-  --argjson is_blocking "$IS_BLOCKING" \
-  '{
-    task_id: "core.local",
-    task_name: "step_2_echo",
-    action_parameters: {cmd: $cmd},
-    is_blocking: $is_blocking,
-    expected_duration_sec: 30,
-    timeout_duration_sec: 300,
-    retry_count: 0,
-    retry_delay: 5,
-    on_failure: "stop"
-  }')
+if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
+  echo "Ingredient core.local not found, creating it..."
+  ING1_PAYLOAD=$(jq -n \
+    --arg cmd "echo \"alert step one task\"" \
+    --argjson is_blocking "$IS_BLOCKING" \
+    '{
+      task_id: "core.local",
+      task_name: "step_1_echo",
+      action_parameters: {cmd: $cmd},
+      is_blocking: $is_blocking,
+      expected_duration_sec: 30,
+      timeout_duration_sec: 300,
+      retry_count: 0,
+      retry_delay: 5,
+      on_failure: "stop"
+    }')
 
-ING1_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
-  -H "Content-Type: application/json" \
-  -d "${ING1_PAYLOAD}" | jq -r '.id')
+  ING1_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
+    -H "Content-Type: application/json" \
+    -d "${ING1_PAYLOAD}" | jq -r '.id')
 
-ING2_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
-  -H "Content-Type: application/json" \
-  -d "${ING2_PAYLOAD}" | jq -r '.id')
-
-if [ -z "$ING1_ID" ] || [ -z "$ING2_ID" ]; then
-  echo "Failed to create ingredients"
-  exit 1
+  if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
+    echo "Failed to create first ingredient"
+    exit 1
+  fi
+else
+  echo "Using existing ingredient core.local (ID: $ING1_ID)"
 fi
+
+# For the second step, we'll use the same ingredient (core.local can be reused in different steps)
+ING2_ID="$ING1_ID"
 
 RECIPE_PAYLOAD=$(jq -n \
   --arg name "$TEST_RECIPE" \
