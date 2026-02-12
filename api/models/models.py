@@ -9,7 +9,7 @@
 from datetime import datetime, timezone
 from typing import Any, Optional, List
 
-from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, Index, Boolean, case
+from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, Index, Boolean, Computed
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 
@@ -252,17 +252,19 @@ class Order(Base):
         DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
     )
 
+    # Generated column for partial unique index
+    # NULL when inactive, equals fingerprint when active
+    # This allows multiple inactive orders per fingerprint but only one active order
+    fingerprint_when_active: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        Computed("IF(is_active = 1, fingerprint, NULL)"),
+        nullable=True,
+    )
+
     dishes: Mapped[List["Dish"]] = relationship("Dish", back_populates="order")
 
     __table_args__ = (
-        # Partial unique index: only enforce uniqueness on fingerprint for active orders
-        # Using CASE expression with NULL allows multiple inactive orders with same fingerprint
-        # but only one active order per fingerprint
-        Index(
-            "ux_orders_fingerprint_active",
-            "fingerprint",
-            case((is_active == True, 0), else_=None),
-            unique=True,
-        ),
+        # Unique index on generated column - only enforces uniqueness for active orders
+        Index("ux_orders_fingerprint_active", "fingerprint_when_active", unique=True),
         Index("ix_orders_is_active", "is_active"),
     )

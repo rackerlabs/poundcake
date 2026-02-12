@@ -92,35 +92,31 @@ def upgrade() -> None:
     )
 
     # Orders (old alerts)
-    op.create_table(
-        "orders",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("req_id", sa.String(length=100), nullable=False),
-        sa.Column("fingerprint", sa.String(length=255), nullable=False),
-        sa.Column("alert_status", sa.String(length=50), nullable=False),
-        sa.Column("processing_status", sa.String(length=50), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("alert_group_name", sa.String(length=255), nullable=False),
-        sa.Column("severity", sa.String(length=50), nullable=True),
-        sa.Column("instance", sa.String(length=255), nullable=True),
-        sa.Column("counter", sa.Integer(), nullable=False),
-        sa.Column("labels", mysql.JSON(), nullable=False),
-        sa.Column("annotations", mysql.JSON(), nullable=True),
-        sa.Column("raw_data", mysql.JSON(), nullable=True),
-        sa.Column("starts_at", sa.DateTime(), nullable=False),
-        sa.Column("ends_at", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-    )
-
-    # Add a generated column for the partial unique index
-    # This column is fingerprint when is_active=1, NULL when is_active=0
-    # Allows multiple inactive orders per fingerprint, but only one active order
+    # Note: We need to use raw SQL to create the table with the generated column
+    # because SQLAlchemy doesn't support GENERATED columns in create_table()
     op.execute(
         """
-        ALTER TABLE orders ADD COLUMN fingerprint_when_active VARCHAR(255)
-        GENERATED ALWAYS AS (IF(is_active = 1, fingerprint, NULL)) STORED
+        CREATE TABLE orders (
+            id INTEGER NOT NULL AUTO_INCREMENT,
+            req_id VARCHAR(100) NOT NULL,
+            fingerprint VARCHAR(255) NOT NULL,
+            alert_status VARCHAR(50) NOT NULL,
+            processing_status VARCHAR(50) NOT NULL,
+            is_active BOOLEAN NOT NULL,
+            alert_group_name VARCHAR(255) NOT NULL,
+            severity VARCHAR(50),
+            instance VARCHAR(255),
+            counter INTEGER NOT NULL,
+            labels JSON NOT NULL,
+            annotations JSON,
+            raw_data JSON,
+            starts_at DATETIME NOT NULL,
+            ends_at DATETIME,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            fingerprint_when_active VARCHAR(255) GENERATED ALWAYS AS (IF(is_active = 1, fingerprint, NULL)) STORED,
+            PRIMARY KEY (id)
+        )
         """
     )
     op.create_index(op.f("ix_orders_id"), "orders", ["id"], unique=False)
