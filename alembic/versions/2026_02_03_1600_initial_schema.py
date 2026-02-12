@@ -113,6 +113,16 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
+
+    # Add a generated column for the partial unique index
+    # This column is fingerprint when is_active=1, NULL when is_active=0
+    # Allows multiple inactive orders per fingerprint, but only one active order
+    op.execute(
+        """
+        ALTER TABLE orders ADD COLUMN fingerprint_when_active VARCHAR(255)
+        GENERATED ALWAYS AS (IF(is_active = 1, fingerprint, NULL)) STORED
+        """
+    )
     op.create_index(op.f("ix_orders_id"), "orders", ["id"], unique=False)
     op.create_index(op.f("ix_orders_req_id"), "orders", ["req_id"], unique=False)
     op.create_index(op.f("ix_orders_fingerprint"), "orders", ["fingerprint"], unique=False)
@@ -121,17 +131,12 @@ def upgrade() -> None:
         op.f("ix_orders_processing_status"), "orders", ["processing_status"], unique=False
     )
     op.create_index(op.f("ix_orders_is_active"), "orders", ["is_active"], unique=False)
-    # Create a partial unique index for active orders only
-    # MariaDB doesn't natively support filtered indexes with WHERE clauses,
-    # so we use a workaround: include a column that is NULL for inactive orders
-    # Since NULL values are not considered in unique constraints, this effectively
-    # creates a unique constraint only for active orders (is_active=1)
-    # Multiple inactive orders (is_active=0) with the same fingerprint are allowed
-    op.execute(
-        """
-        CREATE UNIQUE INDEX ux_orders_fingerprint_active
-        ON orders (fingerprint, (CASE WHEN is_active = 1 THEN 0 ELSE NULL END))
-        """
+
+    # Create unique index on the generated column
+    # Since it's NULL for inactive orders, multiple inactive orders can have the same fingerprint
+    # But only one active order per fingerprint is allowed
+    op.create_index(
+        "ux_orders_fingerprint_active", "orders", ["fingerprint_when_active"], unique=True
     )
     op.create_index(
         op.f("ix_orders_alert_group_name"), "orders", ["alert_group_name"], unique=False
@@ -247,6 +252,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_orders_fingerprint"), table_name="orders")
     op.drop_index(op.f("ix_orders_req_id"), table_name="orders")
     op.drop_index(op.f("ix_orders_id"), table_name="orders")
+    # Drop the generated column
+    op.execute("ALTER TABLE orders DROP COLUMN fingerprint_when_active")
     op.drop_table("orders")
 
     op.drop_index("idx_recipe_ingredient_order", table_name="recipe_ingredients")
