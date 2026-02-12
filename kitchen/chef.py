@@ -38,6 +38,7 @@ def run_chef() -> None:
         "Chef started",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_BASE_URL, "poll_interval": POLL_INTERVAL},
     )
+    api_unavailable_since: float | None = None
 
     while True:
         try:
@@ -64,6 +65,14 @@ def run_chef() -> None:
                 )
                 time.sleep(POLL_INTERVAL)
                 continue
+
+            if api_unavailable_since is not None:
+                downtime_sec = int(time.time() - api_unavailable_since)
+                logger.info(
+                    "Chef API connectivity restored",
+                    extra={"req_id": SYSTEM_REQ_ID, "downtime_sec": downtime_sec},
+                )
+                api_unavailable_since = None
 
             dishes = resp.json()
             if not dishes:
@@ -216,10 +225,17 @@ def run_chef() -> None:
                 )
 
         except Exception as e:
-            logger.error(
-                "Chef loop encountered an error",
-                extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
-            )
+            if api_unavailable_since is None:
+                api_unavailable_since = time.time()
+                logger.error(
+                    "Chef lost API connectivity",
+                    extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
+                )
+            else:
+                logger.debug(
+                    "Chef waiting for API recovery",
+                    extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
+                )
             time.sleep(POLL_INTERVAL)
 
 

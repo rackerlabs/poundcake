@@ -55,6 +55,7 @@ async def create_ingredient(
         action_id=ingredient.action_id,
         action_payload=ingredient.action_payload,
         action_parameters=ingredient.action_parameters,
+        source_type=ingredient.source_type,
         is_blocking=ingredient.is_blocking,
         expected_duration_sec=ingredient.expected_duration_sec,
         timeout_duration_sec=ingredient.timeout_duration_sec,
@@ -134,7 +135,7 @@ async def get_ingredients_by_recipe_name(recipe_name: str, db: AsyncSession = De
         .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
         .where(Recipe.name == recipe_name)
     )
-    recipe = result.scalars().first()
+    recipe = result.unique().scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
 
@@ -149,7 +150,7 @@ async def get_ingredients_by_recipe_id(recipe_id: int, db: AsyncSession = Depend
         .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
         .where(Recipe.id == recipe_id)
     )
-    recipe = result.scalars().first()
+    recipe = result.unique().scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 

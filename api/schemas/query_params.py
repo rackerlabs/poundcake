@@ -52,7 +52,8 @@ class DishQueryParams(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Reject unknown parameters in body
 
     processing_status: Optional[DishProcessingStatus] = Field(
-        None, description="Filter by processing status (new/processing/finalizing/complete/failed/abandoned/timeout/canceled)"
+        None,
+        description="Filter by processing status (new/processing/finalizing/complete/failed/abandoned/timeout/canceled)",
     )
     req_id: Optional[str] = Field(
         None, min_length=1, max_length=100, description="Filter by request ID"
@@ -116,8 +117,8 @@ class OrderQueryParams(BaseModel):
     req_id: Optional[str] = Field(
         None, min_length=1, max_length=100, description="Filter by request ID"
     )
-    group_name: Optional[str] = Field(
-        None, min_length=1, max_length=255, description="Filter by group name"
+    alert_group_name: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="Filter by alert group name"
     )
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"

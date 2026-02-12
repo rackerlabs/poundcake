@@ -62,6 +62,7 @@ class IngredientBase(BaseModel):
     action_payload: Optional[str] = None
     action_parameters: Optional[Dict[str, Any]] = None
 
+    source_type: str = Field(default="stackstorm", max_length=50)
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
@@ -84,6 +85,7 @@ class IngredientUpdate(BaseModel):
     action_id: Optional[str] = Field(None, max_length=100)
     action_payload: Optional[str] = None
     action_parameters: Optional[Dict[str, Any]] = None
+    source_type: Optional[str] = Field(None, max_length=50)
     is_blocking: Optional[bool] = None
     expected_duration_sec: Optional[int] = Field(None, gt=0)
     timeout_duration_sec: Optional[int] = Field(None, gt=0)
@@ -115,6 +117,7 @@ class RecipeIngredientBase(BaseModel):
     on_success: OnSuccessAction = Field(default="continue")
     parallel_group: int = Field(default=0, ge=0)
     depth: int = Field(default=0, ge=0)
+    input_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeIngredientCreate(RecipeIngredientBase):
@@ -248,6 +251,7 @@ class OrderBase(BaseModel):
     alert_group_name: str = Field(..., max_length=255)
     labels: Dict[str, Any]
     starts_at: datetime
+    bakery_comms_id: Optional[str] = Field(None, max_length=36)
 
 
 class OrderCreate(OrderBase):

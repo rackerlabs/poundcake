@@ -36,7 +36,7 @@ async def fetch_orders(
     - processing_status: Filter by processing status (new/pending/processing/complete/failed)
     - alert_status: Filter by alert status (firing/resolved)
     - req_id: Filter by request ID
-    - group_name: Filter by group name
+    - alert_group_name: Filter by alert group name
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
 
@@ -51,7 +51,7 @@ async def fetch_orders(
             "processing_status": params.processing_status,
             "alert_status": params.alert_status,
             "filter_req_id": params.req_id,
-            "group_name": params.group_name,
+            "alert_group_name": params.alert_group_name,
             "limit": params.limit,
             "offset": params.offset,
         },
@@ -65,8 +65,8 @@ async def fetch_orders(
         query = query.where(Order.alert_status == params.alert_status)
     if params.req_id:
         query = query.where(Order.req_id == params.req_id)
-    if params.group_name:
-        query = query.where(Order.alert_group_name == params.group_name)
+    if params.alert_group_name:
+        query = query.where(Order.alert_group_name == params.alert_group_name)
 
     if params.processing_status and params.processing_status == "new":
         query = query.order_by(asc(Order.created_at))

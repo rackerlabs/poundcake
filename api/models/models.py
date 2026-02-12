@@ -46,6 +46,10 @@ class RecipeIngredient(Base):
     # Depth in the task graph (for parallel/linear ordering)
     depth: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Recipe-specific input parameters (actual values to pass to this ingredient instance)
+    # This stores the concrete values, while Ingredient.action_parameters stores the schema
+    input_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
+
     recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="recipe_ingredients")
     ingredient: Mapped["Ingredient"] = relationship("Ingredient")
 
@@ -109,6 +113,9 @@ class Ingredient(Base):
     action_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     action_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     action_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
+
+    # Source type: "stackstorm", "native", "shell", "ansible", etc.
+    source_type: Mapped[str] = mapped_column(String(50), default="stackstorm", nullable=False)
 
     is_blocking: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_duration_sec: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -251,6 +258,9 @@ class Order(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
     )
+
+    # Bakery communication ID (UUID for tracking notifications to external systems)
+    bakery_comms_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     # Generated column for partial unique index
     # NULL when inactive, equals fingerprint when active

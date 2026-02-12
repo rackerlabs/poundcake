@@ -29,12 +29,18 @@ ING1_ID=$(curl -sS -X GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '
 if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
   echo "Ingredient core.local not found, creating it..."
   ING1_PAYLOAD=$(jq -n \
-    --arg cmd "echo \"alert step one task\"" \
     --argjson is_blocking "$IS_BLOCKING" \
     '{
       task_id: "core.local",
       task_name: "step_1_echo",
-      action_parameters: {cmd: $cmd},
+      action_parameters: {
+        cmd: {
+          type: "string",
+          description: "Command to execute",
+          required: true
+        }
+      },
+      source_type: "stackstorm",
       is_blocking: $is_blocking,
       expected_duration_sec: 30,
       timeout_duration_sec: 300,
@@ -61,33 +67,35 @@ ING2_ID="$ING1_ID"
 RECIPE_PAYLOAD=$(jq -n \
   --arg name "$TEST_RECIPE" \
   --arg desc "Automated two-step test recipe" \
-  --arg cmd1 "echo \"alert step one task\"" \
-  --arg cmd2 "echo \"alert step two task\"" \
   --argjson ing1_id "$ING1_ID" \
   --argjson ing2_id "$ING2_ID" \
   '{
     name: $name,
     description: $desc,
     enabled: true,
-    workflow_payload: {
-      version: "1.0",
-      description: "Two-step test workflow",
-      tasks: {
-        step_1_echo: {
-          action: "core.local",
-          input: {cmd: $cmd1},
-          next: [{when: "<% succeeded() %>", do: "step_2_echo"}]
-        },
-        step_2_echo: {
-          action: "core.local",
-          input: {cmd: $cmd2}
-        }
-      }
-    },
+    workflow_payload: null,
     workflow_parameters: {},
     recipe_ingredients: [
-      {ingredient_id: $ing1_id, step_order: 1, on_success: "continue", parallel_group: 0, depth: 0},
-      {ingredient_id: $ing2_id, step_order: 2, on_success: "continue", parallel_group: 1, depth: 1}
+      {
+        ingredient_id: $ing1_id,
+        step_order: 1,
+        on_success: "continue",
+        parallel_group: 0,
+        depth: 0,
+        input_parameters: {
+          cmd: "echo \"step 1\""
+        }
+      },
+      {
+        ingredient_id: $ing2_id,
+        step_order: 2,
+        on_success: "continue",
+        parallel_group: 0,
+        depth: 0,
+        input_parameters: {
+          cmd: "echo \"step 2\""
+        }
+      }
     ]
   }')
 

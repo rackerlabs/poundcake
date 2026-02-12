@@ -29,12 +29,18 @@ ING_ID=$(curl -sS -X GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.
 if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
   echo "Ingredient core.local not found, creating it..."
   ING_PAYLOAD=$(jq -n \
-    --arg cmd "echo \"alert single task\"" \
     --argjson is_blocking "$IS_BLOCKING" \
     '{
       task_id: "core.local",
       task_name: "single_echo",
-      action_parameters: {cmd: $cmd},
+      action_parameters: {
+        cmd: {
+          type: "string",
+          description: "Command to execute",
+          required: true
+        }
+      },
+      source_type: "stackstorm",
       is_blocking: $is_blocking,
       expected_duration_sec: 30,
       timeout_duration_sec: 300,
@@ -58,25 +64,24 @@ fi
 RECIPE_PAYLOAD=$(jq -n \
   --arg name "$TEST_RECIPE" \
   --arg desc "Automated single-step test recipe" \
-  --arg cmd "echo \"alert single task\"" \
   --argjson ing_id "$ING_ID" \
   '{
     name: $name,
     description: $desc,
     enabled: true,
-    workflow_payload: {
-      version: "1.0",
-      description: "Single-step test workflow",
-      tasks: {
-        single_echo: {
-          action: "core.local",
-          input: {cmd: $cmd}
-        }
-      }
-    },
+    workflow_payload: null,
     workflow_parameters: {},
     recipe_ingredients: [
-      {ingredient_id: $ing_id, step_order: 1, on_success: "continue", parallel_group: 0, depth: 0}
+      {
+        ingredient_id: $ing_id,
+        step_order: 1,
+        on_success: "continue",
+        parallel_group: 0,
+        depth: 0,
+        input_parameters: {
+          cmd: "echo \"single step test\""
+        }
+      }
     ]
   }')
 

@@ -29,7 +29,7 @@ done
 
 # Authenticate to get a token (retry until available)
 echo "Authenticating as ${ST2_AUTH_USER}..."
-AUTH_RETRIES=12
+AUTH_RETRIES=30
 AUTH_COUNT=0
 ST2_TOKEN=""
 while [ $AUTH_COUNT -lt $AUTH_RETRIES ]; do
@@ -38,10 +38,18 @@ while [ $AUTH_COUNT -lt $AUTH_RETRIES ]; do
     set -e
     if [ -n "$ST2_TOKEN" ]; then
         export ST2_AUTH_TOKEN=$ST2_TOKEN
-        break
+        # Verify the token works by making a test API call
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $ST2_TOKEN" http://stackstorm-api:9101/v1/actions || echo "000")
+        if [ "$HTTP_CODE" = "200" ]; then
+            echo "[OK] Authentication successful and verified (HTTP $HTTP_CODE)"
+            break
+        else
+            echo "[WARN] Token obtained but not yet valid (HTTP $HTTP_CODE), retrying..."
+            ST2_TOKEN=""
+        fi
     fi
     AUTH_COUNT=$((AUTH_COUNT + 1))
-    sleep 5
+    sleep 4
 done
 if [ -z "$ST2_TOKEN" ]; then
     echo "[ERROR] Failed to authenticate to StackStorm API."
@@ -50,11 +58,16 @@ fi
 
 create_api_key() {
     local key
-    key=$(st2 apikey create -k -m '{"description": "PoundCake-Internal"}' 2>/dev/null || true)
-    if [ -n "$key" ] && [[ "$key" != ERROR:* ]]; then
-        echo "$key"
-        return 0
-    fi
+    # Retry the API key creation with exponential backoff
+    for attempt in 1 2 3 4 5; do
+        key=$(st2 apikey create -k -m '{"description": "PoundCake-Internal"}' 2>/dev/null || true)
+        if [ -n "$key" ] && [[ "$key" != ERROR:* ]]; then
+            echo "$key"
+            return 0
+        fi
+        # Wait longer between retries to allow token to propagate
+        sleep $((attempt * 2))
+    done
     return 1
 }
 
@@ -67,7 +80,7 @@ if [ -f "/app/config/st2_api_key" ] && [ -s "/app/config/st2_api_key" ]; then
         echo "[OK] Existing API Key is valid. Skipping creation."
     else
         echo "[WARN] Key file found but invalid (HTTP $HTTP_CODE). Re-generating..."
-        KEY_RETRIES=10
+        KEY_RETRIES=20
         KEY_COUNT=0
         while [ $KEY_COUNT -lt $KEY_RETRIES ]; do
             if NEW_KEY=$(create_api_key); then
@@ -75,7 +88,7 @@ if [ -f "/app/config/st2_api_key" ] && [ -s "/app/config/st2_api_key" ]; then
                 break
             fi
             KEY_COUNT=$((KEY_COUNT + 1))
-            sleep 3
+            sleep 4
         done
         if [ ! -s "/app/config/st2_api_key" ]; then
             echo "[ERROR] Failed to generate API key."
@@ -84,7 +97,7 @@ if [ -f "/app/config/st2_api_key" ] && [ -s "/app/config/st2_api_key" ]; then
     fi
 else
     echo "Generating new API Key..."
-    KEY_RETRIES=10
+    KEY_RETRIES=20
     KEY_COUNT=0
     while [ $KEY_COUNT -lt $KEY_RETRIES ]; do
         if NEW_KEY=$(create_api_key); then
@@ -92,7 +105,7 @@ else
             break
         fi
         KEY_COUNT=$((KEY_COUNT + 1))
-        sleep 3
+        sleep 4
     done
     if [ ! -s "/app/config/st2_api_key" ]; then
         echo "[ERROR] Failed to generate API key."

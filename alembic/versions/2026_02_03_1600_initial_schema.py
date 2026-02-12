@@ -54,6 +54,7 @@ def upgrade() -> None:
         sa.Column("action_id", sa.String(length=100), nullable=True),
         sa.Column("action_payload", sa.Text(), nullable=True),
         sa.Column("action_parameters", mysql.JSON(), nullable=True),
+        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="stackstorm"),
         sa.Column("is_blocking", sa.Boolean(), nullable=False),
         sa.Column("expected_duration_sec", sa.Integer(), nullable=False),
         sa.Column("timeout_duration_sec", sa.Integer(), nullable=False),
@@ -79,6 +80,7 @@ def upgrade() -> None:
         sa.Column("on_success", sa.String(length=50), nullable=False, server_default="continue"),
         sa.Column("parallel_group", sa.Integer(), nullable=False),
         sa.Column("depth", sa.Integer(), nullable=False),
+        sa.Column("input_parameters", mysql.JSON(), nullable=True),
         sa.ForeignKeyConstraint(["ingredient_id"], ["ingredients.id"]),
         sa.ForeignKeyConstraint(["recipe_id"], ["recipes.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -114,6 +116,7 @@ def upgrade() -> None:
             ends_at DATETIME,
             created_at DATETIME NOT NULL,
             updated_at DATETIME NOT NULL,
+            bakery_comms_id VARCHAR(36),
             fingerprint_when_active VARCHAR(255) GENERATED ALWAYS AS (IF(is_active = 1, fingerprint, NULL)) STORED,
             PRIMARY KEY (id)
         )

@@ -56,7 +56,7 @@ async def cook_dishes(
             .where(Recipe.name == order.alert_group_name, Recipe.enabled.is_(True))
             .with_for_update()
         )
-        recipe = result.scalars().first()
+        recipe = result.unique().scalars().first()
 
         if not recipe:
             if order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
@@ -239,7 +239,7 @@ async def claim_dish(
             )
             .where(Dish.id == dish_id)
         )
-        dish = result.scalars().first()
+        dish = result.unique().scalars().first()
 
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
@@ -290,7 +290,7 @@ async def claim_dish_for_finalize(
             )
             .where(Dish.id == dish_id)
         )
-        dish = result.scalars().first()
+        dish = result.unique().scalars().first()
 
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
@@ -320,7 +320,7 @@ async def upsert_dish_ingredients(
             .where(Dish.id == dish_id)
             .with_for_update()
         )
-        dish = result.scalars().first()
+        dish = result.unique().scalars().first()
         if not dish:
             raise HTTPException(status_code=404, detail="Dish not found")
 
@@ -444,7 +444,7 @@ async def update_dish(
     dish: Dish | None = None
     async with db.begin():
         result = await db.execute(select(Dish).where(Dish.id == dish_id).with_for_update())
-        dish = result.scalars().first()
+        dish = result.unique().scalars().first()
         if not dish:
             logger.warning("Dish not found", extra={"req_id": req_id, "dish_id": dish_id})
             raise HTTPException(status_code=404, detail="Dish not found")
