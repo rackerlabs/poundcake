@@ -10,7 +10,7 @@ from typing import Optional, Type, Callable
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi import Request, HTTPException
 
-from api.validation import ProcessingStatus, AlertStatus
+from api.types import DishProcessingStatus, OrderProcessingStatus, AlertStatus
 
 
 def validate_query_params(model_class: Type[BaseModel]) -> Callable[[Request], BaseModel]:
@@ -51,8 +51,9 @@ class DishQueryParams(BaseModel):
 
     model_config = ConfigDict(extra="forbid")  # Reject unknown parameters in body
 
-    processing_status: Optional[ProcessingStatus] = Field(
-        None, description="Filter by processing status (new/pending/processing/complete/failed)"
+    processing_status: Optional[DishProcessingStatus] = Field(
+        None,
+        description="Filter by processing status (new/processing/finalizing/complete/failed/abandoned/timeout/canceled)",
     )
     req_id: Optional[str] = Field(
         None, min_length=1, max_length=100, description="Filter by request ID"
@@ -107,8 +108,8 @@ class OrderQueryParams(BaseModel):
 
     model_config = ConfigDict(extra="forbid")  # Reject unknown parameters in body
 
-    processing_status: Optional[ProcessingStatus] = Field(
-        None, description="Filter by processing status (new/pending/processing/complete/failed)"
+    processing_status: Optional[OrderProcessingStatus] = Field(
+        None, description="Filter by processing status (new/processing/complete/failed/canceled)"
     )
     alert_status: Optional[AlertStatus] = Field(
         None, description="Filter by alert status (firing/resolved)"
@@ -116,8 +117,8 @@ class OrderQueryParams(BaseModel):
     req_id: Optional[str] = Field(
         None, min_length=1, max_length=100, description="Filter by request ID"
     )
-    group_name: Optional[str] = Field(
-        None, min_length=1, max_length=255, description="Filter by group name"
+    alert_group_name: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="Filter by alert group name"
     )
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"

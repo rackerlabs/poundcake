@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     stackstorm_api_key: str = ""
     stackstorm_auth_token: str = ""
     stackstorm_verify_ssl: bool = False
+    stackstorm_startup_max_attempts: int = 120
+    stackstorm_startup_delay_seconds: float = 2.0
 
     def get_stackstorm_api_key(self) -> str:
         """Get StackStorm API key from env var or runtime config file.

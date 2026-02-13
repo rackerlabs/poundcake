@@ -10,6 +10,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+from api.types import (
+    DishProcessingStatus,
+    OrderProcessingStatus,
+    AlertStatus,
+    OnSuccessAction,
+    OnFailureAction,
+)
+
 # =============================================================================
 # Health & Stats
 # =============================================================================
@@ -54,12 +62,13 @@ class IngredientBase(BaseModel):
     action_payload: Optional[str] = None
     action_parameters: Optional[Dict[str, Any]] = None
 
+    source_type: str = Field(default="stackstorm", max_length=50)
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
     retry_count: int = Field(default=0, ge=0)
     retry_delay: int = Field(default=5, ge=0)
-    on_failure: str = Field(default="stop", max_length=50)
+    on_failure: OnFailureAction = Field(default="stop")
 
 
 class IngredientCreate(IngredientBase):
@@ -76,12 +85,13 @@ class IngredientUpdate(BaseModel):
     action_id: Optional[str] = Field(None, max_length=100)
     action_payload: Optional[str] = None
     action_parameters: Optional[Dict[str, Any]] = None
+    source_type: Optional[str] = Field(None, max_length=50)
     is_blocking: Optional[bool] = None
     expected_duration_sec: Optional[int] = Field(None, gt=0)
     timeout_duration_sec: Optional[int] = Field(None, gt=0)
     retry_count: Optional[int] = Field(None, ge=0)
     retry_delay: Optional[int] = Field(None, ge=0)
-    on_failure: Optional[str] = Field(None, max_length=50)
+    on_failure: Optional[OnFailureAction] = None
 
 
 class IngredientResponse(IngredientBase):
@@ -104,9 +114,10 @@ class IngredientResponse(IngredientBase):
 class RecipeIngredientBase(BaseModel):
     ingredient_id: int = Field(..., ge=1)
     step_order: int = Field(..., ge=1)
-    on_success: str = Field(default="continue", max_length=50)
+    on_success: OnSuccessAction = Field(default="continue")
     parallel_group: int = Field(default=0, ge=0)
     depth: int = Field(default=0, ge=0)
+    input_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeIngredientCreate(RecipeIngredientBase):
@@ -181,13 +192,13 @@ class DishBase(BaseModel):
     """Base schema for Dish."""
 
     req_id: str = Field(..., max_length=100)
-    processing_status: str = Field(default="new", max_length=50)
+    processing_status: DishProcessingStatus = Field(default="new")
 
 
 class DishUpdate(BaseModel):
     """Schema for updating a dish."""
 
-    processing_status: Optional[str] = Field(None, max_length=50)
+    processing_status: Optional[DishProcessingStatus] = None
     status: Optional[str] = Field(None, max_length=50)
     workflow_execution_id: Optional[str] = Field(None, max_length=100)
     started_at: Optional[datetime] = None
@@ -240,12 +251,13 @@ class OrderBase(BaseModel):
     alert_group_name: str = Field(..., max_length=255)
     labels: Dict[str, Any]
     starts_at: datetime
+    bakery_comms_id: Optional[str] = Field(None, max_length=36)
 
 
 class OrderCreate(OrderBase):
     """Schema for creating an order."""
 
-    processing_status: str = Field(default="new", max_length=50)
+    processing_status: OrderProcessingStatus = Field(default="new")
     is_active: bool = True
     severity: Optional[str] = Field(None, max_length=50)
     instance: Optional[str] = Field(None, max_length=255)
@@ -258,8 +270,8 @@ class OrderCreate(OrderBase):
 class OrderUpdate(BaseModel):
     """Schema for updating an order (all fields optional)."""
 
-    alert_status: Optional[str] = Field(None, max_length=50)
-    processing_status: Optional[str] = Field(None, max_length=50)
+    alert_status: Optional[AlertStatus] = None
+    processing_status: Optional[OrderProcessingStatus] = None
     is_active: Optional[bool] = None
     ends_at: Optional[datetime] = None
 
@@ -268,7 +280,7 @@ class OrderResponse(OrderBase):
     """Schema for order responses."""
 
     id: int
-    processing_status: str
+    processing_status: OrderProcessingStatus
     is_active: bool
     severity: Optional[str] = None
     instance: Optional[str] = None

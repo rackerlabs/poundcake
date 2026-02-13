@@ -58,7 +58,7 @@ wait
 
 start=$(date +%s)
 while true; do
-  orders=$(curl -sS "${API_URL}/orders?group_name=${TEST_RECIPE}")
+  orders=$(curl -sS "${API_URL}/orders?alert_group_name=${TEST_RECIPE}")
   active=$(echo "$orders" | jq '[.[] | select(.is_active == true)]')
   active_count=$(echo "$active" | jq -r 'length')
   counter=$(echo "$active" | jq -r '.[0].counter // 0')

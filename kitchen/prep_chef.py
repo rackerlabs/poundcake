@@ -36,6 +36,7 @@ def prep_loop() -> None:
         "Starting prep chef",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": OVEN_INTERVAL},
     )
+    api_unavailable_since: float | None = None
 
     while True:
         try:
@@ -61,6 +62,15 @@ def prep_loop() -> None:
                 )
                 time.sleep(OVEN_INTERVAL)
                 continue
+
+            if api_unavailable_since is not None:
+                downtime_sec = int(time.time() - api_unavailable_since)
+                logger.info(
+                    "Prep chef API connectivity restored",
+                    extra={"req_id": SYSTEM_REQ_ID, "downtime_sec": downtime_sec},
+                )
+                api_unavailable_since = None
+
             orders = resp.json()
 
             for order in orders:
@@ -116,7 +126,17 @@ def prep_loop() -> None:
                     )
 
         except Exception as e:
-            logger.error("Prep chef loop error", extra={"req_id": SYSTEM_REQ_ID, "error": str(e)})
+            if api_unavailable_since is None:
+                api_unavailable_since = time.time()
+                logger.error(
+                    "Prep chef lost API connectivity",
+                    extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
+                )
+            else:
+                logger.debug(
+                    "Prep chef waiting for API recovery",
+                    extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
+                )
 
         time.sleep(OVEN_INTERVAL)
 

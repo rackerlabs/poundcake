@@ -86,6 +86,110 @@ flowchart TD
 - `dishes`: Execution instance for a recipe/order.
 - `dish_ingredients`: Per-task execution data (task_id, st2_execution_id, status, timestamps, result).
 
+## Workflow Graph Generation (DB -> Orquesta)
+
+### Columns used by YAML generation
+
+- `recipes.name`, `recipes.description` -> workflow metadata (`description` fallback uses `name`)
+- `recipe_ingredients.step_order` -> task ordering and task key prefix (`step_{n}_...`)
+- `recipe_ingredients.depth` -> explicit stage ordering when any depth > 0
+- `recipe_ingredients.input_parameters` -> task `input`
+- `ingredients.task_id` -> task `action`
+- `ingredients.task_name` -> task key suffix
+- `ingredients.is_blocking` -> stage grouping when no explicit depth is used
+- `ingredients.retry_count`, `ingredients.retry_delay` -> task `retry`
+
+### Mixed blocking/non-blocking scenario
+
+Example scenario:
+- Task 1 is blocking
+- Tasks 2-4 are non-blocking (parallel fork)
+- Task 5 is blocking (fan-in)
+
+```mermaid
+flowchart LR
+    T1["step_1_task1 (blocking)"]
+    T2["step_2_task2 (non-blocking)"]
+    T3["step_3_task3 (non-blocking)"]
+    T4["step_4_task4 (non-blocking)"]
+    T5["step_5_task5 (blocking, join: all)"]
+
+    T1 -->|"when: succeeded(), do: [T2,T3,T4]"| T2
+    T1 --> T3
+    T1 --> T4
+
+    T2 -->|"when: succeeded(), do: T5"| T5
+    T3 -->|"when: succeeded(), do: T5"| T5
+    T4 -->|"when: succeeded(), do: T5"| T5
+```
+
+### Mapping diagram
+
+```mermaid
+flowchart TB
+    RI["recipe_ingredients (step_order, depth, input_parameters)"]
+    ING["ingredients (task_id, task_name, is_blocking, retry_count, retry_delay)"]
+    REC["recipes (name, description)"]
+    GEN["generate_orquesta_yaml()"]
+    YAML["Orquesta YAML (tasks, next, when, do, join)"]
+
+    RI --> GEN
+    ING --> GEN
+    REC --> GEN
+    GEN --> YAML
+```
+
+### YAML sample (StackStorm 3.9 Orquesta style)
+
+```yaml
+version: "1.0"
+description: "Mixed blocking/non-blocking example"
+tasks:
+  step_1_task1:
+    action: core.local
+    input:
+      cmd: 'echo "step 1"'
+    next:
+      - when: <% succeeded() %>
+        do:
+          - step_2_task2
+          - step_3_task3
+          - step_4_task4
+
+  step_2_task2:
+    action: core.local
+    input:
+      cmd: 'echo "step 2"'
+    next:
+      - when: <% succeeded() %>
+        do: step_5_task5
+
+  step_3_task3:
+    action: core.local
+    input:
+      cmd: 'echo "step 3"'
+    next:
+      - when: <% succeeded() %>
+        do: step_5_task5
+
+  step_4_task4:
+    action: core.local
+    input:
+      cmd: 'echo "step 4"'
+    next:
+      - when: <% succeeded() %>
+        do: step_5_task5
+
+  step_5_task5:
+    action: core.local
+    input:
+      cmd: 'echo "step 5"'
+    join: all
+
+output:
+  result: <% task(step_5_task5).result %>
+```
+
 ## Quick Start (Docker Compose)
 
 ```bash

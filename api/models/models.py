@@ -9,7 +9,7 @@
 from datetime import datetime, timezone
 from typing import Any, Optional, List
 
-from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, Index, Boolean
+from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, Index, Boolean, Computed
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 
@@ -45,6 +45,10 @@ class RecipeIngredient(Base):
     parallel_group: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # Depth in the task graph (for parallel/linear ordering)
     depth: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Recipe-specific input parameters (actual values to pass to this ingredient instance)
+    # This stores the concrete values, while Ingredient.action_parameters stores the schema
+    input_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
 
     recipe: Mapped["Recipe"] = relationship("Recipe", back_populates="recipe_ingredients")
     ingredient: Mapped["Ingredient"] = relationship("Ingredient")
@@ -103,12 +107,15 @@ class Ingredient(Base):
     __tablename__ = "ingredients"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    task_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     action_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     action_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     action_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(MYSQL_JSON, nullable=True)
+
+    # Source type: "stackstorm", "native", "shell", "ansible", etc.
+    source_type: Mapped[str] = mapped_column(String(50), default="stackstorm", nullable=False)
 
     is_blocking: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_duration_sec: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -252,9 +259,22 @@ class Order(Base):
         DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
     )
 
+    # Bakery communication ID (UUID for tracking notifications to external systems)
+    bakery_comms_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    # Generated column for partial unique index
+    # NULL when inactive, equals fingerprint when active
+    # This allows multiple inactive orders per fingerprint but only one active order
+    fingerprint_when_active: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        Computed("IF(is_active = 1, fingerprint, NULL)"),
+        nullable=True,
+    )
+
     dishes: Mapped[List["Dish"]] = relationship("Dish", back_populates="order")
 
     __table_args__ = (
-        Index("ux_orders_fingerprint_active", "fingerprint", "is_active", unique=True),
+        # Unique index on generated column - only enforces uniqueness for active orders
+        Index("ux_orders_fingerprint_active", "fingerprint_when_active", unique=True),
         Index("ix_orders_is_active", "is_active"),
     )

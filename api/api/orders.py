@@ -36,7 +36,7 @@ async def fetch_orders(
     - processing_status: Filter by processing status (new/pending/processing/complete/failed)
     - alert_status: Filter by alert status (firing/resolved)
     - req_id: Filter by request ID
-    - group_name: Filter by group name
+    - alert_group_name: Filter by alert group name
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
 
@@ -48,12 +48,10 @@ async def fetch_orders(
         "Fetching orders",
         extra={
             "req_id": request_id,
-            "processing_status": (
-                params.processing_status.value if params.processing_status else None
-            ),
-            "alert_status": params.alert_status.value if params.alert_status else None,
+            "processing_status": params.processing_status,
+            "alert_status": params.alert_status,
             "filter_req_id": params.req_id,
-            "group_name": params.group_name,
+            "alert_group_name": params.alert_group_name,
             "limit": params.limit,
             "offset": params.offset,
         },
@@ -62,15 +60,15 @@ async def fetch_orders(
     query = select(Order)
 
     if params.processing_status:
-        query = query.where(Order.processing_status == params.processing_status.value)
+        query = query.where(Order.processing_status == params.processing_status)
     if params.alert_status:
-        query = query.where(Order.alert_status == params.alert_status.value)
+        query = query.where(Order.alert_status == params.alert_status)
     if params.req_id:
         query = query.where(Order.req_id == params.req_id)
-    if params.group_name:
-        query = query.where(Order.alert_group_name == params.group_name)
+    if params.alert_group_name:
+        query = query.where(Order.alert_group_name == params.alert_group_name)
 
-    if params.processing_status and params.processing_status.value == "new":
+    if params.processing_status and params.processing_status == "new":
         query = query.order_by(asc(Order.created_at))
     else:
         query = query.order_by(desc(Order.created_at))
@@ -153,15 +151,28 @@ async def update_order(
             raise HTTPException(status_code=404, detail="Order not found")
 
         update_data = payload.model_dump(exclude_unset=True)
+
+        # Check terminal state transitions BEFORE applying updates
+        if update_data.get("processing_status") in ORDER_TERMINAL_PROCESSING_STATUSES:
+            if update_data.get("is_active") is True:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot set is_active=true with terminal processing_status",
+                )
+            # Check if order is already in a different terminal status
+            if (
+                order.processing_status in ORDER_TERMINAL_PROCESSING_STATUSES
+                and order.processing_status != update_data.get("processing_status")
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Order already in terminal status {order.processing_status}",
+                )
+            order.is_active = False
+
+        # Apply updates after validation
         for key, value in update_data.items():
             setattr(order, key, value)
-
-        if (
-            "processing_status" in update_data
-            and update_data["processing_status"] in ORDER_TERMINAL_PROCESSING_STATUSES
-            and "is_active" not in update_data
-        ):
-            order.is_active = False
 
         order.updated_at = datetime.now(timezone.utc)
 

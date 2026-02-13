@@ -54,6 +54,7 @@ def upgrade() -> None:
         sa.Column("action_id", sa.String(length=100), nullable=True),
         sa.Column("action_payload", sa.Text(), nullable=True),
         sa.Column("action_parameters", mysql.JSON(), nullable=True),
+        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="stackstorm"),
         sa.Column("is_blocking", sa.Boolean(), nullable=False),
         sa.Column("expected_duration_sec", sa.Integer(), nullable=False),
         sa.Column("timeout_duration_sec", sa.Integer(), nullable=False),
@@ -67,7 +68,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_ingredients_id"), "ingredients", ["id"], unique=False)
-    op.create_index(op.f("ix_ingredients_task_id"), "ingredients", ["task_id"], unique=False)
+    op.create_index(op.f("ix_ingredients_task_id"), "ingredients", ["task_id"], unique=True)
 
     # Recipe Ingredients (junction)
     op.create_table(
@@ -79,6 +80,7 @@ def upgrade() -> None:
         sa.Column("on_success", sa.String(length=50), nullable=False, server_default="continue"),
         sa.Column("parallel_group", sa.Integer(), nullable=False),
         sa.Column("depth", sa.Integer(), nullable=False),
+        sa.Column("input_parameters", mysql.JSON(), nullable=True),
         sa.ForeignKeyConstraint(["ingredient_id"], ["ingredients.id"]),
         sa.ForeignKeyConstraint(["recipe_id"], ["recipes.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -92,26 +94,33 @@ def upgrade() -> None:
     )
 
     # Orders (old alerts)
-    op.create_table(
-        "orders",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("req_id", sa.String(length=100), nullable=False),
-        sa.Column("fingerprint", sa.String(length=255), nullable=False),
-        sa.Column("alert_status", sa.String(length=50), nullable=False),
-        sa.Column("processing_status", sa.String(length=50), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("alert_group_name", sa.String(length=255), nullable=False),
-        sa.Column("severity", sa.String(length=50), nullable=True),
-        sa.Column("instance", sa.String(length=255), nullable=True),
-        sa.Column("counter", sa.Integer(), nullable=False),
-        sa.Column("labels", mysql.JSON(), nullable=False),
-        sa.Column("annotations", mysql.JSON(), nullable=True),
-        sa.Column("raw_data", mysql.JSON(), nullable=True),
-        sa.Column("starts_at", sa.DateTime(), nullable=False),
-        sa.Column("ends_at", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
+    # Note: We need to use raw SQL to create the table with the generated column
+    # because SQLAlchemy doesn't support GENERATED columns in create_table()
+    op.execute(
+        """
+        CREATE TABLE orders (
+            id INTEGER NOT NULL AUTO_INCREMENT,
+            req_id VARCHAR(100) NOT NULL,
+            fingerprint VARCHAR(255) NOT NULL,
+            alert_status VARCHAR(50) NOT NULL,
+            processing_status VARCHAR(50) NOT NULL,
+            is_active BOOLEAN NOT NULL,
+            alert_group_name VARCHAR(255) NOT NULL,
+            severity VARCHAR(50),
+            instance VARCHAR(255),
+            counter INTEGER NOT NULL,
+            labels JSON NOT NULL,
+            annotations JSON,
+            raw_data JSON,
+            starts_at DATETIME NOT NULL,
+            ends_at DATETIME,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            bakery_comms_id VARCHAR(36),
+            fingerprint_when_active VARCHAR(255) GENERATED ALWAYS AS (IF(is_active = 1, fingerprint, NULL)) STORED,
+            PRIMARY KEY (id)
+        )
+        """
     )
     op.create_index(op.f("ix_orders_id"), "orders", ["id"], unique=False)
     op.create_index(op.f("ix_orders_req_id"), "orders", ["req_id"], unique=False)
@@ -121,11 +130,12 @@ def upgrade() -> None:
         op.f("ix_orders_processing_status"), "orders", ["processing_status"], unique=False
     )
     op.create_index(op.f("ix_orders_is_active"), "orders", ["is_active"], unique=False)
+
+    # Create unique index on the generated column
+    # Since it's NULL for inactive orders, multiple inactive orders can have the same fingerprint
+    # But only one active order per fingerprint is allowed
     op.create_index(
-        "ux_orders_fingerprint_active",
-        "orders",
-        ["fingerprint", "is_active"],
-        unique=True,
+        "ux_orders_fingerprint_active", "orders", ["fingerprint_when_active"], unique=True
     )
     op.create_index(
         op.f("ix_orders_alert_group_name"), "orders", ["alert_group_name"], unique=False
@@ -181,13 +191,11 @@ def upgrade() -> None:
             "task_id_norm",
             sa.String(length=255),
             sa.Computed("IFNULL(task_id, '')", persisted=True),
-            nullable=False,
         ),
         sa.Column(
             "st2_execution_id_norm",
             sa.String(length=100),
             sa.Computed("IFNULL(st2_execution_id, '')", persisted=True),
-            nullable=False,
         ),
         sa.Column("status", sa.String(length=50), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
@@ -236,11 +244,15 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_orders_instance"), table_name="orders")
     op.drop_index(op.f("ix_orders_severity"), table_name="orders")
     op.drop_index(op.f("ix_orders_alert_group_name"), table_name="orders")
+    op.drop_index("ux_orders_fingerprint_active", table_name="orders")
+    op.drop_index(op.f("ix_orders_is_active"), table_name="orders")
     op.drop_index(op.f("ix_orders_processing_status"), table_name="orders")
     op.drop_index(op.f("ix_orders_alert_status"), table_name="orders")
     op.drop_index(op.f("ix_orders_fingerprint"), table_name="orders")
     op.drop_index(op.f("ix_orders_req_id"), table_name="orders")
     op.drop_index(op.f("ix_orders_id"), table_name="orders")
+    # Drop the generated column
+    op.execute("ALTER TABLE orders DROP COLUMN fingerprint_when_active")
     op.drop_table("orders")
 
     op.drop_index("idx_recipe_ingredient_order", table_name="recipe_ingredients")

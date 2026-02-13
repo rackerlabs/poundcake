@@ -64,7 +64,8 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
     pruned = 0
     now = datetime.now(timezone.utc)
 
-    result = await db.execute(select(Ingredient))
+    # Only sync ingredients with source_type="stackstorm"
+    result = await db.execute(select(Ingredient).where(Ingredient.source_type == "stackstorm"))
     existing = {ing.task_id: ing for ing in result.scalars().all()}
     action_refs = set()
 
@@ -85,6 +86,7 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
                 action_id=action.get("id"),
                 action_payload=payload,
                 action_parameters=parameters,
+                source_type="stackstorm",
                 is_blocking=True,
                 expected_duration_sec=DEFAULT_DURATION,
                 timeout_duration_sec=DEFAULT_TIMEOUT,
@@ -98,15 +100,34 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
             db.add(ing)
             created += 1
         else:
-            ing.task_name = action.get("name") or ing.task_name
-            ing.action_id = action.get("id")
-            ing.action_payload = payload
-            ing.action_parameters = parameters
-            ing.deleted = False
-            ing.deleted_at = None
-            ing.updated_at = now
-            updated += 1
+            # Only update if something actually changed
+            changed = False
+            new_task_name = action.get("name") or ing.task_name
+            new_action_id = action.get("id")
 
+            if (
+                ing.task_name != new_task_name
+                or ing.action_id != new_action_id
+                or ing.action_payload != payload
+                or ing.action_parameters != parameters
+                or ing.source_type != "stackstorm"
+                or ing.deleted is True
+                or ing.deleted_at is not None
+            ):
+                ing.task_name = new_task_name
+                ing.action_id = new_action_id
+                ing.action_payload = payload
+                ing.action_parameters = parameters
+                ing.source_type = "stackstorm"
+                ing.deleted = False
+                ing.deleted_at = None
+                ing.updated_at = now
+                changed = True
+
+            if changed:
+                updated += 1
+
+    # Only prune StackStorm ingredients (existing dict already filtered by source_type)
     if PRUNE_MISSING:
         for ref, ing in existing.items():
             if ref not in action_refs:
@@ -159,14 +180,28 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
             await db.flush()
             created += 1
         else:
-            rec.name = name
-            rec.description = description
-            rec.workflow_payload = workflow_payload
-            rec.workflow_parameters = workflow_parameters
-            rec.deleted = False
-            rec.deleted_at = None
-            rec.updated_at = now
-            updated += 1
+            # Only update if something actually changed
+            changed = False
+
+            if (
+                rec.name != name
+                or rec.description != description
+                or rec.workflow_payload != workflow_payload
+                or rec.workflow_parameters != workflow_parameters
+                or rec.deleted is True
+                or rec.deleted_at is not None
+            ):
+                rec.name = name
+                rec.description = description
+                rec.workflow_payload = workflow_payload
+                rec.workflow_parameters = workflow_parameters
+                rec.deleted = False
+                rec.deleted_at = None
+                rec.updated_at = now
+                changed = True
+
+            if changed:
+                updated += 1
 
         if workflow_payload:
             ok = await sync_recipe_ingredients_from_yaml(
@@ -258,6 +293,7 @@ async def sync_recipe_ingredients_from_yaml(
                 action_id=None,
                 action_payload=None,
                 action_parameters={},
+                source_type="native",
                 is_blocking=True,
                 expected_duration_sec=DEFAULT_DURATION,
                 timeout_duration_sec=DEFAULT_TIMEOUT,
