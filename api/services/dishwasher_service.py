@@ -125,7 +125,11 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
     now = datetime.now(timezone.utc)
 
     result = await db.execute(select(Recipe))
-    existing = {rec.workflow_id: rec for rec in result.scalars().all() if rec.workflow_id}
+    existing = {
+        rec.workflow_id: rec
+        for rec in result.scalars().all()
+        if rec.workflow_id and rec.source_type == "stackstorm"
+    }
 
     for action in actions:
         workflow_id = action.get("ref")
@@ -148,6 +152,7 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
                 name=name,
                 description=description,
                 enabled=True,
+                source_type="stackstorm",
                 workflow_id=workflow_id,
                 workflow_payload=workflow_payload,
                 workflow_parameters=workflow_parameters,
@@ -161,6 +166,7 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
         else:
             rec.name = name
             rec.description = description
+            rec.source_type = "stackstorm"
             rec.workflow_payload = workflow_payload
             rec.workflow_parameters = workflow_parameters
             rec.deleted = False

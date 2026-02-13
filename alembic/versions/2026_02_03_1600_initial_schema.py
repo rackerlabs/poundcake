@@ -33,6 +33,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False),
+        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="stackstorm"),
         sa.Column("workflow_id", sa.String(length=255), nullable=True),
         sa.Column("workflow_payload", mysql.JSON(), nullable=True),
         sa.Column("workflow_parameters", mysql.JSON(), nullable=True),

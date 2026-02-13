@@ -664,31 +664,64 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             }
         )
 
-    # Build requires by depth to allow parallel execution within the same depth.
+    # Build stages either by explicit depth or by is_blocking sequencing when depth is absent.
     tasks_by_depth: dict[int, list[dict[str, Any]]] = {}
     for t in task_defs:
         tasks_by_depth.setdefault(t["depth"], []).append(t)
+    for depth in tasks_by_depth:
+        tasks_by_depth[depth] = sorted(tasks_by_depth[depth], key=lambda x: x["step_order"])
 
-    for depth, tasks in tasks_by_depth.items():
-        if depth <= 0:
-            continue
-        prev_tasks = tasks_by_depth.get(depth - 1, [])
-        requires = [t["name"] for t in prev_tasks if t["is_blocking"]]
-        if not requires:
-            continue
-        for t in tasks:
-            t["def"]["requires"] = requires
+    def _add_transition(
+        from_task: dict[str, Any],
+        target_names: list[str],
+    ) -> None:
+        if not target_names:
+            return
+        transition = {
+            "when": "<% succeeded() %>",
+            "do": target_names if len(target_names) > 1 else target_names[0],
+        }
+        next_items = from_task["def"].setdefault("next", [])
+        if transition not in next_items:
+            next_items.append(transition)
 
-    # If no depth info is available (all depth == 0), enforce sequential execution
-    # only for blocking tasks based on step_order. Non-blocking tasks run in parallel.
-    if task_defs and len(tasks_by_depth.keys()) == 1 and 0 in tasks_by_depth:
-        last_blocking: str | None = None
-        for t in sorted(task_defs, key=lambda x: x["step_order"]):
-            if not t["is_blocking"]:
-                continue
-            if last_blocking and last_blocking != t["name"]:
-                t["def"]["requires"] = [last_blocking]
-            last_blocking = t["name"]
+    def _connect_stages(prev_stage: list[dict[str, Any]], next_stage: list[dict[str, Any]]) -> None:
+        if not prev_stage or not next_stage:
+            return
+
+        next_names = [t["name"] for t in next_stage]
+
+        # Multiple upstream tasks converging into one downstream task must fan-in.
+        if len(prev_stage) > 1 and len(next_stage) == 1:
+            next_stage[0]["def"]["join"] = "all"
+
+        # Also support many-to-many stage transitions by joining each downstream task.
+        if len(prev_stage) > 1 and len(next_stage) > 1:
+            for next_task in next_stage:
+                next_task["def"]["join"] = "all"
+
+        for prev_task in prev_stage:
+            _add_transition(prev_task, next_names)
+
+    stages: list[list[dict[str, Any]]] = []
+    has_explicit_depth = any(t["depth"] > 0 for t in task_defs)
+
+    if has_explicit_depth:
+        for depth in sorted(tasks_by_depth):
+            stages.append(tasks_by_depth[depth])
+    else:
+        ordered_tasks = sorted(task_defs, key=lambda x: x["step_order"])
+        for task in ordered_tasks:
+            if task["is_blocking"]:
+                stages.append([task])
+            else:
+                if stages and not stages[-1][0]["is_blocking"]:
+                    stages[-1].append(task)
+                else:
+                    stages.append([task])
+
+    for i in range(1, len(stages)):
+        _connect_stages(stages[i - 1], stages[i])
 
     # Emit tasks in a stable order.
     for t in sorted(task_defs, key=lambda x: (x["depth"], x["step_order"])):
@@ -697,9 +730,10 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
 
     # Capture the final task result as workflow output for easier consumption.
     if last_task_name:
-        workflow["output"] = {"result": f"<% task({last_task_name}).result %>"}
+        # Orquesta expects workflow output to be a list of assignments.
+        workflow["output"] = [{"result": f"<% task({last_task_name}).result %>"}]
 
-    return yaml.dump(workflow, sort_keys=False)
+    return yaml.safe_dump(workflow, sort_keys=False, default_flow_style=False, width=1000, indent=2)
 
 
 async def register_workflow_to_st2(

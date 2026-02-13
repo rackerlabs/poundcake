@@ -132,6 +132,7 @@ class RecipeBase(BaseModel):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     enabled: bool = True
+    source_type: str = Field(default="stackstorm", max_length=50)
     workflow_id: Optional[str] = Field(None, max_length=255)
     workflow_payload: Optional[Dict[str, Any]] = None
     workflow_parameters: Optional[Dict[str, Any]] = None
@@ -149,6 +150,7 @@ class RecipeUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     enabled: Optional[bool] = None
+    source_type: Optional[str] = Field(None, max_length=50)
     workflow_id: Optional[str] = Field(None, max_length=255)
     workflow_payload: Optional[Dict[str, Any]] = None
     workflow_parameters: Optional[Dict[str, Any]] = None

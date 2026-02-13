@@ -78,6 +78,9 @@ class RecipeQueryParams(BaseModel):
     name: Optional[str] = Field(
         None, min_length=1, max_length=255, description="Filter by recipe name"
     )
+    source_type: Optional[str] = Field(
+        None, min_length=1, max_length=50, description="Filter by recipe source type"
+    )
     enabled: Optional[bool] = Field(None, description="Filter by enabled status (true/false)")
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
