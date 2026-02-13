@@ -733,8 +733,6 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
         # Orquesta expects workflow output to be a list of assignments.
         workflow["output"] = [{"result": f"<% task({last_task_name}).result %>"}]
 
-    # Use safe_dump with explicit indentation to ensure proper YAML formatting
-    # Orquesta expects 'next' to be a list of transition objects with 'do' keys
     return yaml.safe_dump(workflow, sort_keys=False, default_flow_style=False, width=1000, indent=2)
 
 

@@ -146,7 +146,11 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
     now = datetime.now(timezone.utc)
 
     result = await db.execute(select(Recipe))
-    existing = {rec.workflow_id: rec for rec in result.scalars().all() if rec.workflow_id}
+    existing = {
+        rec.workflow_id: rec
+        for rec in result.scalars().all()
+        if rec.workflow_id and rec.source_type == "stackstorm"
+    }
 
     for action in actions:
         workflow_id = action.get("ref")
@@ -169,6 +173,7 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
                 name=name,
                 description=description,
                 enabled=True,
+                source_type="stackstorm",
                 workflow_id=workflow_id,
                 workflow_payload=workflow_payload,
                 workflow_parameters=workflow_parameters,
@@ -180,28 +185,15 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
             await db.flush()
             created += 1
         else:
-            # Only update if something actually changed
-            changed = False
-
-            if (
-                rec.name != name
-                or rec.description != description
-                or rec.workflow_payload != workflow_payload
-                or rec.workflow_parameters != workflow_parameters
-                or rec.deleted is True
-                or rec.deleted_at is not None
-            ):
-                rec.name = name
-                rec.description = description
-                rec.workflow_payload = workflow_payload
-                rec.workflow_parameters = workflow_parameters
-                rec.deleted = False
-                rec.deleted_at = None
-                rec.updated_at = now
-                changed = True
-
-            if changed:
-                updated += 1
+            rec.name = name
+            rec.description = description
+            rec.source_type = "stackstorm"
+            rec.workflow_payload = workflow_payload
+            rec.workflow_parameters = workflow_parameters
+            rec.deleted = False
+            rec.deleted_at = None
+            rec.updated_at = now
+            updated += 1
 
         if workflow_payload:
             ok = await sync_recipe_ingredients_from_yaml(
