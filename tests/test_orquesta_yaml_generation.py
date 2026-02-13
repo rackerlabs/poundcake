@@ -1,14 +1,6 @@
-from importlib.util import module_from_spec, spec_from_file_location
-from pathlib import Path
-
 import yaml
 
-_MODULE_PATH = Path(__file__).resolve().parents[1] / "api" / "services" / "stackstorm_service.py"
-_SPEC = spec_from_file_location("stackstorm_service_under_test", _MODULE_PATH)
-assert _SPEC and _SPEC.loader
-_MODULE = module_from_spec(_SPEC)
-_SPEC.loader.exec_module(_MODULE)
-generate_orquesta_yaml = _MODULE.generate_orquesta_yaml
+from api.services.stackstorm_service import generate_orquesta_yaml
 
 
 def _recipe_with_steps(steps):
@@ -22,6 +14,7 @@ def _recipe_with_steps(steps):
                 "ingredient": {
                     "task_id": step.get("task_id", "core.local"),
                     "task_name": step["task_name"],
+                    "action_parameters": step.get("action_parameters", {}),
                     "is_blocking": step["is_blocking"],
                     "retry_count": 0,
                     "retry_delay": 0,
@@ -118,7 +111,6 @@ def test_all_non_blocking_tasks_without_depth_start_in_parallel():
     workflow = yaml.safe_load(generate_orquesta_yaml(recipe))
     tasks = workflow["tasks"]
 
-    # Tasks with no inbound edges are all starting tasks in Orquesta.
     assert "next" not in tasks["step_1_task1"]
     assert "next" not in tasks["step_2_task2"]
     assert "next" not in tasks["step_3_task3"]

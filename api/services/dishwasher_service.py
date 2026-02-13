@@ -41,19 +41,21 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
         ingredient_stats = await upsert_ingredients(db, actions)
         recipe_stats = await upsert_recipes(db, workflows)
 
-    stats: dict[str, Any] = {"ingredients": ingredient_stats, "recipes": recipe_stats}
+    stats: dict[str, Any] = {}
+    stats["ingredients"] = ingredient_stats
+    stats["recipes"] = recipe_stats
 
     if mark_bootstrap:
         try:
             with open(BOOTSTRAP_DONE_FILE, "w") as f:
                 f.write(datetime.now(timezone.utc).isoformat())
-            stats["bootstrap_marked"] = True  # pyright: ignore[reportArgumentType]
+            stats["bootstrap_marked"] = True
         except Exception as e:
             logger.warning(
                 "Failed to mark bootstrap completion",
                 extra={"error": str(e), "file": BOOTSTRAP_DONE_FILE},
             )
-            stats["bootstrap_marked"] = False  # pyright: ignore[reportArgumentType]
+            stats["bootstrap_marked"] = False
 
     return stats
 
@@ -146,7 +148,11 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
     now = datetime.now(timezone.utc)
 
     result = await db.execute(select(Recipe))
-    existing = {rec.workflow_id: rec for rec in result.scalars().all() if rec.workflow_id}
+    existing = {
+        rec.workflow_id: rec
+        for rec in result.scalars().all()
+        if rec.workflow_id and rec.source_type == "stackstorm"
+    }
 
     for action in actions:
         workflow_id = action.get("ref")
@@ -169,6 +175,7 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
                 name=name,
                 description=description,
                 enabled=True,
+                source_type="stackstorm",
                 workflow_id=workflow_id,
                 workflow_payload=workflow_payload,
                 workflow_parameters=workflow_parameters,
@@ -180,28 +187,15 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
             await db.flush()
             created += 1
         else:
-            # Only update if something actually changed
-            changed = False
-
-            if (
-                rec.name != name
-                or rec.description != description
-                or rec.workflow_payload != workflow_payload
-                or rec.workflow_parameters != workflow_parameters
-                or rec.deleted is True
-                or rec.deleted_at is not None
-            ):
-                rec.name = name
-                rec.description = description
-                rec.workflow_payload = workflow_payload
-                rec.workflow_parameters = workflow_parameters
-                rec.deleted = False
-                rec.deleted_at = None
-                rec.updated_at = now
-                changed = True
-
-            if changed:
-                updated += 1
+            rec.name = name
+            rec.description = description
+            rec.source_type = "stackstorm"
+            rec.workflow_payload = workflow_payload
+            rec.workflow_parameters = workflow_parameters
+            rec.deleted = False
+            rec.deleted_at = None
+            rec.updated_at = now
+            updated += 1
 
         if workflow_payload:
             ok = await sync_recipe_ingredients_from_yaml(

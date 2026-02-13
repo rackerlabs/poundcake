@@ -1,0 +1,455 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: poundcake-api
+  labels:
+    app.kubernetes.io/component: api
+    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: api
+      {{- include "poundcake-standalone.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: api
+        {{- include "poundcake-standalone.logLabelsForComponent" (dict "component" "api") | nindent 8 }}
+        {{- include "poundcake-standalone.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- include "poundcake-standalone.poundcakePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-stage-ready
+          image: {{ .Values.images.busybox }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -ec
+            - |
+              until [ "$(cat /app/config/poundcake_mariadb_ready 2>/dev/null)" = "true" ]; do sleep 2; done
+              until [ "$(cat /app/config/stackstorm_bootstrap_ready 2>/dev/null)" = "true" ]; do sleep 2; done
+              until [ -n "$(cat /run/secrets/st2/st2_api_key 2>/dev/null)" ]; do sleep 2; done
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+            - name: st2-apikey
+              mountPath: /run/secrets/st2
+              readOnly: true
+      containers:
+        - name: api
+          image: {{ .Values.poundcakeImage.repository }}:{{ .Values.poundcakeImage.tag }}
+          imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
+          workingDir: /app
+          command: ["/app/api/scripts/entrypoint-auto-migrate.sh"]
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: poundcake-secrets
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: poundcake-secrets
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: poundcake-secrets
+                  key: DB_PASSWORD
+            - name: POUNDCAKE_DATABASE_URL
+              value: mysql+pymysql://$(DB_USER):$(DB_PASSWORD)@poundcake-mariadb:3306/$(DB_NAME)
+            - name: POUNDCAKE_STACKSTORM_URL
+              value: http://stackstorm-api:9101
+            - name: POUNDCAKE_STACKSTORM_VERIFY_SSL
+              value: "False"
+            - name: MONGODB_HOST
+              value: stackstorm-mongodb
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: RABBITMQ_HOST
+              value: stackstorm-rabbitmq
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_MANAGEMENT_PORT
+              value: "15672"
+            - name: REDIS_HOST
+              value: stackstorm-redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: POUNDCAKE_LOG_LEVEL
+              value: DEBUG
+            - name: POUNDCAKE_LOG_FORMAT
+              value: {{ .Values.logFormat | quote }}
+            - name: POUNDCAKE_APP_VERSION
+              value: {{ .Chart.AppVersion | quote }}
+            - name: SERVICE_NAME
+              value: api
+            - name: POUNDCAKE_STACKSTORM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-apikeys
+                  key: st2_api_key
+            - name: ST2_API_KEY_FILE
+              value: /run/secrets/st2/st2_api_key
+          ports:
+            - containerPort: 8000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ready
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/v1/live
+              port: 8000
+            initialDelaySeconds: 40
+            periodSeconds: 10
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+            - name: st2-apikey
+              mountPath: /run/secrets/st2
+              readOnly: true
+            - name: poundcake-alembic
+              mountPath: /app/alembic.ini
+              subPath: alembic.ini
+            - name: poundcake-alembic
+              mountPath: /app/alembic
+              subPath: alembic
+            - name: packs
+              mountPath: /app/stackstorm-packs/poundcake
+      volumes:
+        - name: app-config
+          projected:
+            sources:
+              - secret:
+                  name: stackstorm-startup-markers
+                  optional: true
+        - name: st2-apikey
+          secret:
+            secretName: stackstorm-apikeys
+            items:
+              - key: st2_api_key
+                path: st2_api_key
+        - name: poundcake-alembic
+          configMap:
+            name: poundcake-alembic
+            items:
+              - key: alembic.ini
+                path: alembic.ini
+              - key: env.py
+                path: alembic/env.py
+              - key: script.py.mako
+                path: alembic/script.py.mako
+              - key: versions__init__.py
+                path: alembic/versions/__init__.py
+              - key: 2026_02_03_1600_initial_schema.py
+                path: alembic/versions/2026_02_03_1600_initial_schema.py
+        - name: packs
+          persistentVolumeClaim:
+            claimName: stackstorm-packs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: poundcake-chef
+  labels:
+    app.kubernetes.io/component: chef
+    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: chef
+      {{- include "poundcake-standalone.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: chef
+        {{- include "poundcake-standalone.logLabelsForComponent" (dict "component" "chef") | nindent 8 }}
+        {{- include "poundcake-standalone.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- include "poundcake-standalone.poundcakePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-api
+          image: {{ .Values.images.busybox }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+      containers:
+        - name: chef
+          image: {{ .Values.poundcakeImage.repository }}:{{ .Values.poundcakeImage.tag }}
+          imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
+          workingDir: /app
+          command: ["python3", "kitchen/chef.py"]
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: POUNDCAKE_API_URL
+              value: http://poundcake-api:8000
+            - name: CHEF_POLL_INTERVAL
+              value: {{ .Values.intervals.chef | quote }}
+            - name: LOG_LEVEL
+              value: INFO
+            - name: POUNDCAKE_LOG_FORMAT
+              value: {{ .Values.logFormat | quote }}
+            - name: SERVICE_NAME
+              value: chef
+      volumes:
+        - name: app-config
+          projected:
+            sources:
+              - secret:
+                  name: stackstorm-startup-markers
+                  optional: true
+              - secret:
+                  name: stackstorm-apikeys
+                  optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: poundcake-prep-chef
+  labels:
+    app.kubernetes.io/component: prep-chef
+    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: prep-chef
+      {{- include "poundcake-standalone.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: prep-chef
+        {{- include "poundcake-standalone.logLabelsForComponent" (dict "component" "prep-chef") | nindent 8 }}
+        {{- include "poundcake-standalone.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- include "poundcake-standalone.poundcakePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-api
+          image: {{ .Values.images.busybox }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+      containers:
+        - name: prep-chef
+          image: {{ .Values.poundcakeImage.repository }}:{{ .Values.poundcakeImage.tag }}
+          imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
+          workingDir: /app
+          command: ["python3", "kitchen/prep_chef.py"]
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: POUNDCAKE_API_URL
+              value: http://poundcake-api:8000
+            - name: PREP_INTERVAL
+              value: {{ .Values.intervals.prepChef | quote }}
+            - name: LOG_LEVEL
+              value: INFO
+            - name: POUNDCAKE_LOG_FORMAT
+              value: {{ .Values.logFormat | quote }}
+            - name: SERVICE_NAME
+              value: prep-chef
+      volumes:
+        - name: app-config
+          projected:
+            sources:
+              - secret:
+                  name: stackstorm-startup-markers
+                  optional: true
+              - secret:
+                  name: stackstorm-apikeys
+                  optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: poundcake-timer
+  labels:
+    app.kubernetes.io/component: timer
+    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: timer
+      {{- include "poundcake-standalone.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: timer
+        {{- include "poundcake-standalone.logLabelsForComponent" (dict "component" "timer") | nindent 8 }}
+        {{- include "poundcake-standalone.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- include "poundcake-standalone.poundcakePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-api
+          image: {{ .Values.images.busybox }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+      containers:
+        - name: timer
+          image: {{ .Values.poundcakeImage.repository }}:{{ .Values.poundcakeImage.tag }}
+          imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
+          workingDir: /app
+          command: ["python3", "kitchen/timer.py"]
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: POUNDCAKE_API_URL
+              value: http://poundcake-api:8000
+            - name: TIMER_INTERVAL
+              value: {{ .Values.intervals.timer | quote }}
+            - name: SLA_BUFFER_PERCENT
+              value: "0.2"
+            - name: LOG_LEVEL
+              value: INFO
+            - name: POUNDCAKE_LOG_FORMAT
+              value: {{ .Values.logFormat | quote }}
+            - name: SERVICE_NAME
+              value: timer
+            - name: PREP_INTERVAL
+              value: {{ .Values.intervals.prepInterval | quote }}
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+      volumes:
+        - name: app-config
+          projected:
+            sources:
+              - secret:
+                  name: stackstorm-startup-markers
+                  optional: true
+              - secret:
+                  name: stackstorm-apikeys
+                  optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: poundcake-dishwasher
+  labels:
+    app.kubernetes.io/component: dishwasher
+    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: dishwasher
+      {{- include "poundcake-standalone.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: dishwasher
+        {{- include "poundcake-standalone.logLabelsForComponent" (dict "component" "dishwasher") | nindent 8 }}
+        {{- include "poundcake-standalone.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- include "poundcake-standalone.poundcakePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-api
+          image: {{ .Values.images.busybox }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+      containers:
+        - name: dishwasher
+          image: {{ .Values.poundcakeImage.repository }}:{{ .Values.poundcakeImage.tag }}
+          imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
+          workingDir: /app
+          command: ["python3", "kitchen/dishwasher.py"]
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: POUNDCAKE_API_URL
+              value: http://poundcake-api:8000
+            - name: LOG_LEVEL
+              value: INFO
+            - name: POUNDCAKE_LOG_FORMAT
+              value: {{ .Values.logFormat | quote }}
+            - name: DISHWASHER_DEFAULT_DURATION
+              value: "60"
+            - name: DISHWASHER_DEFAULT_TIMEOUT
+              value: "300"
+            - name: DISHWASHER_PRUNE_MISSING
+              value: "false"
+            - name: DISHWASHER_INTERVAL
+              value: {{ .Values.intervals.dishwasher | quote }}
+            - name: SERVICE_NAME
+              value: dishwasher
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+      volumes:
+        - name: app-config
+          projected:
+            sources:
+              - secret:
+                  name: stackstorm-startup-markers
+                  optional: true
+              - secret:
+                  name: stackstorm-apikeys
+                  optional: true

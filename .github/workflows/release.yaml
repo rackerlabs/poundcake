@@ -1,16 +1,9 @@
-# ____                        _  ____      _
+#  ____                       _  ____      _
 # |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-# ╔════════════════════════════════════════════════════════════════╗
-# ____                        _  ____      _
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
-# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
-# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
-# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# ╚════════════════════════════════════════════════════════════════╝
 
 name: Release
 
@@ -19,24 +12,31 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-  CHART_NAME: poundcake
+  PACKAGE_OWNER: ${{ vars.GHCR_OWNER || github.repository_owner }}
+  REPO_NAME: ${{ vars.GHCR_REPO_NAME || github.event.repository.name }}
+  IMAGE_NAME: ${{ format('{0}/{1}', vars.GHCR_OWNER || github.repository_owner, vars.GHCR_REPO_NAME || github.event.repository.name) }}
+  CHART_PATH: helm
 
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     outputs:
       version: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -62,13 +62,14 @@ jobs:
             type=sha
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
+          cache-from: type=gha,scope=poundcake-api
+          cache-to: type=gha,mode=max,scope=poundcake-api
           platforms: linux/amd64
 
       - name: Extract metadata for UI Docker
@@ -84,14 +85,15 @@ jobs:
             type=sha
 
       - name: Build and push UI Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./ui/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-ui.outputs.tags }}
           labels: ${{ steps.meta-ui.outputs.labels }}
-          no-cache: true
+          cache-from: type=gha,scope=poundcake-ui
+          cache-to: type=gha,mode=max,scope=poundcake-ui
           platforms: linux/amd64
 
       - name: Make UI Docker image public
@@ -101,14 +103,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/user/packages/container/poundcake-ui/versions \
-            -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
-
-          curl -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/poundcake-ui \
+            https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/${{ env.REPO_NAME }}-ui \
             -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
 
       - name: Make Docker image public
@@ -118,14 +113,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/user/packages/container/poundcake/versions \
-            -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
-
-          curl -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/poundcake \
+            https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/${{ env.REPO_NAME }} \
             -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
 
       - name: Extract metadata for Bakery Docker
@@ -141,14 +129,15 @@ jobs:
             type=sha
 
       - name: Build and push Bakery Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./bakery/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-bakery.outputs.tags }}
           labels: ${{ steps.meta-bakery.outputs.labels }}
-          no-cache: true
+          cache-from: type=gha,scope=poundcake-bakery
+          cache-to: type=gha,mode=max,scope=poundcake-bakery
           platforms: linux/amd64
 
       - name: Make Bakery Docker image public
@@ -158,32 +147,34 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/user/packages/container/poundcake-bakery/versions \
-            -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
-
-          curl -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/poundcake-bakery \
+            https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/${{ env.REPO_NAME }}-bakery \
             -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
 
   build-and-push-chart:
     runs-on: ubuntu-latest
     needs: build-and-push-image
     if: github.event_name != 'pull_request'
-    permissions:
-      contents: read
-      packages: write
+    outputs:
+      chart_name: ${{ steps.chart_meta.outputs.chart_name }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
           version: v3.13.0
+
+      - name: Resolve chart metadata
+        id: chart_meta
+        run: |
+          chart_name="$(awk -F': ' '/^name:/ {print $2; exit}' "${{ env.CHART_PATH }}/Chart.yaml")"
+          if [ -z "$chart_name" ]; then
+            echo "Failed to resolve chart name from ${{ env.CHART_PATH }}/Chart.yaml" >&2
+            exit 1
+          fi
+          echo "chart_name=$chart_name" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Container Registry
         run: |
@@ -191,21 +182,19 @@ jobs:
 
       - name: Update Helm dependencies
         run: |
-          cd helm/poundcake
-          helm dependency update
-          cd ../..
+          helm dependency update "${{ env.CHART_PATH }}"
 
       - name: Package Helm chart
         run: |
           mkdir -p .helm-packages
-          helm package helm/poundcake -d .helm-packages
+          helm package "${{ env.CHART_PATH }}" -d .helm-packages
           ls -lah .helm-packages/
 
       - name: Push Helm chart to OCI registry
         run: |
           for chart in .helm-packages/*.tgz; do
-            echo "Pushing $chart to oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts"
-            helm push "$chart" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+            echo "Pushing $chart to oci://${{ env.REGISTRY }}/${{ env.PACKAGE_OWNER }}/charts"
+            helm push "$chart" oci://${{ env.REGISTRY }}/${{ env.PACKAGE_OWNER }}/charts
           done
 
       - name: Make Helm chart public
@@ -214,14 +203,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/user/packages/container/charts%2Fpoundcake/versions \
-            -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
-
-          curl -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/charts%2Fpoundcake \
+            https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/charts%2F${{ steps.chart_meta.outputs.chart_name }} \
             -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
 
   create-release:
@@ -230,13 +212,14 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
+      packages: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           body: |
@@ -249,5 +232,5 @@ jobs:
 
             ### Helm Chart
             ```bash
-            helm install poundcake oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ env.CHART_NAME }} --version ${{ github.ref_name }}
+            helm install poundcake oci://${{ env.REGISTRY }}/${{ env.PACKAGE_OWNER }}/charts/${{ needs.build-and-push-chart.outputs.chart_name }} --version ${{ github.ref_name }}
             ```

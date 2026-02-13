@@ -1,6 +1,6 @@
 # API Endpoints
 
-This document reflects the current PoundCake API surface. For a quick, machine-friendly list, see `API_ENDPOINTS.txt`.
+This document reflects the current PoundCake API surface.
 
 ## Base
 - `GET /`

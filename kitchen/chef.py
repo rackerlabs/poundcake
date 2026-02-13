@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 # Config
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
 API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
-POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
+POLL_INTERVAL = int(os.getenv("CHEF_POLL_INTERVAL", "5"))
 
 # System request ID for polling operations
 SYSTEM_REQ_ID = "SYSTEM-CHEF"
@@ -111,9 +111,27 @@ def run_chef() -> None:
 
             workflow_id = recipe.get("workflow_id")
             workflow_parameters = recipe.get("workflow_parameters") or {}
+            source_type = (recipe.get("source_type") or "stackstorm").lower()
+
+            if source_type != "stackstorm":
+                err = f"Unsupported recipe source_type '{source_type}' for chef execution"
+                logger.error(
+                    "Unsupported recipe source type",
+                    extra={"req_id": req_id, "dish_id": dish_id, "source_type": source_type},
+                )
+                request_with_retry_sync(
+                    "PATCH",
+                    f"{API_BASE_URL}/dishes/{dish_id}",
+                    json={"processing_status": "failed", "error_message": err},
+                    headers={"X-Request-ID": req_id},
+                    timeout=10,
+                    retries=POLLER_RETRIES,
+                )
+                time.sleep(POLL_INTERVAL)
+                continue
 
             # Step 2: if workflow_id exists, confirm in ST2
-            if workflow_id:
+            if workflow_id and source_type == "stackstorm":
                 resp = request_with_retry_sync(
                     "GET",
                     f"{API_BASE_URL}/cook/actions/{workflow_id}",

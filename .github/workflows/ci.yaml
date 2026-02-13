@@ -17,15 +17,84 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  helm-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install helm-unittest plugin
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.1 --verify=false
+
+      - name: Run helm lint
+        run: |
+          helm lint ./helm
+
+      - name: Run helm-unittest suites
+        run: |
+          helm unittest ./helm --file 'tests/unittest/*_test.yaml'
+
+  helm-chart-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.7.0
+
+      - name: Run ct lint
+        run: |
+          ct lint --charts helm --validate-maintainers=false --check-version-increment=false
+
+  helm-chart-install:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.7.0
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1.12.0
+
+      - name: Run ct install
+        run: |
+          ct install --charts helm --helm-extra-args "--timeout 10m"
+
   unit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -51,10 +120,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -69,4 +138,12 @@ jobs:
 
       - name: Run integration tests
         run: |
+          set +e
           pytest -m "integration" tests/ -v
+          rc=$?
+          set -e
+          if [ "$rc" -eq 5 ]; then
+            echo "No integration tests collected; treating as success."
+            exit 0
+          fi
+          exit "$rc"

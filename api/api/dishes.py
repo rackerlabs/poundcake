@@ -11,7 +11,7 @@ from sqlalchemy import select, update, func, asc, desc, and_, or_, case
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import Any, List, cast
 from datetime import datetime, timezone, timedelta
 
 from api.core.database import get_db
@@ -31,6 +31,11 @@ from api.schemas.query_params import DishQueryParams, validate_query_params
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _rowcount(result: object) -> int:
+    """Get affected row count from SQLAlchemy DML result."""
+    return int(getattr(cast(Any, result), "rowcount", 0) or 0)
 
 
 @router.post("/dishes/cook/{order_id}", response_model=CookResponse)
@@ -85,7 +90,7 @@ async def cook_dishes(
             .values(processing_status="processing", updated_at=now)
         )
 
-        if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
+        if _rowcount(update_result) == 0:
             reason = f"Order not new (status={order.processing_status})"
             if existing_dish:
                 reason = "Order already has a dish or is being processed"
@@ -222,7 +227,7 @@ async def claim_dish(
             .values(processing_status="processing", started_at=now)
         )
 
-        if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
+        if _rowcount(update_result) == 0:
             logger.info(
                 "Dish claim failed",
                 extra={"req_id": req_id, "dish_id": dish_id},
@@ -273,7 +278,7 @@ async def claim_dish_for_finalize(
             .values(processing_status="finalizing", updated_at=now)
         )
 
-        if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
+        if _rowcount(update_result) == 0:
             logger.info(
                 "Dish finalize claim failed",
                 extra={"req_id": req_id, "dish_id": dish_id},
@@ -378,13 +383,14 @@ async def upsert_dish_ingredients(
                 ),
             }
             result = await db.execute(insert_stmt.on_duplicate_key_update(**update_stmt))
-            if result.rowcount is not None and result.rowcount >= 0:
+            affected_rows = _rowcount(result)
+            if affected_rows >= 0:
                 total_rows = len(rows)
-                if result.rowcount >= total_rows:
-                    updated = result.rowcount - total_rows
+                if affected_rows >= total_rows:
+                    updated = affected_rows - total_rows
                     created = total_rows - updated
                 else:
-                    created = result.rowcount
+                    created = affected_rows
                     updated = 0
     logger.debug(
         "Dish ingredients upserted",

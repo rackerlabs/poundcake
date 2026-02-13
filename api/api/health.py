@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Health check and statistics endpoints."""
+"""Health, readiness, liveness, and statistics endpoints."""
 
 import os
 import socket
@@ -25,7 +25,8 @@ router = APIRouter()
 settings = get_settings()
 logger = get_logger(__name__)
 SYSTEM_REQ_ID = "SYSTEM-HEALTH"
-BOOTSTRAP_DONE_FILE = "/tmp/poundcake_bootstrap.done"
+BOOTSTRAP_MARKER_FILE = "/app/config/poundcake_bootstrap_ready"
+LEGACY_BOOTSTRAP_DONE_FILE = "/tmp/poundcake_bootstrap.done"
 
 
 async def check_mongodb() -> ComponentHealth:
@@ -57,6 +58,15 @@ async def check_rabbitmq() -> ComponentHealth:
         return ComponentHealth(status="healthy", message="External or disabled")
 
     rabbitmq_host = os.getenv("RABBITMQ_HOST", "stackstorm-rabbitmq")
+    rabbitmq_amqp_port = int(os.getenv("RABBITMQ_PORT", "5672"))
+
+    def _amqp_connectivity() -> bool:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        try:
+            return sock.connect_ex((rabbitmq_host, rabbitmq_amqp_port)) == 0
+        finally:
+            sock.close()
 
     try:
         rabbitmq_port = int(os.getenv("RABBITMQ_MANAGEMENT_PORT", "15672"))
@@ -73,21 +83,23 @@ async def check_rabbitmq() -> ComponentHealth:
         )
         if response.status_code == 200:
             return ComponentHealth(status="healthy", message="Management API accessible")
-        else:
-            return ComponentHealth(status="degraded", message=f"HTTP {response.status_code}")
+        if _amqp_connectivity():
+            return ComponentHealth(
+                status="degraded",
+                message=f"Management API HTTP {response.status_code}; AMQP port accessible",
+            )
+        return ComponentHealth(
+            status="unhealthy",
+            message=f"Management API HTTP {response.status_code}; AMQP unavailable",
+        )
     except Exception:
-        # Fall back to TCP check
         try:
-            rabbitmq_port = int(os.getenv("RABBITMQ_PORT", "5672"))
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            result = sock.connect_ex((rabbitmq_host, rabbitmq_port))
-            sock.close()
-
-            if result == 0:
-                return ComponentHealth(status="healthy", message="AMQP port accessible")
-            else:
-                return ComponentHealth(status="unhealthy", message="Cannot connect")
+            if _amqp_connectivity():
+                return ComponentHealth(
+                    status="degraded",
+                    message="Management API unavailable; AMQP port accessible",
+                )
+            return ComponentHealth(status="unhealthy", message="Cannot connect")
         except Exception as e2:
             return ComponentHealth(status="unhealthy", message=str(e2))
 
@@ -114,9 +126,49 @@ async def check_redis() -> ComponentHealth:
         return ComponentHealth(status="unhealthy", message=str(e))
 
 
-@router.get("/health", response_model=HealthResponse)
-async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -> HealthResponse:
-    """Comprehensive health check for all PoundCake components."""
+def _bootstrap_ready() -> bool:
+    """Check shared bootstrap marker with one-release legacy fallback."""
+    try:
+        with open(BOOTSTRAP_MARKER_FILE, "r", encoding="utf-8") as f:
+            if f.read().strip().lower() == "true":
+                return True
+    except Exception:
+        pass
+    return os.path.exists(LEGACY_BOOTSTRAP_DONE_FILE)
+
+
+def _overall_status(components: dict[str, ComponentHealth]) -> str:
+    """Compute overall status from component statuses."""
+    unhealthy_count = sum(1 for c in components.values() if c.status == "unhealthy")
+    degraded_count = sum(1 for c in components.values() if c.status == "degraded")
+    if unhealthy_count > 0:
+        return "unhealthy"
+    if degraded_count > 0:
+        return "degraded"
+    return "healthy"
+
+
+def _readiness_status(components: dict[str, ComponentHealth]) -> str:
+    """Compute readiness status from blocking dependencies only."""
+    blocking_components = ("database", "stackstorm", "mongodb", "rabbitmq", "redis")
+    blocking = {
+        name: components[name] for name in blocking_components if name in components
+    }
+
+    # Any hard failure in blocking dependencies makes the pod not ready.
+    if any(c.status == "unhealthy" for c in blocking.values()):
+        return "unhealthy"
+
+    # Surface partial degradation without failing readiness.
+    if any(c.status == "degraded" for c in components.values()):
+        return "degraded"
+    if any(c.status == "unhealthy" for name, c in components.items() if name not in blocking):
+        return "degraded"
+    return "healthy"
+
+
+async def _build_health_response(db: AsyncSession) -> HealthResponse:
+    """Build comprehensive component health response."""
     components = {}
 
     # Check MariaDB/MySQL Database
@@ -149,7 +201,7 @@ async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -
     components["redis"] = await check_redis()
 
     # Check PoundCake bootstrap completion
-    if os.path.exists(BOOTSTRAP_DONE_FILE):
+    if _bootstrap_ready():
         components["poundcake_bootstrap"] = ComponentHealth(
             status="healthy", message="Bootstrap completed"
         )
@@ -158,19 +210,7 @@ async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -
             status="unhealthy", message="Bootstrap not completed"
         )
 
-    # Determine overall status
-    unhealthy_count = sum(1 for c in components.values() if c.status == "unhealthy")
-    degraded_count = sum(1 for c in components.values() if c.status == "degraded")
-
-    if unhealthy_count > 0:
-        overall_status = "unhealthy"
-    elif degraded_count > 0:
-        overall_status = "degraded"
-    else:
-        overall_status = "healthy"
-
-    if overall_status != "healthy":
-        response.status_code = 503
+    overall_status = _overall_status(components)
 
     # Get instance ID (pod name in Kubernetes, hostname otherwise)
     instance_id = os.getenv("HOSTNAME", socket.gethostname())
@@ -184,45 +224,71 @@ async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -
     )
 
 
+@router.get("/live")
+async def liveness_check() -> dict[str, str]:
+    """Liveness endpoint for kubelet process checks."""
+    return {"status": "alive", "version": settings.app_version}
+
+
+@router.get("/ready", response_model=HealthResponse)
+async def readiness_check(response: Response, db: AsyncSession = Depends(get_db)) -> HealthResponse:
+    """Readiness endpoint for dependency availability checks."""
+    health = await _build_health_response(db)
+    readiness_status = _readiness_status(health.components)
+    if readiness_status == "unhealthy":
+        response.status_code = 503
+    health.status = readiness_status
+    return health
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -> HealthResponse:
+    """Comprehensive diagnostic health check for all PoundCake components."""
+    health = await _build_health_response(db)
+    if health.status != "healthy":
+        response.status_code = 503
+    return health
+
+
 @router.get("/stats", response_model=StatsResponse)
 async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
     result = await db.execute(select(func.count(Order.id)))
-    total_alerts = result.scalar() or 0
+    total_alerts = int(result.scalar() or 0)
     result = await db.execute(select(func.count(Recipe.id)))
-    total_recipes = result.scalar() or 0
+    total_recipes = int(result.scalar() or 0)
     result = await db.execute(select(func.count(Dish.id)))
-    total_executions = result.scalar() or 0
+    total_executions = int(result.scalar() or 0)
 
     result = await db.execute(
         select(Order.processing_status, func.count(Order.id)).group_by(Order.processing_status)
     )
-    alerts_by_processing_status = dict(
-        result.all()
-    )  # pyright: ignore[reportCallIssue,reportArgumentType]
+    alerts_by_processing_status = {
+        str(processing_status): int(count) for processing_status, count in result.all()
+    }
 
     result = await db.execute(
         select(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status)
     )
-    alerts_by_alert_status = dict(
-        result.all()
-    )  # pyright: ignore[reportCallIssue,reportArgumentType]
+    alerts_by_alert_status = {str(alert_status): int(count) for alert_status, count in result.all()}
 
     result = await db.execute(
         select(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status)
     )
-    executions_by_status = dict(result.all())  # pyright: ignore[reportCallIssue,reportArgumentType]
+    executions_by_status = {
+        str(processing_status): int(count) for processing_status, count in result.all()
+    }
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     result = await db.execute(select(func.count(Order.id)).where(Order.created_at >= cutoff))
-    recent_alerts = result.scalar() or 0
+    recent_alerts = int(result.scalar() or 0)
 
-    return StatsResponse(  # pyright: ignore[reportArgumentType]
+    return StatsResponse(
         total_alerts=total_alerts,
         total_recipes=total_recipes,
         total_executions=total_executions,
-        alerts_by_processing_status=alerts_by_processing_status,  # pyright: ignore[reportArgumentType]
-        alerts_by_alert_status=alerts_by_alert_status,  # pyright: ignore[reportArgumentType]
-        executions_by_status=executions_by_status,  # pyright: ignore[reportArgumentType]
+        alerts_by_processing_status=alerts_by_processing_status,
+        alerts_by_alert_status=alerts_by_alert_status,
+        executions_by_status=executions_by_status,
         recent_alerts=recent_alerts,
     )

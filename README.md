@@ -190,19 +190,129 @@ output:
   result: <% task(step_5_task5).result %>
 ```
 
-## Quick Start (Docker Compose)
+## Installation
+
+### Unified Launchers
+
+```bash
+# Install via Docker Compose
+./install/install-docker.sh
+
+# Install via Helm
+./install/install-helm.sh
+```
+
+### Helm Install
+
+```bash
+# Helm-based install script
+./helm/bin/install-poundcake.sh
+
+# Optional: pass extra Helm args through
+./helm/bin/install-poundcake.sh -f /path/to/values.yaml
+```
+
+Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
+
+### Helm Install With Private GHCR Images
+
+```bash
+source ./install/set-env-helper.sh
+export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
+./install/install-helm.sh
+```
+
+Installer env controls for private pulls:
+- `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-pull`)
+- `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` (default: `true`)
+- `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` (default: `noreply@local`)
+- `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)
+
+Chart value controls:
+- Canonical (PoundCake-only): `poundcakeImage.pullSecrets`
+- Legacy fallback (temporary): `imagePullSecrets`
+
+Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
+- Ensure image exists at `POUNDCAKE_IMAGE_REPO:POUNDCAKE_IMAGE_TAG`
+- Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
+- Ensure PAT has `read:packages` and package visibility grants access
+- Verify pull secret is on a PoundCake pod:
+  `kubectl -n <namespace> get pod <poundcake-pod> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
+
+Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
+Startup jobs are hook-driven (`post-install,post-upgrade`), so the installer defaults to
+`POUNDCAKE_HELM_WAIT=false` to avoid deadlocks with marker-gated init containers.
+
+If a rollout gets stuck in `Init`, re-run without wait semantics:
+
+```bash
+POUNDCAKE_HELM_WAIT=false ./install/install-helm.sh
+kubectl -n rackspace get jobs
+```
+
+StackStorm service startup now renders runtime config at `/tmp/st2/st2.conf` to avoid non-root writes to `/etc`.
+Successful startup hook jobs are auto-cleaned by default; failed ones are retained for debugging.
+
+One-time cleanup for existing completed startup jobs:
+
+```bash
+kubectl -n rackspace get jobs \
+  -o jsonpath='{range .items[?(@.status.succeeded==1)]}{.metadata.name}{"\n"}{end}' \
+  | grep -E '^(stackstorm-.*ready|stackstorm-mongodb-user-sync|stackstorm-startup-markers-reset|stackstorm-bootstrap|poundcake-.*)$' \
+  | xargs -r -I{} kubectl -n rackspace delete job {}
+kubectl -n rackspace get jobs,pods
+```
+
+### Docker Compose Install
+
+```bash
+# Docker-based install script
+./docker/bin/install-poundcake.sh
+```
+
+### Docker Compose Quick Start
 
 ```bash
 # Start all services
 
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # Health
 curl http://localhost:8000/api/v1/health
 
 # Logs
 
-docker compose logs -f api prep-chef chef timer dishwasher
+docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
+```
+
+#### Docker Compose Dependency Gates
+
+```mermaid
+flowchart LR
+  mongodb["stackstorm-mongodb"] -->|service_healthy| st2api["stackstorm-api"]
+  rabbitmq["stackstorm-rabbitmq"] -->|service_healthy| st2api
+  redis["stackstorm-redis"] -->|service_healthy| st2api
+
+  st2api -->|service_healthy| st2auth["stackstorm-auth"]
+  st2api -->|service_healthy| st2bootstrap["stackstorm-bootstrap"]
+  st2auth -->|service_healthy| st2bootstrap
+
+  packinit["poundcake-pack-init"] -->|service_completed_successfully| api["api"]
+  mariadb["mariadb"] -->|service_healthy| api
+  st2api -->|service_healthy| api
+
+  api -->|service_started| pcbootstrap["poundcake-bootstrap"]
+  packinit -->|service_completed_successfully| pcbootstrap
+  st2api -->|service_healthy| pcbootstrap
+
+  api -->|service_healthy| chef["chef"]
+  api -->|service_healthy| prepchef["prep-chef"]
+  api -->|service_healthy| timer["timer"]
+  api -->|service_healthy| dishwasher["dishwasher"]
+  pcbootstrap -->|service_completed_successfully| chef
+  pcbootstrap -->|service_completed_successfully| prepchef
+  pcbootstrap -->|service_completed_successfully| timer
+  pcbootstrap -->|service_completed_successfully| dishwasher
 ```
 
 Services:
@@ -227,8 +337,12 @@ POUNDCAKE_ST2_PACK_ROOT=/app/stackstorm-packs
 
 ## API Reference
 
-See `docs/API_ENDPOINTS.md` or `API_ENDPOINTS.txt`.
+See `docs/API_ENDPOINTS.md`.
 
 ## Troubleshooting
 
 See `docs/TROUBLESHOOTING.md`.
+
+## Developer Workflow
+
+See `docs/developer.md` for fork-based package publishing and lab deployment steps.

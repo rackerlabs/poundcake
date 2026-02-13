@@ -52,6 +52,7 @@ async def create_recipe(
             name=recipe.name,
             description=recipe.description,
             enabled=recipe.enabled,
+            source_type=recipe.source_type,
             workflow_id=recipe.workflow_id,
             workflow_payload=recipe.workflow_payload,
             workflow_parameters=recipe.workflow_parameters,
@@ -88,6 +89,8 @@ async def create_recipe(
         .where(Recipe.id == db_recipe.id)
     )
     db_recipe = result.scalars().first()
+    if db_recipe is None:
+        raise HTTPException(status_code=500, detail="Recipe retrieval failed after create")
     logger.info(
         "Recipe created successfully",
         extra={
@@ -98,7 +101,7 @@ async def create_recipe(
         },
     )
 
-    return db_recipe  # pyright: ignore[reportOptionalMemberAccess]
+    return db_recipe
 
 
 @router.get("/recipes/", response_model=List[RecipeDetailResponse])
@@ -112,6 +115,7 @@ async def list_recipes(
 
     Query Parameters:
     - name: Filter by recipe name
+    - source_type: Filter by recipe source type
     - enabled: Filter by enabled status (true/false)
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
@@ -124,6 +128,8 @@ async def list_recipes(
 
     if params.name is not None:
         query = query.where(Recipe.name == params.name)
+    if params.source_type is not None:
+        query = query.where(Recipe.source_type == params.source_type)
     if params.enabled is not None:
         query = query.where(Recipe.enabled == params.enabled)
 

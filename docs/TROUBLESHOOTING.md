@@ -5,7 +5,7 @@
 Check logs:
 
 ```bash
-docker compose logs -f api
+docker compose -f docker/docker-compose.yml logs -f api
 ```
 
 ## StackStorm API key errors
@@ -14,7 +14,7 @@ Delete and regenerate:
 
 ```bash
 rm -f config/st2_api_key
-docker compose restart st2client
+docker compose -f docker/docker-compose.yml restart st2client
 ```
 
 ## Dishes stuck in processing
@@ -22,13 +22,13 @@ docker compose restart st2client
 Check timer logs:
 
 ```bash
-docker compose logs -f timer
+docker compose -f docker/docker-compose.yml logs -f timer
 ```
 
 Confirm StackStorm execution exists:
 
 ```bash
-docker compose exec st2client st2 execution get <execution_id>
+docker compose -f docker/docker-compose.yml exec st2client st2 execution get <execution_id>
 ```
 
 ## No dishes created
@@ -36,7 +36,7 @@ docker compose exec st2client st2 execution get <execution_id>
 Check prep-chef logs:
 
 ```bash
-docker compose logs -f prep-chef
+docker compose -f docker/docker-compose.yml logs -f prep-chef
 ```
 
 ## No workflow execution
@@ -44,5 +44,5 @@ docker compose logs -f prep-chef
 Check chef logs:
 
 ```bash
-docker compose logs -f chef
+docker compose -f docker/docker-compose.yml logs -f chef
 ```
