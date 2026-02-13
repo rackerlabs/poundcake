@@ -7,7 +7,7 @@
 """API routes for Dish (execution) management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, update, func, asc, desc, nullsfirst, and_, or_
+from sqlalchemy import select, update, func, asc, desc, and_, or_, case
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,7 @@ from datetime import datetime, timezone, timedelta
 from api.core.database import get_db
 from api.core.config import get_settings
 from api.core.logging import get_logger
-from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES
+from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES, ORDER_TERMINAL_PROCESSING_STATUSES
 from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient, Ingredient
 from api.schemas.schemas import (
     DishResponse,
@@ -54,13 +54,15 @@ async def cook_dishes(
             select(Recipe)
             .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
             .where(Recipe.name == order.alert_group_name, Recipe.enabled.is_(True))
+            .with_for_update()
         )
-        recipe = result.scalars().first()
+        recipe = result.unique().scalars().first()
 
         if not recipe:
-            order.processing_status = "complete"
-            order.is_active = False
-            order.updated_at = datetime.now(timezone.utc)
+            if order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
+                order.processing_status = "complete"
+                order.is_active = False
+                order.updated_at = datetime.now(timezone.utc)
             logger.error(
                 "No recipe found, order closed",
                 extra={
@@ -112,10 +114,11 @@ async def cook_dishes(
         )
         db.add(new_dish)
         await db.flush()
+        # Refresh inside transaction for consistency
+        await db.refresh(new_dish)
 
     if not new_dish:
         raise HTTPException(status_code=500, detail="Dish creation failed")
-    await db.refresh(new_dish)
 
     logger.info(
         "Dish created successfully",
@@ -158,9 +161,7 @@ async def fetch_dishes(
         "Fetching dishes",
         extra={
             "req_id": request_id,
-            "processing_status": (
-                params.processing_status.value if params.processing_status else None
-            ),
+            "processing_status": params.processing_status,
             "filter_req_id": params.req_id,
             "order_id": params.order_id,
             "workflow_execution_id": params.workflow_execution_id,
@@ -176,7 +177,7 @@ async def fetch_dishes(
     )
 
     if params.processing_status:
-        query = query.where(Dish.processing_status == params.processing_status.value)
+        query = query.where(Dish.processing_status == params.processing_status)
     if params.req_id:
         query = query.where(Dish.req_id == params.req_id)
     if params.order_id:
@@ -184,11 +185,13 @@ async def fetch_dishes(
     if params.workflow_execution_id:
         query = query.where(Dish.workflow_execution_id == params.workflow_execution_id)
 
-    if params.processing_status and params.processing_status.value == "new":
+    if params.processing_status and params.processing_status == "new":
         query = query.order_by(asc(Dish.created_at))
-    elif params.processing_status and params.processing_status.value == "processing":
+    elif params.processing_status and params.processing_status == "processing":
+        # MariaDB doesn't support NULLS FIRST, use CASE to sort NULL values first
         query = query.order_by(
-            nullsfirst(asc(Dish.started_at)),
+            case((Dish.started_at.is_(None), 0), else_=1),
+            asc(Dish.started_at),
             asc(Dish.created_at),
         )
     else:
@@ -211,31 +214,33 @@ async def claim_dish(
     req_id = request.state.req_id
     now = datetime.now(timezone.utc)
 
-    update_result = await db.execute(
-        update(Dish)
-        .where(Dish.id == dish_id, Dish.processing_status == "new")
-        .values(processing_status="processing", started_at=now)
-    )
-
-    if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
-        logger.info(
-            "Dish claim failed",
-            extra={"req_id": req_id, "dish_id": dish_id},
+    dish: Dish | None = None
+    async with db.begin():
+        update_result = await db.execute(
+            update(Dish)
+            .where(Dish.id == dish_id, Dish.processing_status == "new")
+            .values(processing_status="processing", started_at=now)
         )
-        raise HTTPException(status_code=409, detail="Dish already claimed")
 
-    await db.commit()
+        if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
+            logger.info(
+                "Dish claim failed",
+                extra={"req_id": req_id, "dish_id": dish_id},
+            )
+            raise HTTPException(status_code=409, detail="Dish already claimed")
 
-    result = await db.execute(
-        select(Dish)
-        .options(
-            joinedload(Dish.recipe)
-            .joinedload(Recipe.recipe_ingredients)
-            .joinedload(RecipeIngredient.ingredient)
+        # Fetch inside transaction for consistency
+        result = await db.execute(
+            select(Dish)
+            .options(
+                joinedload(Dish.recipe)
+                .joinedload(Recipe.recipe_ingredients)
+                .joinedload(RecipeIngredient.ingredient)
+            )
+            .where(Dish.id == dish_id)
         )
-        .where(Dish.id == dish_id)
-    )
-    dish = result.scalars().first()
+        dish = result.unique().scalars().first()
+
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
     return dish
@@ -251,40 +256,42 @@ async def claim_dish_for_finalize(
     settings = get_settings()
     stale_cutoff = now - timedelta(seconds=settings.lock_timeout_seconds)
 
-    update_result = await db.execute(
-        update(Dish)
-        .where(
-            Dish.id == dish_id,
-            or_(
-                Dish.processing_status == "processing",
-                and_(
-                    Dish.processing_status == "finalizing",
-                    Dish.updated_at < stale_cutoff,
+    dish: Dish | None = None
+    async with db.begin():
+        update_result = await db.execute(
+            update(Dish)
+            .where(
+                Dish.id == dish_id,
+                or_(
+                    Dish.processing_status == "processing",
+                    and_(
+                        Dish.processing_status == "finalizing",
+                        Dish.updated_at < stale_cutoff,
+                    ),
                 ),
-            ),
+            )
+            .values(processing_status="finalizing", updated_at=now)
         )
-        .values(processing_status="finalizing", updated_at=now)
-    )
 
-    if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
-        logger.info(
-            "Dish finalize claim failed",
-            extra={"req_id": req_id, "dish_id": dish_id},
+        if update_result.rowcount == 0:  # pyright: ignore[reportAttributeAccessIssue]
+            logger.info(
+                "Dish finalize claim failed",
+                extra={"req_id": req_id, "dish_id": dish_id},
+            )
+            raise HTTPException(status_code=409, detail="Dish already claimed")
+
+        # Fetch inside transaction for consistency
+        result = await db.execute(
+            select(Dish)
+            .options(
+                joinedload(Dish.recipe)
+                .joinedload(Recipe.recipe_ingredients)
+                .joinedload(RecipeIngredient.ingredient)
+            )
+            .where(Dish.id == dish_id)
         )
-        raise HTTPException(status_code=409, detail="Dish already claimed")
+        dish = result.unique().scalars().first()
 
-    await db.commit()
-
-    result = await db.execute(
-        select(Dish)
-        .options(
-            joinedload(Dish.recipe)
-            .joinedload(Recipe.recipe_ingredients)
-            .joinedload(RecipeIngredient.ingredient)
-        )
-        .where(Dish.id == dish_id)
-    )
-    dish = result.scalars().first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
     return dish
@@ -313,7 +320,7 @@ async def upsert_dish_ingredients(
             .where(Dish.id == dish_id)
             .with_for_update()
         )
-        dish = result.scalars().first()
+        dish = result.unique().scalars().first()
         if not dish:
             raise HTTPException(status_code=404, detail="Dish not found")
 
@@ -437,7 +444,7 @@ async def update_dish(
     dish: Dish | None = None
     async with db.begin():
         result = await db.execute(select(Dish).where(Dish.id == dish_id).with_for_update())
-        dish = result.scalars().first()
+        dish = result.unique().scalars().first()
         if not dish:
             logger.warning("Dish not found", extra={"req_id": req_id, "dish_id": dish_id})
             raise HTTPException(status_code=404, detail="Dish not found")

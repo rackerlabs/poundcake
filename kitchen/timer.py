@@ -31,6 +31,7 @@ logger = get_logger("timer")
 POLLER_RETRIES = get_settings().poller_http_retries
 SYSTEM_REQ_ID = "SYSTEM-TIMER"
 MISSING_EXECUTION_TIMEOUT_SECONDS = get_settings().chef_missing_execution_timeout_seconds
+API_UNAVAILABLE_SINCE: float | None = None
 
 
 def update_dish(
@@ -190,6 +191,7 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
 
 def monitor_dishes() -> None:
     """Polls for processing dishes and updates terminal states."""
+    global API_UNAVAILABLE_SINCE
     try:
         dishes: list[dict[str, Any]] = []
         for status in ("processing", "finalizing"):
@@ -214,6 +216,14 @@ def monitor_dishes() -> None:
                     },
                 )
                 continue
+
+            if API_UNAVAILABLE_SINCE is not None:
+                downtime_sec = int(time.time() - API_UNAVAILABLE_SINCE)
+                logger.info(
+                    "Timer API connectivity restored",
+                    extra={"req_id": SYSTEM_REQ_ID, "downtime_sec": downtime_sec},
+                )
+                API_UNAVAILABLE_SINCE = None
             dishes.extend(resp.json())
 
         for dish in dishes:
@@ -541,15 +551,27 @@ def monitor_dishes() -> None:
 
     except Exception as e:
         latency_ms = int((time.time() - start_time) * 1000)
-        logger.error(
-            "Error in monitor loop",
-            extra={
-                "req_id": SYSTEM_REQ_ID,
-                "method": "GET",
-                "latency_ms": latency_ms,
-                "error": str(e),
-            },
-        )
+        if API_UNAVAILABLE_SINCE is None:
+            API_UNAVAILABLE_SINCE = time.time()
+            logger.error(
+                "Timer lost API connectivity",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "method": "GET",
+                    "latency_ms": latency_ms,
+                    "error": str(e),
+                },
+            )
+        else:
+            logger.debug(
+                "Timer waiting for API recovery",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "method": "GET",
+                    "latency_ms": latency_ms,
+                    "error": str(e),
+                },
+            )
 
 
 if __name__ == "__main__":

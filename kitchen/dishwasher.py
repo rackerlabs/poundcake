@@ -69,7 +69,9 @@ def run_sync() -> bool:
 
 
 def main() -> None:
-    wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger, require_healthy=False)
+    wait_for_api(
+        API_BASE_URL, SYSTEM_REQ_ID, logger, require_healthy=False, max_attempts=120, delay_sec=2.0
+    )
 
     if DISHWASHER_INTERVAL <= 0:
         attempts = int(os.getenv("DISHWASHER_BOOTSTRAP_ATTEMPTS", "10"))

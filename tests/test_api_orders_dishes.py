@@ -136,6 +136,16 @@ def test_update_order_sets_is_active_false_on_terminal_status(client, mock_db_se
     assert body["is_active"] is False
 
 
+def test_update_order_rejects_terminal_to_terminal_transition(client, mock_db_session):
+    order = _make_order(status="complete")
+    mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
+
+    payload = {"processing_status": "failed"}
+    response = client.put("/api/v1/orders/1", json=payload)
+
+    assert response.status_code == 409
+
+
 def test_fetch_dishes_returns_list(client, mock_db_session):
     dish = _make_dish()
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(all_=[dish]))

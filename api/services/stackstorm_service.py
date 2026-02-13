@@ -623,7 +623,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             depth = ri.get("depth") or 0
             task_name_raw = ingredient.get("task_name", "task")
             task_id = ingredient.get("task_id")
-            action_parameters = ingredient.get("action_parameters") or {}
+            input_parameters = ri.get("input_parameters") or {}
             retry_count = ingredient.get("retry_count") or 0
             retry_delay = ingredient.get("retry_delay")
             is_blocking = ingredient.get("is_blocking", True)
@@ -635,7 +635,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             depth = ri.depth
             task_name_raw = ingredient.task_name
             task_id = ingredient.task_id
-            action_parameters = ingredient.action_parameters or {}
+            input_parameters = ri.input_parameters or {}
             retry_count = ingredient.retry_count
             retry_delay = ingredient.retry_delay
             is_blocking = ingredient.is_blocking
@@ -645,7 +645,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
 
         task_def: dict[str, Any] = {
             "action": task_id,
-            "input": action_parameters,
+            "input": input_parameters,
         }
 
         if retry_count > 0:

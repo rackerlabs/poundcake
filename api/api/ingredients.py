@@ -37,12 +37,25 @@ async def create_ingredient(
 
     logger.info("Creating ingredient", extra={"req_id": req_id, "task_id": ingredient.task_id})
 
+    # Check if ingredient with this task_id already exists
+    result = await db.execute(select(Ingredient).where(Ingredient.task_id == ingredient.task_id))
+    existing = result.scalars().first()
+    if existing:
+        logger.warning(
+            "Ingredient already exists",
+            extra={"req_id": req_id, "task_id": ingredient.task_id, "existing_id": existing.id},
+        )
+        raise HTTPException(
+            status_code=400, detail=f"Ingredient with task_id '{ingredient.task_id}' already exists"
+        )
+
     db_ingredient = Ingredient(
         task_id=ingredient.task_id,
         task_name=ingredient.task_name,
         action_id=ingredient.action_id,
         action_payload=ingredient.action_payload,
         action_parameters=ingredient.action_parameters,
+        source_type=ingredient.source_type,
         is_blocking=ingredient.is_blocking,
         expected_duration_sec=ingredient.expected_duration_sec,
         timeout_duration_sec=ingredient.timeout_duration_sec,
@@ -91,14 +104,16 @@ async def delete_ingredient(
 ) -> DeleteResponse:
     """Delete a global ingredient."""
     req_id = request.state.req_id
-    result = await db.execute(select(Ingredient).where(Ingredient.id == ingredient_id))
-    ingredient = result.scalars().first()
-    if not ingredient:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
+    async with db.begin():
+        result = await db.execute(
+            select(Ingredient).where(Ingredient.id == ingredient_id).with_for_update()
+        )
+        ingredient = result.scalars().first()
+        if not ingredient:
+            raise HTTPException(status_code=404, detail="Ingredient not found")
 
-    task_name = ingredient.task_name
-    await db.delete(ingredient)
-    await db.commit()
+        task_name = ingredient.task_name
+        await db.delete(ingredient)
 
     logger.info(
         "Ingredient deleted",
@@ -120,7 +135,7 @@ async def get_ingredients_by_recipe_name(recipe_name: str, db: AsyncSession = De
         .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
         .where(Recipe.name == recipe_name)
     )
-    recipe = result.scalars().first()
+    recipe = result.unique().scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
 
@@ -135,7 +150,7 @@ async def get_ingredients_by_recipe_id(recipe_id: int, db: AsyncSession = Depend
         .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
         .where(Recipe.id == recipe_id)
     )
-    recipe = result.scalars().first()
+    recipe = result.unique().scalars().first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
@@ -148,17 +163,23 @@ async def update_ingredient(
     ingredient_id: int, payload: IngredientUpdate, db: AsyncSession = Depends(get_db)
 ) -> IngredientResponse:
     """Update a global ingredient."""
-    result = await db.execute(select(Ingredient).where(Ingredient.id == ingredient_id))
-    ingredient = result.scalars().first()
-    if not ingredient:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
+    ingredient: Ingredient | None = None
+    async with db.begin():
+        result = await db.execute(
+            select(Ingredient).where(Ingredient.id == ingredient_id).with_for_update()
+        )
+        ingredient = result.scalars().first()
+        if not ingredient:
+            raise HTTPException(status_code=404, detail="Ingredient not found")
 
-    update_data = payload.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(ingredient, key, value)
+        update_data = payload.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(ingredient, key, value)
 
-    ingredient.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
-    await db.commit()
+        ingredient.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+
+    if ingredient is None:
+        raise HTTPException(status_code=500, detail="Ingredient update failed")
     await db.refresh(ingredient)
 
     return ingredient

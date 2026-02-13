@@ -16,6 +16,24 @@ if [ -z "$TEST_RECIPE" ]; then
   exit 1
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required"
+  exit 1
+fi
+
+# Verify the recipe exists before posting order
+echo "Checking if recipe exists: ${TEST_RECIPE}"
+RECIPE_EXISTS=$(curl -sS -X GET "${API_URL}/recipes/?name=${TEST_RECIPE}" | jq -r 'length')
+
+if [ "$RECIPE_EXISTS" -eq 0 ]; then
+  echo "Error: Recipe '${TEST_RECIPE}' does not exist!"
+  echo "Available recipes:"
+  curl -sS -X GET "${API_URL}/recipes/" | jq -r '.[].name'
+  exit 1
+fi
+
+echo "Recipe found: ${TEST_RECIPE}"
+
 if [ -z "$REQ_ID" ]; then
   REQ_ID="AUTOMATED-$(date +%s)"
 fi

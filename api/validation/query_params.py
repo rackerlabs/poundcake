@@ -5,61 +5,30 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """
-Query parameter validation schemas and enums for API endpoints.
+Query parameter validation schemas using strict Literal types.
 
 This module defines valid values and constraints for all query parameters
 to ensure proper input validation and return 400 Bad Request for invalid inputs.
 """
 
-from enum import Enum
 from typing import Optional
 from fastapi import Query
 
-
-class ProcessingStatus(str, Enum):
-    """Valid processing status values for orders and dishes."""
-
-    NEW = "new"
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETE = "complete"
-    FAILED = "failed"
-    CANCELED = "canceled"
-    TIMEOUT = "timeout"
-    ABANDONED = "abandoned"
+# Import strict Literal types for compile-time type safety
+from api.types import (
+    DishProcessingStatus,
+    OrderProcessingStatus,
+    AlertStatus as AlertStatusType,
+    ST2ExecutionStatus,
+    SortOrder as SortOrderType,
+)
 
 
-class AlertStatus(str, Enum):
-    """Valid alert status values."""
-
-    FIRING = "firing"
-    RESOLVED = "resolved"
-
-
-class ST2Status(str, Enum):
-    """Valid StackStorm execution status values."""
-
-    REQUESTED = "requested"
-    SCHEDULED = "scheduled"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELED = "canceled"
-    CANCELING = "canceling"
-    PAUSED = "paused"
-    PAUSING = "pausing"
-    RESUMING = "resuming"
-    PENDING = "pending"
-
-
-class SortOrder(str, Enum):
-    """Valid sort order values."""
-
-    ASC = "asc"
-    DESC = "desc"
-
-
+# =============================================================================
 # Common query parameter constraints
+# =============================================================================
+
+
 def get_limit_param(default: int = 100, max_value: int = 1000) -> int:
     """
     Standard limit parameter with validation.
@@ -92,48 +61,61 @@ def get_offset_param(default: int = 0) -> int:
     return Query(default=default, ge=0, description="Number of results to skip for pagination")
 
 
-def get_processing_status_param() -> Optional[ProcessingStatus]:
+def get_dish_processing_status_param() -> Optional[DishProcessingStatus]:
     """
-    Processing status parameter with enum validation.
+    Dish processing status parameter with strict Literal validation.
 
     Returns:
         FastAPI Query parameter
     """
     return Query(
         default=None,
-        description=f"Filter by processing status. Valid values: {', '.join([s.value for s in ProcessingStatus])}",
+        description="Filter by processing status. Valid values: new, processing, finalizing, complete, failed, abandoned, timeout, canceled",
     )
 
 
-def get_alert_status_param() -> Optional[AlertStatus]:
+def get_order_processing_status_param() -> Optional[OrderProcessingStatus]:
     """
-    Alert status parameter with enum validation.
+    Order processing status parameter with strict Literal validation.
 
     Returns:
         FastAPI Query parameter
     """
     return Query(
         default=None,
-        description=f"Filter by alert status. Valid values: {', '.join([s.value for s in AlertStatus])}",
+        description="Filter by processing status. Valid values: new, processing, complete, failed, canceled",
     )
 
 
-def get_st2_status_param() -> Optional[ST2Status]:
+def get_alert_status_param() -> Optional[AlertStatusType]:
     """
-    StackStorm status parameter with enum validation.
+    Alert status parameter with strict Literal validation.
 
     Returns:
         FastAPI Query parameter
     """
     return Query(
         default=None,
-        description=f"Filter by StackStorm execution status. Valid values: {', '.join([s.value for s in ST2Status])}",
+        description="Filter by alert status. Valid values: firing, resolved",
     )
 
 
-def get_sort_order_param(default: SortOrder = SortOrder.DESC) -> SortOrder:
+def get_st2_status_param() -> Optional[ST2ExecutionStatus]:
     """
-    Sort order parameter with enum validation.
+    StackStorm status parameter with strict Literal validation.
+
+    Returns:
+        FastAPI Query parameter
+    """
+    return Query(
+        default=None,
+        description="Filter by StackStorm execution status. Valid values: requested, scheduled, running, succeeded, failed, canceled, canceling, paused, pausing, resuming, pending, timeout, abandoned",
+    )
+
+
+def get_sort_order_param(default: SortOrderType = "desc") -> SortOrderType:
+    """
+    Sort order parameter with strict Literal validation.
 
     Args:
         default: Default sort order
@@ -143,7 +125,7 @@ def get_sort_order_param(default: SortOrder = SortOrder.DESC) -> SortOrder:
     """
     return Query(
         default=default,
-        description=f"Sort order. Valid values: {', '.join([s.value for s in SortOrder])}",
+        description="Sort order. Valid values: asc, desc",
     )
 
 
