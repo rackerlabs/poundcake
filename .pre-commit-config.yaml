@@ -1,7 +1,7 @@
 # pre-commit configuration
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
       - id: check-yaml
         exclude: ^helm/.*/templates/
@@ -9,7 +9,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.11.13
     hooks:
       - id: ruff
         files: ^(api|tests|bakery|cli|kitchen|scripts)/.*\.py$
@@ -22,7 +22,7 @@ repos:
         files: ^(api|tests|bakery|cli|kitchen|scripts)/.*\.py$
 
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
+    rev: v1.37.1
     hooks:
       - id: yamllint
         args: ["-c", ".yamllint.yml", "."]
