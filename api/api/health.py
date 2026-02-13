@@ -188,41 +188,41 @@ async def health_check(response: Response, db: AsyncSession = Depends(get_db)) -
 async def get_statistics(db: AsyncSession = Depends(get_db)) -> StatsResponse:
     """System statistics with mapped model fields."""
     result = await db.execute(select(func.count(Order.id)))
-    total_alerts = result.scalar() or 0
+    total_alerts = int(result.scalar() or 0)
     result = await db.execute(select(func.count(Recipe.id)))
-    total_recipes = result.scalar() or 0
+    total_recipes = int(result.scalar() or 0)
     result = await db.execute(select(func.count(Dish.id)))
-    total_executions = result.scalar() or 0
+    total_executions = int(result.scalar() or 0)
 
     result = await db.execute(
         select(Order.processing_status, func.count(Order.id)).group_by(Order.processing_status)
     )
-    alerts_by_processing_status = dict(
-        result.all()
-    )  # pyright: ignore[reportCallIssue,reportArgumentType]
+    alerts_by_processing_status = {
+        str(processing_status): int(count) for processing_status, count in result.all()
+    }
 
     result = await db.execute(
         select(Order.alert_status, func.count(Order.id)).group_by(Order.alert_status)
     )
-    alerts_by_alert_status = dict(
-        result.all()
-    )  # pyright: ignore[reportCallIssue,reportArgumentType]
+    alerts_by_alert_status = {str(alert_status): int(count) for alert_status, count in result.all()}
 
     result = await db.execute(
         select(Dish.processing_status, func.count(Dish.id)).group_by(Dish.processing_status)
     )
-    executions_by_status = dict(result.all())  # pyright: ignore[reportCallIssue,reportArgumentType]
+    executions_by_status = {
+        str(processing_status): int(count) for processing_status, count in result.all()
+    }
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     result = await db.execute(select(func.count(Order.id)).where(Order.created_at >= cutoff))
-    recent_alerts = result.scalar() or 0
+    recent_alerts = int(result.scalar() or 0)
 
-    return StatsResponse(  # pyright: ignore[reportArgumentType]
+    return StatsResponse(
         total_alerts=total_alerts,
         total_recipes=total_recipes,
         total_executions=total_executions,
-        alerts_by_processing_status=alerts_by_processing_status,  # pyright: ignore[reportArgumentType]
-        alerts_by_alert_status=alerts_by_alert_status,  # pyright: ignore[reportArgumentType]
-        executions_by_status=executions_by_status,  # pyright: ignore[reportArgumentType]
+        alerts_by_processing_status=alerts_by_processing_status,
+        alerts_by_alert_status=alerts_by_alert_status,
+        executions_by_status=executions_by_status,
         recent_alerts=recent_alerts,
     )

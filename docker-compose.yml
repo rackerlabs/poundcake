@@ -77,7 +77,7 @@ services:
     environment:
       PYTHONPATH: /app
       POUNDCAKE_API_URL: http://api:8000
-      OVEN_POLL_INTERVAL: ${OVEN_INTERVAL:-5}
+      CHEF_POLL_INTERVAL: ${CHEF_INTERVAL:-5}
       LOG_LEVEL: INFO
       POUNDCAKE_LOG_FORMAT: console
       SERVICE_NAME: chef
@@ -103,7 +103,7 @@ services:
     environment:
       PYTHONPATH: /app
       POUNDCAKE_API_URL: http://api:8000
-      OVEN_INTERVAL: ${OVEN_INTERVAL:-5}
+      PREP_INTERVAL: ${PREP_INTERVAL:-5}
       LOG_LEVEL: INFO
       POUNDCAKE_LOG_FORMAT: console
       SERVICE_NAME: prep-chef

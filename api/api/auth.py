@@ -8,6 +8,7 @@
 
 import secrets
 import base64
+import importlib
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -36,14 +37,15 @@ def get_admin_credentials() -> tuple[str, str] | None:
 
     # 1. Attempt to load from Kubernetes (Helm/K8s Environment)
     try:
-        from kubernetes import client, config  # pyright: ignore[reportMissingImports]
+        k8s_client_module = importlib.import_module("kubernetes.client")
+        k8s_config_module = importlib.import_module("kubernetes.config")
 
         try:
-            config.load_incluster_config()
+            k8s_config_module.load_incluster_config()
         except Exception:
-            config.load_kube_config()
+            k8s_config_module.load_kube_config()
 
-        v1 = client.CoreV1Api()
+        v1 = k8s_client_module.CoreV1Api()
         secret = v1.read_namespaced_secret(
             name=settings.auth_secret_name,
             namespace=settings.auth_secret_namespace,

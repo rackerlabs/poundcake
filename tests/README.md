@@ -3,6 +3,7 @@
 Use the provided shell tests for end-to-end workflows. Example:
 
 ```bash
+./tests/run_all_e2e_workflow_generation_tests
 ./tests/run_single_task_non_blocking_test
 ./tests/run_multiple_tasks_with_blocking_test
 ./tests/run_reuse_recipe_two_webhooks_test

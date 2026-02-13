@@ -89,6 +89,8 @@ async def create_recipe(
         .where(Recipe.id == db_recipe.id)
     )
     db_recipe = result.scalars().first()
+    if db_recipe is None:
+        raise HTTPException(status_code=500, detail="Recipe retrieval failed after create")
     logger.info(
         "Recipe created successfully",
         extra={
@@ -99,7 +101,7 @@ async def create_recipe(
         },
     )
 
-    return db_recipe  # pyright: ignore[reportOptionalMemberAccess]
+    return db_recipe
 
 
 @router.get("/recipes/", response_model=List[RecipeDetailResponse])

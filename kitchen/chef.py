@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 # Config
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
 API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
-POLL_INTERVAL = int(os.getenv("OVEN_POLL_INTERVAL", "5"))
+POLL_INTERVAL = int(os.getenv("CHEF_POLL_INTERVAL", "5"))
 
 # System request ID for polling operations
 SYSTEM_REQ_ID = "SYSTEM-CHEF"

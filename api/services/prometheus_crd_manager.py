@@ -6,6 +6,7 @@
 #
 """Prometheus Operator CRD manager for PrometheusRule resources."""
 
+import importlib
 from typing import Any
 
 from api.core.config import get_settings
@@ -25,17 +26,18 @@ class PrometheusCRDManager:
 
         if self.settings.prometheus_use_crds:
             try:
-                from kubernetes import client, config  # pyright: ignore[reportMissingImports]
+                k8s_client_module = importlib.import_module("kubernetes.client")
+                k8s_config_module = importlib.import_module("kubernetes.config")
 
                 try:
-                    config.load_incluster_config()
+                    k8s_config_module.load_incluster_config()
                     logger.info("Loaded in-cluster Kubernetes config")
                 except Exception:
-                    config.load_kube_config()
+                    k8s_config_module.load_kube_config()
                     logger.info("Loaded kubeconfig from file")
 
-                self.k8s_client = client.ApiClient()
-                self.custom_api = client.CustomObjectsApi(self.k8s_client)
+                self.k8s_client = k8s_client_module.ApiClient()
+                self.custom_api = k8s_client_module.CustomObjectsApi(self.k8s_client)
             except ImportError:
                 logger.error(
                     "kubernetes package not installed. Install with: pip install kubernetes"

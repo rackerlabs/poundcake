@@ -135,7 +135,7 @@ class Ingredient(Base):
 
 class Dish(Base):
     """
-    Execution instances (Old Ovens) - Tracks the actual run of a recipe.
+    Execution instances - Tracks the actual run of a recipe.
     """
 
     __tablename__ = "dishes"

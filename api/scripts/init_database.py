@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Initialize database with new Recipe/Oven/Alert schema."""
+"""Initialize database with new Recipe/Dish/Alert schema."""
 
 import asyncio
 import sys
@@ -83,7 +83,7 @@ async def seed_default_recipes() -> None:
                 Ingredient(
                     task_id="log_alert",
                     task_name="Log Alert Information",
-                    action_id=None,  # pyright: ignore[reportCallIssue]
+                    action_id=None,
                     action_payload=None,
                     action_parameters=None,
                     is_blocking=True,

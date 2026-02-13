@@ -1,18 +1,18 @@
 
-{{- if .Values.dispatcher.enabled }}
+{{- if .Values.prepChef.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "poundcake.fullname" . }}-dispatcher
+  name: {{ include "poundcake.fullname" . }}-prep-chef
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: dispatcher
+    app.kubernetes.io/component: prep-chef
 spec:
-  replicas: {{ .Values.dispatcher.replicaCount }}
+  replicas: {{ .Values.prepChef.replicaCount }}
   selector:
     matchLabels:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: dispatcher
+      app.kubernetes.io/component: prep-chef
   template:
     metadata:
       annotations:
@@ -22,7 +22,7 @@ spec:
         {{- end }}
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: dispatcher
+        app.kubernetes.io/component: prep-chef
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -59,7 +59,7 @@ spec:
             echo "✗ Timeout waiting for PoundCake API"
             exit 1
       containers:
-        - name: dispatcher
+        - name: prep-chef
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -68,14 +68,14 @@ spec:
           env:
             - name: POUNDCAKE_API_URL
               value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
-            - name: OVEN_INTERVAL
-              value: {{ .Values.dispatcher.interval | quote }}
+            - name: PREP_INTERVAL
+              value: {{ .Values.prepChef.interval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: SERVICE_NAME
               value: "prep-chef"
           resources:
-            {{- toYaml .Values.dispatcher.resources | nindent 12 }}
+            {{- toYaml .Values.prepChef.resources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

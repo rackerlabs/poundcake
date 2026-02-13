@@ -41,19 +41,21 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
         ingredient_stats = await upsert_ingredients(db, actions)
         recipe_stats = await upsert_recipes(db, workflows)
 
-    stats: dict[str, Any] = {"ingredients": ingredient_stats, "recipes": recipe_stats}
+    stats: dict[str, Any] = {}
+    stats["ingredients"] = ingredient_stats
+    stats["recipes"] = recipe_stats
 
     if mark_bootstrap:
         try:
             with open(BOOTSTRAP_DONE_FILE, "w") as f:
                 f.write(datetime.now(timezone.utc).isoformat())
-            stats["bootstrap_marked"] = True  # pyright: ignore[reportArgumentType]
+            stats["bootstrap_marked"] = True
         except Exception as e:
             logger.warning(
                 "Failed to mark bootstrap completion",
                 extra={"error": str(e), "file": BOOTSTRAP_DONE_FILE},
             )
-            stats["bootstrap_marked"] = False  # pyright: ignore[reportArgumentType]
+            stats["bootstrap_marked"] = False
 
     return stats
 

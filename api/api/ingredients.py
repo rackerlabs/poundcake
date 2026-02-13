@@ -176,7 +176,7 @@ async def update_ingredient(
         for key, value in update_data.items():
             setattr(ingredient, key, value)
 
-        ingredient.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+        setattr(ingredient, "updated_at", datetime.now(timezone.utc))
 
     if ingredient is None:
         raise HTTPException(status_code=500, detail="Ingredient update failed")
