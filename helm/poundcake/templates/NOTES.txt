@@ -34,14 +34,17 @@ COMPONENTS DEPLOYED:
 {{- if .Values.ui.enabled }}
   - UI: {{ include "poundcake.fullname" . }}-ui
 {{- end }}
-{{- if .Values.oven.enabled }}
-  - Dish Executor: {{ include "poundcake.fullname" . }}-oven ({{ .Values.oven.replicaCount }} replica(s))
+{{- if .Values.chef.enabled }}
+  - Chef Worker: {{ include "poundcake.fullname" . }}-chef ({{ .Values.chef.replicaCount }} replica(s))
 {{- end }}
-{{- if .Values.ovenService.enabled }}
-  - Dish Dispatcher: {{ include "poundcake.fullname" . }}-oven-service ({{ .Values.ovenService.replicaCount }} replica(s))
+{{- if .Values.prepChef.enabled }}
+  - Prep Chef Worker: {{ include "poundcake.fullname" . }}-prep-chef ({{ .Values.prepChef.replicaCount }} replica(s))
 {{- end }}
 {{- if .Values.timer.enabled }}
   - Timer Monitor: {{ include "poundcake.fullname" . }}-timer ({{ .Values.timer.replicaCount }} replica(s))
+{{- end }}
+{{- if .Values.dishwasher.enabled }}
+  - Dishwasher Worker: {{ include "poundcake.fullname" . }}-dishwasher ({{ .Values.dishwasher.replicaCount }} replica(s))
 {{- end }}
 {{- if and .Values.redis.enabled .Values.redis.deploy }}
   - Redis: {{ include "poundcake.fullname" . }}-redis

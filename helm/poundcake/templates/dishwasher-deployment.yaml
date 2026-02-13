@@ -1,18 +1,17 @@
-
-{{- if .Values.ovenService.enabled }}
+{{- if .Values.dishwasher.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "poundcake.fullname" . }}-oven-service
+  name: {{ include "poundcake.fullname" . }}-dishwasher
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: oven-service
+    app.kubernetes.io/component: dishwasher
 spec:
-  replicas: {{ .Values.ovenService.replicaCount }}
+  replicas: {{ .Values.dishwasher.replicaCount }}
   selector:
     matchLabels:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: oven-service
+      app.kubernetes.io/component: dishwasher
   template:
     metadata:
       annotations:
@@ -22,7 +21,7 @@ spec:
         {{- end }}
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: oven-service
+        app.kubernetes.io/component: dishwasher
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -39,43 +38,60 @@ spec:
           - -c
           - |
             set -e
-            echo "Waiting for PoundCake API to be ready..."
-
-            MAX_WAIT=300  # 5 minutes
+            MAX_WAIT=300
             ELAPSED=0
             INTERVAL=5
-
             while [ $ELAPSED -lt $MAX_WAIT ]; do
-              if curl -sf http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1/health > /dev/null 2>&1; then
-                echo "✓ PoundCake API is ready"
+              if curl -sf http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1/health >/dev/null 2>&1; then
                 exit 0
               fi
-
-              echo "Waiting for API... (${ELAPSED}s / ${MAX_WAIT}s)"
               sleep $INTERVAL
               ELAPSED=$((ELAPSED + INTERVAL))
             done
-
-            echo "✗ Timeout waiting for PoundCake API"
+            exit 1
+        - name: wait-for-stackstorm
+          image: curlimages/curl:latest
+          command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            MAX_WAIT=300
+            ELAPSED=0
+            INTERVAL=5
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" {{ include "poundcake.stackstormApiUrl" . }}/v1/actions || true)
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+                exit 0
+              fi
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
             exit 1
       containers:
-        - name: oven-service
+        - name: dishwasher
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "kitchen/prep_chef.py"]
+          command: ["python", "kitchen/dishwasher.py"]
           env:
             - name: POUNDCAKE_API_URL
               value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
-            - name: OVEN_INTERVAL
-              value: {{ .Values.ovenService.interval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            - name: DISHWASHER_DEFAULT_DURATION
+              value: {{ .Values.dishwasher.defaultDuration | quote }}
+            - name: DISHWASHER_DEFAULT_TIMEOUT
+              value: {{ .Values.dishwasher.defaultTimeout | quote }}
+            - name: DISHWASHER_PRUNE_MISSING
+              value: {{ .Values.dishwasher.pruneMissing | quote }}
+            - name: DISHWASHER_INTERVAL
+              value: {{ .Values.dishwasher.interval | quote }}
             - name: SERVICE_NAME
-              value: "prep-chef"
+              value: "dishwasher"
           resources:
-            {{- toYaml .Values.ovenService.resources | nindent 12 }}
+            {{- toYaml .Values.dishwasher.resources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

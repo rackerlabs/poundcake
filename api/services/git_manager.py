@@ -9,6 +9,7 @@
 import os
 import shutil
 import tempfile
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +43,7 @@ class GitManager:
             return False
 
         try:
-            import git
+            git = importlib.import_module("git")
         except ImportError:
             logger.error("GitPython not installed. Install with: pip install GitPython")
             return False
@@ -118,7 +119,7 @@ class GitManager:
                 return False, ""
 
         try:
-            import git
+            git = importlib.import_module("git")
         except ImportError:
             logger.error("GitPython not installed")
             return False, ""
@@ -128,9 +129,9 @@ class GitManager:
             repo = git.Repo(self.repo_path)
 
             branch_name = f"poundcake-rule-update-{os.urandom(4).hex()}"
-            current = repo.head.reference
-            new_branch = repo.create_head(branch_name)
-            new_branch.checkout()  # pyright: ignore[reportAttributeAccessIssue]
+            current_ref = str(repo.head.reference)
+            repo.create_head(branch_name)
+            repo.git.checkout(branch_name)
 
             full_path = self.repo_path / file_path
             if full_path.exists():
@@ -152,7 +153,7 @@ class GitManager:
 
             repo.git.push("--set-upstream", "origin", branch_name, env=env)
 
-            current.checkout()  # pyright: ignore[reportAttributeAccessIssue]
+            repo.git.checkout(current_ref)
 
             logger.info(
                 "Committed and pushed file deletion",
@@ -185,7 +186,7 @@ class GitManager:
                 return False, ""
 
         try:
-            import git
+            git = importlib.import_module("git")
         except ImportError:
             logger.error("GitPython not installed")
             return False, ""
@@ -195,9 +196,9 @@ class GitManager:
             repo = git.Repo(self.repo_path)
 
             branch_name = f"poundcake-rule-update-{os.urandom(4).hex()}"
-            current = repo.head.reference
-            new_branch = repo.create_head(branch_name)
-            new_branch.checkout()  # pyright: ignore[reportAttributeAccessIssue]
+            current_ref = str(repo.head.reference)
+            repo.create_head(branch_name)
+            repo.git.checkout(branch_name)
 
             full_path = self.repo_path / file_path
             full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,7 +220,7 @@ class GitManager:
 
             repo.git.push("--set-upstream", "origin", branch_name, env=env)
 
-            current.checkout()  # pyright: ignore[reportAttributeAccessIssue]
+            repo.git.checkout(current_ref)
 
             logger.info(
                 "Committed and pushed changes",

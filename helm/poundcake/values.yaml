@@ -628,7 +628,7 @@ mongodb:
 
 # Celery worker configuration for async task processing
 # NOTE: Celery deployment template not included in this chart version.
-# Worker services (oven, oven-service, timer) handle task processing instead.
+# Worker services (chef, prep-chef, timer) handle task processing instead.
 # Keep enabled for future Celery integration or if using external Celery workers.
 celery:
   # Enable Celery configuration (no deployment template currently)
@@ -656,23 +656,9 @@ celery:
   # Worker concurrency (number of parallel tasks)
   concurrency: 4
 
-# Dish service configuration
+# Chef service configuration
 # Executor service that polls for dishes and triggers their execution
-oven:
-  enabled: true
-  replicaCount: 1
-  pollInterval: 5
-  resources:
-    limits:
-      cpu: 200m
-      memory: 128Mi
-    requests:
-      cpu: 50m
-      memory: 64Mi
-
-# Dispatcher service configuration
-# Polls API and triggers baking operations
-dispatcher:
+chef:
   enabled: true
   replicaCount: 1
   interval: 5
@@ -684,9 +670,9 @@ dispatcher:
       cpu: 50m
       memory: 64Mi
 
-# Dish-service configuration
-# Dispatcher service that converts orders into oven objects
-ovenService:
+# Prep chef service configuration
+# Polls API and converts new orders into dishes.
+prepChef:
   enabled: true
   replicaCount: 1
   interval: 5
@@ -699,7 +685,7 @@ ovenService:
       memory: 64Mi
 
 # Timer service configuration
-# Monitoring service that tracks oven execution status in StackStorm
+# Monitoring service that tracks dish execution status in StackStorm
 timer:
   enabled: true
   replicaCount: 1
@@ -712,6 +698,38 @@ timer:
     requests:
       cpu: 50m
       memory: 64Mi
+
+# Dishwasher service configuration
+# Periodic sync job that reconciles StackStorm content/state.
+dishwasher:
+  enabled: true
+  replicaCount: 1
+  interval: 300
+  defaultDuration: 60
+  defaultTimeout: 300
+  pruneMissing: false
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Bootstrap jobs configuration
+# Includes compatibility jobs that mirror docker-compose startup flow.
+bootstrap:
+  # One-shot job that mirrors poundcake-pack-init.
+  packInit:
+    enabled: true
+    image: alpine:3.19
+
+  # One-shot job that mirrors poundcake-bootstrap (dishwasher in bootstrap mode).
+  poundcakeBootstrap:
+    enabled: true
+    defaultDuration: 60
+    defaultTimeout: 300
+    pruneMissing: false
 
 # Bakery service configuration
 # API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)

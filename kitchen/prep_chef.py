@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
 API_URL = f"{POUNDCAKE_API_URL}/api/v1"
-OVEN_INTERVAL = int(os.getenv("OVEN_INTERVAL", "5"))
+PREP_INTERVAL = int(os.getenv("PREP_INTERVAL", "5"))
 
 # System request ID for prep chef operations
 SYSTEM_REQ_ID = "SYSTEM-PREP-CHEF"
@@ -34,7 +34,7 @@ def prep_loop() -> None:
     wait_for_api(API_URL, SYSTEM_REQ_ID, logger)
     logger.info(
         "Starting prep chef",
-        extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": OVEN_INTERVAL},
+        extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": PREP_INTERVAL},
     )
     api_unavailable_since: float | None = None
 
@@ -60,7 +60,7 @@ def prep_loop() -> None:
                         "latency_ms": latency_ms,
                     },
                 )
-                time.sleep(OVEN_INTERVAL)
+                time.sleep(PREP_INTERVAL)
                 continue
 
             if api_unavailable_since is not None:
@@ -138,7 +138,7 @@ def prep_loop() -> None:
                     extra={"req_id": SYSTEM_REQ_ID, "error": str(e)},
                 )
 
-        time.sleep(OVEN_INTERVAL)
+        time.sleep(PREP_INTERVAL)
 
 
 if __name__ == "__main__":
