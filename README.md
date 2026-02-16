@@ -263,3 +263,7 @@ See `docs/API_ENDPOINTS.md`.
 ## Troubleshooting
 
 See `docs/TROUBLESHOOTING.md`.
+
+## Developer Workflow
+
+See `docs/developer.md` for fork-based package publishing and lab deployment steps.
