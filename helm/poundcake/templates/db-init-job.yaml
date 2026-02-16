@@ -1,5 +1,5 @@
 
-{{- if or .Values.database.url .Values.database.existingSecret .Values.mariadbOperator.enabled }}
+{{- if or .Values.database.existingSecret .Values.mariadbOperator.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -125,16 +125,12 @@ spec:
           echo "Migration Complete"
           echo "========================================"
         env:
-          {{- if or .Values.database.url .Values.database.existingSecret }}
+          {{- if .Values.database.existingSecret }}
           - name: POUNDCAKE_DATABASE_URL
-            {{- if .Values.database.existingSecret }}
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.database.existingSecret }}
                 key: {{ .Values.database.secretKey }}
-            {{- else }}
-            value: {{ .Values.database.url | quote }}
-            {{- end }}
           {{- else if .Values.mariadbOperator.enabled }}
           - name: MARIADB_PASSWORD
             valueFrom:

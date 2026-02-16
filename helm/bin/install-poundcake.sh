@@ -1,59 +1,112 @@
-#!/bin/bash
-#  ___                        _  ____      _
-# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
-# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
-# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
-# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-#
-# shellcheck disable=SC2124,SC2145,SC2294
+#!/usr/bin/env bash
 
-# Configuration
-NAMESPACE="${POUNDCAKE_NAMESPACE:-poundcake}"
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HELM_DIR="$(dirname "$SCRIPT_DIR")"
+source "${HELM_DIR}/scripts/common-functions.sh"
+
+SERVICE_NAME="${POUNDCAKE_SERVICE_NAME:-poundcake}"
+NAMESPACE="${POUNDCAKE_NAMESPACE:-rackspace}"
 RELEASE_NAME="${POUNDCAKE_RELEASE_NAME:-poundcake}"
-CHART_REPO="oci://ghcr.io/aedan/charts/poundcake"
+CHART_REPO="${POUNDCAKE_CHART_REPO:-oci://ghcr.io/aedan/charts/poundcake}"
+VERSION_FILE="/etc/genestack/helm-chart-versions.yaml"
 GLOBAL_OVERRIDES_DIR="/etc/genestack/helm-configs/global_overrides"
 SERVICE_CONFIG_DIR="/etc/genestack/helm-configs/poundcake"
 BASE_OVERRIDES="/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml"
+KUSTOMIZE_RENDERER="/etc/genestack/kustomize/kustomize.sh"
+KUSTOMIZE_OVERLAY_DIR="/etc/genestack/kustomize/poundcake/overlay"
+KUSTOMIZE_OVERLAY_ARG="poundcake/overlay"
 
-# Read poundcake version from helm-chart-versions.yaml
-VERSION_FILE="/etc/genestack/helm-chart-versions.yaml"
-if [ -f "$VERSION_FILE" ]; then
-    # Extract poundcake version using grep and sed
-    POUNDCAKE_VERSION=$(grep 'poundcake:' "$VERSION_FILE" | sed 's/.*poundcake: *//')
-fi
+ROTATE_SECRETS=false
+VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
+SKIP_PREFLIGHT=false
+PASSTHROUGH_ARGS=()
+POST_RENDER_ARGS=()
 
-# Use environment variable as fallback, or default to "latest"
-POUNDCAKE_VERSION="${POUNDCAKE_VERSION:-${POUNDCAKE_CHART_VERSION:-0.1.10}}"
-
-echo "Installing PoundCake version: ${POUNDCAKE_VERSION}"
-
-HELM_CMD="helm upgrade --install ${RELEASE_NAME} ${CHART_REPO} \
-  --version ${POUNDCAKE_VERSION} \
-  --namespace=${NAMESPACE} \
-  --create-namespace \
-  --timeout 120m"
-
-# Add post-renderer if available AND overlay exists
-if [ -f "/etc/genestack/kustomize/kustomize.sh" ] && [ -d "/etc/genestack/kustomize/poundcake/overlay" ]; then
-    HELM_CMD+=" --post-renderer /etc/genestack/kustomize/kustomize.sh"
-    HELM_CMD+=" --post-renderer-args poundcake/overlay"
-fi
-
-# Add base overrides if they exist
-if [ -f "${BASE_OVERRIDES}" ]; then
-    HELM_CMD+=" -f ${BASE_OVERRIDES}"
-fi
-
-for dir in "$GLOBAL_OVERRIDES_DIR" "$SERVICE_CONFIG_DIR"; do
-    if compgen -G "${dir}/*.yaml" > /dev/null; then
-        for yaml_file in "${dir}"/*.yaml; do
-            HELM_CMD+=" -f ${yaml_file}"
-        done
-    fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --rotate-secrets)
+      ROTATE_SECRETS=true
+      shift
+      ;;
+    --validate)
+      VALIDATE=true
+      shift
+      ;;
+    --skip-preflight)
+      SKIP_PREFLIGHT=true
+      shift
+      ;;
+    *)
+      PASSTHROUGH_ARGS+=("$1")
+      shift
+      ;;
+  esac
 done
 
-HELM_CMD+=" $@"
+if [[ "$SKIP_PREFLIGHT" != "true" ]]; then
+  perform_preflight_checks
+fi
+
+POUNDCAKE_VERSION="$(get_chart_version "poundcake" "$VERSION_FILE")"
+
+if [[ -z "${POUNDCAKE_VERSION}" ]]; then
+  echo "Error: could not determine PoundCake chart version from ${VERSION_FILE} (key: poundcake)." >&2
+  exit 1
+fi
+
+echo "Installing PoundCake chart version: ${POUNDCAKE_VERSION}"
+
+OVERRIDE_ARGS=()
+if [[ -f "$BASE_OVERRIDES" ]]; then
+  OVERRIDE_ARGS+=("-f" "$BASE_OVERRIDES")
+fi
+
+if [[ -d "$GLOBAL_OVERRIDES_DIR" ]] && compgen -G "${GLOBAL_OVERRIDES_DIR}/*.yaml" >/dev/null; then
+  for yaml_file in "${GLOBAL_OVERRIDES_DIR}"/*.yaml; do
+    OVERRIDE_ARGS+=("-f" "$yaml_file")
+  done
+fi
+
+if [[ -d "$SERVICE_CONFIG_DIR" ]] && compgen -G "${SERVICE_CONFIG_DIR}/*.yaml" >/dev/null; then
+  for yaml_file in "${SERVICE_CONFIG_DIR}"/*.yaml; do
+    OVERRIDE_ARGS+=("-f" "$yaml_file")
+  done
+fi
+
+# Add post-renderer if available AND overlay exists.
+if [[ -f "$KUSTOMIZE_RENDERER" && -d "$KUSTOMIZE_OVERLAY_DIR" ]]; then
+  POST_RENDER_ARGS+=("--post-renderer" "$KUSTOMIZE_RENDERER")
+  POST_RENDER_ARGS+=("--post-renderer-args" "$KUSTOMIZE_OVERLAY_ARG")
+fi
+
+if [[ "$ROTATE_SECRETS" == "true" ]]; then
+  rotate_chart_secrets "$NAMESPACE" "$RELEASE_NAME"
+fi
+
+if [[ "$VALIDATE" == "true" ]]; then
+  run_helm_validation "$CHART_REPO" "$POUNDCAKE_VERSION" "$NAMESPACE" "$RELEASE_NAME" \
+    "${OVERRIDE_ARGS[@]}" \
+    "${POST_RENDER_ARGS[@]}" \
+    "${PASSTHROUGH_ARGS[@]}"
+fi
+
+HELM_CMD=(
+  helm upgrade --install "$RELEASE_NAME" "$CHART_REPO"
+  --version "$POUNDCAKE_VERSION"
+  --namespace "$NAMESPACE"
+  --create-namespace
+  --wait
+  --atomic
+  --cleanup-on-fail
+  --timeout "${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}"
+  "${OVERRIDE_ARGS[@]}"
+  "${POST_RENDER_ARGS[@]}"
+)
 
 echo "Executing Helm command:"
-echo "${HELM_CMD}"
-eval "${HELM_CMD}"
+printf '%q ' "${HELM_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"
+echo
+
+"${HELM_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"

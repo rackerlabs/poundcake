@@ -62,13 +62,14 @@ STACKSTORM SERVICES:
     {{ include "poundcake.stackstormAuthUrl" . }}
 
   Get admin credentials:
-    kubectl get secret {{ .Release.Name }}-stackstorm-ha-st2-auth -n {{ .Release.Namespace }} -o jsonpath='{.data.password}' | base64 -d && echo
+    kubectl get secret {{ include "poundcake.stackstormAuthSecretName" . }} -n {{ .Release.Namespace }} -o jsonpath='{.data.password}' | base64 -d && echo
 
   Access StackStorm CLI:
-    kubectl exec -it deployment/{{ .Release.Name }}-stackstorm-ha-st2client -n {{ .Release.Namespace }} -- st2 action list
+    kubectl exec -it deployment/{{ include "poundcake.stackstormSubchartPrefix" . }}-st2client -n {{ .Release.Namespace }} -- st2 action list
+    Note: st2client is a helper CLI pod and may show little/no logs when idle.
 
   View StackStorm UI (if enabled):
-    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-stackstorm-ha-st2web 8080:80
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "poundcake.stackstormSubchartPrefix" . }}-st2web 8080:80
 
 {{- else }}
 

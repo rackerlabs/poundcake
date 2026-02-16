@@ -3,7 +3,7 @@
 apiVersion: rabbitmq.com/v1beta1
 kind: RabbitmqCluster
 metadata:
-  name: {{ include "poundcake.fullname" . }}-rabbitmq
+  name: {{ include "poundcake.stackstormRabbitmqName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}

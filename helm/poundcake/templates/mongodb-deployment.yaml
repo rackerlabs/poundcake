@@ -3,7 +3,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "poundcake.fullname" . }}-mongodb
+  name: {{ include "poundcake.stackstormMongoName" . }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: mongodb
@@ -50,7 +50,7 @@ spec:
         - name: MONGO_INITDB_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "poundcake.fullname" . }}-mongodb-secret
+              name: {{ include "poundcake.stackstormMongoName" . }}-secret
               key: mongodb-root-password
         - name: MONGO_INITDB_DATABASE
           value: {{ .Values.mongodb.auth.database | quote }}
@@ -87,7 +87,7 @@ spec:
       - name: mongodb-data
         {{- if .Values.mongodb.persistence.enabled }}
         persistentVolumeClaim:
-          claimName: {{ include "poundcake.fullname" . }}-mongodb-data
+          claimName: {{ include "poundcake.stackstormMongoName" . }}-data
         {{- else }}
         emptyDir: {}
         {{- end }}

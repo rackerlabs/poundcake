@@ -31,7 +31,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: api
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -75,16 +75,12 @@ spec:
               value: {{ .Values.config.maxConcurrentRemediations | quote }}
             - name: POUNDCAKE_MAPPINGS_PATH
               value: "/app/config/mappings"
-            {{- if or .Values.database.url .Values.database.existingSecret }}
+            {{- if .Values.database.existingSecret }}
             - name: POUNDCAKE_DATABASE_URL
-              {{- if .Values.database.existingSecret }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecret }}
                   key: {{ .Values.database.secretKey }}
-              {{- else }}
-              value: {{ .Values.database.url | quote }}
-              {{- end }}
             {{- else if .Values.mariadbOperator.enabled }}
             # MariaDB Operator: password from generated secret (URL constructed in command)
             - name: MARIADB_PASSWORD
@@ -105,30 +101,31 @@ spec:
               value: {{ include "poundcake.stackstormAuthUrl" . | quote }}
             - name: POUNDCAKE_STACKSTORM_VERIFY_SSL
               value: {{ .Values.stackstorm.verifySsl | quote }}
-            {{- if or .Values.stackstorm.apiKey .Values.stackstorm.existingSecret }}
+            {{- if .Values.rabbitmq.enabled }}
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.rabbitmqSecretName" . }}
+                  key: {{ .Values.rabbitmq.secretKeys.username }}
+                  optional: true
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.rabbitmqSecretName" . }}
+                  key: {{ .Values.rabbitmq.secretKeys.password }}
+                  optional: true
+            {{- end }}
             - name: POUNDCAKE_STACKSTORM_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.stackstormSecretName" . }}
-                  key: {{ .Values.stackstorm.secretKeys.apiKey }}
+                  name: {{ include "poundcake.stackstormApiKeySecret" . }}
+                  key: {{ include "poundcake.stackstormApiKeySecretKey" . }}
                   optional: true
-            {{- end }}
-            {{- if or .Values.stackstorm.authToken .Values.stackstorm.existingSecret }}
-            - name: POUNDCAKE_STACKSTORM_AUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.stackstormSecretName" . }}
-                  key: {{ .Values.stackstorm.secretKeys.authToken }}
-                  optional: true
-            {{- end }}
             {{- if .Values.stackstorm.adminUser }}
             - name: POUNDCAKE_STACKSTORM_ADMIN_USER
               value: {{ .Values.stackstorm.adminUser | quote }}
             {{- end }}
-            {{- if .Values.stackstorm.adminPassword }}
-            - name: POUNDCAKE_STACKSTORM_ADMIN_PASSWORD
-              value: {{ .Values.stackstorm.adminPassword | quote }}
-            {{- else if .Values.stackstorm.adminPasswordSecret }}
+            {{- if .Values.stackstorm.adminPasswordSecret }}
             - name: POUNDCAKE_STACKSTORM_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -151,10 +148,7 @@ spec:
                   key: {{ .Values.redis.secretKey }}
             {{- end }}
             {{- else }}
-            {{- if .Values.redis.external.password }}
-            - name: POUNDCAKE_REDIS_PASSWORD
-              value: {{ .Values.redis.external.password | quote }}
-            {{- else if .Values.redis.external.existingSecret }}
+            {{- if .Values.redis.external.existingSecret }}
             - name: POUNDCAKE_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:

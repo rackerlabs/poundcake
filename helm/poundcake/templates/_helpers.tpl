@@ -73,6 +73,27 @@ Get the secret name for StackStorm credentials
 {{- end }}
 
 {{/*
+Get StackStorm MongoDB resource name
+*/}}
+{{- define "poundcake.stackstormMongoName" -}}
+{{- .Values.stackstorm.resourceNames.mongodb | default "st2-mongodb" }}
+{{- end }}
+
+{{/*
+Get StackStorm RabbitMQ resource name
+*/}}
+{{- define "poundcake.stackstormRabbitmqName" -}}
+{{- .Values.stackstorm.resourceNames.rabbitmq | default "st2-rabbitmq" }}
+{{- end }}
+
+{{/*
+Get StackStorm Redis resource name
+*/}}
+{{- define "poundcake.stackstormRedisName" -}}
+{{- .Values.stackstorm.resourceNames.redis | default "st2-redis" }}
+{{- end }}
+
+{{/*
 Get the secret name for Redis credentials
 */}}
 {{- define "poundcake.redisSecretName" -}}
@@ -81,7 +102,18 @@ Get the secret name for Redis credentials
 {{- else if and (not .Values.redis.deploy) .Values.redis.external.existingSecret }}
 {{- .Values.redis.external.existingSecret }}
 {{- else }}
-{{- include "poundcake.fullname" . }}-redis
+{{- include "poundcake.stackstormRedisName" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Get the secret name for RabbitMQ credentials
+*/}}
+{{- define "poundcake.rabbitmqSecretName" -}}
+{{- if .Values.rabbitmq.existingSecret }}
+{{- .Values.rabbitmq.existingSecret }}
+{{- else }}
+{{- include "poundcake.stackstormRabbitmqName" . }}
 {{- end }}
 {{- end }}
 
@@ -90,7 +122,7 @@ Get the Redis URL
 */}}
 {{- define "poundcake.redisUrl" -}}
 {{- if .Values.redis.deploy }}
-{{- printf "redis://%s-redis:6379/0" (include "poundcake.fullname" .) }}
+{{- printf "redis://%s:6379/0" (include "poundcake.stackstormRedisName" .) }}
 {{- else }}
 {{- .Values.redis.external.url }}
 {{- end }}
@@ -235,32 +267,38 @@ Get the database URL - prioritizes explicit config over operator
 {{/*
 Get StackStorm API URL - either from subchart service or external URL
 */}}
-{{- define "poundcake.stackstormApiUrl" -}}
-{{- if .Values.stackstorm.chart.enabled }}
-{{- printf "http://%s-stackstorm-ha-st2api.%s.svc.cluster.local:9101" .Release.Name .Release.Namespace }}
-{{- else }}
-{{- .Values.stackstorm.url | required "stackstorm.url is required when stackstorm.chart.enabled is false" }}
+{{- define "poundcake.stackstormSubchartPrefix" -}}
+{{- .Values.stackstorm.subchart.fullnameOverride | default (printf "%s-stackstorm-ha" .Release.Name) }}
 {{- end }}
+
+{{/*
+Get StackStorm auth secret name from subchart
+*/}}
+{{- define "poundcake.stackstormAuthSecretName" -}}
+{{- printf "%s-st2-auth" (include "poundcake.stackstormSubchartPrefix" .) }}
+{{- end }}
+
+{{- define "poundcake.stackstormApiUrl" -}}
+{{- printf "http://%s-st2api.%s.svc.cluster.local:9101" (include "poundcake.stackstormSubchartPrefix" .) .Release.Namespace }}
 {{- end }}
 
 {{/*
 Get StackStorm Auth URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormAuthUrl" -}}
-{{- if .Values.stackstorm.chart.enabled }}
-{{- printf "http://%s-stackstorm-ha-st2auth.%s.svc.cluster.local:9100" .Release.Name .Release.Namespace }}
-{{- else }}
-{{- .Values.stackstorm.authUrl | required "stackstorm.authUrl is required when stackstorm.chart.enabled is false" }}
-{{- end }}
+{{- printf "http://%s-st2auth.%s.svc.cluster.local:9100" (include "poundcake.stackstormSubchartPrefix" .) .Release.Namespace }}
 {{- end }}
 
 {{/*
 Get StackStorm API key secret name
 */}}
 {{- define "poundcake.stackstormApiKeySecret" -}}
-{{- if .Values.stackstorm.chart.enabled }}
-{{- printf "%s-stackstorm-ha-st2-apikeys" .Release.Name }}
-{{- else }}
-{{- .Values.stackstorm.existingSecret | default (printf "%s-stackstorm" (include "poundcake.fullname" .)) }}
+{{- .Values.stackstorm.subchart.apiKeySecretName | default (printf "%s-st2-apikeys" (include "poundcake.stackstormSubchartPrefix" .)) }}
 {{- end }}
+
+{{/*
+Get StackStorm API key secret key
+*/}}
+{{- define "poundcake.stackstormApiKeySecretKey" -}}
+{{- .Values.stackstorm.subchart.apiKeySecretKey | default "api-key" }}
 {{- end }}
