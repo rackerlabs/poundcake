@@ -69,9 +69,7 @@ class Recipe(Base):
     workflow_payload: Mapped[dict[str, Any] | None] = mapped_column(
         MYSQL_JSON, nullable=True
     )  # Orquesta JSON payload
-    workflow_parameters: Mapped[dict[str, Any] | None] = mapped_column(
-        MYSQL_JSON, nullable=True
-    )
+    workflow_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -144,12 +142,16 @@ class Dish(Base):
     req_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
 
     # Unique UUID returned by StackStorm for this specific run
-    workflow_execution_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    workflow_execution_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
 
     order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"), nullable=True)
     recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), nullable=False)
 
-    processing_status: Mapped[str] = mapped_column(String(50), default="new", nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(
+        String(50), default="new", nullable=False, index=True
+    )
     status: Mapped[str | None] = mapped_column(String(50), nullable=True)  # running, etc.
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -228,7 +230,9 @@ class Order(Base):
     req_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     fingerprint: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     alert_status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    processing_status: Mapped[str] = mapped_column(String(50), default="new", nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(
+        String(50), default="new", nullable=False, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
 
     alert_group_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -243,7 +247,9 @@ class Order(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, nullable=False, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
     )
