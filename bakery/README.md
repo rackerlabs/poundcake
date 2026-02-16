@@ -79,6 +79,9 @@ All endpoints are prefixed with `/api/v1`.
 | `POST` | `/api/v1/tickets` | Submit a ticket request (returns 202) |
 | `GET` | `/api/v1/tickets/{correlation_id}` | Get request status by correlation ID |
 
+Bakery now exposes a stable internal `ticket_id` UUID to PoundCake API. External/provider-native
+ticket numbers are stored only inside Bakery.
+
 **POST /api/v1/tickets** request body:
 
 ```json
@@ -298,10 +301,13 @@ All mixer responses follow a consistent format.
 ```json
 {
   "success": true,
-  "ticket_id": "INC0012345",
+  "ticket_id": "3ec48de0-ef52-4c2b-b45c-b58f0ca5c1ef",
   "data": { ... }
 }
 ```
+
+For `update`, `close`, `comment`, and `find`, `request_data.ticket_id` must be this Bakery
+internal UUID (not the external ticket number).
 
 **Search operations:**
 ```json

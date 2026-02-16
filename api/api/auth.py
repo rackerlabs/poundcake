@@ -123,7 +123,9 @@ def verify_credentials(username: str, password: str) -> bool:
         return False
 
     admin_user, admin_pass = credentials
-    return username == admin_user and password == admin_pass
+    return secrets.compare_digest(username, admin_user) and secrets.compare_digest(
+        password, admin_pass
+    )
 
 
 def require_auth_if_enabled(
@@ -137,23 +139,17 @@ def require_auth_if_enabled(
 
     # Alignment with main.py versioned routes
     public_paths = [
-        "/",
-        "/docs",
-        "/redoc",
-        "/openapi.json",
         "/api/v1/health",
         "/api/v1/auth/login",
-        "/metrics",
-        "/api/v1/orders",
-        "/api/v1/webhook",
     ]
 
-    if (
-        request.url.path in public_paths
-        or request.url.path.startswith("/static/")
-        or request.url.path.startswith("/api/v1/cook/")
-    ):
+    if request.url.path in public_paths or request.url.path.startswith("/static/"):
         return None
+
+    internal_key = request.headers.get("X-Internal-API-Key")
+    if settings.auth_internal_api_key and internal_key:
+        if secrets.compare_digest(internal_key, settings.auth_internal_api_key):
+            return "__internal__"
 
     username = validate_session(session_token)
     if not username:
@@ -193,7 +189,7 @@ async def login(request: Request, response: Response) -> SessionResponse:
                 value=token,
                 httponly=True,
                 samesite="lax",
-                secure=False,  # Set to True if using HTTPS
+                secure=not get_settings().debug,
                 path="/",  # Make cookie available to all paths
                 max_age=get_settings().auth_session_timeout,
             )

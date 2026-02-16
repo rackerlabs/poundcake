@@ -48,6 +48,6 @@ async def alertmanager_webhook(
     return WebhookResponse(
         status=result["status"],
         order_id=result.get("order_id"),
-        message=f"Order {result['status']}",
+        message=result.get("message") or f"Order {result['status']}",
         results=result.get("results"),
     )

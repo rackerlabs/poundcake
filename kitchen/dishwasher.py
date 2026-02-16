@@ -13,7 +13,7 @@ from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
 from api.core.config import get_settings
-from kitchen.service_helpers import wait_for_api
+from kitchen.service_helpers import wait_for_api, get_service_headers
 
 setup_logging()
 logger = get_logger("dishwasher")
@@ -35,7 +35,7 @@ def run_sync() -> bool:
             "POST",
             f"{API_BASE_URL}/cook/sync",
             params=params,
-            headers={"X-Request-ID": SYSTEM_REQ_ID},
+            headers=get_service_headers(SYSTEM_REQ_ID),
             timeout=60,
             retries=POLLER_RETRIES,
         )

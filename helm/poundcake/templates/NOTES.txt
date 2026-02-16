@@ -28,6 +28,10 @@ To access the application:
 
 Configure Alertmanager to send webhooks to:
   http://{{ include "poundcake.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/api/v1/webhook
+{{- if .Values.auth.enabled }}
+  Include header:
+    X-Internal-API-Key: $(kubectl get secret {{ include "poundcake.fullname" . }}-admin -n {{ .Release.Namespace }} -o jsonpath='{.data.internal-api-key}' | base64 -d)
+{{- end }}
 
 COMPONENTS DEPLOYED:
   - API Server: {{ include "poundcake.fullname" . }}
@@ -120,6 +124,9 @@ AUTHENTICATION ENABLED:
 
   To retrieve the admin password, run:
     kubectl get secret {{ include "poundcake.fullname" . }}-admin -n {{ .Release.Namespace }} -o jsonpath='{.data.password}' | base64 -d && echo
+
+  To retrieve the internal service API key, run:
+    kubectl get secret {{ include "poundcake.fullname" . }}-admin -n {{ .Release.Namespace }} -o jsonpath='{.data.internal-api-key}' | base64 -d && echo
 
 {{- end }}
 

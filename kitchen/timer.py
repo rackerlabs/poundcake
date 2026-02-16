@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from api.core.logging import setup_logging, get_logger
 from api.core.config import get_settings
 from api.core.statuses import ST2_TERMINAL_STATUSES, ST2_FAILURE_STATUSES
-from kitchen.service_helpers import wait_for_api
+from kitchen.service_helpers import wait_for_api, get_service_headers
 
 # Configuration
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
@@ -84,7 +84,7 @@ def update_dish(
             "PUT",
             f"{API_BASE_URL}/dishes/{dish_id}",
             json=payload,
-            headers={"X-Request-ID": req_id},
+            headers=get_service_headers(req_id),
             timeout=10,
             retries=POLLER_RETRIES,
         )
@@ -108,11 +108,12 @@ def cancel_execution(execution_id: str, req_id: str) -> bool:
         resp = request_with_retry_sync(
             "PUT",
             f"{API_BASE_URL}/cook/executions/{execution_id}",
-            headers={"X-Request-ID": req_id},
+            headers=get_service_headers(req_id),
             timeout=10,
             retries=POLLER_RETRIES,
         )
         latency_ms = int((time.time() - start_time) * 1000)
+        resp.raise_for_status()
         return True
     except Exception as e:
         latency_ms = int((time.time() - start_time) * 1000)
@@ -288,7 +289,7 @@ def monitor_dishes() -> None:
             st2_resp = request_with_retry_sync(
                 "GET",
                 f"{API_BASE_URL}/cook/executions/{execution_id}",
-                headers={"X-Request-ID": req_id},
+                headers=get_service_headers(req_id),
                 timeout=10,
                 retries=POLLER_RETRIES,
             )
@@ -308,7 +309,7 @@ def monitor_dishes() -> None:
                         tasks_resp = request_with_retry_sync(
                             "GET",
                             f"{API_BASE_URL}/cook/executions/{execution_id}/tasks",
-                            headers={"X-Request-ID": req_id},
+                            headers=get_service_headers(req_id),
                             timeout=10,
                             retries=POLLER_RETRIES,
                         )
@@ -347,7 +348,7 @@ def monitor_dishes() -> None:
                             "GET",
                             f"{API_BASE_URL}/cook/executions",
                             params={"parent": execution_id, "limit": 1000},
-                            headers={"X-Request-ID": req_id},
+                            headers=get_service_headers(req_id),
                             timeout=10,
                             retries=POLLER_RETRIES,
                         )
@@ -380,7 +381,7 @@ def monitor_dishes() -> None:
                             "GET",
                             f"{API_BASE_URL}/cook/executions",
                             params={"parent": execution_id, "limit": 1000},
-                            headers={"X-Request-ID": req_id},
+                            headers=get_service_headers(req_id),
                             timeout=10,
                             retries=POLLER_RETRIES,
                         )
@@ -431,7 +432,7 @@ def monitor_dishes() -> None:
                             ing_resp = request_with_retry_sync(
                                 "GET",
                                 f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients",
-                                headers={"X-Request-ID": req_id},
+                                headers=get_service_headers(req_id),
                                 timeout=10,
                                 retries=POLLER_RETRIES,
                             )
@@ -479,7 +480,7 @@ def monitor_dishes() -> None:
                                 "POST",
                                 f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients/bulk",
                                 json={"items": items},
-                                headers={"X-Request-ID": req_id},
+                                headers=get_service_headers(req_id),
                                 timeout=10,
                                 retries=POLLER_RETRIES,
                             )
@@ -497,7 +498,7 @@ def monitor_dishes() -> None:
                         dish,
                         req_id,
                         processing_status=processing_status,
-                        status=st2_status,
+                        status="failed" if processing_status == "failed" else "completed",
                         error_msg=err,
                         final_status=True,
                         result=dish_result,

@@ -252,6 +252,11 @@ DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
 # StackStorm
 POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
 POUNDCAKE_ST2_PACK_ROOT=/app/stackstorm-packs
+
+# Auth (required when auth is enabled)
+POUNDCAKE_AUTH_DEV_USERNAME=admin
+POUNDCAKE_AUTH_DEV_PASSWORD=change-me
+POUNDCAKE_AUTH_INTERNAL_API_KEY=shared-internal-key
 ```
 
 `config/st2_api_key` is created by `st2client` during bootstrap.

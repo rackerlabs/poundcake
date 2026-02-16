@@ -12,7 +12,7 @@ from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
 from api.core.config import get_settings
-from kitchen.service_helpers import wait_for_api
+from kitchen.service_helpers import wait_for_api, get_service_headers
 
 # Initialize logging with standardized configuration
 setup_logging()
@@ -48,7 +48,7 @@ def run_chef() -> None:
                 "GET",
                 f"{API_BASE_URL}/dishes",
                 params={"processing_status": "new", "limit": 1},
-                headers={"X-Request-ID": SYSTEM_REQ_ID},
+                headers=get_service_headers(SYSTEM_REQ_ID),
                 timeout=10,
                 retries=POLLER_RETRIES,
             )
@@ -87,7 +87,7 @@ def run_chef() -> None:
             claim_resp = request_with_retry_sync(
                 "POST",
                 f"{API_BASE_URL}/dishes/{dish_id}/claim",
-                headers={"X-Request-ID": req_id},
+                headers=get_service_headers(req_id),
                 timeout=10,
                 retries=POLLER_RETRIES,
             )
@@ -135,7 +135,7 @@ def run_chef() -> None:
                 resp = request_with_retry_sync(
                     "GET",
                     f"{API_BASE_URL}/cook/actions/{workflow_id}",
-                    headers={"X-Request-ID": req_id},
+                    headers=get_service_headers(req_id),
                     timeout=10,
                     retries=POLLER_RETRIES,
                 )
@@ -149,7 +149,7 @@ def run_chef() -> None:
                         "POST",
                         f"{API_BASE_URL}/cook/workflows/register",
                         json=recipe,
-                        headers={"X-Request-ID": req_id},
+                        headers=get_service_headers(req_id),
                         timeout=30,
                         retries=POLLER_RETRIES,
                     )
@@ -164,7 +164,7 @@ def run_chef() -> None:
                         json={
                             "workflow_id": workflow_id,
                         },
-                        headers={"X-Request-ID": req_id},
+                        headers=get_service_headers(req_id),
                         timeout=10,
                         retries=POLLER_RETRIES,
                     )
@@ -177,7 +177,7 @@ def run_chef() -> None:
                         "PATCH",
                         f"{API_BASE_URL}/dishes/{dish_id}",
                         json={"processing_status": "failed", "error_message": str(e)},
-                        headers={"X-Request-ID": req_id},
+                        headers=get_service_headers(req_id),
                         timeout=10,
                         retries=POLLER_RETRIES,
                     )
@@ -190,7 +190,7 @@ def run_chef() -> None:
                     "POST",
                     f"{API_BASE_URL}/cook/execute",
                     json={"action": workflow_id, "parameters": workflow_parameters},
-                    headers={"X-Request-ID": req_id},
+                    headers=get_service_headers(req_id),
                     timeout=30,
                     retries=POLLER_RETRIES,
                 )
@@ -202,7 +202,7 @@ def run_chef() -> None:
                     "PATCH",
                     f"{API_BASE_URL}/dishes/{dish_id}",
                     json={"workflow_execution_id": st2_exec_id},
-                    headers={"X-Request-ID": req_id},
+                    headers=get_service_headers(req_id),
                     timeout=10,
                     retries=CHEF_PATCH_RETRIES,
                     retry_backoff_seconds=CHEF_PATCH_RETRY_BACKOFF_SECONDS,
@@ -237,7 +237,7 @@ def run_chef() -> None:
                     "PATCH",
                     f"{API_BASE_URL}/dishes/{dish_id}",
                     json={"processing_status": "failed", "error_message": str(e)},
-                    headers={"X-Request-ID": req_id},
+                    headers=get_service_headers(req_id),
                     timeout=10,
                     retries=POLLER_RETRIES,
                 )

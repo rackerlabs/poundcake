@@ -181,10 +181,11 @@ class Settings(BaseSettings):
     auth_secret_namespace: str = "poundcake"
     auth_session_timeout: int = 86400
     auth_secret_key: str = Field(default_factory=lambda: os.urandom(32).hex())
+    auth_internal_api_key: str = ""
 
     # Development/local auth fallback
-    auth_dev_username: str = "admin"
-    auth_dev_password: str = "chained-to-the-oven"
+    auth_dev_username: str = ""
+    auth_dev_password: str = ""
 
 
 settings = Settings()

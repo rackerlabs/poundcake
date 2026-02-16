@@ -51,7 +51,9 @@ class TicketRequestResponse(TicketRequestBase):
     """Schema for ticket request response."""
 
     id: int
-    ticket_id: Optional[str] = None
+    ticket_id: Optional[str] = Field(
+        None, description="Bakery internal ticket UUID (never provider-native ID)"
+    )
     status: str
     error_message: Optional[str] = None
     created_at: datetime
@@ -69,7 +71,9 @@ class MessageBase(BaseModel):
     correlation_id: str
     mixer_type: str
     status: str
-    ticket_id: Optional[str] = None
+    ticket_id: Optional[str] = Field(
+        None, description="Bakery internal ticket UUID (never provider-native ID)"
+    )
     response_data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
 

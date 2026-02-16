@@ -13,7 +13,7 @@ from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
 from api.core.config import get_settings
-from kitchen.service_helpers import wait_for_api
+from kitchen.service_helpers import wait_for_api, get_service_headers
 
 # Initialize logging with standardized configuration
 setup_logging()
@@ -46,6 +46,7 @@ def prep_loop() -> None:
                 "GET",
                 f"{API_URL}/orders",
                 params={"processing_status": "new", "limit": POLL_LIMIT},
+                headers=get_service_headers(SYSTEM_REQ_ID),
                 timeout=10,
                 retries=POLLER_RETRIES,
             )
@@ -78,7 +79,7 @@ def prep_loop() -> None:
                 order_id = order.get("id")
 
                 # Pass the original Request ID to the next hop
-                headers = {"X-Request-ID": req_id}
+                headers = get_service_headers(req_id)
 
                 logger.info(
                     "Preparing order for cooking",

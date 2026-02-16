@@ -540,8 +540,12 @@ auth:
   enabled: true
   # Session timeout in seconds (default: 24 hours)
   sessionTimeout: 86400
+  # Shared internal API key for service-to-service auth (API <-> workers).
+  # If empty, Helm will generate one and persist it in the admin secret.
+  internalApiKey: ""
   # Secret name will be: <release-name>-poundcake-admin
   # Get password with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.password}' | base64 -d
+  # Get internal key with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d
 
 # Database configuration (MySQL/MariaDB)
 # Required for persistent storage of orders, mappings, and execution history
