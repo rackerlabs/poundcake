@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 cd "$PROJECT_ROOT"
 
@@ -39,7 +39,7 @@ fi
 echo "[OK] Docker found"
 
 # Check Docker Compose
-if ! command -v docker compose &> /dev/null; then
+if ! docker compose -f docker/docker-compose.yml version &> /dev/null; then
     echo "ERROR: Docker Compose is not installed"
     exit 1
 fi
@@ -74,7 +74,7 @@ echo ""
 echo "Step 3: Starting services..."
 echo "This will start 12+ services (may take a moment)..."
 
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 echo "[OK] Services started"
 
@@ -97,7 +97,7 @@ echo "Step 5: Verifying deployment..."
 # Check services
 echo ""
 echo "Service Status:"
-docker compose ps
+docker compose -f docker/docker-compose.yml ps
 
 # Test API health
 echo ""
@@ -126,10 +126,10 @@ echo "  2. View API documentation:"
 echo "     http://localhost:8000/docs"
 echo ""
 echo "  3. Monitor logs:"
-echo "     docker compose logs -f"
+echo "     docker compose -f docker/docker-compose.yml logs -f"
 echo ""
 echo "  4. Check service status:"
-echo "     docker compose ps"
+echo "     docker compose -f docker/docker-compose.yml ps"
 echo ""
 echo "Available endpoints:"
 echo "  - PoundCake API: http://localhost:8000"
@@ -137,8 +137,8 @@ echo "  - API Docs: http://localhost:8000/docs"
 echo "  - RabbitMQ Management: http://localhost:15672"
 echo ""
 echo "To stop services:"
-echo "  docker compose down"
+echo "  docker compose -f docker/docker-compose.yml down"
 echo ""
 echo "To stop and remove all data:"
-echo "  docker compose down -v"
+echo "  docker compose -f docker/docker-compose.yml down -v"
 echo ""
