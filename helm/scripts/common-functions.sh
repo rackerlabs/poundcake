@@ -25,6 +25,28 @@ perform_preflight_checks() {
   check_cluster_connection
 }
 
+ensure_oci_registry_auth() {
+  local chart_ref=$1
+
+  if [[ "$chart_ref" != oci://* ]]; then
+    return 0
+  fi
+
+  local registry
+  registry="${chart_ref#oci://}"
+  registry="${registry%%/*}"
+
+  local username="${HELM_REGISTRY_USERNAME:-${GHCR_USERNAME:-${GITHUB_ACTOR:-}}}"
+  local password="${HELM_REGISTRY_PASSWORD:-${GHCR_TOKEN:-${CR_PAT:-${GITHUB_TOKEN:-}}}}"
+
+  if [[ -n "$username" && -n "$password" ]]; then
+    echo "Authenticating Helm OCI client to ${registry} as ${username}..."
+    printf '%s' "$password" | helm registry login "$registry" -u "$username" --password-stdin >/dev/null
+  elif [[ "$registry" == "ghcr.io" ]]; then
+    echo "Note: ${chart_ref} is an OCI chart in GHCR. If it is private, export HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD (or GHCR_USERNAME/GHCR_TOKEN)." >&2
+  fi
+}
+
 get_chart_version() {
   local service=$1
   local version_file=$2

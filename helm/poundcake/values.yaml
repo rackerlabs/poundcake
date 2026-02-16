@@ -23,7 +23,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/rackerlabs/poundcake
+  repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
   tag: "d5dbf49"  # Git SHA tag from build workflow
 
@@ -59,7 +59,7 @@ service:
 ui:
   enabled: true
   image:
-    repository: ghcr.io/rackerlabs/poundcake-ui
+    repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
     tag: "d5dbf49"  # Git SHA tag from build workflow
   service:
@@ -790,7 +790,7 @@ bakery:
 
   # Bakery image configuration
   image:
-    repository: ghcr.io/rackerlabs/poundcake-bakery
+    repository: ghcr.io/aedan/poundcake-bakery
     pullPolicy: IfNotPresent
     tag: ""  # Defaults to chart appVersion if not specified
 

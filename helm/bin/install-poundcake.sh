@@ -9,7 +9,11 @@ source "${HELM_DIR}/scripts/common-functions.sh"
 SERVICE_NAME="${POUNDCAKE_SERVICE_NAME:-poundcake}"
 NAMESPACE="${POUNDCAKE_NAMESPACE:-rackspace}"
 RELEASE_NAME="${POUNDCAKE_RELEASE_NAME:-poundcake}"
-CHART_REPO="${POUNDCAKE_CHART_REPO:-oci://ghcr.io/rackerlabs/charts/poundcake}"
+GHCR_OWNER="${POUNDCAKE_GHCR_OWNER:-aedan}"
+CHART_REPO="${POUNDCAKE_CHART_REPO:-oci://ghcr.io/${GHCR_OWNER}/charts/poundcake}"
+APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
+UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
+BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
 VERSION_FILE="/etc/genestack/helm-chart-versions.yaml"
 GLOBAL_OVERRIDES_DIR="/etc/genestack/helm-configs/global_overrides"
 SERVICE_CONFIG_DIR="/etc/genestack/helm-configs/poundcake"
@@ -57,6 +61,7 @@ if [[ -z "${POUNDCAKE_VERSION}" ]]; then
 fi
 
 echo "Installing PoundCake chart version: ${POUNDCAKE_VERSION}"
+ensure_oci_registry_auth "$CHART_REPO"
 
 OVERRIDE_ARGS=()
 if [[ -f "$BASE_OVERRIDES" ]]; then
@@ -101,6 +106,9 @@ HELM_CMD=(
   --atomic
   --cleanup-on-fail
   --timeout "${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}"
+  --set "image.repository=${APP_IMAGE_REPO}"
+  --set "ui.image.repository=${UI_IMAGE_REPO}"
+  --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
   "${OVERRIDE_ARGS[@]}"
   "${POST_RENDER_ARGS[@]}"
 )
