@@ -190,19 +190,48 @@ output:
   result: <% task(step_5_task5).result %>
 ```
 
-## Quick Start (Docker Compose)
+## Installation
+
+### Unified Launchers
+
+```bash
+# Install via Docker Compose
+./install/install-docker.sh
+
+# Install via Helm
+./install/install-helm.sh
+```
+
+### Helm Install
+
+```bash
+# Helm-based install script
+./helm/bin/install-poundcake.sh
+
+# Optional: pass extra Helm args through
+./helm/bin/install-poundcake.sh -f /path/to/values.yaml
+```
+
+### Docker Compose Install
+
+```bash
+# Docker-based install script
+./docker/bin/install-poundcake.sh
+```
+
+### Docker Compose Quick Start
 
 ```bash
 # Start all services
 
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # Health
 curl http://localhost:8000/api/v1/health
 
 # Logs
 
-docker compose logs -f api prep-chef chef timer dishwasher
+docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
 ```
 
 Services:
@@ -227,7 +256,7 @@ POUNDCAKE_ST2_PACK_ROOT=/app/stackstorm-packs
 
 ## API Reference
 
-See `docs/API_ENDPOINTS.md` or `API_ENDPOINTS.txt`.
+See `docs/API_ENDPOINTS.md`.
 
 ## Troubleshooting
 

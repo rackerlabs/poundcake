@@ -1,4 +1,4 @@
-# Scripts
+# Docker Scripts
 
 ## automated-setup.sh
 
@@ -10,7 +10,7 @@ Removes `config/st2_api_key` so `st2client` regenerates it.
 
 ## quickstart.sh
 
-Local helper for bootstrapping a dev environment.
+Local helper for bootstrapping a Docker Compose dev environment.
 
 ## st2client-help.sh
 

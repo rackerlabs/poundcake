@@ -11,7 +11,7 @@ services:
       POUNDCAKE_LOG_FORMAT: console
     volumes:
       - mariadb_data:/var/lib/mysql
-      - ./docker/mariadb-init:/docker-entrypoint-initdb.d
+      - ./mariadb-init:/docker-entrypoint-initdb.d
     ports:
       - "127.0.0.1:3306:3306"
     networks:
@@ -26,8 +26,8 @@ services:
   # POUNDCAKE SERVICES
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ../Dockerfile
     container_name: poundcake-api
     working_dir: /app
     entrypoint: /app/api/scripts/entrypoint-auto-migrate.sh
@@ -52,9 +52,9 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - .:/app
-      - ./logs:/app/logs
-      - ./config:/app/config
+      - ../:/app
+      - ../logs:/app/logs
+      - ../config:/app/config
       - stackstorm_packs:/app/stackstorm-packs/poundcake
     ports:
       - "8000:8000"
@@ -70,8 +70,8 @@ services:
 
   chef:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ../Dockerfile
     container_name: poundcake-chef
     working_dir: /app
     environment:
@@ -87,8 +87,8 @@ services:
       poundcake-bootstrap:
         condition: service_completed_successfully
     volumes:
-      - .:/app
-      - ./logs:/app/logs
+      - ../:/app
+      - ../logs:/app/logs
     networks:
       - poundcake
     command: python3 kitchen/chef.py
@@ -96,8 +96,8 @@ services:
 
   prep-chef:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ../Dockerfile
     container_name: poundcake-prep-chef
     working_dir: /app
     environment:
@@ -113,8 +113,8 @@ services:
       poundcake-bootstrap:
         condition: service_completed_successfully
     volumes:
-      - .:/app
-      - ./logs:/app/logs
+      - ../:/app
+      - ../logs:/app/logs
     networks:
       - poundcake
     command: python3 kitchen/prep_chef.py
@@ -122,8 +122,8 @@ services:
 
   timer:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ../Dockerfile
     container_name: poundcake-timer
     working_dir: /app
     environment:
@@ -140,9 +140,9 @@ services:
       poundcake-bootstrap:
         condition: service_completed_successfully
     volumes:
-      - .:/app
-      - ./logs:/app/logs
-      - ./config:/app/config:ro
+      - ../:/app
+      - ../logs:/app/logs
+      - ../config:/app/config:ro
     networks:
       - poundcake
     command: python3 kitchen/timer.py
@@ -150,8 +150,8 @@ services:
 
   dishwasher:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ../Dockerfile
     container_name: poundcake-dishwasher
     working_dir: /app
     environment:
@@ -172,9 +172,9 @@ services:
       poundcake-bootstrap:
         condition: service_completed_successfully
     volumes:
-      - .:/app
-      - ./logs:/app/logs
-      - ./config:/app/config:ro
+      - ../:/app
+      - ../logs:/app/logs
+      - ../config:/app/config:ro
     networks:
       - poundcake
     command: python3 kitchen/dishwasher.py
@@ -204,8 +204,8 @@ services:
 
   poundcake-bootstrap:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ../Dockerfile
     container_name: poundcake-bootstrap
     working_dir: /app
     environment:
@@ -226,9 +226,9 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - .:/app
-      - ./logs:/app/logs
-      - ./config:/app/config:ro
+      - ../:/app
+      - ../logs:/app/logs
+      - ../config:/app/config:ro
     networks:
       - poundcake
     command: python3 kitchen/dishwasher.py
@@ -245,7 +245,7 @@ services:
     volumes:
       - mongo_data:/data/db
       # Uses the user creation script for the 'st2' database
-      - ./docker/mongodb-init/01-create-st2-user.sh:/docker-entrypoint-initdb.d/01-create-st2-user.sh:ro
+      - ./mongodb-init/01-create-st2-user.sh:/docker-entrypoint-initdb.d/01-create-st2-user.sh:ro
     networks:
       - poundcake
     healthcheck:
@@ -303,8 +303,8 @@ services:
         condition: service_healthy
     volumes:
       # Mounts the template and entrypoint to enable runtime configuration templating
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
       - stackstorm_packs:/opt/stackstorm/packs/poundcake
     ports:
       - "127.0.0.1:9101:9101"
@@ -331,9 +331,9 @@ services:
       stackstorm-mongodb:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
-      - ./docker/st2-config/htpasswd:/etc/st2/htpasswd:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/htpasswd:/etc/st2/htpasswd:ro
     ports:
       - "127.0.0.1:9100:9100"
     networks:
@@ -352,8 +352,8 @@ services:
     depends_on:
       - stackstorm-api
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
       - stackstorm_packs:/opt/stackstorm/packs/poundcake
     networks:
       - poundcake
@@ -372,8 +372,8 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     ports:
       - "127.0.0.1:9102:9102"
     networks:
@@ -399,8 +399,8 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
       - stackstorm_packs:/opt/stackstorm/packs/poundcake
     networks:
       - poundcake
@@ -425,8 +425,8 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
@@ -450,8 +450,8 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
@@ -475,8 +475,8 @@ services:
       stackstorm-api:
         condition: service_healthy
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
@@ -506,11 +506,11 @@ services:
       ST2_AUTH_PASSWORD: ${ST2_AUTH_PASSWORD:-Ch@ngeMe}
       POUNDCAKE_LOG_FORMAT: json
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
-      - ./scripts/automated-setup.sh:/automated-setup.sh:ro
-      - ./config:/app/config
-      - ./.env:/app/.env
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ../docker/scripts/automated-setup.sh:/automated-setup.sh:ro
+      - ../config:/app/config
+      - ../.env:/app/.env
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
@@ -535,9 +535,9 @@ services:
       ST2_AUTH_PASSWORD: ${ST2_AUTH_PASSWORD:-Ch@ngeMe}
       POUNDCAKE_LOG_FORMAT: json
     volumes:
-      - ./docker/st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
-      - ./docker/st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
-      - ./config:/app/config:ro
+      - ./st2-config/st2.conf.template:/etc/st2/st2.conf.template:ro
+      - ./st2-init/st2-entrypoint.sh:/st2-entrypoint.sh:ro
+      - ../config:/app/config:ro
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]

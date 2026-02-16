@@ -12,6 +12,11 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+cd "$PROJECT_ROOT"
+
 echo "========================================="
 echo "  PoundCake Configuration Cleanup"
 echo "========================================="
@@ -32,9 +37,9 @@ echo "  Cleanup Complete!"
 echo "========================================="
 echo ""
 echo "You can now run a fresh deployment:"
-echo "  docker compose down -v"
-echo "  docker compose build"
-echo "  docker compose up -d"
+echo "  docker compose -f docker/docker-compose.yml down -v"
+echo "  docker compose -f docker/docker-compose.yml build"
+echo "  docker compose -f docker/docker-compose.yml up -d"
 echo ""
 echo "st2client will generate a new API key automatically."
 echo ""

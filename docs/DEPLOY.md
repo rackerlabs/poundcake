@@ -3,13 +3,13 @@
 ## Docker Compose (Local)
 
 ```bash
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 Common logs:
 
 ```bash
-docker compose logs -f api prep-chef chef timer dishwasher
+docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
 ```
 
 ## Service Ports
@@ -34,5 +34,5 @@ curl http://localhost:8000/api/v1/health
 
 ```bash
 rm -f config/st2_api_key
-docker compose restart st2client
+docker compose -f docker/docker-compose.yml restart st2client
 ```

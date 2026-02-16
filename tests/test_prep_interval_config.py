@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_compose_prep_chef_uses_prep_interval_env() -> None:
-    compose_path = REPO_ROOT / "docker-compose.yml"
+    compose_path = REPO_ROOT / "docker" / "docker-compose.yml"
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
 
     prep_chef_env = compose["services"]["prep-chef"]["environment"]
@@ -20,7 +20,7 @@ def test_compose_prep_chef_uses_prep_interval_env() -> None:
 
 
 def test_compose_chef_uses_chef_poll_interval_env() -> None:
-    compose_path = REPO_ROOT / "docker-compose.yml"
+    compose_path = REPO_ROOT / "docker" / "docker-compose.yml"
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
 
     chef_env = compose["services"]["chef"]["environment"]
