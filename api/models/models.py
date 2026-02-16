@@ -63,6 +63,7 @@ class Recipe(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)
 
     # Store the ST2 Ref (e.g. 'my_pack.my_workflow')
     workflow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -109,6 +110,7 @@ class Ingredient(Base):
         String(100), nullable=False, index=True
     )  # ST2 action.ref (e.g. 'core.local')
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)
 
     action_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # ST2 UUID for reuse
     action_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
