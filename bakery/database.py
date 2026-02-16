@@ -18,6 +18,7 @@ engine = create_engine(
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 class Base(DeclarativeBase):
     """Base class for SQLAlchemy declarative models."""
 

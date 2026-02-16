@@ -100,9 +100,7 @@ async def process_ticket_request(
             if not internal_ticket_id:
                 raise ValueError("request_data.ticket_id (Bakery internal UUID) required for find")
 
-            mapping = _get_mapping_by_internal_id(
-                db, ticket_request.mixer_type, internal_ticket_id
-            )
+            mapping = _get_mapping_by_internal_id(db, ticket_request.mixer_type, internal_ticket_id)
             if not mapping:
                 result = {
                     "success": False,

@@ -10,7 +10,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "002"
 down_revision: Union[str, None] = "001"
@@ -34,9 +33,7 @@ def upgrade() -> None:
             name="uq_ticket_id_mappings_internal_ticket_id",
         ),
     )
-    op.create_index(
-        "ix_ticket_id_mappings_id", "ticket_id_mappings", ["id"], unique=False
-    )
+    op.create_index("ix_ticket_id_mappings_id", "ticket_id_mappings", ["id"], unique=False)
     op.create_index(
         "ix_ticket_id_mappings_internal_ticket_id",
         "ticket_id_mappings",
@@ -64,4 +61,3 @@ def downgrade() -> None:
     op.drop_index("ix_ticket_id_mappings_internal_ticket_id", table_name="ticket_id_mappings")
     op.drop_index("ix_ticket_id_mappings_id", table_name="ticket_id_mappings")
     op.drop_table("ticket_id_mappings")
-

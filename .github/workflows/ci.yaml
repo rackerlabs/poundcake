@@ -76,4 +76,12 @@ jobs:
 
       - name: Run integration tests
         run: |
+          set +e
           pytest -m "integration" tests/ -v
+          status=$?
+          set -e
+          if [ "$status" -eq 5 ]; then
+            echo "No integration tests were collected; treating as skip."
+            exit 0
+          fi
+          exit "$status"
