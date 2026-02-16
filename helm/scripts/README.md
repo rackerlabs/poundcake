@@ -6,3 +6,6 @@ Example use cases:
 - chart validation helpers
 - value-generation helpers
 - release/packaging helpers
+
+Current scripts:
+- `common-functions.sh`: shared install helpers (preflight, overrides, validation, rotation).

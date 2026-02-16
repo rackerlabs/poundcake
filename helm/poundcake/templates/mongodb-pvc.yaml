@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "poundcake.fullname" . }}-mongodb-data
+  name: {{ include "poundcake.stackstormMongoName" . }}-data
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: mongodb

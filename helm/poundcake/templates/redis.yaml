@@ -3,7 +3,7 @@
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: Redis
 metadata:
-  name: {{ include "poundcake.fullname" . }}-redis
+  name: {{ include "poundcake.stackstormRedisName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}

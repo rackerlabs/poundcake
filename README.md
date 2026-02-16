@@ -212,6 +212,8 @@ output:
 ./helm/bin/install-poundcake.sh -f /path/to/values.yaml
 ```
 
+Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
+
 ### Docker Compose Install
 
 ```bash

@@ -3,7 +3,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "poundcake.fullname" . }}-mongodb-init
+  name: {{ include "poundcake.stackstormMongoName" . }}-init
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
@@ -16,7 +16,7 @@ spec:
   backoffLimit: 5
   template:
     metadata:
-      name: {{ include "poundcake.fullname" . }}-mongodb-init
+      name: {{ include "poundcake.stackstormMongoName" . }}-init
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: mongodb-init
@@ -58,7 +58,7 @@ spec:
           RETRY_COUNT=0
 
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if mongosh --host {{ include "poundcake.fullname" . }}-mongodb --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+            if mongosh --host {{ include "poundcake.stackstormMongoName" . }} --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
               echo "✓ MongoDB is ready"
               break
             fi
@@ -76,7 +76,7 @@ spec:
           echo "Creating StackStorm user in st2 database..."
 
           # Build MongoDB connection string
-          MONGO_URI="mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@{{ include "poundcake.fullname" . }}-mongodb:27017/admin"
+          MONGO_URI="mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@{{ include "poundcake.stackstormMongoName" . }}:27017/admin"
 
           # Try to create user, update if exists
           mongosh "${MONGO_URI}" --eval "
@@ -120,14 +120,14 @@ spec:
         - name: MONGO_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "poundcake.fullname" . }}-mongodb-secret
+              name: {{ include "poundcake.stackstormMongoName" . }}-secret
               key: mongodb-root-password
         - name: ST2_DB_USERNAME
           value: {{ .Values.mongodb.auth.username | default "stackstorm" | quote }}
         - name: ST2_DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "poundcake.fullname" . }}-mongodb-secret
+              name: {{ include "poundcake.stackstormMongoName" . }}-secret
               key: mongodb-password
         resources:
           requests:
