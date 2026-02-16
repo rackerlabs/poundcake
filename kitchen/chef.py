@@ -19,7 +19,7 @@ setup_logging()
 logger = get_logger(__name__)
 
 # Config
-POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
+POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://poundcake:8080").rstrip("/")
 API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 POLL_INTERVAL = int(os.getenv("CHEF_POLL_INTERVAL", "5"))
 

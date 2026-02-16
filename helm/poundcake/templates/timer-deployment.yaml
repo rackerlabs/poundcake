@@ -94,7 +94,7 @@ spec:
           command: ["python", "kitchen/timer.py"]
           env:
             - name: POUNDCAKE_API_URL
-              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1"
+              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
             - name: ST2_API_URL
               value: {{ printf "%s/v1" (include "poundcake.stackstormApiUrl" .) | quote }}
             - name: TIMER_INTERVAL

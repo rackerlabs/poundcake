@@ -8,6 +8,7 @@
 
 import os
 import socket
+from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func, text, select
@@ -35,7 +36,7 @@ async def check_mongodb() -> ComponentHealth:
 
     try:
         # Try to connect to MongoDB
-        mongodb_host = os.getenv("MONGODB_HOST", "stackstorm-mongodb")
+        mongodb_host = os.getenv("MONGODB_HOST", "poundcake-mongodb")
         mongodb_port = int(os.getenv("MONGODB_PORT", "27017"))
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -56,12 +57,12 @@ async def check_rabbitmq() -> ComponentHealth:
     if not settings.rabbitmq_enabled:
         return ComponentHealth(status="healthy", message="External or disabled")
 
-    rabbitmq_host = os.getenv("RABBITMQ_HOST", "stackstorm-rabbitmq")
+    rabbitmq_host = os.getenv("RABBITMQ_HOST", "poundcake-rabbitmq")
 
     try:
         rabbitmq_port = int(os.getenv("RABBITMQ_MANAGEMENT_PORT", "15672"))
         rabbitmq_user = os.getenv("RABBITMQ_USER", "stackstorm")
-        rabbitmq_password = os.getenv("RABBITMQ_PASSWORD", "password")
+        rabbitmq_password = os.getenv("RABBITMQ_PASSWORD", "stackstorm")
 
         # Try management API
         response = await request_with_retry(
@@ -98,8 +99,13 @@ async def check_redis() -> ComponentHealth:
         return ComponentHealth(status="healthy", message="External or disabled")
 
     try:
-        redis_host = os.getenv("REDIS_HOST", "stackstorm-redis")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_host = os.getenv("REDIS_HOST", "").strip()
+        redis_port = int(os.getenv("REDIS_PORT", "0") or "0")
+        if not redis_host or redis_port <= 0:
+            redis_url = os.getenv("POUNDCAKE_REDIS_URL", settings.redis_url)
+            parsed = urlparse(redis_url)
+            redis_host = redis_host or (parsed.hostname or "poundcake-redis")
+            redis_port = redis_port if redis_port > 0 else (parsed.port or 6379)
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(2)

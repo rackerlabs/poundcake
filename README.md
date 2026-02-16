@@ -250,7 +250,7 @@ Important environment variables:
 DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
 
 # StackStorm
-POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
+POUNDCAKE_STACKSTORM_URL=http://poundcake-st2api:9101
 POUNDCAKE_ST2_PACK_ROOT=/app/stackstorm-packs
 
 # Auth (required when auth is enabled)

@@ -18,7 +18,7 @@ from kitchen.service_helpers import wait_for_api, get_service_headers
 setup_logging()
 logger = get_logger("dishwasher")
 
-POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
+POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://poundcake:8080").rstrip("/")
 API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 DISHWASHER_INTERVAL = int(os.getenv("DISHWASHER_INTERVAL", "0"))
 MARK_BOOTSTRAP = os.getenv("POUNDCAKE_BOOTSTRAP_MARK", "false").lower() == "true"

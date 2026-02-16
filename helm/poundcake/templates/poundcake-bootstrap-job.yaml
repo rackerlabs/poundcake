@@ -51,6 +51,13 @@ spec:
               value: "true"
             - name: SERVICE_NAME
               value: "dishwasher-bootstrap"
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
           resources:
             limits:
               cpu: 200m

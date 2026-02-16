@@ -339,7 +339,7 @@ All configuration is via environment variables. In Kubernetes, non-sensitive val
 |----------|---------|-------------|
 | `ENVIRONMENT` | `production` | Environment name (development enables debug) |
 | `LOG_LEVEL` | `INFO` | Logging level |
-| `DATABASE_HOST` | `bakery-mariadb` | MariaDB hostname |
+| `DATABASE_HOST` | `poundcake-bakery-mariadb` | MariaDB hostname |
 | `DATABASE_PORT` | `3306` | MariaDB port |
 | `DATABASE_USER` | `bakery` | Database username |
 | `DATABASE_PASSWORD` | (required) | Database password (from Secret) |

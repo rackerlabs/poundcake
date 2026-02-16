@@ -18,10 +18,10 @@ This directory contains the background workers that drive execution.
 
 ## Environment Variables
 
-- `API_URL` - PoundCake API base URL (default: `http://api:8000/api/v1`).
+- `POUNDCAKE_API_URL` - PoundCake API base URL (default: `http://poundcake:8080`; workers append `/api/v1`).
 - `POLL_INTERVAL` - Poll interval in seconds.
 
 ## Debug Tips
 
-- Verify StackStorm is running: `curl http://stackstorm-api:9101/v1`
+- Verify StackStorm is running: `curl http://poundcake-st2api:9101/v1`
 - List dishes: `curl http://localhost:8000/api/v1/dishes`

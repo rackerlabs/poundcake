@@ -20,7 +20,7 @@ StackStorm access is via `/api/v1/cook/*` endpoints. Use `config/st2_api_key` fo
 
 ```bash
 DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
-POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
+POUNDCAKE_STACKSTORM_URL=http://poundcake-st2api:9101
 POUNDCAKE_AUTH_DEV_USERNAME=admin
 POUNDCAKE_AUTH_DEV_PASSWORD=change-me
 POUNDCAKE_AUTH_INTERNAL_API_KEY=shared-internal-key
