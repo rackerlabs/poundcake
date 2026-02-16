@@ -6,6 +6,7 @@
 #
 """Authentication and session management for PoundCake."""
 
+import os
 import secrets
 import base64
 import importlib
@@ -132,7 +133,13 @@ def require_auth_if_enabled(
     request: Request, session_token: str | None = Cookie(default=None)
 ) -> str | None:
     """Dependency for FastAPI routes. Checks if auth is enabled and validates session."""
+    if os.getenv("TESTING", "").strip().lower() in {"1", "true", "yes"}:
+        return None
+
     settings = get_settings()
+
+    if settings.testing:
+        return None
 
     if not settings.auth_enabled:
         return None

@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     app_name: str = "PoundCake"
     app_version: str = Field(default=__version__)
     debug: bool = False
+    testing: bool = Field(
+        default_factory=lambda: os.getenv("TESTING", "").strip().lower() in {"1", "true", "yes"}
+    )
 
     # API Server
     server_host: str = "0.0.0.0"

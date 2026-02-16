@@ -498,7 +498,7 @@ def monitor_dishes() -> None:
                         dish,
                         req_id,
                         processing_status=processing_status,
-                        status="failed" if processing_status == "failed" else "completed",
+                        status=st2_status,
                         error_msg=err,
                         final_status=True,
                         result=dish_result,

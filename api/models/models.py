@@ -229,6 +229,7 @@ class Order(Base):
     fingerprint: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     alert_status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     processing_status: Mapped[str] = mapped_column(String(50), default="new", nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
 
     alert_group_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     severity: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)

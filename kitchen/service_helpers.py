@@ -18,7 +18,10 @@ from api.core.config import get_settings
 def get_service_headers(req_id: str) -> dict[str, str]:
     """Build shared headers for internal service-to-service API calls."""
     headers = {"X-Request-ID": req_id}
-    internal_api_key = os.getenv("POUNDCAKE_INTERNAL_API_KEY", "").strip()
+    internal_api_key = (
+        os.getenv("POUNDCAKE_AUTH_INTERNAL_API_KEY", "").strip()
+        or os.getenv("POUNDCAKE_INTERNAL_API_KEY", "").strip()
+    )
     if internal_api_key:
         headers["X-Internal-API-Key"] = internal_api_key
     return headers
