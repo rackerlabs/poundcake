@@ -20,7 +20,7 @@ sequenceDiagram
     participant DW as Dishwasher
 
     Note over AM, API: Phase 1: Intake (pre_heat)
-    AM->>API: POST /api/v1/webhook (with X-Request-ID)
+    AM->>API: POST /api/v1/webhook (with Authorization: Bearer <internal-api-key>)
     API->>DB: Store Order (processing_status: new)
     API-->>AM: 202 Accepted
 
