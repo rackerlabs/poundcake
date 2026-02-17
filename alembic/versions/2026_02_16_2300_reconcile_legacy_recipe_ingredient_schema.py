@@ -113,7 +113,7 @@ def upgrade() -> None:
                   action_parameters = CASE
                     WHEN action_parameters IS NOT NULL THEN action_parameters
                     WHEN parameters IS NULL OR parameters = '' THEN NULL
-                    WHEN JSON_VALID(parameters) THEN CAST(parameters AS JSON)
+                    WHEN JSON_VALID(parameters) THEN parameters
                     ELSE JSON_OBJECT('raw', parameters)
                   END,
                   expected_duration_sec = COALESCE(expected_duration_sec, expected_time_to_completion),
