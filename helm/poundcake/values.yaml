@@ -25,7 +25,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
-  tag: "d5dbf49"  # Git SHA tag from build workflow
+  tag: "2.0.62"  # Release tag
 
 imagePullSecrets: []
 nameOverride: ""
@@ -61,7 +61,7 @@ ui:
   image:
     repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
-    tag: "d5dbf49"  # Git SHA tag from build workflow
+    tag: "2.0.62"  # Release tag
   service:
     type: ClusterIP
     port: 80
@@ -320,6 +320,9 @@ redis:
   external:
     # Redis connection URL (e.g., redis://my-redis:6379/0)
     url: "redis://redis.default.svc.cluster.local:6379/0"
+    # Explicit host/port for components that do TCP health checks.
+    host: "redis.default.svc.cluster.local"
+    port: 6379
     # Password for external Redis
     password: ""
     existingSecret: ""
@@ -540,8 +543,12 @@ auth:
   enabled: true
   # Session timeout in seconds (default: 24 hours)
   sessionTimeout: 86400
+  # Shared internal API key for service-to-service auth (API <-> workers).
+  # If empty, Helm will generate one and persist it in the admin secret.
+  internalApiKey: ""
   # Secret name will be: <release-name>-poundcake-admin
   # Get password with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.password}' | base64 -d
+  # Get internal key with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d
 
 # Database configuration (MySQL/MariaDB)
 # Required for persistent storage of orders, mappings, and execution history
@@ -792,7 +799,7 @@ bakery:
   image:
     repository: ghcr.io/aedan/poundcake-bakery
     pullPolicy: IfNotPresent
-    tag: ""  # Defaults to chart appVersion if not specified
+    tag: "2.0.62"
 
   # Service configuration
   service:

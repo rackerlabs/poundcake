@@ -101,6 +101,13 @@ spec:
               value: {{ .Values.config.logLevel | quote }}
             - name: SERVICE_NAME
               value: "prep-chef"
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
           resources:
             {{- toYaml .Values.prepChef.resources | nindent 12 }}
           volumeMounts:

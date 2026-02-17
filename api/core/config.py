@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     app_name: str = "PoundCake"
     app_version: str = Field(default=__version__)
     debug: bool = False
+    testing: bool = Field(
+        default_factory=lambda: os.getenv("TESTING", "").strip().lower() in {"1", "true", "yes"}
+    )
 
     # API Server
     server_host: str = "0.0.0.0"
@@ -44,21 +47,21 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Database Settings
     # ==========================================================================
-    # Pointing to the 'mariadb' service in docker-compose
-    database_url: str = "mysql+pymysql://poundcake:poundcake@mariadb:3306/poundcake"
+    # Default to in-cluster MariaDB service (overridden by Helm env var in production).
+    database_url: str = "mysql+pymysql://poundcake:poundcake@poundcake-mariadb:3306/poundcake"
     database_echo: bool = False
 
     # ==========================================================================
     # Redis & Celery Settings
     # ==========================================================================
-    # Pointing to the 'redis' service in docker-compose
-    redis_url: str = "redis://redis:6379/0"
+    # Default to in-cluster Redis service (overridden by Helm env var in production).
+    redis_url: str = "redis://poundcake-redis:6379/0"
     redis_password: str = ""
     alert_ttl_hours: int = 24
     lock_timeout_seconds: int = 300
 
-    celery_broker_url: str = "redis://redis:6379/1"
-    celery_result_backend: str = "redis://redis:6379/2"
+    celery_broker_url: str = "redis://poundcake-redis:6379/1"
+    celery_result_backend: str = "redis://poundcake-redis:6379/2"
     celery_task_track_started: bool = True
     celery_task_time_limit: int = 300
     celery_worker_prefetch_multiplier: int = 4
@@ -75,8 +78,8 @@ class Settings(BaseSettings):
     # ==========================================================================
     # StackStorm Settings
     # ==========================================================================
-    stackstorm_url: str = "https://st2web"  # Matches st2 service name
-    stackstorm_auth_url: str = ""
+    stackstorm_url: str = "http://poundcake-st2api:9101"
+    stackstorm_auth_url: str = "http://poundcake-st2auth:9100"
     stackstorm_api_key: str = ""
     stackstorm_auth_token: str = ""
     stackstorm_verify_ssl: bool = False
@@ -110,7 +113,9 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Prometheus Settings
     # ==========================================================================
-    prometheus_url: str = "http://prometheus:9090"
+    prometheus_url: str = (
+        "http://kube-prometheus-stack-prometheus.prometheus.svc.cluster.local:9090"
+    )
     prometheus_verify_ssl: bool = True
     prometheus_reload_enabled: bool = True
     prometheus_reload_url: str = ""
@@ -181,10 +186,11 @@ class Settings(BaseSettings):
     auth_secret_namespace: str = "poundcake"
     auth_session_timeout: int = 86400
     auth_secret_key: str = Field(default_factory=lambda: os.urandom(32).hex())
+    auth_internal_api_key: str = ""
 
     # Development/local auth fallback
-    auth_dev_username: str = "admin"
-    auth_dev_password: str = "chained-to-the-oven"
+    auth_dev_username: str = ""
+    auth_dev_password: str = ""
 
 
 settings = Settings()

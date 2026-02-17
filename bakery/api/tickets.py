@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Ticket management endpoints for Bakery."""
 
+import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from bakery.database import get_db
-from bakery.models import TicketRequest, Message
+from bakery.models import TicketRequest, Message, TicketIdMapping
 from bakery.schemas import (
     TicketRequestCreate,
     TicketRequestResponse,
@@ -15,6 +17,46 @@ from bakery.schemas import (
 from bakery.mixer.factory import get_mixer, list_mixers
 
 router = APIRouter()
+
+
+def _get_mapping_by_internal_id(
+    db: Session, mixer_type: str, internal_ticket_id: str
+) -> TicketIdMapping | None:
+    """Resolve internal UUID to external provider ticket ID."""
+    return (
+        db.query(TicketIdMapping)
+        .filter(
+            TicketIdMapping.mixer_type == mixer_type,
+            TicketIdMapping.internal_ticket_id == internal_ticket_id,
+        )
+        .first()
+    )
+
+
+def _get_or_create_mapping_for_external_id(
+    db: Session, mixer_type: str, external_ticket_id: str
+) -> TicketIdMapping:
+    """Resolve or create internal UUID mapping for a provider ticket ID."""
+    mapping = (
+        db.query(TicketIdMapping)
+        .filter(
+            TicketIdMapping.mixer_type == mixer_type,
+            TicketIdMapping.external_ticket_id == external_ticket_id,
+        )
+        .order_by(TicketIdMapping.id.asc())
+        .first()
+    )
+    if mapping:
+        return mapping
+
+    mapping = TicketIdMapping(
+        internal_ticket_id=str(uuid.uuid4()),
+        mixer_type=mixer_type,
+        external_ticket_id=external_ticket_id,
+    )
+    db.add(mapping)
+    db.flush()
+    return mapping
 
 
 async def process_ticket_request(
@@ -36,6 +78,8 @@ async def process_ticket_request(
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
 
+    ticket_request: TicketRequest | None = None
+
     try:
         # Get request from database
         ticket_request = db.query(TicketRequest).filter(TicketRequest.id == request_id).first()
@@ -49,26 +93,113 @@ async def process_ticket_request(
         # Get appropriate mixer
         mixer = get_mixer(ticket_request.mixer_type)
 
+        request_data = deepcopy(ticket_request.request_data or {})
+        original_internal_ticket_id = request_data.get("ticket_id")
+        if ticket_request.action == "find":
+            internal_ticket_id = str(request_data.get("ticket_id", "")).strip()
+            if not internal_ticket_id:
+                raise ValueError("request_data.ticket_id (Bakery internal UUID) required for find")
+
+            mapping = _get_mapping_by_internal_id(db, ticket_request.mixer_type, internal_ticket_id)
+            if not mapping:
+                result = {
+                    "success": False,
+                    "error": f"No ticket mapping found for ticket_id={internal_ticket_id}",
+                }
+                public_ticket_id = None
+            else:
+                result = {
+                    "success": True,
+                    "ticket_id": internal_ticket_id,
+                    "data": {
+                        "ticket_id": internal_ticket_id,
+                        "mixer_type": ticket_request.mixer_type,
+                        "found": True,
+                    },
+                }
+                public_ticket_id = internal_ticket_id
+
+            response_data = deepcopy(result)
+            if not public_ticket_id:
+                response_data.pop("ticket_id", None)
+
+            message = Message(
+                correlation_id=ticket_request.correlation_id,
+                ticket_id=public_ticket_id,
+                mixer_type=ticket_request.mixer_type,
+                status="success" if result.get("success") else "error",
+                response_data=response_data,
+                error_message=result.get("error"),
+            )
+            db.add(message)
+
+            ticket_request.status = "success" if result.get("success") else "error"  # type: ignore[assignment]
+            ticket_request.ticket_id = public_ticket_id  # type: ignore[assignment]
+            ticket_request.error_message = result.get("error")  # type: ignore[assignment]
+            ticket_request.completed_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            db.commit()
+            return
+
+        mixer_action = ticket_request.action
+
+        # Translate Bakery internal UUID to provider ticket ID for mutating actions.
+        if mixer_action in {"update", "close", "comment"}:
+            if not original_internal_ticket_id:
+                raise ValueError(
+                    "request_data.ticket_id (Bakery internal UUID) required for this action"
+                )
+            mapping = _get_mapping_by_internal_id(
+                db,
+                ticket_request.mixer_type,
+                str(original_internal_ticket_id),
+            )
+            if not mapping:
+                raise ValueError(
+                    f"No ticket mapping found for ticket_id={original_internal_ticket_id}"
+                )
+            request_data["ticket_id"] = mapping.external_ticket_id
+
         # Process request through mixer
         result = await mixer.process_request(
-            action=ticket_request.action,
-            data=ticket_request.request_data,
+            action=mixer_action,
+            data=request_data,
         )
+        external_ticket_id = result.get("ticket_id")
+
+        # Expose only Bakery internal UUIDs to PoundCake.
+        public_ticket_id: str | None = None
+        if result.get("success"):
+            if mixer_action == "create":
+                if external_ticket_id:
+                    mapping = _get_or_create_mapping_for_external_id(
+                        db,
+                        ticket_request.mixer_type,
+                        str(external_ticket_id),
+                    )
+                    public_ticket_id = mapping.internal_ticket_id
+            elif mixer_action in {"update", "close", "comment"}:
+                public_ticket_id = str(original_internal_ticket_id)
+
+        response_data = deepcopy(result)
+        if public_ticket_id:
+            response_data["ticket_id"] = public_ticket_id
+        else:
+            response_data.pop("ticket_id", None)
 
         # Create message in queue
         message = Message(
             correlation_id=ticket_request.correlation_id,
-            ticket_id=result.get("ticket_id"),
+            ticket_id=public_ticket_id,
             mixer_type=ticket_request.mixer_type,
             status="success" if result.get("success") else "error",
-            response_data=result,
+            response_data=response_data,
             error_message=result.get("error"),
         )
         db.add(message)
 
         # Update ticket request
         ticket_request.status = "success" if result.get("success") else "error"  # type: ignore[assignment]
-        ticket_request.ticket_id = result.get("ticket_id")  # type: ignore[assignment]
+        ticket_request.ticket_id = public_ticket_id  # type: ignore[assignment]
         ticket_request.error_message = result.get("error")  # type: ignore[assignment]
         ticket_request.completed_at = datetime.now(timezone.utc)  # type: ignore[assignment]
 
@@ -131,7 +262,7 @@ async def create_ticket_request(
         )
 
     # Validate action
-    valid_actions = ["create", "update", "close", "comment", "search"]
+    valid_actions = ["create", "update", "close", "comment", "search", "find"]
     if request.action not in valid_actions:
         raise HTTPException(
             status_code=400,

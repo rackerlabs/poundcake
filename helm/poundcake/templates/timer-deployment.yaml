@@ -94,9 +94,9 @@ spec:
           command: ["python", "kitchen/timer.py"]
           env:
             - name: POUNDCAKE_API_URL
-              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1"
+              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
             - name: ST2_API_URL
-              value: "{{ .Values.stackstorm.url }}/v1"
+              value: {{ printf "%s/v1" (include "poundcake.stackstormApiUrl" .) | quote }}
             - name: TIMER_INTERVAL
               value: {{ .Values.timer.interval | quote }}
             - name: SLA_BUFFER_PERCENT
@@ -105,6 +105,13 @@ spec:
               value: {{ .Values.config.logLevel | quote }}
             - name: SERVICE_NAME
               value: "timer"
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
           resources:
             {{- toYaml .Values.timer.resources | nindent 12 }}
           volumeMounts:

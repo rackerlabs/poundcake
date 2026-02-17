@@ -53,6 +53,8 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --chown=appuser:appuser api/ /app/api/
 COPY --chown=appuser:appuser kitchen/ /app/kitchen/
 COPY --chown=appuser:appuser docker/scripts/ /app/scripts/
+COPY --chown=appuser:appuser alembic/ /app/alembic/
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 
 # Make scripts executable
 RUN chmod +x /app/api/scripts/entrypoint-auto-migrate.sh \

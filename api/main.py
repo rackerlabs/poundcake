@@ -8,7 +8,7 @@
 
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
@@ -24,6 +24,7 @@ from api.api.dishes import router as dishes_router
 from api.api.orders import router as orders_router
 from api.api.prometheus import router as prometheus_router
 from api.api.auth import router as auth_router
+from api.api.auth import require_auth_if_enabled
 from api.api.settings import router as settings_router
 from api.api.ingredients import router as ingredients_router
 from api.api.webhook import router as webhook_router
@@ -48,6 +49,7 @@ app = FastAPI(
     title="PoundCake API",
     version=settings.app_version,
     lifespan=lifespan,
+    dependencies=[Depends(require_auth_if_enabled)],
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
     redirect_slashes=False,  # Prevent 307 redirects for trailing slashes

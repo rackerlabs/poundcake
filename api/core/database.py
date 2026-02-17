@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 
 from api.core.logging import get_logger
 from api.core.config import settings
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 logger = get_logger(__name__)
@@ -48,7 +48,12 @@ SessionLocal = async_sessionmaker(
     bind=engine,
     expire_on_commit=False,
 )
-Base = declarative_base()
+
+
+class Base(DeclarativeBase):
+    """Base class for SQLAlchemy declarative models."""
+
+    pass
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

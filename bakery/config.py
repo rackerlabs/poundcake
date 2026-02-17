@@ -16,7 +16,7 @@ class Settings:
         self.api_prefix: str = "/api/v1"
 
         # Database
-        self.database_host: str = os.getenv("DATABASE_HOST", "bakery-mariadb")
+        self.database_host: str = os.getenv("DATABASE_HOST", "poundcake-bakery-mariadb")
         self.database_port: int = int(os.getenv("DATABASE_PORT", "3306"))
         self.database_user: str = os.getenv("DATABASE_USER", "bakery")
         self.database_password: str = os.getenv("DATABASE_PASSWORD", "")

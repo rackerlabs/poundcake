@@ -13,13 +13,13 @@ from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
 from api.core.config import get_settings
-from kitchen.service_helpers import wait_for_api
+import kitchen.service_helpers as service_helpers
 
 # Initialize logging with standardized configuration
 setup_logging()
 logger = get_logger(__name__)
 
-POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://api:8000").rstrip("/")
+POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://poundcake:8080").rstrip("/")
 API_URL = f"{POUNDCAKE_API_URL}/api/v1"
 PREP_INTERVAL = int(os.getenv("PREP_INTERVAL", "5"))
 
@@ -31,7 +31,7 @@ POLL_LIMIT = int(os.getenv("PREP_CHEF_LIMIT", "1"))
 
 def prep_loop() -> None:
     """Main prep chef loop - polls for new orders and triggers cooking."""
-    wait_for_api(API_URL, SYSTEM_REQ_ID, logger)
+    service_helpers.wait_for_api(API_URL, SYSTEM_REQ_ID, logger, delay_sec=PREP_INTERVAL)
     logger.info(
         "Starting prep chef",
         extra={"req_id": SYSTEM_REQ_ID, "api_url": API_URL, "poll_interval": PREP_INTERVAL},
@@ -46,6 +46,7 @@ def prep_loop() -> None:
                 "GET",
                 f"{API_URL}/orders",
                 params={"processing_status": "new", "limit": POLL_LIMIT},
+                headers=_service_headers(SYSTEM_REQ_ID),
                 timeout=10,
                 retries=POLLER_RETRIES,
             )
@@ -78,7 +79,7 @@ def prep_loop() -> None:
                 order_id = order.get("id")
 
                 # Pass the original Request ID to the next hop
-                headers = {"X-Request-ID": req_id}
+                headers = _service_headers(req_id)
 
                 logger.info(
                     "Preparing order for cooking",
@@ -139,6 +140,12 @@ def prep_loop() -> None:
                 )
 
         time.sleep(PREP_INTERVAL)
+
+
+def _service_headers(req_id: str) -> dict[str, str]:
+    if hasattr(service_helpers, "get_service_headers"):
+        return service_helpers.get_service_headers(req_id)
+    return {"X-Request-ID": req_id}
 
 
 if __name__ == "__main__":
