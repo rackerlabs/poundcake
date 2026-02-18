@@ -11,15 +11,15 @@ rules:
   # Allow reading services to discover StackStorm
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch"]
   # Allow managing secrets for StackStorm API key persistence and credentials
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
   # Allow staged startup orchestration of StackStorm subchart deployments.
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/scale"]
-    verbs: ["get", "list", "patch", "update"]
+    verbs: ["get", "list", "watch", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

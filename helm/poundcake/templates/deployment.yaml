@@ -297,6 +297,9 @@ spec:
             - name: mappings
               mountPath: /app/config/mappings
               readOnly: false
+            - name: st2-apikeys
+              mountPath: /app/config/st2-apikeys
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -308,6 +311,10 @@ spec:
           configMap:
             name: {{ include "poundcake.fullname" . }}-mappings
           {{- end }}
+        - name: st2-apikeys
+          secret:
+            secretName: {{ include "poundcake.stackstormApiKeySecret" . }}
+            optional: true
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}

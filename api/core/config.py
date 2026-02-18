@@ -91,15 +91,20 @@ class Settings(BaseSettings):
         if self.stackstorm_api_key:
             return self.stackstorm_api_key
 
-        # Fall back to runtime config file (written by setup container)
-        config_file = Path("/app/config/st2_api_key")
-        if config_file.exists():
+        # Fall back to runtime config file (written by setup container or mounted secret).
+        config_files = [
+            Path("/app/config/st2_api_key"),
+            Path("/app/config/st2-apikeys/api-key"),
+        ]
+        for config_file in config_files:
+            if not config_file.exists():
+                continue
             try:
                 key = config_file.read_text().strip()
                 if key:
                     return key
             except Exception:
-                pass
+                continue
 
         return ""
 
