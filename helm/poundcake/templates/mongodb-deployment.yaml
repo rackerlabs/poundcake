@@ -59,6 +59,9 @@ spec:
           mountPath: /data/db
         - name: mongodb-config
           mountPath: /data/configdb
+        - name: mongodb-init
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
         {{- if .Values.mongodb.resources }}
         resources:
           {{- toYaml .Values.mongodb.resources | nindent 10 }}
@@ -93,4 +96,7 @@ spec:
         {{- end }}
       - name: mongodb-config
         emptyDir: {}
+      - name: mongodb-init
+        configMap:
+          name: {{ include "poundcake.stackstormMongoName" . }}-init
 {{- end }}
