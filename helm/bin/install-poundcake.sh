@@ -195,9 +195,13 @@ POUNDCAKE_PHASE1_CMD=(
   --namespace "$NAMESPACE"
   --create-namespace
   --timeout "${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}"
+  --set "bootstrap.poundcakeBootstrap.enabled=false"
   --set "image.repository=${APP_IMAGE_REPO}"
+  --set "image.tag=${POUNDCAKE_VERSION}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
+  --set "ui.image.tag=${POUNDCAKE_VERSION}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
+  --set "bakery.image.tag=${POUNDCAKE_VERSION}"
   --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
   --set "stackstorm.url=${STACKSTORM_API_URL}"
   --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
@@ -227,9 +231,13 @@ POUNDCAKE_PHASE3_CMD=(
   --atomic
   --cleanup-on-fail
   --timeout "${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}"
+  --set "bootstrap.poundcakeBootstrap.enabled=true"
   --set "image.repository=${APP_IMAGE_REPO}"
+  --set "image.tag=${POUNDCAKE_VERSION}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
+  --set "ui.image.tag=${POUNDCAKE_VERSION}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
+  --set "bakery.image.tag=${POUNDCAKE_VERSION}"
   --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
   --set "stackstorm.url=${STACKSTORM_API_URL}"
   --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"

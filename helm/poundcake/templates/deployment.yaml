@@ -170,6 +170,7 @@ spec:
                 secretKeyRef:
                   name: {{ $st2AdminSecret }}
                   key: {{ .Values.stackstorm.adminPasswordSecretKey | default "ST2_AUTH_PASSWORD" }}
+                  optional: true
             {{- if .Values.redis.enabled }}
             - name: REDIS_HOST
               {{- if .Values.redis.deploy }}
