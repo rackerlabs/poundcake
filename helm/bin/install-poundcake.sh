@@ -14,7 +14,8 @@ CHART_REPO="${POUNDCAKE_CHART_REPO:-oci://ghcr.io/${GHCR_OWNER}/charts/poundcake
 APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
-VERSION_FILE="/etc/genestack/helm-chart-versions.yaml"
+VERSION_FILE_PRIMARY="/etc/genestack/helm-chart-version.yaml"
+VERSION_FILE_FALLBACK="/etc/genestack/helm-chart-versions.yaml"
 GLOBAL_OVERRIDES_DIR="/etc/genestack/helm-configs/global_overrides"
 SERVICE_CONFIG_DIR="/etc/genestack/helm-configs/poundcake"
 BASE_OVERRIDES="/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml"
@@ -51,6 +52,11 @@ done
 
 if [[ "$SKIP_PREFLIGHT" != "true" ]]; then
   perform_preflight_checks
+fi
+
+VERSION_FILE="$VERSION_FILE_PRIMARY"
+if [[ ! -f "$VERSION_FILE" && -f "$VERSION_FILE_FALLBACK" ]]; then
+  VERSION_FILE="$VERSION_FILE_FALLBACK"
 fi
 
 POUNDCAKE_VERSION="$(get_chart_version "poundcake" "$VERSION_FILE")"
