@@ -1,0 +1,33 @@
+# StackStorm chart defaults for PoundCake external-stackstorm mode.
+# This config tells stackstorm-ha to use the shared st2-* services deployed by PoundCake.
+
+mongodb:
+  enabled: false
+
+rabbitmq:
+  enabled: false
+
+redis:
+  enabled: false
+
+st2:
+  rbac:
+    enabled: true
+  auth:
+    username: st2admin
+  config: |
+    [database]
+    host = st2-mongodb
+    port = 27017
+    db_name = st2
+    username = stackstorm
+    password = stackstorm
+
+    [messaging]
+    url = amqp://stackstorm:stackstorm@st2-rabbitmq:5672
+
+    [coordination]
+    url = redis://st2-redis:6379
+
+    [api]
+    allow_origin = *
