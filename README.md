@@ -253,6 +253,24 @@ bakery:
       - bakery.api.ord.cloudmunchers.net
 ```
 
+Bakery HMAC auth for PoundCake-to-Bakery calls (recommended):
+
+```yaml
+bakery:
+  auth:
+    enabled: true
+    mode: hmac
+    existingSecret: bakery-hmac
+  client:
+    enabled: true
+    baseUrl: "https://bakery.api.ord.cloudmunchers.net"
+    auth:
+      mode: hmac
+      existingSecret: bakery-hmac
+```
+
+See `/docs/DEPLOY.md` for full secret key mapping and header format.
+
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
 
 In full mode, StackStorm is installed as a separate Helm release by `bin/install-poundcake.sh`.

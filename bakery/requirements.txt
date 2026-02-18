@@ -20,6 +20,7 @@ cryptography>=46.0.4
 # Data Validation
 pydantic>=2.12.5
 structlog>=24.4.0
+prometheus-client>=0.23.1
 
 # HTTP Client (for mixer API calls)
 httpx>=0.28.1

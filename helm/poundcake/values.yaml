@@ -689,6 +689,15 @@ bakery:
   # Number of Bakery replicas
   replicaCount: 1
 
+  worker:
+    enabled: true
+    replicaCount: 1
+    pollIntervalSec: 2
+    batchSize: 10
+    maxAttempts: 5
+    backoffBaseSec: 5
+    backoffMaxSec: 300
+
   # Bakery image configuration
   image:
     repository: ghcr.io/aedan/poundcake-bakery
@@ -739,6 +748,7 @@ bakery:
     # Application settings
     environment: production
     logLevel: INFO
+    activeProvider: rackspace_core
     # If true, Bakery logs all requests and skips outbound calls to external ticketing systems.
     ticketingDryRun: false
 
@@ -749,6 +759,38 @@ bakery:
     # Mixer settings
     mixerTimeoutSec: 30
     mixerMaxRetries: 3
+
+  auth:
+    enabled: true
+    mode: hmac
+    existingSecret: ""
+    secretKeys:
+      activeKeyId: "active-key-id"
+      activeKey: "active-key"
+      nextKeyId: "next-key-id"
+      nextKey: "next-key"
+    hmac:
+      activeKeyId: ""
+      activeKey: ""
+      nextKeyId: ""
+      nextKey: ""
+      timestampSkewSec: 300
+
+  client:
+    enabled: true
+    baseUrl: ""
+    auth:
+      mode: hmac
+      existingSecret: ""
+      secretKeys:
+        keyId: "active-key-id"
+        key: "active-key"
+      keyId: ""
+      key: ""
+    requestTimeoutSeconds: 15
+    maxRetries: 2
+    pollIntervalSeconds: 2
+    pollTimeoutSeconds: 60
 
   # ServiceNow configuration
   servicenow:

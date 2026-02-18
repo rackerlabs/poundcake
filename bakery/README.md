@@ -1,6 +1,6 @@
 # Bakery
 
-Bakery is PoundCake's ticketing system integration microservice. It acts as a translation layer between the PoundCake API and external ticketing systems, converting generic ticket requests into system-specific API calls and returning the results.
+Bakery is PoundCake's ticketing system integration microservice. It is an async ticket broker between PoundCake and external ticketing systems and exposes Bakery-owned UUIDs (not provider-native ticket numbers) to callers.
 
 ## Supported Ticketing Systems
 
@@ -35,12 +35,10 @@ PoundCake API
 
 ### Request Flow
 
-1. PoundCake API sends a `POST /api/v1/tickets` request with a `correlation_id`, `mixer_type`, `action`, and `request_data`.
-2. Bakery validates the request, persists it to MariaDB, and returns `202 Accepted` immediately.
-3. A background task picks up the request, resolves the appropriate mixer via the Factory, and calls `mixer.process_request(action, data)`.
-4. The mixer translates the request into the target system's API format and executes it.
-5. The result is written to the `messages` table.
-6. PoundCake API polls `GET /api/v1/messages?correlation_id=...` to retrieve the result.
+1. PoundCake sends an authenticated `POST /api/v1/tickets` (create) and receives `ticket_id` + `operation_id` immediately (`202 Accepted`).
+2. Bakery persists operation state to MariaDB and returns without waiting on provider completion.
+3. Bakery worker(s) claim queued operations, execute provider calls, and update operation/ticket state with retries + dead-letter behavior.
+4. PoundCake polls `GET /api/v1/operations/{operation_id}` until terminal, then reads `GET /api/v1/tickets/{ticket_id}` as needed.
 
 ### Mixers
 
@@ -58,8 +56,11 @@ Mixers are registered in `bakery/mixer/factory.py` via the `MIXER_REGISTRY` dict
 
 | Table | Purpose |
 |-------|---------|
-| `ticket_requests` | Audit log of all requests with status tracking |
-| `messages` | Response queue polled by PoundCake API |
+| `tickets` | Logical ticket records keyed by Bakery UUID |
+| `ticket_operations` | Async operation queue + execution status |
+| `idempotency_keys` | Idempotent replay mapping for mutation requests |
+| `ticket_requests` | Legacy table retained physically for cleanup migration |
+| `messages` | Legacy table retained physically for cleanup migration |
 | `mixer_configs` | Optional per-mixer dynamic configuration |
 
 ## API Endpoints
@@ -76,44 +77,15 @@ All endpoints are prefixed with `/api/v1`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/tickets` | Submit a ticket request (returns 202) |
-| `GET` | `/api/v1/tickets/{correlation_id}` | Get request status by correlation ID |
+| `POST` | `/api/v1/tickets` | Queue create operation; returns `ticket_id` + `operation_id` |
+| `PATCH` | `/api/v1/tickets/{ticket_id}` | Queue update operation |
+| `POST` | `/api/v1/tickets/{ticket_id}/comments` | Queue comment operation |
+| `POST` | `/api/v1/tickets/{ticket_id}/close` | Queue close operation |
+| `GET` | `/api/v1/tickets/{ticket_id}` | Get logical ticket state |
+| `GET` | `/api/v1/tickets/{ticket_id}/operations` | Get operation history |
+| `GET` | `/api/v1/operations/{operation_id}` | Get operation status/details |
 
-Bakery now exposes a stable internal `ticket_id` UUID to PoundCake API. External/provider-native
-ticket numbers are stored only inside Bakery.
-
-**POST /api/v1/tickets** request body:
-
-```json
-{
-  "correlation_id": "uuid-from-poundcake",
-  "mixer_type": "servicenow",
-  "action": "create",
-  "request_data": {
-    "title": "Server disk full",
-    "description": "Root partition at 95%",
-    "urgency": "2",
-    "impact": "2"
-  }
-}
-```
-
-### Messages
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/messages` | Poll for response messages |
-| `DELETE` | `/api/v1/messages/{message_id}` | Delete a message |
-| `POST` | `/api/v1/messages/cleanup` | Remove old retrieved messages |
-
-**GET /api/v1/messages** query parameters:
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `correlation_id` | string | Filter by correlation ID |
-| `mixer_type` | string | Filter by mixer type |
-| `status` | string | Filter by status (success, error) |
-| `limit` | int | Max results (default 100, max 1000) |
+All non-health endpoints require HMAC auth (`Authorization: HMAC <key_id>:<signature>`, `X-Timestamp`) and mutating endpoints require `Idempotency-Key`.
 
 ## Mixer-Specific Request Data
 

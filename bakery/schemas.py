@@ -1,102 +1,101 @@
 #!/usr/bin/env python3
 """Pydantic schemas for Bakery API."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
-# Ticket Request Schemas
-class TicketRequestBase(BaseModel):
-    """Base schema for ticket requests."""
+class TicketCreateRequest(BaseModel):
+    """Create a new logical ticket."""
 
-    correlation_id: str = Field(
-        ...,
-        description="Unique request identifier used to correlate requests with responses",
-        json_schema_extra={"examples": ["550e8400-e29b-41d4-a716-446655440000"]},
-    )
-    mixer_type: str = Field(
-        ...,
-        description="Target ticketing system",
-        json_schema_extra={"examples": ["servicenow"]},
-    )
-    action: str = Field(
-        ...,
-        description="Operation to perform on the ticketing system",
-        json_schema_extra={"examples": ["create"]},
-    )
-    request_data: Dict[str, Any] = Field(
-        ...,
-        description="Mixer-specific payload (varies by mixer_type and action)",
-        json_schema_extra={
-            "examples": [
-                {
-                    "title": "Server disk full",
-                    "description": "Root partition at 95%",
-                    "urgency": "2",
-                    "impact": "2",
-                }
-            ]
-        },
-    )
+    title: str = Field(..., min_length=1, max_length=512)
+    description: str = Field(..., min_length=1)
+    severity: Optional[str] = Field(default=None, max_length=50)
+    category: Optional[str] = Field(default=None, max_length=100)
+    source: Optional[str] = Field(default=None, max_length=100)
+    provider_extras: Dict[str, Any] = Field(default_factory=dict)
 
 
-class TicketRequestCreate(TicketRequestBase):
-    """Schema for creating a ticket request."""
+class TicketUpdateRequest(BaseModel):
+    """Update mutable ticket fields."""
 
-    pass
+    title: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    description: Optional[str] = Field(default=None, min_length=1)
+    severity: Optional[str] = Field(default=None, max_length=50)
+    category: Optional[str] = Field(default=None, max_length=100)
+    state: Optional[str] = Field(default=None, max_length=50)
+    provider_extras: Dict[str, Any] = Field(default_factory=dict)
 
 
-class TicketRequestResponse(TicketRequestBase):
-    """Schema for ticket request response."""
+class TicketCommentRequest(BaseModel):
+    """Add a comment to a ticket."""
 
-    id: int
-    ticket_id: Optional[str] = Field(
-        None, description="Bakery internal ticket UUID (never provider-native ID)"
-    )
+    comment: str = Field(..., min_length=1)
+    visibility: Optional[str] = Field(default=None, max_length=50)
+    provider_extras: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TicketCloseRequest(BaseModel):
+    """Close a ticket."""
+
+    resolution_code: Optional[str] = Field(default=None, max_length=100)
+    resolution_notes: Optional[str] = Field(default=None, max_length=4096)
+    state: Optional[str] = Field(default="closed", max_length=50)
+    provider_extras: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OperationAcceptedResponse(BaseModel):
+    """Accepted async operation response."""
+
+    ticket_id: str
+    operation_id: str
+    action: str
     status: str
-    error_message: Optional[str] = None
+    created_at: datetime
+
+
+class TicketResponse(BaseModel):
+    """Logical ticket status."""
+
+    ticket_id: str
+    provider_type: str
+    provider_ticket_id: Optional[str] = None
+    state: str
+    latest_error: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    completed_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 
-# Message Schemas
-class MessageBase(BaseModel):
-    """Base schema for messages."""
+class TicketOperationResponse(BaseModel):
+    """Detailed ticket operation state."""
 
-    correlation_id: str
-    mixer_type: str
+    operation_id: str
+    ticket_id: str
+    action: str
     status: str
-    ticket_id: Optional[str] = Field(
-        None, description="Bakery internal ticket UUID (never provider-native ID)"
-    )
-    response_data: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-
-
-class MessageResponse(MessageBase):
-    """Schema for message response."""
-
-    id: int
+    attempt_count: int
+    max_attempts: int
+    next_attempt_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    provider_response: Optional[Dict[str, Any]] = None
     created_at: datetime
-    retrieved_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+    updated_at: datetime
 
 
-class MessageListResponse(BaseModel):
-    """Schema for list of messages."""
+class TicketOperationListResponse(BaseModel):
+    """List of operations for a ticket."""
 
-    messages: list[MessageResponse]
+    ticket_id: str
+    operations: List[TicketOperationResponse]
     count: int
 
 
-# Health Check Schemas
 class ComponentHealth(BaseModel):
     """Health status of a single component."""
 
@@ -117,23 +116,13 @@ class HealthResponse(BaseModel):
     )
 
 
-# Generic Response Schemas
 class ErrorResponse(BaseModel):
     """Standard error response."""
 
     error: str
     detail: Optional[str] = None
-    correlation_id: Optional[str] = None
 
 
-class SuccessResponse(BaseModel):
-    """Standard success response."""
-
-    message: str
-    data: Optional[Dict[str, Any]] = None
-
-
-# Mixer Schemas
 class MixerInfo(BaseModel):
     """Information about a single mixer."""
 
