@@ -39,8 +39,8 @@ spec:
           API_KEY_FIELD="{{ include "poundcake.stackstormApiKeySecretKey" . }}"
           ST2_AUTH_SECRET="{{ include "poundcake.stackstormAuthSecretName" . }}"
           ST2_AUTH_USER_DEFAULT="{{ .Values.stackstorm.adminUser }}"
-          ST2_ADMIN_PASSWORD_SECRET="{{ .Values.stackstorm.adminPasswordSecret }}"
-          ST2_ADMIN_PASSWORD_KEY="{{ .Values.stackstorm.adminPasswordSecretKey }}"
+          ST2_ADMIN_PASSWORD_SECRET="{{ .Values.stackstorm.adminPasswordSecret | default (include "poundcake.stackstormAuthSecretName" .) }}"
+          ST2_ADMIN_PASSWORD_KEY="{{ .Values.stackstorm.adminPasswordSecretKey | default "ST2_AUTH_PASSWORD" }}"
           ST2_AUTH_URL="{{ include "poundcake.stackstormAuthUrl" . }}"
           ST2_API_URL="{{ include "poundcake.stackstormApiUrl" . }}"
           TIMEOUT="600s"
@@ -136,11 +136,17 @@ spec:
 
             # Prefer StackStorm auth secret (used by subchart), then fallback to PoundCake admin secret.
             discovered_user="$(get_secret_value "${ST2_AUTH_SECRET}" "username")"
+            if [ -z "${discovered_user}" ]; then
+              discovered_user="$(get_secret_value "${ST2_AUTH_SECRET}" "ST2_AUTH_USERNAME")"
+            fi
             if [ -n "${discovered_user}" ]; then
               st2_auth_user="${discovered_user}"
             fi
 
             st2_auth_password="$(get_secret_value "${ST2_AUTH_SECRET}" "password")"
+            if [ -z "${st2_auth_password}" ]; then
+              st2_auth_password="$(get_secret_value "${ST2_AUTH_SECRET}" "ST2_AUTH_PASSWORD")"
+            fi
             if [ -z "${st2_auth_password}" ] && [ -n "${ST2_ADMIN_PASSWORD_SECRET}" ] && [ -n "${ST2_ADMIN_PASSWORD_KEY}" ]; then
               st2_auth_password="$(get_secret_value "${ST2_ADMIN_PASSWORD_SECRET}" "${ST2_ADMIN_PASSWORD_KEY}")"
             fi

@@ -287,7 +287,7 @@ Get the database URL - prioritizes explicit config over operator
 Get StackStorm API URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormSubchartPrefix" -}}
-{{- .Values.stackstorm.subchart.fullnameOverride | default (printf "%s-stackstorm-ha" .Release.Name) }}
+{{- .Values.stackstorm.subchart.fullnameOverride | default .Release.Name }}
 {{- end }}
 
 {{/*
