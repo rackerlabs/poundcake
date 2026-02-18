@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if and .Values.redis.enabled .Values.redis.deploy }}
 apiVersion: redis.redis.opstreelabs.in/v1beta2
@@ -50,4 +51,5 @@ spec:
     additionalRedisConfig: |
       requirepass {{ .Values.redis.auth.password | default "stackstorm" }}
   {{- end }}
+{{- end }}
 {{- end }}

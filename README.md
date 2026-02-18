@@ -206,10 +206,16 @@ output:
 
 ```bash
 # Helm-based install script
-./helm/bin/install-poundcake.sh
+./bin/install-poundcake.sh
 
 # Optional: pass extra Helm args through
-./helm/bin/install-poundcake.sh -f /path/to/values.yaml
+./bin/install-poundcake.sh -f /path/to/values.yaml
+```
+
+Bakery-only deployment (no PoundCake or StackStorm resources):
+
+```bash
+./bin/install-poundcake.sh --mode bakery-only -f /path/to/values.yaml
 ```
 
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).

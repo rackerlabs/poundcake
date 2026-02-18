@@ -27,6 +27,12 @@ internal:
   # Must remain false. StackStorm is installed separately by bin/install-poundcake.sh.
   renderEmbeddedStackstormSubchart: false
 
+# Deployment mode:
+# - full: PoundCake + StackStorm workflow (and Bakery if bakery.enabled=true)
+# - bakery-only: only Bakery and its dependencies
+deployment:
+  mode: full
+
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
@@ -706,8 +712,8 @@ bootstrap:
 # Bakery service configuration
 # API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)
 bakery:
-  # Enable Bakery deployment
-  # Disabled by default - enable only when ticketing integration is needed
+  # Enable Bakery deployment in full mode.
+  # In deployment.mode=bakery-only, Bakery is always rendered regardless of this flag.
   enabled: false
 
   # Number of Bakery replicas

@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 {{- if .Values.bootstrap.poundcakeBootstrap.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -71,4 +72,5 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}
 {{- end }}

@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if and .Values.rabbitmq.enabled (not .Values.rabbitmq.external) }}
 apiVersion: rabbitmq.com/v1beta1
@@ -43,4 +44,5 @@ spec:
 
   service:
     type: {{ .Values.rabbitmq.service.type | default "ClusterIP" }}
+{{- end }}
 {{- end }}

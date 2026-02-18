@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if .Values.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
@@ -24,4 +25,5 @@ spec:
   selector:
     matchLabels:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
+{{- end }}
 {{- end }}

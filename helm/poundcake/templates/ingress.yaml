@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "poundcake.fullname" . -}}
@@ -130,4 +131,5 @@ spec:
           {{- end }}
           {{- end }}
     {{- end }}
+{{- end }}
 {{- end }}

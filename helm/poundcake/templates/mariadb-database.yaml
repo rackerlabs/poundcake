@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if .Values.mariadbOperator.enabled }}
 apiVersion: k8s.mariadb.com/v1alpha1
@@ -19,4 +20,5 @@ spec:
   collate: utf8mb4_unicode_ci
 
   retryInterval: 5s
+{{- end }}
 {{- end }}
