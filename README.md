@@ -218,6 +218,21 @@ Bakery-only deployment (no PoundCake or StackStorm resources):
 ./bin/install-poundcake.sh --mode bakery-only -f /path/to/values.yaml
 ```
 
+Provide Bakery Rackspace Core credentials interactively (full or bakery-only):
+
+```bash
+./bin/install-poundcake.sh --interactive-bakery-creds
+```
+
+Or non-interactively:
+
+```bash
+./bin/install-poundcake.sh \
+  --bakery-rackspace-url "https://10.12.223.241" \
+  --bakery-rackspace-username "poundcake" \
+  --bakery-rackspace-password "<password>"
+```
+
 Bakery Gateway API exposure (optional):
 
 ```yaml

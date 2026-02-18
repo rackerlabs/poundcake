@@ -142,6 +142,10 @@ APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
 INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
+BAKERY_RACKSPACE_URL="${POUNDCAKE_BAKERY_RACKSPACE_URL:-}"
+BAKERY_RACKSPACE_USERNAME="${POUNDCAKE_BAKERY_RACKSPACE_USERNAME:-}"
+BAKERY_RACKSPACE_PASSWORD="${POUNDCAKE_BAKERY_RACKSPACE_PASSWORD:-}"
+BAKERY_RACKSPACE_SECRET_NAME="${POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME:-bakery-rackspace-core}"
 VERSION_FILE_PRIMARY="/etc/genestack/helm-chart-version.yaml"
 VERSION_FILE_FALLBACK="/etc/genestack/helm-chart-versions.yaml"
 VERSION_FILE_MANAGED="/etc/genestack/helm-chart-versions.yaml"
@@ -159,6 +163,7 @@ ROTATE_SECRETS=false
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 SKIP_PREFLIGHT=false
 BOOTSTRAP_DIRS=true
+INTERACTIVE_BAKERY_CREDS=false
 PASSTHROUGH_ARGS=()
 POST_RENDER_ARGS=()
 GLOBAL_OVERRIDE_ARGS=()
@@ -191,6 +196,58 @@ ensure_chart_version_key() {
   printf "\n%s%s: %s\n" "$indent" "$key" "$value" >>"$file_path"
 }
 
+apply_bakery_rackspace_secret() {
+  local should_manage_secret=false
+
+  if [[ "$INTERACTIVE_BAKERY_CREDS" == "true" ]]; then
+    should_manage_secret=true
+
+    local prompt_url_default="${BAKERY_RACKSPACE_URL:-https://ws.core.rackspace.com}"
+    local prompt_user_default="${BAKERY_RACKSPACE_USERNAME:-}"
+
+    read -r -p "Bakery Rackspace Core URL [${prompt_url_default}]: " prompt_url
+    BAKERY_RACKSPACE_URL="${prompt_url:-$prompt_url_default}"
+
+    read -r -p "Bakery Rackspace Core username [${prompt_user_default}]: " prompt_user
+    BAKERY_RACKSPACE_USERNAME="${prompt_user:-$prompt_user_default}"
+
+    read -r -s -p "Bakery Rackspace Core password: " prompt_password
+    echo
+    BAKERY_RACKSPACE_PASSWORD="$prompt_password"
+  fi
+
+  if [[ -n "${BAKERY_RACKSPACE_URL}${BAKERY_RACKSPACE_USERNAME}${BAKERY_RACKSPACE_PASSWORD}" ]]; then
+    should_manage_secret=true
+  fi
+
+  if [[ "$should_manage_secret" != "true" ]]; then
+    return 0
+  fi
+
+  if [[ -z "$BAKERY_RACKSPACE_URL" || -z "$BAKERY_RACKSPACE_USERNAME" || -z "$BAKERY_RACKSPACE_PASSWORD" ]]; then
+    echo "Error: Bakery Rackspace Core credentials require url, username, and password." >&2
+    echo "Use --interactive-bakery-creds or provide all of:" >&2
+    echo "  --bakery-rackspace-url --bakery-rackspace-username --bakery-rackspace-password" >&2
+    exit 1
+  fi
+
+  if ! kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
+    echo "Creating namespace '${NAMESPACE}' to store Bakery credential secret..."
+    kubectl create namespace "$NAMESPACE" >/dev/null
+  fi
+
+  echo "Applying Bakery Rackspace Core secret '${BAKERY_RACKSPACE_SECRET_NAME}' in namespace '${NAMESPACE}'..."
+  kubectl -n "$NAMESPACE" create secret generic "$BAKERY_RACKSPACE_SECRET_NAME" \
+    --from-literal=rackspace-core-url="$BAKERY_RACKSPACE_URL" \
+    --from-literal=rackspace-core-username="$BAKERY_RACKSPACE_USERNAME" \
+    --from-literal=rackspace-core-password="$BAKERY_RACKSPACE_PASSWORD" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  # Ensure Bakery is enabled and wired to the managed secret in any install mode.
+  POUNDCAKE_OVERRIDE_ARGS+=("--set" "bakery.enabled=true")
+  POUNDCAKE_OVERRIDE_ARGS+=("--set" "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode)
@@ -212,6 +269,26 @@ while [[ $# -gt 0 ]]; do
     --skip-bootstrap-dirs)
       BOOTSTRAP_DIRS=false
       shift
+      ;;
+    --interactive-bakery-creds|--interactive-bakery-credentials)
+      INTERACTIVE_BAKERY_CREDS=true
+      shift
+      ;;
+    --bakery-rackspace-url)
+      BAKERY_RACKSPACE_URL="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-username)
+      BAKERY_RACKSPACE_USERNAME="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-password)
+      BAKERY_RACKSPACE_PASSWORD="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-secret-name)
+      BAKERY_RACKSPACE_SECRET_NAME="$2"
+      shift 2
       ;;
     *)
       PASSTHROUGH_ARGS+=("$1")
@@ -301,6 +378,8 @@ if [[ -d "$STACKSTORM_CONFIG_DIR" ]] && compgen -G "${STACKSTORM_CONFIG_DIR}/*.y
     STACKSTORM_OVERRIDE_ARGS+=("-f" "$yaml_file")
   done
 fi
+
+apply_bakery_rackspace_secret
 
 # Add post-renderer if available AND overlay exists.
 if [[ "$INSTALL_MODE" != "bakery-only" && -f "$KUSTOMIZE_RENDERER" && -d "$KUSTOMIZE_OVERLAY_DIR" ]]; then

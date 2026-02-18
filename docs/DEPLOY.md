@@ -20,6 +20,28 @@ Bakery-only mode:
 ./bin/install-poundcake.sh --mode bakery-only
 ```
 
+Interactive Bakery Rackspace Core credential setup (works in full or bakery-only mode):
+
+```bash
+./bin/install-poundcake.sh --interactive-bakery-creds
+```
+
+Non-interactive Bakery Rackspace Core credential setup:
+
+```bash
+./bin/install-poundcake.sh \
+  --bakery-rackspace-url "https://10.12.223.241" \
+  --bakery-rackspace-username "poundcake" \
+  --bakery-rackspace-password "<password>"
+```
+
+Notes:
+- The installer creates/updates secret `bakery-rackspace-core` in the target namespace.
+- The secret name can be overridden with `--bakery-rackspace-secret-name`.
+- When Bakery credentials are provided, installer sets:
+  - `bakery.enabled=true`
+  - `bakery.rackspaceCore.existingSecret=<secret-name>`
+
 Bakery Gateway API exposure (optional):
 
 ```yaml
