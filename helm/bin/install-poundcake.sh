@@ -20,6 +20,7 @@ UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
 VERSION_FILE_PRIMARY="/etc/genestack/helm-chart-version.yaml"
 VERSION_FILE_FALLBACK="/etc/genestack/helm-chart-versions.yaml"
+VERSION_FILE_MANAGED="/etc/genestack/helm-chart-versions.yaml"
 GLOBAL_OVERRIDES_DIR="/etc/genestack/helm-configs/global_overrides"
 POUNDCAKE_CONFIG_DIR="/etc/genestack/helm-configs/poundcake"
 STACKSTORM_CONFIG_DIR="/etc/genestack/helm-configs/stackstorm"
@@ -39,6 +40,32 @@ POST_RENDER_ARGS=()
 GLOBAL_OVERRIDE_ARGS=()
 POUNDCAKE_OVERRIDE_ARGS=()
 STACKSTORM_OVERRIDE_ARGS=()
+
+get_local_poundcake_chart_version() {
+  local chart_file="${HELM_DIR}/poundcake/Chart.yaml"
+  if [[ -f "$chart_file" ]]; then
+    grep -E "^[[:space:]]*version:" "$chart_file" | head -n1 | sed -E 's/^[[:space:]]*version:[[:space:]]*//'
+  fi
+}
+
+ensure_chart_version_key() {
+  local file_path=$1
+  local key=$2
+  local value=$3
+
+  if grep -Eq "^[[:space:]]*${key}:" "$file_path"; then
+    return 0
+  fi
+
+  local indent
+  indent="$(grep -E "^[[:space:]]+[A-Za-z0-9_-]+:[[:space:]]" "$file_path" | head -n1 | sed -E 's/^([[:space:]]*).*/\1/' || true)"
+  if [[ -z "${indent}" ]]; then
+    indent=""
+  fi
+
+  echo "Adding missing '${key}' chart version to ${file_path}: ${value}"
+  printf "\n%s%s: %s\n" "$indent" "$key" "$value" >>"$file_path"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -70,23 +97,39 @@ if [[ "$SKIP_PREFLIGHT" != "true" ]]; then
 fi
 
 if [[ "$BOOTSTRAP_DIRS" == "true" ]]; then
-  mkdir -p "$GLOBAL_OVERRIDES_DIR" "$POUNDCAKE_CONFIG_DIR" "$STACKSTORM_CONFIG_DIR"
+  for dir_path in "$GLOBAL_OVERRIDES_DIR" "$POUNDCAKE_CONFIG_DIR" "$STACKSTORM_CONFIG_DIR"; do
+    if [[ -d "$dir_path" ]]; then
+      echo "Bootstrap: ${dir_path} already exists, skipping."
+    else
+      echo "Bootstrap: creating ${dir_path}"
+      mkdir -p "$dir_path"
+    fi
+  done
 fi
 
-VERSION_FILE="$VERSION_FILE_PRIMARY"
-if [[ ! -f "$VERSION_FILE" && -f "$VERSION_FILE_FALLBACK" ]]; then
-  VERSION_FILE="$VERSION_FILE_FALLBACK"
+if [[ ! -f "$VERSION_FILE_MANAGED" ]]; then
+  if [[ -f "$VERSION_FILE_PRIMARY" ]]; then
+    cp "$VERSION_FILE_PRIMARY" "$VERSION_FILE_MANAGED"
+  else
+    touch "$VERSION_FILE_MANAGED"
+  fi
 fi
 
-POUNDCAKE_VERSION="$(get_chart_version "poundcake" "$VERSION_FILE")"
-STACKSTORM_VERSION="$(get_chart_version "stackstorm" "$VERSION_FILE" || true)"
+POUNDCAKE_VERSION="$(get_chart_version "poundcake" "$VERSION_FILE_MANAGED" || true)"
+STACKSTORM_VERSION="$(get_chart_version "stackstorm" "$VERSION_FILE_MANAGED" || true)"
+
+LOCAL_POUNDCAKE_VERSION="$(get_local_poundcake_chart_version || true)"
+POUNDCAKE_VERSION="${POUNDCAKE_VERSION:-${POUNDCAKE_CHART_VERSION:-$LOCAL_POUNDCAKE_VERSION}}"
+STACKSTORM_VERSION="${STACKSTORM_VERSION:-$STACKSTORM_VERSION_DEFAULT}"
 
 if [[ -z "${POUNDCAKE_VERSION}" ]]; then
-  echo "Error: could not determine PoundCake chart version from ${VERSION_FILE} (key: poundcake)." >&2
+  echo "Error: could not determine PoundCake chart version. Set /etc/genestack/helm-chart-versions.yaml key 'poundcake' or env POUNDCAKE_CHART_VERSION." >&2
   exit 1
 fi
 
-STACKSTORM_VERSION="${STACKSTORM_VERSION:-$STACKSTORM_VERSION_DEFAULT}"
+ensure_chart_version_key "$VERSION_FILE_MANAGED" "poundcake" "$POUNDCAKE_VERSION"
+ensure_chart_version_key "$VERSION_FILE_MANAGED" "stackstorm" "$STACKSTORM_VERSION"
+
 STACKSTORM_API_URL="http://${STACKSTORM_RELEASE_NAME}-st2api.${NAMESPACE}.svc.cluster.local:9101"
 STACKSTORM_AUTH_URL="http://${STACKSTORM_RELEASE_NAME}-st2auth.${NAMESPACE}.svc.cluster.local:9100"
 
