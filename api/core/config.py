@@ -52,20 +52,13 @@ class Settings(BaseSettings):
     database_echo: bool = False
 
     # ==========================================================================
-    # Redis & Celery Settings
+    # Redis Settings
     # ==========================================================================
     # Default to in-cluster Redis service (overridden by Helm env var in production).
     redis_url: str = "redis://poundcake-redis:6379/0"
     redis_password: str = ""
     alert_ttl_hours: int = 24
     lock_timeout_seconds: int = 300
-
-    celery_broker_url: str = "redis://poundcake-redis:6379/1"
-    celery_result_backend: str = "redis://poundcake-redis:6379/2"
-    celery_task_track_started: bool = True
-    celery_task_time_limit: int = 300
-    celery_worker_prefetch_multiplier: int = 4
-    celery_worker_max_tasks_per_child: int = 1000
 
     # ==========================================================================
     # Component Health Check Settings

@@ -60,13 +60,7 @@ db-init:
 
 # Development shortcuts
 dev: docker-up
-	@echo "Services started. API: http://localhost:8000, Flower: http://localhost:5555"
+	@echo "Services started. API: http://localhost:8000"
 
 run-api:
 	uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-
-run-worker:
-	celery -A api.tasks.celery_app:celery_app worker --loglevel=info
-
-run-flower:
-	celery -A api.tasks.celery_app:celery_app flower --port=5555

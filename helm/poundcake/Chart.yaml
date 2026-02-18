@@ -6,10 +6,10 @@
 #
 apiVersion: v2
 name: poundcake
-description: All-in-one auto-remediation platform with integrated StackStorm, bridging Prometheus Alertmanager with automated remediation actions
+description: Auto-remediation platform bridging Prometheus Alertmanager with StackStorm and optional Bakery ticket translation
 type: application
-version: 2.0.77
-appVersion: "2.0.76"
+version: 2.0.78
+appVersion: "2.0.78"
 maintainers:
   - name: Jake Briggs
 keywords:
@@ -18,7 +18,6 @@ keywords:
   - auto-remediation
   - prometheus
   - automation
-  - all-in-one
 home: https://github.com/aedan/poundCake
 sources:
   - https://github.com/aedan/poundCake

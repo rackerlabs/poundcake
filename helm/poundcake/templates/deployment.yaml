@@ -89,6 +89,12 @@ spec:
               value: {{ .Values.config.defaultTimeout | quote }}
             - name: POUNDCAKE_MAX_CONCURRENT_REMEDIATIONS
               value: {{ .Values.config.maxConcurrentRemediations | quote }}
+            - name: DISHWASHER_DEFAULT_DURATION
+              value: {{ .Values.dishwasher.defaultDuration | quote }}
+            - name: DISHWASHER_DEFAULT_TIMEOUT
+              value: {{ .Values.dishwasher.defaultTimeout | quote }}
+            - name: DISHWASHER_PRUNE_MISSING
+              value: {{ .Values.dishwasher.pruneMissing | quote }}
             - name: POUNDCAKE_MAPPINGS_PATH
               value: "/app/config/mappings"
             {{- if .Values.database.existingSecret }}
@@ -104,12 +110,6 @@ spec:
                 secretKeyRef:
                   name: {{ include "poundcake.mariadbUserSecretName" . }}
                   key: {{ .Values.mariadbOperator.user.passwordSecretKey | default "password" }}
-            {{- end }}
-            {{- if .Values.celery.enabled }}
-            - name: POUNDCAKE_CELERY_BROKER_URL
-              value: {{ include "poundcake.celeryBrokerUrl" . | quote }}
-            - name: POUNDCAKE_CELERY_RESULT_BACKEND
-              value: {{ include "poundcake.celeryResultBackend" . | quote }}
             {{- end }}
             - name: POUNDCAKE_STACKSTORM_URL
               value: {{ include "poundcake.stackstormApiUrl" . | quote }}

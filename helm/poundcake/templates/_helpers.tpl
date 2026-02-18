@@ -159,32 +159,6 @@ bakery
 {{- end }}
 
 {{/*
-Get the Celery broker URL
-*/}}
-{{- define "poundcake.celeryBrokerUrl" -}}
-{{- if .Values.celery.brokerUrl }}
-{{- .Values.celery.brokerUrl }}
-{{- else if .Values.redis.enabled }}
-{{- include "poundcake.redisUrl" . }}
-{{- else }}
-{{- "redis://localhost:6379/0" }}
-{{- end }}
-{{- end }}
-
-{{/*
-Get the Celery result backend URL
-*/}}
-{{- define "poundcake.celeryResultBackend" -}}
-{{- if .Values.celery.resultBackend }}
-{{- .Values.celery.resultBackend }}
-{{- else if .Values.redis.enabled }}
-{{- include "poundcake.redisUrl" . }}
-{{- else }}
-{{- "redis://localhost:6379/0" }}
-{{- end }}
-{{- end }}
-
-{{/*
 MariaDB Operator helpers
 */}}
 

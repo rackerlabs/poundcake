@@ -138,7 +138,7 @@ def setup_logging() -> None:
     logger.addHandler(handler)
 
     # Set third-party loggers to WARNING (suppresses INFO and DEBUG)
-    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "celery", "sqlalchemy"]:
+    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "sqlalchemy"]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     # Set httpx/httpcore to ERROR (suppress WARNING/INFO/DEBUG by default)

@@ -8,6 +8,24 @@ Check logs:
 docker compose -f docker/docker-compose.yml logs -f api
 ```
 
+## Alertmanager webhook returns 401
+
+PoundCake requires `X-Internal-API-Key` for `/api/v1/webhook` when auth is enabled.
+
+Get the key:
+
+```bash
+kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d
+```
+
+Confirm your Alertmanager receiver sends:
+
+```yaml
+http_config:
+  headers:
+    X-Internal-API-Key: "<internal-api-key>"
+```
+
 ## StackStorm API key errors
 
 Delete and regenerate:

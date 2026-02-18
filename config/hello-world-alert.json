@@ -29,7 +29,7 @@
       },
       "annotations": {
         "summary": "Hello World Test Alert",
-        "description": "This is a test alert to verify the webhook is working correctly. You should see this processed by the Celery worker and stored in MariaDB.",
+        "description": "This is a test alert to verify the webhook is working correctly. You should see this processed by PoundCake workers and stored in MariaDB.",
         "runbook_url": "https://docs.example.com/runbooks/hello-world"
       },
       "startsAt": "2026-01-09T21:00:00Z",

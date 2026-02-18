@@ -198,14 +198,14 @@ output:
 # Install via Docker Compose
 ./install/install-docker.sh
 
-# Install via Helm
+# Install via Helm (wrapper around bin/install-poundcake.sh)
 ./install/install-helm.sh
 ```
 
 ### Helm Install
 
 ```bash
-# Helm-based install script
+# Helm-based install script (3-phase full install)
 ./bin/install-poundcake.sh
 
 # Optional: pass extra Helm args through
@@ -219,6 +219,8 @@ Bakery-only deployment (no PoundCake or StackStorm resources):
 ```
 
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
+
+In full mode, StackStorm is installed as a separate Helm release by `bin/install-poundcake.sh`.
 
 ### Docker Compose Install
 
