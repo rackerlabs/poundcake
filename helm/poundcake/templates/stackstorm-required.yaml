@@ -1,4 +1,8 @@
-{{- if and (not .Values.stackstorm.chart.enabled) (or (not .Values.stackstorm.url) (not .Values.stackstorm.authUrl)) -}}
+{{- if .Values.stackstorm.chart.enabled -}}
+{{- fail "Embedded StackStorm mode is disabled. Install stackstorm-ha separately via bin/install-poundcake.sh." -}}
+{{- end -}}
+
+{{- if or (not .Values.stackstorm.url) (not .Values.stackstorm.authUrl) -}}
 {{- fail "When stackstorm.chart.enabled=false, set stackstorm.url and stackstorm.authUrl for external StackStorm." -}}
 {{- end -}}
 

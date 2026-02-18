@@ -199,8 +199,8 @@ stackstorm:
   releaseName: ""
 
   chart:
-    # Set false when installing stackstorm-ha as a separate Helm release.
-    enabled: true
+    # Must stay false. StackStorm is installed separately by the install script.
+    enabled: false
 
   # Connection configuration
   # Auto-generated from releaseName/subchart service names if empty.
