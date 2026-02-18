@@ -1,3 +1,25 @@
+{{- if eq (default "full" .Values.deployment.mode) "bakery-only" }}
+Thank you for installing {{ .Chart.Name }} in bakery-only mode!
+
+Your release is named {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+BAKERY COMPONENTS DEPLOYED:
+  - Bakery API: {{ include "poundcake.bakeryName" . }}
+  - Bakery Service: {{ include "poundcake.bakeryName" . }}:{{ .Values.bakery.service.port }}
+
+To access Bakery:
+{{- if contains "ClusterIP" .Values.bakery.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "poundcake.bakeryName" . }} 8000:{{ .Values.bakery.service.port }}
+  echo "Visit http://127.0.0.1:8000"
+{{- else }}
+  kubectl get svc {{ include "poundcake.bakeryName" . }} -n {{ .Release.Namespace }}
+{{- end }}
+
+{{- if and .Values.bakery.database.createServer .Values.mariadbOperator.enabled }}
+Bakery database host:
+  {{ include "poundcake.bakeryDbHost" . }}
+{{- end }}
+{{- else }}
 Thank you for installing {{ .Chart.Name }}!
 
 Your release is named {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
@@ -108,3 +130,4 @@ AUTHENTICATION ENABLED:
 
 For more information:
   https://github.com/aedan/poundcake
+{{- end }}

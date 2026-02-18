@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if and .Values.mongodb.enabled (not .Values.mongodb.external) .Values.mongodb.persistence.enabled }}
 apiVersion: v1
@@ -16,4 +17,5 @@ spec:
   resources:
     requests:
       storage: {{ .Values.mongodb.persistence.size }}
+{{- end }}
 {{- end }}

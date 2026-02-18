@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 apiVersion: v1
 kind: ConfigMap
@@ -17,3 +18,4 @@ data:
   POUNDCAKE_METRICS_PATH: {{ .Values.config.metricsPath | quote }}
   POUNDCAKE_DEFAULT_TIMEOUT: {{ .Values.config.defaultTimeout | quote }}
   POUNDCAKE_MAX_CONCURRENT_REMEDIATIONS: {{ .Values.config.maxConcurrentRemediations | quote }}
+{{- end }}

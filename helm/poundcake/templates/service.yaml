@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 apiVersion: v1
 kind: Service
@@ -14,3 +15,4 @@ spec:
       name: http
   selector:
     {{- include "poundcake.selectorLabels" . | nindent 4 }}
+{{- end }}

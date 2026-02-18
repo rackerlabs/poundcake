@@ -287,18 +287,14 @@ Get the database URL - prioritizes explicit config over operator
 Get StackStorm API URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormSubchartPrefix" -}}
-{{- if .Values.stackstorm.releaseName }}
-{{- .Values.stackstorm.releaseName }}
-{{- else }}
-stackstorm
-{{- end }}
+{{- default "stackstorm" .Values.stackstorm.releaseName -}}
 {{- end }}
 
 {{/*
 Get StackStorm auth secret name from subchart
 */}}
 {{- define "poundcake.stackstormAuthSecretName" -}}
-{{- printf "%s-st2-auth" (include "poundcake.stackstormSubchartPrefix" .) }}
+{{- printf "%s-st2-auth" (include "poundcake.stackstormSubchartPrefix" .) -}}
 {{- end }}
 
 {{- define "poundcake.stackstormApiUrl" -}}
@@ -324,12 +320,12 @@ Get StackStorm Auth URL - either from subchart service or external URL
 Get StackStorm API key secret name
 */}}
 {{- define "poundcake.stackstormApiKeySecret" -}}
-{{- .Values.stackstorm.apiKeySecretName | default (printf "%s-st2-apikeys" (include "poundcake.stackstormSubchartPrefix" .)) }}
+{{- .Values.stackstorm.apiKeySecretName | default (printf "%s-st2-apikeys" (include "poundcake.stackstormSubchartPrefix" .)) -}}
 {{- end }}
 
 {{/*
 Get StackStorm API key secret key
 */}}
 {{- define "poundcake.stackstormApiKeySecretKey" -}}
-{{- .Values.stackstorm.apiKeySecretKey | default "api-key" }}
+{{- .Values.stackstorm.apiKeySecretKey | default "api-key" -}}
 {{- end }}

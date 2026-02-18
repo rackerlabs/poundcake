@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 apiVersion: v1
 kind: ConfigMap
@@ -10,3 +11,4 @@ data:
   {{ $filename }}: |
     {{- $content | nindent 4 }}
   {{- end }}
+{{- end }}

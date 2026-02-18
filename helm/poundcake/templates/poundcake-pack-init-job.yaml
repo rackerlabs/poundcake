@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 {{- if .Values.bootstrap.packInit.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -30,4 +31,5 @@ spec:
               && mkdir -p /tmp/stackstorm-packs/actions
               && chown -R 1000:1000 /tmp/stackstorm-packs
               && echo "[PACK-INIT] Prepared /tmp/stackstorm-packs tree";
+{{- end }}
 {{- end }}

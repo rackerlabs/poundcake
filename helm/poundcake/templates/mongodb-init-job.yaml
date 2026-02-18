@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if and .Values.mongodb.enabled (not .Values.mongodb.external) }}
 apiVersion: batch/v1
@@ -136,4 +137,5 @@ spec:
           limits:
             cpu: 500m
             memory: 256Mi
+{{- end }}
 {{- end }}

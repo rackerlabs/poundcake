@@ -1,4 +1,4 @@
-{{- if and .Values.bakery.enabled .Values.bakery.database.createServer .Values.mariadbOperator.enabled }}
+{{- if and (or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only")) .Values.bakery.database.createServer .Values.mariadbOperator.enabled }}
 ---
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: MariaDB

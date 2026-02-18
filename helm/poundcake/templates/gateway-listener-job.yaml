@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 {{- if .Values.gateway.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -197,4 +198,5 @@ spec:
           echo "=========================================="
           echo "Gateway Listener Configuration Complete"
           echo "=========================================="
+{{- end }}
 {{- end }}

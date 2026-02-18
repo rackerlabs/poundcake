@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 
 {{- if and .Values.mongodb.enabled (not .Values.mongodb.external) }}
 apiVersion: v1
@@ -17,4 +18,5 @@ spec:
   selector:
     {{- include "poundcake.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: mongodb
+{{- end }}
 {{- end }}
