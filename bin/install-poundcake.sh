@@ -164,7 +164,7 @@ VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 SKIP_PREFLIGHT=false
 BOOTSTRAP_DIRS=true
 INTERACTIVE_BAKERY_CREDS=false
-PASSTHROUGH_ARGS=()
+POUNDCAKE_EXTRA_ARGS=()
 POST_RENDER_ARGS=()
 GLOBAL_OVERRIDE_ARGS=()
 POUNDCAKE_OVERRIDE_ARGS=()
@@ -291,7 +291,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
-      PASSTHROUGH_ARGS+=("$1")
+      POUNDCAKE_EXTRA_ARGS+=("$1")
       shift
       ;;
   esac
@@ -399,7 +399,7 @@ if [[ "$VALIDATE" == "true" ]]; then
     --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}" \
     "${POUNDCAKE_OVERRIDE_ARGS[@]}" \
     "${POST_RENDER_ARGS[@]}" \
-    "${PASSTHROUGH_ARGS[@]}"
+    "${POUNDCAKE_EXTRA_ARGS[@]}"
 fi
 
 POUNDCAKE_PHASE1_CMD=(
@@ -474,7 +474,7 @@ BAKERY_ONLY_CMD=(
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
   --set "bakery.image.tag=${POUNDCAKE_VERSION}"
   "${POUNDCAKE_OVERRIDE_ARGS[@]}"
-  "${PASSTHROUGH_ARGS[@]}"
+  "${POUNDCAKE_EXTRA_ARGS[@]}"
 )
 
 if [[ "$INSTALL_MODE" == "bakery-only" ]]; then
@@ -486,16 +486,16 @@ if [[ "$INSTALL_MODE" == "bakery-only" ]]; then
 fi
 
 echo "Phase 1/3: Install PoundCake prerequisites (external StackStorm mode)"
-printf '%q ' "${POUNDCAKE_PHASE1_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"
+printf '%q ' "${POUNDCAKE_PHASE1_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"
 echo
-"${POUNDCAKE_PHASE1_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"
+"${POUNDCAKE_PHASE1_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"
 
 echo "Phase 2/3: Install StackStorm as separate release"
-printf '%q ' "${STACKSTORM_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"
+printf '%q ' "${STACKSTORM_CMD[@]}"
 echo
-"${STACKSTORM_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"
+"${STACKSTORM_CMD[@]}"
 
 echo "Phase 3/3: Reconcile PoundCake after StackStorm is ready"
-printf '%q ' "${POUNDCAKE_PHASE3_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"
+printf '%q ' "${POUNDCAKE_PHASE3_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"
 echo
-"${POUNDCAKE_PHASE3_CMD[@]}" "${PASSTHROUGH_ARGS[@]}"
+"${POUNDCAKE_PHASE3_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"
