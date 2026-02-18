@@ -35,8 +35,8 @@ def _build_provider_payload(
     ticket: Ticket,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    provider_extras = payload.get("provider_extras") or {}
-    provider_payload = dict(provider_extras)
+    context = payload.get("context") or {}
+    provider_payload = dict(context)
 
     if action == "create":
         provider_payload.setdefault("title", payload.get("title", ""))
