@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 
 from bakery.config import settings
 from bakery.database import Base
+import bakery.models  # noqa: F401 - ensure model metadata is registered
 
 # Configure logging
 structlog.configure(
