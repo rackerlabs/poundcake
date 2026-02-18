@@ -190,16 +190,23 @@ config:
   maxConcurrentRemediations: 10
 
 # StackStorm Helm Chart Integration
-# StackStorm is deployed as a required subchart.
+# StackStorm can be deployed as:
+# 1) an embedded subchart (stackstorm.chart.enabled=true), or
+# 2) a separate Helm release (stackstorm.chart.enabled=false with url/authUrl set).
 stackstorm:
+  # External StackStorm release name (used for secret/service name defaults).
+  # Example: "stackstorm" -> stackstorm-st2api, stackstorm-st2auth, stackstorm-st2-apikeys.
+  releaseName: ""
+
   chart:
-    # Keep enabled. External StackStorm mode is disabled.
+    # Set false when installing stackstorm-ha as a separate Helm release.
     enabled: true
 
   # Connection configuration
-  # Auto-generated from subchart service names (leave empty).
-  url: ""  # Auto-generated when subchart enabled: http://<release>-st2api:9101
-  authUrl: ""  # Auto-generated when subchart enabled: http://<release>-st2auth:9100
+  # Auto-generated from releaseName/subchart service names if empty.
+  # Set explicitly when using external StackStorm mode.
+  url: ""  # Example external: http://stackstorm-st2api.<namespace>.svc.cluster.local:9101
+  authUrl: ""  # Example external: http://stackstorm-st2auth.<namespace>.svc.cluster.local:9100
   verifySsl: false
 
   # StackStorm subchart secret mapping.

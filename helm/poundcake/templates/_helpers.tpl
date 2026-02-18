@@ -287,7 +287,11 @@ Get the database URL - prioritizes explicit config over operator
 Get StackStorm API URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormSubchartPrefix" -}}
+{{- if .Values.stackstorm.releaseName }}
+{{- .Values.stackstorm.releaseName }}
+{{- else }}
 {{- .Values.stackstorm.subchart.fullnameOverride | default .Release.Name }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -298,14 +302,22 @@ Get StackStorm auth secret name from subchart
 {{- end }}
 
 {{- define "poundcake.stackstormApiUrl" -}}
+{{- if .Values.stackstorm.url }}
+{{- .Values.stackstorm.url }}
+{{- else }}
 {{- printf "http://%s-st2api.%s.svc.cluster.local:9101" (include "poundcake.stackstormSubchartPrefix" .) .Release.Namespace }}
+{{- end }}
 {{- end }}
 
 {{/*
 Get StackStorm Auth URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormAuthUrl" -}}
+{{- if .Values.stackstorm.authUrl }}
+{{- .Values.stackstorm.authUrl }}
+{{- else }}
 {{- printf "http://%s-st2auth.%s.svc.cluster.local:9100" (include "poundcake.stackstormSubchartPrefix" .) .Release.Namespace }}
+{{- end }}
 {{- end }}
 
 {{/*
