@@ -97,7 +97,6 @@ async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSes
             order.bakery_operation_id = accepted.get("operation_id")
             await db.commit()
     except Exception as exc:  # noqa: BLE001
-        await db.rollback()
         logger.error(
             "Failed Bakery synchronization",
             extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},

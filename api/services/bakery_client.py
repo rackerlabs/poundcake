@@ -71,6 +71,7 @@ async def _request(
 ) -> dict[str, Any]:
     settings = get_settings()
     url = f"{settings.bakery_base_url.rstrip('/')}{path}"
+    body = _canonical_body(payload)
     headers = _build_headers(method, path, payload)
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
@@ -80,7 +81,7 @@ async def _request(
             method,
             url,
             headers=headers,
-            json=payload,
+            content=body.encode("utf-8") if body else None,
             timeout=settings.bakery_request_timeout_seconds,
             retries=settings.bakery_max_retries,
         )
