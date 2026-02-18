@@ -97,9 +97,7 @@ spec:
           get_auth_token() {
             user="$1"
             pass="$2"
-            response="$(curl -s -X POST "${ST2_AUTH_URL}/tokens" \
-              -H "Content-Type: application/json" \
-              -d "{\"username\":\"${user}\",\"password\":\"${pass}\"}" || true)"
+            response="$(curl -s -u "${user}:${pass}" -X POST "${ST2_AUTH_URL}/tokens" || true)"
             echo "${response}" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
           }
 
@@ -108,7 +106,7 @@ spec:
             response="$(curl -s -X POST "${ST2_API_URL}/v1/apikeys" \
               -H "X-Auth-Token: ${token}" \
               -H "Content-Type: application/json" \
-              -d '{"description":"PoundCake-Internal"}' || true)"
+              -d '{}' || true)"
             echo "${response}" | sed -n 's/.*"key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
           }
 
