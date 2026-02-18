@@ -140,6 +140,25 @@ Get the secret name for Git credentials
 {{- end }}
 
 {{/*
+Bakery resource names
+*/}}
+{{- define "poundcake.bakeryName" -}}
+bakery
+{{- end }}
+
+{{- define "poundcake.bakerySecretName" -}}
+{{- printf "%s-secret" (include "poundcake.bakeryName" .) }}
+{{- end }}
+
+{{- define "poundcake.bakeryDbHost" -}}
+{{- printf "%s-mariadb" (include "poundcake.bakeryName" .) }}
+{{- end }}
+
+{{- define "poundcake.bakeryDbSecretName" -}}
+{{- printf "%s-db" (include "poundcake.bakeryName" .) }}
+{{- end }}
+
+{{/*
 Get the Celery broker URL
 */}}
 {{- define "poundcake.celeryBrokerUrl" -}}
@@ -268,7 +287,7 @@ Get the database URL - prioritizes explicit config over operator
 Get StackStorm API URL - either from subchart service or external URL
 */}}
 {{- define "poundcake.stackstormSubchartPrefix" -}}
-{{- .Values.stackstorm.subchart.fullnameOverride | default (printf "%s-stackstorm-ha" .Release.Name) }}
+{{- .Values.stackstorm.subchart.fullnameOverride | default .Release.Name }}
 {{- end }}
 
 {{/*

@@ -27,4 +27,5 @@ POUNDCAKE_AUTH_INTERNAL_API_KEY=shared-internal-key
 ```
 
 When auth is enabled, all API endpoints except `/api/v1/health` and `/api/v1/auth/login` require
-authentication. Internal services should send `X-Internal-API-Key`.
+authentication. Internal services should send either `X-Internal-API-Key` or
+`Authorization: Bearer <internal-api-key>`.

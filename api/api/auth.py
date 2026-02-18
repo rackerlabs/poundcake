@@ -154,6 +154,11 @@ def require_auth_if_enabled(
         return None
 
     internal_key = request.headers.get("X-Internal-API-Key")
+    if not internal_key:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            internal_key = auth_header[7:].strip()
+
     if settings.auth_internal_api_key and internal_key:
         if secrets.compare_digest(internal_key, settings.auth_internal_api_key):
             return "__internal__"

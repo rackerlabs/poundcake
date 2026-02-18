@@ -20,7 +20,7 @@ sequenceDiagram
     participant DW as Dishwasher
 
     Note over AM, API: Phase 1: Intake (pre_heat)
-    AM->>API: POST /api/v1/webhook (with X-Request-ID)
+    AM->>API: POST /api/v1/webhook (with X-Internal-API-Key header)
     API->>DB: Store Order (processing_status: new)
     API-->>AM: 202 Accepted
 
@@ -260,6 +260,59 @@ POUNDCAKE_AUTH_INTERNAL_API_KEY=shared-internal-key
 ```
 
 `config/st2_api_key` is created by `st2client` during bootstrap.
+
+## Alertmanager Integration (Kubernetes)
+
+When PoundCake auth is enabled, Alertmanager must send the `X-Internal-API-Key` header.
+
+Get the key:
+
+```bash
+kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.internal-api-key}' | base64 -d
+```
+
+Webhook URL (in-cluster):
+
+```text
+http://poundcake.rackspace.svc.cluster.local:8080/api/v1/webhook
+```
+
+Example `alertmanager.yml` receiver:
+
+```yaml
+receivers:
+  - name: poundcake
+    webhook_configs:
+      - url: http://poundcake.rackspace.svc.cluster.local:8080/api/v1/webhook
+        send_resolved: true
+        http_config:
+          headers:
+            X-Internal-API-Key: "<internal-api-key>"
+```
+
+Example Prometheus Operator `AlertmanagerConfig` receiver:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: poundcake
+  namespace: prometheus
+spec:
+  route:
+    receiver: poundcake
+    groupBy: ["alertname"]
+  receivers:
+    - name: poundcake
+      webhookConfigs:
+        - url: http://poundcake.rackspace.svc.cluster.local:8080/api/v1/webhook
+          sendResolved: true
+          httpConfig:
+            headers:
+              X-Internal-API-Key: "<internal-api-key>"
+```
+
+If the header/key is missing, PoundCake returns `401` for `/api/v1/webhook`.
 
 ## API Reference
 

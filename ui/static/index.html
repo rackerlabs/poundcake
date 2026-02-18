@@ -129,7 +129,7 @@
                     <div class="header-stats" id="header-stats"></div>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <span class="version-display" id="header-version">v2.0.53</span>
+                    <span class="version-display" id="header-version">v2.0.72</span>
                     <button class="btn" onclick="logout()" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Logout</button>
                 </div>
             </div>
@@ -525,6 +525,10 @@
         let editActionMode = false;
         let autoRefreshInterval = null;
 
+        function order(message) {
+            alert(message);
+        }
+
         function showTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -669,7 +673,7 @@
                         <td>${actions}</td>
                         <td>
                             <button class="btn btn-primary" onclick="editMapping('${recipe.name}')">Edit</button>
-                            <button class="btn btn-danger" onclick="deleteMapping('${name}')">Delete</button>
+                            <button class="btn btn-danger" onclick="deleteMapping('${recipe.name}')">Delete</button>
                         </td>
                     </tr>
                 `;
@@ -1223,7 +1227,7 @@
 
         async function loadBasicLabelKeys(select, metric) {
             try {
-                const url = metric ? `/api/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
+                const url = metric ? `/api/v1/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
                 const res = await fetch(url);
                 const data = await res.json();
                 const labels = data.labels || [];
@@ -1250,8 +1254,8 @@
 
             try {
                 const url = metric
-                    ? `/api/prometheus/label-values/${encodeURIComponent(labelKey)}?metric=${encodeURIComponent(metric)}`
-                    : `/api/prometheus/label-values/${encodeURIComponent(labelKey)}`;
+                    ? `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}?metric=${encodeURIComponent(metric)}`
+                    : `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}`;
                 const res = await fetch(url);
                 const data = await res.json();
                 const values = data.values || [];
@@ -1302,7 +1306,7 @@
 
         async function loadAdvancedLabelKeys(select, metric) {
             try {
-                const url = metric ? `/api/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
+                const url = metric ? `/api/v1/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
                 const res = await fetch(url);
                 const data = await res.json();
                 const labels = data.labels || [];
@@ -1329,8 +1333,8 @@
 
             try {
                 const url = metric
-                    ? `/api/prometheus/label-values/${encodeURIComponent(labelKey)}?metric=${encodeURIComponent(metric)}`
-                    : `/api/prometheus/label-values/${encodeURIComponent(labelKey)}`;
+                    ? `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}?metric=${encodeURIComponent(metric)}`
+                    : `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}`;
                 const res = await fetch(url);
                 const data = await res.json();
                 const values = data.values || [];

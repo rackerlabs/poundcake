@@ -35,6 +35,26 @@ def _add_column_if_missing(table_name: str, column: sa.Column) -> None:
         op.add_column(table_name, column)
 
 
+def _drop_fk_constraints_for_column(table_name: str, column_name: str) -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    for fk in inspector.get_foreign_keys(table_name):
+        constrained = fk.get("constrained_columns", []) or []
+        fk_name = fk.get("name")
+        if fk_name and column_name in constrained:
+            op.drop_constraint(fk_name, table_name, type_="foreignkey")
+
+
+def _drop_indexes_for_column(table_name: str, column_name: str) -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    for idx in inspector.get_indexes(table_name):
+        idx_name = idx.get("name")
+        idx_columns = idx.get("column_names", []) or []
+        if idx_name and column_name in idx_columns:
+            op.drop_index(idx_name, table_name=table_name)
+
+
 def upgrade() -> None:
     if _has_table("recipes"):
         recipe_cols = _column_names("recipes")
@@ -113,7 +133,7 @@ def upgrade() -> None:
                   action_parameters = CASE
                     WHEN action_parameters IS NOT NULL THEN action_parameters
                     WHEN parameters IS NULL OR parameters = '' THEN NULL
-                    WHEN JSON_VALID(parameters) THEN CAST(parameters AS JSON)
+                    WHEN JSON_VALID(parameters) THEN parameters
                     ELSE JSON_OBJECT('raw', parameters)
                   END,
                   expected_duration_sec = COALESCE(expected_duration_sec, expected_time_to_completion),
@@ -146,6 +166,9 @@ def upgrade() -> None:
                       AND ri.id IS NULL
                     """)
 
+            _drop_fk_constraints_for_column("ingredients", "recipe_id")
+            _drop_indexes_for_column("ingredients", "recipe_id")
+            _drop_indexes_for_column("ingredients", "task_order")
             op.drop_column("ingredients", "recipe_id")
             op.drop_column("ingredients", "task_order")
             op.drop_column("ingredients", "st2_action")

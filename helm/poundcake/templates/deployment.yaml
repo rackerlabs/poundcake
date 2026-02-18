@@ -121,7 +121,7 @@ spec:
               {{- if .Values.mongodb.external }}
               value: {{ .Values.mongodb.host | quote }}
               {{- else }}
-              value: "{{ include "poundcake.fullname" . }}-mongodb"
+              value: "{{ include "poundcake.stackstormMongoName" . }}"
               {{- end }}
             - name: MONGODB_PORT
               {{- if .Values.mongodb.external }}
@@ -135,7 +135,7 @@ spec:
               {{- if .Values.rabbitmq.external }}
               value: {{ .Values.rabbitmq.host | quote }}
               {{- else }}
-              value: "{{ include "poundcake.fullname" . }}-rabbitmq"
+              value: "{{ include "poundcake.stackstormRabbitmqName" . }}"
               {{- end }}
             - name: RABBITMQ_PORT
               value: {{ .Values.rabbitmq.port | quote }}
@@ -164,17 +164,16 @@ spec:
             - name: POUNDCAKE_STACKSTORM_ADMIN_USER
               value: {{ .Values.stackstorm.adminUser | quote }}
             {{- end }}
-            {{- if .Values.stackstorm.adminPasswordSecret }}
+            {{- $st2AdminSecret := .Values.stackstorm.adminPasswordSecret | default (include "poundcake.stackstormAuthSecretName" .) }}
             - name: POUNDCAKE_STACKSTORM_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.stackstorm.adminPasswordSecret }}
-                  key: {{ .Values.stackstorm.adminPasswordSecretKey }}
-            {{- end }}
+                  name: {{ $st2AdminSecret }}
+                  key: {{ .Values.stackstorm.adminPasswordSecretKey | default "ST2_AUTH_PASSWORD" }}
             {{- if .Values.redis.enabled }}
             - name: REDIS_HOST
               {{- if .Values.redis.deploy }}
-              value: "{{ include "poundcake.fullname" . }}-redis"
+              value: "{{ include "poundcake.stackstormRedisName" . }}"
               {{- else }}
               value: {{ .Values.redis.external.host | quote }}
               {{- end }}
@@ -267,6 +266,12 @@ spec:
                   name: {{ include "poundcake.fullname" . }}-admin
                   key: internal-api-key
             {{- end }}
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 120
           livenessProbe:
             httpGet:
               path: /api/v1/health
