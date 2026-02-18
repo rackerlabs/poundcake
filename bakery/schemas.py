@@ -17,7 +17,7 @@ class TicketCreateRequest(BaseModel):
     severity: Optional[str] = Field(default=None, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
     source: Optional[str] = Field(default=None, max_length=100)
-    provider_extras: Dict[str, Any] = Field(default_factory=dict)
+    context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TicketUpdateRequest(BaseModel):
@@ -28,7 +28,7 @@ class TicketUpdateRequest(BaseModel):
     severity: Optional[str] = Field(default=None, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
     state: Optional[str] = Field(default=None, max_length=50)
-    provider_extras: Dict[str, Any] = Field(default_factory=dict)
+    context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TicketCommentRequest(BaseModel):
@@ -36,7 +36,7 @@ class TicketCommentRequest(BaseModel):
 
     comment: str = Field(..., min_length=1)
     visibility: Optional[str] = Field(default=None, max_length=50)
-    provider_extras: Dict[str, Any] = Field(default_factory=dict)
+    context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TicketCloseRequest(BaseModel):
@@ -45,7 +45,7 @@ class TicketCloseRequest(BaseModel):
     resolution_code: Optional[str] = Field(default=None, max_length=100)
     resolution_notes: Optional[str] = Field(default=None, max_length=4096)
     state: Optional[str] = Field(default="closed", max_length=50)
-    provider_extras: Dict[str, Any] = Field(default_factory=dict)
+    context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class OperationAcceptedResponse(BaseModel):

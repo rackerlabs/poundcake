@@ -61,7 +61,7 @@ async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSes
                 ),
                 "severity": order.severity or "unknown",
                 "source": "poundcake",
-                "provider_extras": {
+                "context": {
                     "labels": order.labels or {},
                     "annotations": order.annotations or {},
                     "req_id": order.req_id,
