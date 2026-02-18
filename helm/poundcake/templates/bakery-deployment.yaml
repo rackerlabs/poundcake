@@ -54,6 +54,8 @@ spec:
               value: {{ .Values.bakery.config.environment | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.bakery.config.logLevel | quote }}
+            - name: TICKETING_DRY_RUN
+              value: {{ .Values.bakery.config.ticketingDryRun | quote }}
             - name: DATABASE_HOST
               value: {{ include "poundcake.bakeryDbHost" . }}
             - name: DATABASE_PORT

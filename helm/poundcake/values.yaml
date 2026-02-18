@@ -739,6 +739,8 @@ bakery:
     # Application settings
     environment: production
     logLevel: INFO
+    # If true, Bakery logs all requests and skips outbound calls to external ticketing systems.
+    ticketingDryRun: false
 
     # Message queue settings
     messageRetentionHours: 24

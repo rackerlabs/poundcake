@@ -5,8 +5,10 @@ import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import structlog
 from sqlalchemy.orm import Session
 
+from bakery.config import settings
 from bakery.database import get_db
 from bakery.models import TicketRequest, Message, TicketIdMapping
 from bakery.schemas import (
@@ -17,6 +19,7 @@ from bakery.schemas import (
 from bakery.mixer.factory import get_mixer, list_mixers
 
 router = APIRouter()
+logger = structlog.get_logger()
 
 
 def _get_mapping_by_internal_id(
@@ -59,6 +62,128 @@ def _get_or_create_mapping_for_external_id(
     return mapping
 
 
+def _get_or_create_mapping_for_internal_id(
+    db: Session, mixer_type: str, internal_ticket_id: str
+) -> TicketIdMapping:
+    """Resolve or create mapping by Bakery internal ticket UUID."""
+    mapping = _get_mapping_by_internal_id(db, mixer_type, internal_ticket_id)
+    if mapping:
+        return mapping
+
+    mapping = TicketIdMapping(
+        internal_ticket_id=internal_ticket_id,
+        mixer_type=mixer_type,
+        external_ticket_id=f"dryrun-{internal_ticket_id}",
+    )
+    db.add(mapping)
+    db.flush()
+    return mapping
+
+
+def _build_dry_run_result(
+    db: Session,
+    ticket_request: TicketRequest,
+    request_data: dict,
+    original_internal_ticket_id: str | None,
+) -> tuple[dict, str | None]:
+    """
+    Build a dry-run response and skip all outbound ticket-system calls.
+
+    Returns:
+        tuple[result_dict, public_ticket_id]
+    """
+    action = ticket_request.action
+    mixer_type = ticket_request.mixer_type
+
+    if action == "create":
+        external_ticket_id = f"dryrun-{uuid.uuid4()}"
+        mapping = _get_or_create_mapping_for_external_id(db, mixer_type, external_ticket_id)
+        return (
+            {
+                "success": True,
+                "ticket_id": mapping.internal_ticket_id,
+                "dry_run": True,
+                "data": {
+                    "action": action,
+                    "mixer_type": mixer_type,
+                    "outbound_sent": False,
+                    "request_data": request_data,
+                },
+            },
+            mapping.internal_ticket_id,
+        )
+
+    if action in {"update", "close", "comment"}:
+        if not original_internal_ticket_id:
+            raise ValueError(
+                "request_data.ticket_id (Bakery internal UUID) required for this action"
+            )
+        internal_id = str(original_internal_ticket_id)
+        _get_or_create_mapping_for_internal_id(db, mixer_type, internal_id)
+        return (
+            {
+                "success": True,
+                "ticket_id": internal_id,
+                "dry_run": True,
+                "data": {
+                    "action": action,
+                    "mixer_type": mixer_type,
+                    "outbound_sent": False,
+                    "request_data": request_data,
+                },
+            },
+            internal_id,
+        )
+
+    if action == "find":
+        internal_ticket_id = str(request_data.get("ticket_id", "")).strip()
+        if not internal_ticket_id:
+            raise ValueError("request_data.ticket_id (Bakery internal UUID) required for find")
+        mapping = _get_mapping_by_internal_id(db, mixer_type, internal_ticket_id)
+        found = mapping is not None
+        result = {
+            "success": found,
+            "dry_run": True,
+            "data": {
+                "action": action,
+                "mixer_type": mixer_type,
+                "found": found,
+                "outbound_sent": False,
+                "ticket_id": internal_ticket_id,
+            },
+        }
+        if not found:
+            result["error"] = f"No ticket mapping found for ticket_id={internal_ticket_id}"
+            return result, None
+        result["ticket_id"] = internal_ticket_id
+        return result, internal_ticket_id
+
+    if action == "search":
+        return (
+            {
+                "success": True,
+                "dry_run": True,
+                "data": {
+                    "action": action,
+                    "mixer_type": mixer_type,
+                    "outbound_sent": False,
+                    "results": [],
+                    "request_data": request_data,
+                },
+            },
+            None,
+        )
+
+    return (
+        {
+            "success": False,
+            "error": f"Dry-run does not support action '{action}'",
+            "dry_run": True,
+        },
+        None,
+    )
+
+
 async def process_ticket_request(
     request_id: int,
     db_url: str,
@@ -90,11 +215,46 @@ async def process_ticket_request(
         ticket_request.status = "processing"  # type: ignore[assignment]
         db.commit()
 
+        request_data = deepcopy(ticket_request.request_data or {})
+        original_internal_ticket_id = request_data.get("ticket_id")
+        if settings.ticketing_dry_run:
+            logger.info(
+                "Bakery dry-run mode: request intercepted",
+                correlation_id=ticket_request.correlation_id,
+                mixer_type=ticket_request.mixer_type,
+                action=ticket_request.action,
+                request_data=request_data,
+            )
+            result, public_ticket_id = _build_dry_run_result(
+                db,
+                ticket_request,
+                request_data,
+                str(original_internal_ticket_id) if original_internal_ticket_id else None,
+            )
+            response_data = deepcopy(result)
+            if not public_ticket_id:
+                response_data.pop("ticket_id", None)
+
+            message = Message(
+                correlation_id=ticket_request.correlation_id,
+                ticket_id=public_ticket_id,
+                mixer_type=ticket_request.mixer_type,
+                status="success" if result.get("success") else "error",
+                response_data=response_data,
+                error_message=result.get("error"),
+            )
+            db.add(message)
+
+            ticket_request.status = "success" if result.get("success") else "error"  # type: ignore[assignment]
+            ticket_request.ticket_id = public_ticket_id  # type: ignore[assignment]
+            ticket_request.error_message = result.get("error")  # type: ignore[assignment]
+            ticket_request.completed_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            db.commit()
+            return
+
         # Get appropriate mixer
         mixer = get_mixer(ticket_request.mixer_type)
 
-        request_data = deepcopy(ticket_request.request_data or {})
-        original_internal_ticket_id = request_data.get("ticket_id")
         if ticket_request.action == "find":
             internal_ticket_id = str(request_data.get("ticket_id", "")).strip()
             if not internal_ticket_id:
@@ -283,8 +443,6 @@ async def create_ticket_request(
     db.refresh(ticket_request)
 
     # Process in background
-    from bakery.config import settings
-
     background_tasks.add_task(
         process_ticket_request,
         ticket_request.id,

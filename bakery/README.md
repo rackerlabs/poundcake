@@ -348,6 +348,7 @@ All configuration is via environment variables. In Kubernetes, non-sensitive val
 | `MAX_MESSAGES_PER_POLL` | `100` | Max messages returned per poll |
 | `MIXER_TIMEOUT_SEC` | `30` | HTTP timeout for mixer API calls |
 | `MIXER_MAX_RETRIES` | `3` | Max retry attempts for failed calls |
+| `TICKETING_DRY_RUN` | `false` | Log and process requests without sending outbound calls to ticketing systems |
 
 ### Mixer Credentials
 
@@ -379,6 +380,8 @@ Bakery is deployed as part of the PoundCake Helm chart. Enable it in `values.yam
 ```yaml
 bakery:
   enabled: true
+  config:
+    ticketingDryRun: false
 ```
 
 The chart creates:

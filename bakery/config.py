@@ -5,6 +5,13 @@ import os
 from typing import Optional
 
 
+def _env_to_bool(value: Optional[str], default: bool = False) -> bool:
+    """Parse a boolean-like environment variable string."""
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Settings:
     """Bakery application settings loaded from environment variables."""
 
@@ -29,6 +36,7 @@ class Settings:
         # Mixer settings
         self.mixer_timeout_sec: int = int(os.getenv("MIXER_TIMEOUT_SEC", "30"))
         self.mixer_max_retries: int = int(os.getenv("MIXER_MAX_RETRIES", "3"))
+        self.ticketing_dry_run: bool = _env_to_bool(os.getenv("TICKETING_DRY_RUN"), default=False)
 
         # ServiceNow
         self.servicenow_url: Optional[str] = os.getenv("SERVICENOW_URL")

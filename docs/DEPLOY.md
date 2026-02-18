@@ -67,6 +67,16 @@ When enabled, the chart creates/updates:
 - HTTPRoute named `bakery-httproute`
 - RBAC for Gateway/HTTPRoute management
 
+Bakery no-send test mode (optional):
+
+```yaml
+bakery:
+  config:
+    ticketingDryRun: true
+```
+
+With `ticketingDryRun: true`, Bakery logs and processes requests but does not send outbound calls to external ticketing systems.
+
 By default, install scripts source chart versions from:
 - `/etc/genestack/helm-chart-versions.yaml`
 
