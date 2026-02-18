@@ -25,7 +25,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
-  tag: "2.0.68"  # Release tag
+  tag: "2.0.69"  # Release tag
 
 imagePullSecrets: []
 nameOverride: ""
@@ -61,7 +61,7 @@ ui:
   image:
     repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
-    tag: "2.0.68"  # Release tag
+    tag: "2.0.69"  # Release tag
   service:
     type: ClusterIP
     port: 80
@@ -799,7 +799,7 @@ bakery:
   image:
     repository: ghcr.io/aedan/poundcake-bakery
     pullPolicy: IfNotPresent
-    tag: "2.0.68"
+    tag: "2.0.69"
 
   # Service configuration
   service:

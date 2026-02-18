@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "poundcake.fullname" . }}-bakery
+  name: {{ include "poundcake.bakeryName" . }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: bakery
@@ -34,7 +34,7 @@ spec:
             - sh
             - -c
             - |
-              until nc -z -v -w30 {{ include "poundcake.fullname" . }}-bakery-mariadb 3306; do
+              until nc -z -v -w30 {{ include "poundcake.bakeryDbHost" . }} 3306; do
                 echo "Waiting for MariaDB..."
                 sleep 5
               done
@@ -55,7 +55,7 @@ spec:
             - name: LOG_LEVEL
               value: {{ .Values.bakery.config.logLevel | quote }}
             - name: DATABASE_HOST
-              value: {{ include "poundcake.fullname" . }}-bakery-mariadb
+              value: {{ include "poundcake.bakeryDbHost" . }}
             - name: DATABASE_PORT
               value: "3306"
             - name: DATABASE_NAME
@@ -65,7 +65,7 @@ spec:
             - name: DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.fullname" . }}-bakery-db
+                  name: {{ include "poundcake.bakeryDbSecretName" . }}
                   key: password
             - name: MESSAGE_RETENTION_HOURS
               value: {{ .Values.bakery.config.messageRetentionHours | quote }}
@@ -99,7 +99,7 @@ spec:
             - name: SERVICENOW_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.fullname" . }}-bakery
+                  name: {{ include "poundcake.bakerySecretName" . }}
                   key: servicenow-password
             {{- end }}
             {{- if .Values.bakery.jira.existingSecret }}
@@ -126,7 +126,7 @@ spec:
             - name: JIRA_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.fullname" . }}-bakery
+                  name: {{ include "poundcake.bakerySecretName" . }}
                   key: jira-api-token
             {{- end }}
             {{- if .Values.bakery.github.existingSecret }}
@@ -139,7 +139,7 @@ spec:
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.fullname" . }}-bakery
+                  name: {{ include "poundcake.bakerySecretName" . }}
                   key: github-token
             {{- end }}
             {{- if .Values.bakery.pagerduty.existingSecret }}
@@ -152,7 +152,7 @@ spec:
             - name: PAGERDUTY_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.fullname" . }}-bakery
+                  name: {{ include "poundcake.bakerySecretName" . }}
                   key: pagerduty-api-key
             {{- end }}
             {{- if .Values.bakery.rackspaceCore.existingSecret }}
@@ -179,7 +179,7 @@ spec:
             - name: RACKSPACE_CORE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.fullname" . }}-bakery
+                  name: {{ include "poundcake.bakerySecretName" . }}
                   key: rackspace-core-password
             {{- end }}
           livenessProbe:

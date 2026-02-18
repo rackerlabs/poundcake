@@ -2,7 +2,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "poundcake.fullname" . }}-bakery-db-init
+  name: {{ include "poundcake.bakeryName" . }}-db-init
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: bakery-db-init
@@ -40,7 +40,7 @@ spec:
             - name: LOG_LEVEL
               value: {{ .Values.bakery.config.logLevel | quote }}
             - name: DATABASE_HOST
-              value: {{ include "poundcake.fullname" . }}-bakery-mariadb
+              value: {{ include "poundcake.bakeryDbHost" . }}
             - name: DATABASE_PORT
               value: "3306"
             - name: DATABASE_NAME
@@ -50,7 +50,7 @@ spec:
             - name: DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "poundcake.fullname" . }}-bakery-db
+                  name: {{ include "poundcake.bakeryDbSecretName" . }}
                   key: password
           resources:
             limits:

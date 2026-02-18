@@ -3,14 +3,14 @@
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: MariaDB
 metadata:
-  name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+  name: {{ include "poundcake.bakeryDbHost" . }}
   namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: bakery-database
 spec:
   rootPasswordSecretKeyRef:
-    name: {{ .Values.mariadbOperator.server.rootPasswordSecret | default (printf "%s-bakery-mariadb-root" (include "poundcake.fullname" .)) }}
+    name: {{ .Values.mariadbOperator.server.rootPasswordSecret | default (printf "%s-root" (include "poundcake.bakeryDbHost" .)) }}
     key: {{ .Values.mariadbOperator.server.rootPasswordSecretKey | default "password" }}
 
   image: {{ .Values.mariadbOperator.server.image.repository }}:{{ .Values.mariadbOperator.server.image.tag }}
@@ -43,7 +43,7 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .Values.mariadbOperator.server.rootPasswordSecret | default (printf "%s-bakery-mariadb-root" (include "poundcake.fullname" .)) }}
+  name: {{ .Values.mariadbOperator.server.rootPasswordSecret | default (printf "%s-root" (include "poundcake.bakeryDbHost" .)) }}
   namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
@@ -56,14 +56,14 @@ data:
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: Database
 metadata:
-  name: {{ include "poundcake.fullname" . }}-bakery-db
+  name: {{ include "poundcake.bakeryName" . }}-db
   namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: bakery-database
 spec:
   mariaDbRef:
-    name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+    name: {{ include "poundcake.bakeryDbHost" . }}
   name: {{ .Values.bakery.database.name }}
   characterSet: utf8mb4
   collate: utf8mb4_unicode_ci
@@ -72,17 +72,17 @@ spec:
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: User
 metadata:
-  name: {{ include "poundcake.fullname" . }}-bakery-user
+  name: {{ include "poundcake.bakeryName" . }}-user
   namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: bakery-database
 spec:
   mariaDbRef:
-    name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+    name: {{ include "poundcake.bakeryDbHost" . }}
   name: {{ .Values.bakery.database.user.name }}
   passwordSecretKeyRef:
-    name: {{ .Values.bakery.database.user.passwordSecret | default (printf "%s-bakery-db" (include "poundcake.fullname" .)) }}
+    name: {{ .Values.bakery.database.user.passwordSecret | default (include "poundcake.bakeryDbSecretName" .) }}
     key: {{ .Values.bakery.database.user.passwordSecretKey | default "password" }}
   maxUserConnections: {{ .Values.bakery.database.user.maxUserConnections }}
   host: "%"
@@ -91,7 +91,7 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .Values.bakery.database.user.passwordSecret | default (printf "%s-bakery-db" (include "poundcake.fullname" .)) }}
+  name: {{ .Values.bakery.database.user.passwordSecret | default (include "poundcake.bakeryDbSecretName" .) }}
   namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
@@ -104,14 +104,14 @@ data:
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: Grant
 metadata:
-  name: {{ include "poundcake.fullname" . }}-bakery-grant
+  name: {{ include "poundcake.bakeryName" . }}-grant
   namespace: {{ .Values.mariadbOperator.namespace | default .Release.Namespace }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: bakery-database
 spec:
   mariaDbRef:
-    name: {{ include "poundcake.fullname" . }}-bakery-mariadb
+    name: {{ include "poundcake.bakeryDbHost" . }}
   privileges:
     - "ALL PRIVILEGES"
   database: {{ .Values.bakery.database.name }}
