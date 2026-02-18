@@ -22,6 +22,11 @@
 
 replicaCount: 1
 
+internal:
+  # Internal compatibility toggle while vendored legacy subchart files exist.
+  # Must remain false. StackStorm is installed separately by bin/install-poundcake.sh.
+  renderEmbeddedStackstormSubchart: false
+
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
@@ -189,33 +194,22 @@ config:
   defaultTimeout: 300
   maxConcurrentRemediations: 10
 
-# StackStorm Helm Chart Integration
-# StackStorm can be deployed as:
-# 1) an embedded subchart (stackstorm.chart.enabled=true), or
-# 2) a separate Helm release (stackstorm.chart.enabled=false with url/authUrl set).
+# StackStorm integration (external chart managed by install script).
 stackstorm:
-  # External StackStorm release name (used for secret/service name defaults).
+  # External StackStorm release name used for service/secret defaults.
   # Example: "stackstorm" -> stackstorm-st2api, stackstorm-st2auth, stackstorm-st2-apikeys.
   releaseName: ""
 
-  chart:
-    # Must stay false. StackStorm is installed separately by the install script.
-    enabled: false
-
   # Connection configuration
-  # Auto-generated from releaseName/subchart service names if empty.
-  # Set explicitly when using external StackStorm mode.
+  # Auto-generated from releaseName if empty; can be set explicitly.
   url: ""  # Example external: http://stackstorm-st2api.<namespace>.svc.cluster.local:9101
   authUrl: ""  # Example external: http://stackstorm-st2auth.<namespace>.svc.cluster.local:9100
   verifySsl: false
 
-  # StackStorm subchart secret mapping.
-  # Adjust these if your stackstorm-ha chart version uses different secret naming/keys.
-  subchart:
-    # Keep empty: upstream stackstorm-ha names resources using release prefix.
-    fullnameOverride: ""
-    apiKeySecretName: ""
-    apiKeySecretKey: "api-key"
+  # API key secret mapping.
+  apiKeySecretName: ""
+  apiKeySecretKey: "api-key"
+
   # Auto-discovery settings
   autoDiscover: true
   discoverAcrossNamespaces: true
@@ -231,109 +225,6 @@ stackstorm:
     mongodb: "st2-mongodb"
     rabbitmq: "st2-rabbitmq"
     redis: "st2-redis"
-
-  # Startup ordering for StackStorm subchart components.
-  # When enabled, PoundCake bootstrap will:
-  # 1) scale non-api/non-auth st2 deployments to 0
-  # 2) wait for st2auth + st2api + st2 API key secret
-  # 3) scale remaining st2 deployments back up
-  startupOrder:
-    enabled: true
-    replicas:
-      st2stream: 2
-      st2sensorcontainer: 1
-      st2rulesengine: 2
-      st2workflowengine: 2
-      st2actionrunner: 5
-      st2scheduler: 2
-      st2notifier: 2
-      st2garbagecollector: 1
-      st2timersengine: 1
-      st2chatops: 0
-      st2web: 2
-
-# StackStorm subchart configuration
-# These values are passed to the stackstorm-ha subchart when stackstorm.chart.enabled = true
-stackstorm-chart:
-  # Keep empty: upstream stackstorm-ha names resources using release prefix.
-  fullnameOverride: ""
-
-  # Pin StackStorm image version to avoid drift.
-  # Keep this aligned with your target StackStorm release.
-  imageTag: "3.9.0"
-
-  # Disable bundled services in StackStorm chart (we deploy them at parent level for sharing)
-  mongodb:
-    enabled: false
-
-  rabbitmq:
-    enabled: false
-
-  redis:
-    enabled: false
-
-  # StackStorm configuration
-  st2:
-    image:
-      tag: "3.9.0"
-      pullPolicy: IfNotPresent
-    rbac:
-      enabled: true
-
-    # Admin user configuration
-    auth:
-      username: st2admin
-      password: ""  # Auto-generated if empty
-
-    # Configure StackStorm to use parent-level services
-    # Note: Cannot use Helm templates here, must use actual service names
-    config: |
-      [database]
-      host = st2-mongodb
-      port = 27017
-      db_name = st2
-      username = stackstorm
-      password = stackstorm
-
-      [messaging]
-      url = amqp://stackstorm:stackstorm@st2-rabbitmq:5672
-
-      [coordination]
-      url = redis://st2-redis:6379
-
-      [api]
-      allow_origin = *
-
-  # st2client uses the actionrunner image in stackstorm-ha chart.
-  # Pin it explicitly to the same StackStorm release.
-  st2client:
-    image:
-      repository: stackstorm/st2actionrunner
-      tag: "3.9.0"
-      pullPolicy: IfNotPresent
-
-  # Start non-auth/non-api components at 0.
-  # The bootstrap job scales these up once API/auth and key bootstrap complete.
-  st2stream:
-    replicas: 0
-  st2sensorcontainer:
-    deployments: 0
-  st2rulesengine:
-    replicas: 0
-  st2workflowengine:
-    replicas: 0
-  st2actionrunner:
-    replicas: 0
-  st2scheduler:
-    replicas: 0
-  st2notifier:
-    replicas: 0
-  st2garbagecollector:
-    replicas: 0
-  st2timersengine:
-    replicas: 0
-  st2web:
-    replicas: 0
 
 # Redis configuration (used by StackStorm for coordination and optionally by PoundCake for caching)
 # Uses Redis Operator (OpsTree Labs) to deploy Redis
@@ -652,10 +543,8 @@ mariadbOperator:
     privileges:
       - "ALL PRIVILEGES"
 
-# MongoDB configuration (shared by StackStorm and PoundCake)
-# When stackstorm.chart.enabled = true, this MongoDB instance is used by both:
-# - StackStorm (st2 database)
-# - PoundCake (poundcake database, if needed)
+# MongoDB configuration (shared by external StackStorm and PoundCake)
+# StackStorm uses this for the st2 database.
 mongodb:
   # Enable MongoDB deployment
   enabled: true

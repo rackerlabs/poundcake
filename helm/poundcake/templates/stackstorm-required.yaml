@@ -1,9 +1,9 @@
-{{- if .Values.stackstorm.chart.enabled -}}
+{{- if .Values.internal.renderEmbeddedStackstormSubchart -}}
 {{- fail "Embedded StackStorm mode is disabled. Install stackstorm-ha separately via bin/install-poundcake.sh." -}}
 {{- end -}}
 
 {{- if or (not .Values.stackstorm.url) (not .Values.stackstorm.authUrl) -}}
-{{- fail "When stackstorm.chart.enabled=false, set stackstorm.url and stackstorm.authUrl for external StackStorm." -}}
+{{- fail "Set stackstorm.url and stackstorm.authUrl for external StackStorm." -}}
 {{- end -}}
 
 {{- if .Values.database.url -}}

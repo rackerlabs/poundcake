@@ -181,9 +181,7 @@ fi
 
 if [[ "$VALIDATE" == "true" ]]; then
   run_helm_validation "$CHART_REPO" "$POUNDCAKE_VERSION" "$NAMESPACE" "$RELEASE_NAME" \
-    --set "stackstorm.chart.enabled=false" \
     --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}" \
-    --set "stackstorm.subchart.fullnameOverride=${STACKSTORM_RELEASE_NAME}" \
     --set "stackstorm.url=${STACKSTORM_API_URL}" \
     --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}" \
     "${POUNDCAKE_OVERRIDE_ARGS[@]}" \
@@ -200,9 +198,7 @@ POUNDCAKE_PHASE1_CMD=(
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
-  --set "stackstorm.chart.enabled=false"
   --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
-  --set "stackstorm.subchart.fullnameOverride=${STACKSTORM_RELEASE_NAME}"
   --set "stackstorm.url=${STACKSTORM_API_URL}"
   --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
   "${POUNDCAKE_OVERRIDE_ARGS[@]}"
@@ -234,9 +230,7 @@ POUNDCAKE_PHASE3_CMD=(
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
-  --set "stackstorm.chart.enabled=false"
   --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
-  --set "stackstorm.subchart.fullnameOverride=${STACKSTORM_RELEASE_NAME}"
   --set "stackstorm.url=${STACKSTORM_API_URL}"
   --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
   "${POUNDCAKE_OVERRIDE_ARGS[@]}"

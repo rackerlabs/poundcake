@@ -55,37 +55,12 @@ COMPONENTS DEPLOYED:
   - Redis: {{ include "poundcake.fullname" . }}-redis
 {{- end }}
 
-{{- if .Values.stackstorm.chart.enabled }}
-
-STACKSTORM SERVICES:
-  StackStorm is deployed as part of this release.
-
-  API Endpoint:
-    {{ include "poundcake.stackstormApiUrl" . }}
-
-  Auth Endpoint:
-    {{ include "poundcake.stackstormAuthUrl" . }}
-
-  Get admin credentials:
-    kubectl get secret {{ include "poundcake.stackstormAuthSecretName" . }} -n {{ .Release.Namespace }} -o jsonpath='{.data.password}' | base64 -d && echo
-
-  Access StackStorm CLI:
-    kubectl exec -it deployment/{{ include "poundcake.stackstormSubchartPrefix" . }}-st2client -n {{ .Release.Namespace }} -- st2 action list
-    Note: st2client is a helper CLI pod and may show little/no logs when idle.
-
-  View StackStorm UI (if enabled):
-    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "poundcake.stackstormSubchartPrefix" . }}-st2web 8080:80
-
-{{- else }}
-
 STACKSTORM CONFIGURATION:
   Using external StackStorm instance at:
     API: {{ include "poundcake.stackstormApiUrl" . }}
     Auth: {{ include "poundcake.stackstormAuthUrl" . }}
 
   Ensure StackStorm is accessible from this namespace.
-
-{{- end }}
 
 {{- if not (or .Values.database.url .Values.database.existingSecret .Values.mariadbOperator.enabled) }}
 

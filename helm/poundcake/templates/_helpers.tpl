@@ -290,7 +290,7 @@ Get StackStorm API URL - either from subchart service or external URL
 {{- if .Values.stackstorm.releaseName }}
 {{- .Values.stackstorm.releaseName }}
 {{- else }}
-{{- .Values.stackstorm.subchart.fullnameOverride | default .Release.Name }}
+stackstorm
 {{- end }}
 {{- end }}
 
@@ -324,12 +324,12 @@ Get StackStorm Auth URL - either from subchart service or external URL
 Get StackStorm API key secret name
 */}}
 {{- define "poundcake.stackstormApiKeySecret" -}}
-{{- .Values.stackstorm.subchart.apiKeySecretName | default (printf "%s-st2-apikeys" (include "poundcake.stackstormSubchartPrefix" .)) }}
+{{- .Values.stackstorm.apiKeySecretName | default (printf "%s-st2-apikeys" (include "poundcake.stackstormSubchartPrefix" .)) }}
 {{- end }}
 
 {{/*
 Get StackStorm API key secret key
 */}}
 {{- define "poundcake.stackstormApiKeySecretKey" -}}
-{{- .Values.stackstorm.subchart.apiKeySecretKey | default "api-key" }}
+{{- .Values.stackstorm.apiKeySecretKey | default "api-key" }}
 {{- end }}
