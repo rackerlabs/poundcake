@@ -102,7 +102,7 @@ spec:
         lifecycle:
           preStop:
             exec: # https://blog.laputa.io/graceful-shutdown-in-kubernetes-85f1c8d586da
-              # kubeproxy and kubelet both race  
+              # kubeproxy and kubelet both race
               # wait a bit to ensure kubeproxy has removed the iptables rule.
               command: [ "sleep", {{ .Values.st2auth.preStopSleep | toString }} ]
           postStart:
@@ -235,7 +235,7 @@ spec:
         lifecycle:
           preStop:
             exec: # https://blog.laputa.io/graceful-shutdown-in-kubernetes-85f1c8d586da
-              # kubeproxy and kubelet both race  
+              # kubeproxy and kubelet both race
               # wait a bit to ensure kubeproxy has removed the iptables rule.
               command: [ "sleep", {{ .Values.st2api.preStopSleep | toString }} ]
           postStart:
@@ -359,7 +359,7 @@ spec:
         lifecycle:
           preStop:
             exec: # https://blog.laputa.io/graceful-shutdown-in-kubernetes-85f1c8d586da
-              # kubeproxy and kubelet both race  
+              # kubeproxy and kubelet both race
               # wait a bit to ensure kubeproxy has removed the iptables rule.
               command: [ "sleep", {{ .Values.st2stream.preStopSleep | toString }} ]
           postStart:
@@ -485,7 +485,7 @@ spec:
         lifecycle:
           preStop:
             exec: # https://blog.laputa.io/graceful-shutdown-in-kubernetes-85f1c8d586da
-              # kubeproxy and kubelet both race  
+              # kubeproxy and kubelet both race
               # wait a bit to ensure kubeproxy has removed the iptables rule.
               command: [ "sleep", {{ .Values.st2web.preStopSleep | toString }} ]
           postStart:

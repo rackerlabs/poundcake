@@ -49,11 +49,11 @@ rules:
     verbs:
       - patch
       - update
-  - apiGroups: 
+  - apiGroups:
       - projectcontour.io
     resources:
       - httpproxies
-    verbs: 
+    verbs:
       - get
       - watch
       - list
