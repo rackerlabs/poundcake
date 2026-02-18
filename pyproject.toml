@@ -71,12 +71,10 @@ disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
 module = [
-    "api.tasks.*",
     "api.services.*",
 ]
 # Ignore SQLAlchemy Column assignment issues
 warn_return_any = false
-# Allow Celery task decorators without full type annotations
 disallow_untyped_defs = false
 # Disable problematic error codes for SQLAlchemy ORM code
 disable_error_code = ["assignment", "arg-type", "call-overload", "misc", "var-annotated", "dict-item", "type-var", "return-value", "union-attr", "index"]
@@ -99,7 +97,7 @@ module = [
     "api.models.models",
     "api.validation.query_params",
 ]
-# Ignore SQLAlchemy and Celery type issues in API modules
+# Ignore SQLAlchemy type issues in API modules
 disable_error_code = ["assignment", "arg-type", "call-overload", "var-annotated", "return-value", "no-any-return", "no-untyped-def", "attr-defined", "index"]
 
 [[tool.mypy.overrides]]
@@ -108,10 +106,7 @@ module = [
     "kubernetes.*",
     "git",
     "git.*",
-    "celery",
-    "celery.*",
     "api.models.models_simple",
-    "api.tasks.tasks_simple",
 ]
 ignore_missing_imports = true
 

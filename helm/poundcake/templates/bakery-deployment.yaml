@@ -91,7 +91,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.servicenow.existingSecret }}
                   key: {{ .Values.bakery.servicenow.secretKeys.password }}
-            {{- else if .Values.bakery.servicenow.url }}
+            {{- else if and .Values.bakery.servicenow.url .Values.bakery.servicenow.password }}
             - name: SERVICENOW_URL
               value: {{ .Values.bakery.servicenow.url | quote }}
             - name: SERVICENOW_USERNAME
@@ -118,7 +118,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.jira.existingSecret }}
                   key: {{ .Values.bakery.jira.secretKeys.apiToken }}
-            {{- else if .Values.bakery.jira.url }}
+            {{- else if and .Values.bakery.jira.url .Values.bakery.jira.apiToken }}
             - name: JIRA_URL
               value: {{ .Values.bakery.jira.url | quote }}
             - name: JIRA_USERNAME
@@ -171,7 +171,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.rackspaceCore.existingSecret }}
                   key: {{ .Values.bakery.rackspaceCore.secretKeys.password }}
-            {{- else if .Values.bakery.rackspaceCore.url }}
+            {{- else if and .Values.bakery.rackspaceCore.url .Values.bakery.rackspaceCore.password }}
             - name: RACKSPACE_CORE_URL
               value: {{ .Values.bakery.rackspaceCore.url | quote }}
             - name: RACKSPACE_CORE_USERNAME
