@@ -158,6 +158,10 @@
                     <h3>Quick Stats</h3>
                     <div id="quick-stats"></div>
                 </div>
+                <div class="dashboard-card">
+                    <h3>Platform Snapshot</h3>
+                    <div id="platform-summary"></div>
+                </div>
             </div>
         </div>
 
@@ -529,6 +533,23 @@
             alert(message);
         }
 
+        async function fetchJson(url) {
+            const res = await fetch(url);
+            if (!res.ok) {
+                throw new Error(`${url} failed (${res.status})`);
+            }
+            return await res.json();
+        }
+
+        async function fetchJsonOrDefault(url, fallback) {
+            try {
+                return await fetchJson(url);
+            } catch (error) {
+                console.warn(`Failed to fetch ${url}:`, error);
+                return fallback;
+            }
+        }
+
         function showTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -560,12 +581,14 @@
 
             orders.forEach(order => {
                 const statusClass = `status-${order.processing_status}`;
+                const instance = order.labels?.instance || order.labels?.pod || order.labels?.node || '-';
+                const severity = order.labels?.severity || '-';
 
                 tbody.innerHTML += `
                     <tr class="expandable" onclick="toggleDetails(${order.id})">
                         <td><strong>${order.alert_group_name}</strong></td>
-                        <td>${order.instance || '-'}</td>
-                        <td>${order.severity || '-'}</td>
+                        <td>${instance}</td>
+                        <td>${severity}</td>
                         <td><span class="status ${statusClass}">${order.processing_status}</span></td>
                         <td>${order.alert_status || '-'}</td>
                         <td>${new Date(order.created_at).toLocaleString()}</td>
@@ -681,18 +704,20 @@
         }
 
         async function loadPacks() {
-            const res = await fetch('/api/v1/stackstorm/packs');
+            const res = await fetch('/api/v1/cook/packs');
             const data = await res.json();
             const select = document.getElementById('pack-filter');
             select.innerHTML = '<option value="">All Packs</option>';
             data.packs.forEach(pack => {
-                select.innerHTML += `<option value="${pack.ref}">${pack.ref}</option>`;
+                const packRef = pack.ref || pack.name || '';
+                if (!packRef) return;
+                select.innerHTML += `<option value="${packRef}">${packRef}</option>`;
             });
         }
 
         async function loadActions() {
             const pack = document.getElementById('pack-filter').value;
-            const url = pack ? `/api/v1/stackstorm/actions?pack=${pack}` : '/api/v1/stackstorm/actions';
+            const url = pack ? `/api/v1/cook/actions?pack=${pack}` : '/api/v1/cook/actions';
             const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('actions-table');
@@ -712,8 +737,6 @@
                         <td>${pack}</td>
                         <td>
                             <button class="btn btn-primary btn-sm" onclick="showAction('${action.ref}')">View</button>
-                            <button class="btn btn-primary btn-sm" onclick="editAction('${action.ref}')">Edit</button>
-                            <button class="btn btn-danger btn-sm" onclick="deleteAction('${action.ref}')">Delete</button>
                         </td>
                     </tr>
                 `;
@@ -1477,13 +1500,16 @@
             data.forEach(r => {
                 const statusClass = r.processing_status === 'complete' ? 'status-success' :
                                    r.processing_status === 'failed' ? 'status-failed' : 'status-running';
+                const alertName = r.recipe?.name || r.req_id || (r.order_id ? `Order ${r.order_id}` : 'Unknown');
+                const actionName = r.recipe?.workflow_id || 'Recipe dispatch';
+                const started = r.started_at || r.created_at;
                 tbody.innerHTML += `
                     <tr>
-                        <td>${r.task_name || 'Unknown'}</td>
-                        <td>${r.st2_action || 'N/A'}</td>
+                        <td>${alertName}</td>
+                        <td>${actionName}</td>
                         <td><span class="status ${statusClass}">${r.processing_status}</span></td>
-                        <td>${r.started_at ? new Date(r.started_at).toLocaleString() : 'Pending'}</td>
-                        <td>${r.action_id || '-'}</td>
+                        <td>${started ? new Date(started).toLocaleString() : 'Pending'}</td>
+                        <td>${r.workflow_execution_id || '-'}</td>
                     </tr>
                 `;
             });
@@ -1576,7 +1602,7 @@ actions:
         }
 
         async function showAction(ref) {
-            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`);
+            const res = await fetch(`/api/v1/cook/actions/${ref}`);
             currentAction = await res.json();
             document.getElementById('action-title').textContent = ref;
             document.getElementById('action-details').textContent = JSON.stringify(currentAction, null, 2);
@@ -1613,7 +1639,7 @@ actions:
         }
 
         async function editAction(ref) {
-            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`);
+            const res = await fetch(`/api/v1/cook/actions/${ref}`);
             const action = await res.json();
 
             editActionMode = true;
@@ -1648,56 +1674,12 @@ actions:
 
         async function saveAction(e) {
             e.preventDefault();
-            const ref = document.getElementById('action-ref').value;
-            const data = JSON.parse(document.getElementById('action-data').value);
-
-            try {
-                if (editActionMode) {
-                    const res = await fetch(`/api/v1/stackstorm/actions/${ref}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-                    if (!res.ok) {
-                        const error = await res.json();
-                        order(`Failed to update action: ${error.detail || res.statusText}`);
-                        return;
-                    }
-                } else {
-                    const res = await fetch('/api/v1/stackstorm/actions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-                    if (!res.ok) {
-                        const error = await res.json();
-                        order(`Failed to create action: ${error.detail || res.statusText}`);
-                        return;
-                    }
-                }
-
-                closeEditActionModal();
-                loadActions();
-                order('Action saved successfully!');
-            } catch (err) {
-                order(`Error: ${err.message}`);
-            }
+            closeEditActionModal();
+            order('Action create/update is not exposed by the current API. Use StackStorm directly for edits.');
         }
 
         async function deleteAction(ref) {
-            if (!confirm(`Delete action "${ref}"?`)) return;
-
-            const res = await fetch(`/api/v1/stackstorm/actions/${ref}`, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                loadActions();
-                order('Action deleted successfully!');
-            } else {
-                const error = await res.json();
-                order(`Failed to delete action: ${error.detail || res.statusText}`);
-            }
+            order('Action deletion is not exposed by the current API. Use StackStorm directly for deletes.');
         }
 
         function closeEditActionModal() {
@@ -1707,19 +1689,21 @@ actions:
         // Dashboard functions
         async function loadDashboard() {
             try {
-                // Load health data for dashboard cards
-                const healthRes = await fetch('/api/v1/health');
-                const health = await healthRes.json();
-
-                // Load order stats
-                const statsRes = await fetch('/api/v1/stats');
-                const stats = await statsRes.json();
-
-                // Load recent history
-                const historyRes = await fetch('/api/v1/dishes?limit=10');
-                const history = await historyRes.json();
-
-                console.log('Dashboard data:', { health, stats, history });
+                const [
+                    health,
+                    stats,
+                    orders,
+                    dishes,
+                    executions,
+                    rulesResp
+                ] = await Promise.all([
+                    fetchJson('/api/v1/health'),
+                    fetchJson('/api/v1/stats'),
+                    fetchJsonOrDefault('/api/v1/orders?limit=20', []),
+                    fetchJsonOrDefault('/api/v1/dishes?limit=20', []),
+                    fetchJsonOrDefault('/api/v1/cook/executions?limit=20', []),
+                    fetchJsonOrDefault('/api/v1/prometheus/rules', { rules: [] })
+                ]);
 
             // Update header version from health API
             const headerVersion = document.getElementById('header-version');
@@ -1841,18 +1825,52 @@ actions:
                 </div>
             `;
 
-            // Update recent activity (history is now an array of dishes, not an object with remediations)
+            // Build recent activity from orders, dish processing, and StackStorm executions
             const activityDiv = document.getElementById('recent-activity');
-            if (!history || history.length === 0) {
+            const activity = [];
+
+            (Array.isArray(orders) ? orders : []).forEach(o => {
+                activity.push({
+                    timestamp: o.updated_at || o.created_at,
+                    status: o.processing_status || 'new',
+                    title: `Alert: ${o.alert_group_name}`,
+                    details: `${o.alert_status || 'unknown'} (${o.req_id || 'no-req-id'})`,
+                });
+            });
+
+            (Array.isArray(dishes) ? dishes : []).forEach(d => {
+                activity.push({
+                    timestamp: d.updated_at || d.started_at || d.created_at,
+                    status: d.processing_status || 'new',
+                    title: `Dish: ${d.recipe?.name || d.req_id || 'unknown'}`,
+                    details: d.workflow_execution_id ? `Execution ${d.workflow_execution_id}` : 'Awaiting execution ID',
+                });
+            });
+
+            (Array.isArray(executions) ? executions : []).forEach(exe => {
+                activity.push({
+                    timestamp: exe.start_timestamp || exe.end_timestamp,
+                    status: exe.status || 'unknown',
+                    title: `Execution: ${exe.action?.ref || exe.action || 'unknown action'}`,
+                    details: `id=${exe.id || 'n/a'}`,
+                });
+            });
+
+            activity.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+            if (activity.length === 0) {
                 activityDiv.innerHTML = '<p style="color: #666; text-align: center;">No recent activity</p>';
             } else {
-                activityDiv.innerHTML = history.slice(0, 5).map(r => {
-                    const statusClass = r.processing_status === 'complete' ? 'success' : (r.processing_status === 'failed' ? 'failed' : 'pending');
-                    const time = r.started_at ? new Date(r.started_at).toLocaleString() : new Date(r.created_at).toLocaleString();
+                activityDiv.innerHTML = activity.slice(0, 8).map(item => {
+                    const normalized = String(item.status).toLowerCase();
+                    const statusClass = (normalized === 'complete' || normalized === 'succeeded') ? 'success' :
+                        (normalized === 'failed' || normalized === 'error') ? 'failed' : '';
+                    const time = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'unknown time';
                     return `
                         <div class="activity-item ${statusClass}">
-                            <div><strong>${r.task_name || 'Unknown Task'}</strong> → ${r.st2_action || 'N/A'}</div>
-                            <div class="time">${time} - ${r.processing_status}</div>
+                            <div><strong>${item.title}</strong></div>
+                            <div>${item.details}</div>
+                            <div class="time">${time} - ${item.status}</div>
                         </div>
                     `;
                 }).join('');
@@ -1872,6 +1890,37 @@ actions:
                 <div class="metric-row">
                     <span class="metric-label">Total Orders</span>
                     <span class="metric-value">${stats.total_alerts || 0}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Recent Alerts (24h)</span>
+                    <span class="metric-value">${stats.recent_alerts || 0}</span>
+                </div>
+            `;
+
+            const platformSummaryDiv = document.getElementById('platform-summary');
+            const rules = Array.isArray(rulesResp.rules) ? rulesResp.rules : [];
+            const firingRules = rules.filter(r => String(r.state).toLowerCase() === 'firing').length;
+            const pendingRules = rules.filter(r => String(r.state).toLowerCase() === 'pending').length;
+            const executionFailures = (Array.isArray(executions) ? executions : [])
+                .filter(exe => ['failed', 'error', 'timed_out', 'abandoned'].includes(String(exe.status).toLowerCase()))
+                .length;
+
+            platformSummaryDiv.innerHTML = `
+                <div class="metric-row">
+                    <span class="metric-label">Prometheus Rules</span>
+                    <span class="metric-value">${rules.length}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Rules Firing</span>
+                    <span class="metric-value">${firingRules}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Rules Pending</span>
+                    <span class="metric-value">${pendingRules}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Execution Failures</span>
+                    <span class="metric-value">${executionFailures}</span>
                 </div>
             `;
             } catch (error) {
