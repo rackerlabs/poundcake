@@ -79,7 +79,7 @@ if [[ ! -f "$VERSION_FILE" && -f "$VERSION_FILE_FALLBACK" ]]; then
 fi
 
 POUNDCAKE_VERSION="$(get_chart_version "poundcake" "$VERSION_FILE")"
-STACKSTORM_VERSION="$(get_chart_version "stackstorm" "$VERSION_FILE")"
+STACKSTORM_VERSION="$(get_chart_version "stackstorm" "$VERSION_FILE" || true)"
 
 if [[ -z "${POUNDCAKE_VERSION}" ]]; then
   echo "Error: could not determine PoundCake chart version from ${VERSION_FILE} (key: poundcake)." >&2
