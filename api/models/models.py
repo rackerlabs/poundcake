@@ -241,6 +241,8 @@ class Order(Base):
     severity: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     instance: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     counter: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    bakery_ticket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    bakery_operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     labels: Mapped[dict[str, Any]] = mapped_column(MYSQL_JSON, nullable=False)
     annotations: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)

@@ -19,6 +19,7 @@ from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES, ORDER_TERMINAL_PROCESSING_STATUSES
 from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient, Ingredient
+from api.services.bakery_client import create_ticket, close_ticket, poll_operation
 from api.schemas.schemas import (
     DishResponse,
     DishUpdate,
@@ -31,6 +32,75 @@ from api.schemas.query_params import DishQueryParams, validate_query_params
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSession) -> None:
+    """Create/close Bakery tickets for terminal dish states."""
+    settings = get_settings()
+    if not settings.bakery_enabled:
+        return
+
+    result = await db.execute(select(Dish).where(Dish.id == dish_id))
+    dish = result.scalars().first()
+    if not dish or not dish.order_id or dish.processing_status not in {"failed", "complete"}:
+        return
+
+    result = await db.execute(select(Order).where(Order.id == dish.order_id).with_for_update())
+    order = result.scalars().first()
+    if not order:
+        return
+
+    try:
+        if dish.processing_status == "failed" and not order.bakery_ticket_id:
+            create_payload = {
+                "title": f"[{order.severity or 'unknown'}] {order.alert_group_name}",
+                "description": (
+                    f"Order {order.id} failed for req_id={order.req_id}\n"
+                    f"Dish {dish.id} status={dish.status or dish.processing_status}\n"
+                    f"Error: {dish.error_message or 'unknown'}"
+                ),
+                "severity": order.severity or "unknown",
+                "source": "poundcake",
+                "provider_extras": {
+                    "labels": order.labels or {},
+                    "annotations": order.annotations or {},
+                    "req_id": order.req_id,
+                },
+            }
+            accepted = await create_ticket(req_id=req_id, payload=create_payload)
+            order.bakery_ticket_id = accepted.get("ticket_id")
+            order.bakery_operation_id = accepted.get("operation_id")
+            await db.commit()
+
+            operation_id = accepted.get("operation_id")
+            if operation_id:
+                try:
+                    await poll_operation(operation_id)
+                except TimeoutError:
+                    logger.info(
+                        "Bakery create operation still in progress",
+                        extra={
+                            "req_id": req_id,
+                            "order_id": order.id,
+                            "ticket_id": order.bakery_ticket_id,
+                            "operation_id": operation_id,
+                        },
+                    )
+
+        elif dish.processing_status == "complete" and order.bakery_ticket_id:
+            close_payload = {"resolution_notes": f"Order {order.id} completed successfully"}
+            accepted = await close_ticket(
+                req_id=req_id,
+                ticket_id=order.bakery_ticket_id,
+                payload=close_payload,
+            )
+            order.bakery_operation_id = accepted.get("operation_id")
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Failed Bakery synchronization",
+            extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
+        )
 
 
 def _rowcount(result: object) -> int:
@@ -448,12 +518,14 @@ async def update_dish(
     logger.info("Updating dish", extra={"req_id": req_id, "dish_id": dish_id})
 
     dish: Dish | None = None
+    previous_processing_status: str | None = None
     async with db.begin():
         result = await db.execute(select(Dish).where(Dish.id == dish_id).with_for_update())
         dish = result.unique().scalars().first()
         if not dish:
             logger.warning("Dish not found", extra={"req_id": req_id, "dish_id": dish_id})
             raise HTTPException(status_code=404, detail="Dish not found")
+        previous_processing_status = dish.processing_status
 
         update_data = payload.model_dump(exclude_unset=True)
         if (
@@ -496,6 +568,11 @@ async def update_dish(
     if dish is None:
         raise HTTPException(status_code=500, detail="Dish update failed")
     await db.refresh(dish)
+    if (
+        previous_processing_status not in DISH_TERMINAL_PROCESSING_STATUSES
+        and dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES
+    ):
+        await _sync_bakery_for_terminal_dish(req_id=req_id, dish_id=dish.id, db=db)
 
     logger.info(
         "Dish updated successfully",

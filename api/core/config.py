@@ -91,15 +91,20 @@ class Settings(BaseSettings):
         if self.stackstorm_api_key:
             return self.stackstorm_api_key
 
-        # Fall back to runtime config file (written by setup container)
-        config_file = Path("/app/config/st2_api_key")
-        if config_file.exists():
+        # Fall back to runtime config file (written by setup container or mounted secret).
+        config_files = [
+            Path("/app/config/st2_api_key"),
+            Path("/app/config/st2-apikeys/api-key"),
+        ]
+        for config_file in config_files:
+            if not config_file.exists():
+                continue
             try:
                 key = config_file.read_text().strip()
                 if key:
                     return key
             except Exception:
-                pass
+                continue
 
         return ""
 
@@ -184,6 +189,19 @@ class Settings(BaseSettings):
     # Development/local auth fallback
     auth_dev_username: str = ""
     auth_dev_password: str = ""
+
+    # ==========================================================================
+    # Bakery Integration Settings
+    # ==========================================================================
+    bakery_enabled: bool = False
+    bakery_base_url: str = "http://bakery:8000"
+    bakery_auth_mode: str = "hmac"
+    bakery_hmac_key_id: str = ""
+    bakery_hmac_key: str = ""
+    bakery_request_timeout_seconds: int = 15
+    bakery_max_retries: int = 2
+    bakery_poll_interval_seconds: float = 2.0
+    bakery_poll_timeout_seconds: int = 60
 
 
 settings = Settings()

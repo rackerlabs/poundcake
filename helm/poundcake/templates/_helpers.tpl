@@ -150,12 +150,28 @@ bakery
 {{- printf "%s-secret" (include "poundcake.bakeryName" .) }}
 {{- end }}
 
+{{- define "poundcake.bakeryClientSecretName" -}}
+{{- if .Values.bakery.client.auth.existingSecret }}
+{{- .Values.bakery.client.auth.existingSecret }}
+{{- else }}
+{{- include "poundcake.bakerySecretName" . }}
+{{- end }}
+{{- end }}
+
 {{- define "poundcake.bakeryDbHost" -}}
 {{- printf "%s-mariadb" (include "poundcake.bakeryName" .) }}
 {{- end }}
 
 {{- define "poundcake.bakeryDbSecretName" -}}
 {{- printf "%s-db" (include "poundcake.bakeryName" .) }}
+{{- end }}
+
+{{- define "poundcake.bakeryBaseUrl" -}}
+{{- if .Values.bakery.client.baseUrl }}
+{{- .Values.bakery.client.baseUrl }}
+{{- else }}
+{{- printf "http://%s.%s.svc.cluster.local:%v" (include "poundcake.bakeryName" .) .Release.Namespace .Values.bakery.service.port }}
+{{- end }}
 {{- end }}
 
 {{/*

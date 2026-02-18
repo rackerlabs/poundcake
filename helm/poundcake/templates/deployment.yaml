@@ -23,6 +23,7 @@ spec:
         {{- end }}
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -161,6 +162,34 @@ spec:
                   name: {{ include "poundcake.stackstormApiKeySecret" . }}
                   key: {{ include "poundcake.stackstormApiKeySecretKey" . }}
                   optional: true
+            {{- if .Values.bakery.client.enabled }}
+            - name: POUNDCAKE_BAKERY_ENABLED
+              value: "true"
+            - name: POUNDCAKE_BAKERY_BASE_URL
+              value: {{ include "poundcake.bakeryBaseUrl" . | quote }}
+            - name: POUNDCAKE_BAKERY_AUTH_MODE
+              value: {{ .Values.bakery.client.auth.mode | quote }}
+            - name: POUNDCAKE_BAKERY_REQUEST_TIMEOUT_SECONDS
+              value: {{ .Values.bakery.client.requestTimeoutSeconds | quote }}
+            - name: POUNDCAKE_BAKERY_MAX_RETRIES
+              value: {{ .Values.bakery.client.maxRetries | quote }}
+            - name: POUNDCAKE_BAKERY_POLL_INTERVAL_SECONDS
+              value: {{ .Values.bakery.client.pollIntervalSeconds | quote }}
+            - name: POUNDCAKE_BAKERY_POLL_TIMEOUT_SECONDS
+              value: {{ .Values.bakery.client.pollTimeoutSeconds | quote }}
+            - name: POUNDCAKE_BAKERY_HMAC_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.bakeryClientSecretName" . }}
+                  key: {{ .Values.bakery.client.auth.secretKeys.keyId | default "active-key-id" }}
+                  optional: true
+            - name: POUNDCAKE_BAKERY_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.bakeryClientSecretName" . }}
+                  key: {{ .Values.bakery.client.auth.secretKeys.key | default "active-key" }}
+                  optional: true
+            {{- end }}
             {{- if .Values.stackstorm.adminUser }}
             - name: POUNDCAKE_STACKSTORM_ADMIN_USER
               value: {{ .Values.stackstorm.adminUser | quote }}
@@ -296,6 +325,9 @@ spec:
             - name: mappings
               mountPath: /app/config/mappings
               readOnly: false
+            - name: st2-apikeys
+              mountPath: /app/config/st2-apikeys
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -307,6 +339,10 @@ spec:
           configMap:
             name: {{ include "poundcake.fullname" . }}-mappings
           {{- end }}
+        - name: st2-apikeys
+          secret:
+            secretName: {{ include "poundcake.stackstormApiKeySecret" . }}
+            optional: true
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}

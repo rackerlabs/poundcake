@@ -1,24 +1,24 @@
-{{- if or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only") }}
+{{- if and (or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only")) .Values.bakery.worker.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "poundcake.bakeryName" . }}
+  name: {{ include "poundcake.bakeryName" . }}-worker
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: bakery
+    app.kubernetes.io/component: bakery-worker
 spec:
-  replicas: {{ .Values.bakery.replicaCount }}
+  replicas: {{ .Values.bakery.worker.replicaCount }}
   selector:
     matchLabels:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: bakery
+      app.kubernetes.io/component: bakery-worker
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/bakery-secret.yaml") . | sha256sum }}
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: bakery
+        app.kubernetes.io/component: bakery-worker
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -40,15 +40,15 @@ spec:
               done
               echo "MariaDB is ready"
       containers:
-        - name: bakery
+        - name: bakery-worker
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.bakery.image.repository }}:{{ .Values.bakery.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.bakery.image.pullPolicy }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.bakery.service.port }}
-              protocol: TCP
+          command:
+            - python
+            - -m
+            - bakery.worker
           env:
             - name: ENVIRONMENT
               value: {{ .Values.bakery.config.environment | quote }}
@@ -71,14 +71,20 @@ spec:
                 secretKeyRef:
                   name: {{ include "poundcake.bakeryDbSecretName" . }}
                   key: password
-            - name: MESSAGE_RETENTION_HOURS
-              value: {{ .Values.bakery.config.messageRetentionHours | quote }}
-            - name: MAX_MESSAGES_PER_POLL
-              value: {{ .Values.bakery.config.maxMessagesPerPoll | quote }}
             - name: MIXER_TIMEOUT_SEC
               value: {{ .Values.bakery.config.mixerTimeoutSec | quote }}
             - name: MIXER_MAX_RETRIES
               value: {{ .Values.bakery.config.mixerMaxRetries | quote }}
+            - name: BAKERY_WORKER_POLL_INTERVAL_SEC
+              value: {{ .Values.bakery.worker.pollIntervalSec | quote }}
+            - name: BAKERY_WORKER_BATCH_SIZE
+              value: {{ .Values.bakery.worker.batchSize | quote }}
+            - name: BAKERY_WORKER_MAX_ATTEMPTS
+              value: {{ .Values.bakery.worker.maxAttempts | quote }}
+            - name: BAKERY_WORKER_BACKOFF_BASE_SEC
+              value: {{ .Values.bakery.worker.backoffBaseSec | quote }}
+            - name: BAKERY_WORKER_BACKOFF_MAX_SEC
+              value: {{ .Values.bakery.worker.backoffMaxSec | quote }}
             - name: BAKERY_AUTH_ENABLED
               value: {{ .Values.bakery.auth.enabled | quote }}
             - name: BAKERY_AUTH_MODE
@@ -110,16 +116,6 @@ spec:
                   name: {{ $bakeryAuthSecretName }}
                   key: {{ .Values.bakery.auth.secretKeys.nextKey }}
                   optional: true
-            - name: BAKERY_WORKER_POLL_INTERVAL_SEC
-              value: {{ .Values.bakery.worker.pollIntervalSec | quote }}
-            - name: BAKERY_WORKER_BATCH_SIZE
-              value: {{ .Values.bakery.worker.batchSize | quote }}
-            - name: BAKERY_WORKER_MAX_ATTEMPTS
-              value: {{ .Values.bakery.worker.maxAttempts | quote }}
-            - name: BAKERY_WORKER_BACKOFF_BASE_SEC
-              value: {{ .Values.bakery.worker.backoffBaseSec | quote }}
-            - name: BAKERY_WORKER_BACKOFF_MAX_SEC
-              value: {{ .Values.bakery.worker.backoffMaxSec | quote }}
             {{- if .Values.bakery.servicenow.existingSecret }}
             - name: SERVICENOW_URL
               valueFrom:
@@ -227,26 +223,8 @@ spec:
                   name: {{ include "poundcake.bakerySecretName" . }}
                   key: rackspace-core-password
             {{- end }}
-          livenessProbe:
-            httpGet:
-              path: /api/v1/health
-              port: http
-            initialDelaySeconds: 30
-            periodSeconds: 30
-          readinessProbe:
-            httpGet:
-              path: /api/v1/health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 10
           resources:
             {{- toYaml .Values.bakery.resources | nindent 12 }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-      volumes:
-        - name: tmp
-          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

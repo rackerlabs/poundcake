@@ -25,5 +25,6 @@ spec:
   selector:
     matchLabels:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
 {{- end }}
 {{- end }}

@@ -253,7 +253,8 @@ class OrderBase(BaseModel):
     alert_group_name: str = Field(..., max_length=255)
     labels: Dict[str, Any]
     starts_at: datetime
-    bakery_comms_id: Optional[str] = Field(None, max_length=36)
+    bakery_ticket_id: Optional[str] = Field(None, max_length=36)
+    bakery_operation_id: Optional[str] = Field(None, max_length=36)
 
 
 class OrderCreate(OrderBase):

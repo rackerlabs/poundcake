@@ -15,4 +15,5 @@ spec:
       name: http
   selector:
     {{- include "poundcake.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
 {{- end }}

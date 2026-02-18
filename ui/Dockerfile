@@ -19,8 +19,8 @@ COPY ui/nginx/nginx.conf /etc/nginx/templates/default.conf.template
 # Default API URL - will be overridden by environment variable in Kubernetes
 ENV API_URL=http://poundcake:8080
 
-# Expose port
-EXPOSE 80
+# Expose unprivileged port (compatible with non-root runtime)
+EXPOSE 8080
 
 # Labels
 LABEL org.opencontainers.image.title="PoundCake UI" \
@@ -30,7 +30,7 @@ LABEL org.opencontainers.image.title="PoundCake UI" \
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+    CMD wget --quiet --tries=1 --spider http://localhost:8080/ || exit 1
 
 # Use nginx's default entrypoint which handles templates automatically
 # No custom entrypoint needed - nginx will process templates and start normally
