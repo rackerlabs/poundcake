@@ -218,6 +218,26 @@ Bakery-only deployment (no PoundCake or StackStorm resources):
 ./bin/install-poundcake.sh --mode bakery-only -f /path/to/values.yaml
 ```
 
+Bakery Gateway API exposure (optional):
+
+```yaml
+bakery:
+  gateway:
+    enabled: true
+    gatewayName: flex-gateway
+    gatewayNamespace: envoy-gateway
+    listener:
+      name: bakery-https
+      hostname: bakery.api.ord.cloudmunchers.net
+      port: 443
+      protocol: HTTPS
+      tlsSecretName: bakery-gw-tls-secret
+      allowedNamespaces: All
+      updateIfExists: true
+    hostnames:
+      - bakery.api.ord.cloudmunchers.net
+```
+
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
 
 In full mode, StackStorm is installed as a separate Helm release by `bin/install-poundcake.sh`.

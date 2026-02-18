@@ -36,7 +36,7 @@ deployment:
 image:
   repository: ghcr.io/aedan/poundcake
   pullPolicy: IfNotPresent
-  tag: "2.0.78"  # Release tag
+  tag: "2.0.79"  # Release tag
 
 imagePullSecrets: []
 nameOverride: ""
@@ -72,7 +72,7 @@ ui:
   image:
     repository: ghcr.io/aedan/poundcake-ui
     pullPolicy: IfNotPresent
-    tag: "2.0.78"  # Release tag
+    tag: "2.0.79"  # Release tag
   service:
     type: ClusterIP
     port: 80
@@ -693,12 +693,37 @@ bakery:
   image:
     repository: ghcr.io/aedan/poundcake-bakery
     pullPolicy: IfNotPresent
-    tag: "2.0.78"
+    tag: "2.0.79"
 
   # Service configuration
   service:
     type: ClusterIP
     port: 8000
+
+  # Gateway API exposure for Bakery (optional)
+  # Useful when PoundCake is deployed in a different environment/cluster.
+  gateway:
+    enabled: false
+
+    # Gateway reference (required if enabled)
+    gatewayName: ""  # Example: flex-gateway
+    gatewayNamespace: ""  # Example: envoy-gateway
+
+    # Listener configuration to create/update on the target Gateway
+    listener:
+      name: ""  # Example: bakery-https
+      hostname: ""  # Example: bakery.api.ord.cloudmunchers.net
+      port: 443
+      protocol: "HTTPS"  # HTTPS or HTTP
+      tlsSecretName: ""  # Required when protocol is HTTPS
+      allowedNamespaces: "All"
+      updateIfExists: true
+
+    # HTTPRoute hostnames (should match listener.hostname)
+    hostnames: []
+
+    # Optional HTTPRoute annotations
+    annotations: {}
 
   # Resource limits
   resources:

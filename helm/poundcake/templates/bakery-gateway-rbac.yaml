@@ -1,0 +1,30 @@
+{{- if and (or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only")) .Values.bakery.gateway.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "poundcake.bakeryName" . }}-gateway-manager
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources: ["gateways"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources: ["httproutes"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "poundcake.bakeryName" . }}-gateway-manager
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "poundcake.bakeryName" . }}-gateway-manager
+subjects:
+- kind: ServiceAccount
+  name: {{ include "poundcake.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

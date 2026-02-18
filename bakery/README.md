@@ -388,6 +388,31 @@ The chart creates:
 - **MariaDB** instance (via MariaDB Operator) with database, user, and grants
 - **Job** for database initialization (runs migrations on install/upgrade)
 
+Optional: expose Bakery through Gateway API (for cross-environment PoundCake -> Bakery traffic):
+
+```yaml
+bakery:
+  gateway:
+    enabled: true
+    gatewayName: flex-gateway
+    gatewayNamespace: envoy-gateway
+    listener:
+      name: bakery-https
+      hostname: bakery.api.ord.cloudmunchers.net
+      port: 443
+      protocol: HTTPS
+      tlsSecretName: bakery-gw-tls-secret
+      allowedNamespaces: All
+      updateIfExists: true
+    hostnames:
+      - bakery.api.ord.cloudmunchers.net
+```
+
+When `bakery.gateway.enabled=true`, the chart also creates:
+- Gateway listener reconciliation hook job
+- Bakery HTTPRoute (`bakery-httproute`)
+- Cluster-scoped RBAC for Gateway API objects
+
 ### Docker Image
 
 The image is built via GitHub Actions and pushed to:

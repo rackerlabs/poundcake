@@ -20,6 +20,31 @@ Bakery-only mode:
 ./bin/install-poundcake.sh --mode bakery-only
 ```
 
+Bakery Gateway API exposure (optional):
+
+```yaml
+bakery:
+  gateway:
+    enabled: true
+    gatewayName: flex-gateway
+    gatewayNamespace: envoy-gateway
+    listener:
+      name: bakery-https
+      hostname: bakery.api.ord.cloudmunchers.net
+      port: 443
+      protocol: HTTPS
+      tlsSecretName: bakery-gw-tls-secret
+      allowedNamespaces: All
+      updateIfExists: true
+    hostnames:
+      - bakery.api.ord.cloudmunchers.net
+```
+
+When enabled, the chart creates/updates:
+- Gateway listener (hook job)
+- HTTPRoute named `bakery-httproute`
+- RBAC for Gateway/HTTPRoute management
+
 By default, install scripts source chart versions from:
 - `/etc/genestack/helm-chart-versions.yaml`
 
