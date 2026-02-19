@@ -169,6 +169,7 @@ class RackspaceCoreMixer(BaseMixer):
 
         source = data.get("source", "Bakery")
         severity = data.get("severity", "Normal")
+        has_bbcode = bool(data.get("has_bbcode", True))
 
         query_set = [
             {
@@ -176,7 +177,9 @@ class RackspaceCoreMixer(BaseMixer):
                 "load_arg": str(account_number),
                 "method": "addTicket",
                 "args": [queue, subcategory, source, severity, subject, body],
-                "keyword_args": {},
+                "keyword_args": {
+                    "has_bbcode": has_bbcode,
+                },
                 "result_map": {
                     "number": "number",
                     "status": "status.id",
@@ -315,7 +318,9 @@ class RackspaceCoreMixer(BaseMixer):
                 "load_arg": str(ticket_number),
                 "method": "addComment",
                 "args": [comment],
-                "keyword_args": {},
+                "keyword_args": {
+                    "has_bbcode": bool(data.get("has_bbcode", True)),
+                },
             }
         ]
 
