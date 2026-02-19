@@ -7,19 +7,15 @@
 # Test: Run a single task with manual order creation (non-blocking)
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-start_test_target
-register_cleanup_trap
-
+API_URL=${API_URL:-http://localhost:8000/api/v1}
 TEST_TS=${TEST_TS:-$(date +%s)}
 TEST_RECIPE=${TEST_RECIPE:-AutomatedTestRecipe-${TEST_TS}}
 REQ_ID=${REQ_ID:-AUTOMATED-${TEST_TS}}
 
 export API_URL TEST_RECIPE REQ_ID
 
-run_step "create recipe" env IS_BLOCKING=false "${SCRIPT_DIR}/test_create_recipe_single_step.sh"
-run_step "post order" "${SCRIPT_DIR}/test_post_order.sh"
-run_step "wait for order" "${SCRIPT_DIR}/test_wait_for_order.sh"
-run_step "wait for dishes" "${SCRIPT_DIR}/test_wait_for_dishes.sh"
-run_step "assert dish count" env EXPECTED_COUNT=1 "${SCRIPT_DIR}/test_assert_dish_count.sh"
+IS_BLOCKING=false "$(dirname "$0")/test_create_recipe_single_step.sh"
+"$(dirname "$0")/test_post_order.sh"
+"$(dirname "$0")/test_wait_for_order.sh"
+"$(dirname "$0")/test_wait_for_dishes.sh"
+EXPECTED_COUNT=1 "$(dirname "$0")/test_assert_dish_count.sh"

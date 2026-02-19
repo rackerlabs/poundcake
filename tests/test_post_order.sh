@@ -7,9 +7,7 @@
 # Test: Post an order for a given recipe and request ID
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-
+API_URL=${API_URL:-http://localhost:8000/api/v1}
 TEST_RECIPE=${TEST_RECIPE:-}
 REQ_ID=${REQ_ID:-}
 
@@ -18,21 +16,23 @@ if [ -z "$TEST_RECIPE" ]; then
   exit 1
 fi
 
-require_cmd curl
-require_cmd jq
-
-# Verify the recipe exists before posting order
-log_info "Checking if recipe exists: ${TEST_RECIPE}"
-RECIPE_EXISTS=$(api_request_json GET "${API_URL}/recipes/?name=${TEST_RECIPE}" | jq -r 'length')
-
-if [ "$RECIPE_EXISTS" -eq 0 ]; then
-  log_error "Recipe '${TEST_RECIPE}' does not exist"
-  log_info "Available recipes:"
-  api_request_json GET "${API_URL}/recipes/" | jq -r '.[].name'
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required"
   exit 1
 fi
 
-log_info "Recipe found: ${TEST_RECIPE}"
+# Verify the recipe exists before posting order
+echo "Checking if recipe exists: ${TEST_RECIPE}"
+RECIPE_EXISTS=$(curl -sS -X GET "${API_URL}/recipes/?name=${TEST_RECIPE}" | jq -r 'length')
+
+if [ "$RECIPE_EXISTS" -eq 0 ]; then
+  echo "Error: Recipe '${TEST_RECIPE}' does not exist!"
+  echo "Available recipes:"
+  curl -sS -X GET "${API_URL}/recipes/" | jq -r '.[].name'
+  exit 1
+fi
+
+echo "Recipe found: ${TEST_RECIPE}"
 
 if [ -z "$REQ_ID" ]; then
   REQ_ID="AUTOMATED-$(date +%s)"
@@ -77,6 +77,12 @@ payload=$(cat <<JSON
 JSON
 )
 
-log_info "Posting manual order for recipe: ${TEST_RECIPE}"
-REQUEST_ID="${REQ_ID}" api_request_json POST "${API_URL}/orders" "${payload}" >/dev/null
+echo "Posting manual order for recipe: ${TEST_RECIPE}"
+
+curl -sS -X POST "${API_URL}/orders" \
+  -H "Content-Type: application/json" \
+  -H "X-Request-ID: ${REQ_ID}" \
+  -d "${payload}"
+
+echo
 echo "REQ_ID=${REQ_ID}"

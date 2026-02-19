@@ -7,18 +7,18 @@
 # Test: Concurrent cook_dishes requests should create exactly one dish
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-
+API_URL=${API_URL:-http://localhost:8000/api/v1}
 TEST_RECIPE=${TEST_RECIPE:-"concurrent-cook-$(date +%s)"}
 REQ_ID=${REQ_ID:-"CONCURRENT-COOK-$(date +%s)"}
 
-require_cmd curl
-require_cmd jq
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required"
+  exit 1
+fi
 
-log_info "Creating recipe: ${TEST_RECIPE}"
+echo "Creating recipe: ${TEST_RECIPE}"
 TEST_RECIPE="${TEST_RECIPE}" IS_BLOCKING=true \
-  "${SCRIPT_DIR}/test_create_recipe_single_step.sh" >/dev/null
+  /Users/chris.breu/code/poundcake/tests/test_create_recipe_single_step.sh >/dev/null
 
 payload=$(jq -n \
   --arg req_id "$REQ_ID" \
@@ -55,7 +55,10 @@ payload=$(jq -n \
     ends_at: null
   }')
 
-order=$(REQUEST_ID="${REQ_ID}" api_request_json POST "${API_URL}/orders" "${payload}")
+order=$(curl -sS -X POST "${API_URL}/orders" \
+  -H "Content-Type: application/json" \
+  -H "X-Request-ID: ${REQ_ID}" \
+  -d "${payload}")
 
 order_id=$(echo "$order" | jq -r '.id')
 if [ -z "$order_id" ] || [ "$order_id" = "null" ]; then
@@ -64,19 +67,21 @@ if [ -z "$order_id" ] || [ "$order_id" = "null" ]; then
   exit 1
 fi
 
-log_info "Order created: ${order_id}"
+echo "Order created: ${order_id}"
 
-REQUEST_ID="${REQ_ID}-A" api_request_json POST "${API_URL}/dishes/cook/${order_id}" >/dev/null &
-REQUEST_ID="${REQ_ID}-B" api_request_json POST "${API_URL}/dishes/cook/${order_id}" >/dev/null &
+curl -sS -X POST "${API_URL}/dishes/cook/${order_id}" \
+  -H "X-Request-ID: ${REQ_ID}-A" >/dev/null &
+curl -sS -X POST "${API_URL}/dishes/cook/${order_id}" \
+  -H "X-Request-ID: ${REQ_ID}-B" >/dev/null &
 wait
 
-dishes=$(api_request_json GET "${API_URL}/dishes?order_id=${order_id}")
+dishes=$(curl -sS "${API_URL}/dishes?order_id=${order_id}")
 count=$(echo "$dishes" | jq -r 'length')
 
-log_info "Dish count for order ${order_id}: ${count}"
+echo "Dish count for order ${order_id}: ${count}"
 echo "$dishes" | jq
 
 if [ "$count" != "1" ]; then
-  log_error "Expected exactly 1 dish, got ${count}"
+  echo "Expected exactly 1 dish, got ${count}"
   exit 1
 fi

@@ -7,27 +7,23 @@
 # Test: Reuse the same recipe/workflow across two webhook posts in one run
 set -euo pipefail
 
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-start_test_target
-register_cleanup_trap
-
+API_URL=${API_URL:-http://localhost:8000/api/v1}
 TEST_TS=${TEST_TS:-$(date +%s)}
 TEST_RECIPE=${TEST_RECIPE:-AutomatedReuseRecipe-${TEST_TS}}
 REQ_ID_1=${REQ_ID_1:-AUTOMATED-REUSE-${TEST_TS}-1}
 REQ_ID_2=${REQ_ID_2:-AUTOMATED-REUSE-${TEST_TS}-2}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-90}
+INTERVAL=${INTERVAL:-2}
 
-INTERVAL=${INTERVAL:-$POLL_INTERVAL_SEC}
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required"
+  exit 1
+fi
 
-require_cmd curl
-require_cmd jq
-
-log_info "Using recipe: ${TEST_RECIPE}"
+echo "Using recipe: ${TEST_RECIPE}"
 
 # Find or create core.local ingredient.
-ING_ID=$(api_request_json GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
+ING_ID=$(curl -sS -X GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
 if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
   ING_PAYLOAD=$(jq -n \
     '{
@@ -42,12 +38,13 @@ if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
       on_failure: "stop"
     }')
 
-
-  ING_ID=$(api_request_json POST "${API_URL}/ingredients/" "${ING_PAYLOAD}" | jq -r '.id')
+  ING_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
+    -H "Content-Type: application/json" \
+    -d "${ING_PAYLOAD}" | jq -r '.id')
 fi
 
 if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
-  log_error "Failed to resolve ingredient core.local"
+  echo "Failed to resolve ingredient core.local"
   exit 1
 fi
 
@@ -83,11 +80,12 @@ RECIPE_PAYLOAD=$(jq -n \
     ]
   }')
 
-
-RECIPE_ID=$(api_request_json POST "${API_URL}/recipes/" "${RECIPE_PAYLOAD}" | jq -r '.id')
+RECIPE_ID=$(curl -sS -X POST "${API_URL}/recipes/" \
+  -H "Content-Type: application/json" \
+  -d "${RECIPE_PAYLOAD}" | jq -r '.id')
 
 if [ -z "${RECIPE_ID}" ] || [ "${RECIPE_ID}" = "null" ]; then
-  log_error "Failed to create recipe"
+  echo "Failed to create recipe"
   exit 1
 fi
 
@@ -122,8 +120,10 @@ post_webhook() {
 }
 JSON
 )
-
-  REQUEST_ID="${req_id}" api_request_json POST "${API_URL}/webhook" "${payload}" >/dev/null
+  curl -sS -X POST "${API_URL}/webhook" \
+    -H "Content-Type: application/json" \
+    -H "X-Request-ID: ${req_id}" \
+    -d "${payload}" >/dev/null
 }
 
 wait_for_dish() {
@@ -131,8 +131,7 @@ wait_for_dish() {
   local start now dishes count
   start=$(date +%s)
   while true; do
-
-    dishes=$(api_request_json GET "${API_URL}/dishes?req_id=${req_id}")
+    dishes=$(curl -sS "${API_URL}/dishes?req_id=${req_id}")
     count=$(echo "${dishes}" | jq -r 'length')
     if [ "${count}" != "0" ]; then
       echo "${dishes}" | jq -r '.[0]'
@@ -140,8 +139,7 @@ wait_for_dish() {
     fi
     now=$(date +%s)
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
-
-      log_error "Timed out waiting for dish for req_id=${req_id}"
+      echo "Timed out waiting for dish for req_id=${req_id}"
       return 1
     fi
     sleep "${INTERVAL}"
@@ -153,8 +151,7 @@ wait_for_order_inactive() {
   local start now orders count is_active processing_status
   start=$(date +%s)
   while true; do
-
-    orders=$(api_request_json GET "${API_URL}/orders?req_id=${req_id}")
+    orders=$(curl -sS "${API_URL}/orders?req_id=${req_id}")
     count=$(echo "${orders}" | jq -r 'length')
     if [ "${count}" != "0" ]; then
       is_active=$(echo "${orders}" | jq -r '.[0].is_active')
@@ -165,8 +162,7 @@ wait_for_order_inactive() {
     fi
     now=$(date +%s)
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
-
-      log_error "Timed out waiting for order to become inactive for req_id=${req_id}"
+      echo "Timed out waiting for order to become inactive for req_id=${req_id}"
       return 1
     fi
     sleep "${INTERVAL}"
@@ -177,8 +173,7 @@ wait_for_workflow_id() {
   local start now recipe workflow_id
   start=$(date +%s)
   while true; do
-
-    recipe=$(api_request_json GET "${API_URL}/recipes/by-name/${TEST_RECIPE}")
+    recipe=$(curl -sS "${API_URL}/recipes/by-name/${TEST_RECIPE}")
     workflow_id=$(echo "${recipe}" | jq -r '.workflow_id // empty')
     if [ -n "${workflow_id}" ] && [ "${workflow_id}" != "null" ]; then
       echo "${workflow_id}"
@@ -186,41 +181,36 @@ wait_for_workflow_id() {
     fi
     now=$(date +%s)
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
-
-      log_error "Timed out waiting for workflow_id on recipe ${TEST_RECIPE}"
+      echo "Timed out waiting for workflow_id on recipe ${TEST_RECIPE}"
       return 1
     fi
     sleep "${INTERVAL}"
   done
 }
 
-
-log_info "Posting first webhook (${REQ_ID_1})..."
+echo "Posting first webhook (${REQ_ID_1})..."
 post_webhook "${REQ_ID_1}"
 DISH1_JSON=$(wait_for_dish "${REQ_ID_1}")
 WORKFLOW_ID_1=$(wait_for_workflow_id)
 RECIPE_ID_1=$(echo "${DISH1_JSON}" | jq -r '.recipe_id')
 wait_for_order_inactive "${REQ_ID_1}"
 
-
-log_info "Posting second webhook (${REQ_ID_2})..."
+echo "Posting second webhook (${REQ_ID_2})..."
 post_webhook "${REQ_ID_2}"
 DISH2_JSON=$(wait_for_dish "${REQ_ID_2}")
 WORKFLOW_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe.workflow_id')
 RECIPE_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe_id')
 
 if [ "${RECIPE_ID_1}" != "${RECIPE_ID_2}" ]; then
-
-  log_error "Recipe was not reused: first=${RECIPE_ID_1} second=${RECIPE_ID_2}"
+  echo "Recipe was not reused: first=${RECIPE_ID_1} second=${RECIPE_ID_2}"
   exit 1
 fi
 
 if [ "${WORKFLOW_ID_1}" != "${WORKFLOW_ID_2}" ]; then
-
-  log_error "Workflow was not reused: first=${WORKFLOW_ID_1} second=${WORKFLOW_ID_2}"
+  echo "Workflow was not reused: first=${WORKFLOW_ID_1} second=${WORKFLOW_ID_2}"
   exit 1
 fi
 
-log_info "PASS: recipe and workflow reused across two webhook posts"
+echo "PASS: recipe and workflow reused across two webhook posts"
 echo "recipe_id=${RECIPE_ID_1}"
 echo "workflow_id=${WORKFLOW_ID_1}"
