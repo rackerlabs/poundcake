@@ -5,8 +5,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-if [[ -n "${POUNDCAKE_STACKSTORM_CHART_ENABLED:-}" ]]; then
-  echo "Note: POUNDCAKE_STACKSTORM_CHART_ENABLED is deprecated and ignored. Installer now manages StackStorm as a separate chart."
+
+STACKSTORM_CHART_ENABLED="${POUNDCAKE_STACKSTORM_CHART_ENABLED:-true}"
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "$@"
 fi
 
-exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "$@"
+exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" \
+  --set "stackstorm.chart.enabled=${STACKSTORM_CHART_ENABLED}" \
+  "$@"
+>>>>>>> 8706343 (feat: poundcake helm chart and test improvements)

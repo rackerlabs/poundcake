@@ -7,10 +7,15 @@
 # Test: Wait for dishes to be created for a given request ID
 set -euo pipefail
 
-API_URL=${API_URL:-http://localhost:8000/api/v1}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib.sh"
+
 REQ_ID=${REQ_ID:-}
-TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-30}
-INTERVAL=${INTERVAL:-2}
+TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-$TEST_TIMEOUT_SEC}
+INTERVAL=${INTERVAL:-$POLL_INTERVAL_SEC}
+
+require_cmd curl
+require_cmd jq
 
 if [ -z "$REQ_ID" ]; then
   echo "REQ_ID is required"
@@ -19,10 +24,10 @@ fi
 
 start=$(date +%s)
 
-echo "Waiting for dishes with req_id=${REQ_ID}"
+log_info "Waiting for dishes with req_id=${REQ_ID}"
 
 while true; do
-  dishes=$(curl -sS "${API_URL}/dishes?req_id=${REQ_ID}")
+  dishes=$(api_request_json GET "${API_URL}/dishes?req_id=${REQ_ID}")
   count=$(echo "$dishes" | jq -r 'length')
   if [ "$count" != "0" ]; then
     echo "$dishes" | jq
@@ -31,7 +36,7 @@ while true; do
 
   now=$(date +%s)
   if [ $((now - start)) -ge "$TIMEOUT_SECONDS" ]; then
-    echo "Timed out waiting for dishes"
+    log_error "Timed out waiting for dishes"
     exit 1
   fi
   sleep "$INTERVAL"
