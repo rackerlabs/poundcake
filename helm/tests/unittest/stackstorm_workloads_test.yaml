@@ -171,33 +171,62 @@ tests:
           value: false
         documentIndex: 6
 
-  - it: mounts shared stackstorm packs PVC for pack-consuming services
+  - it: uses local emptyDir packs volume for pack-consuming services
     asserts:
       - equal:
           path: spec.template.spec.volumes[2].name
           value: packs
         documentIndex: 1
       - equal:
-          path: spec.template.spec.volumes[2].persistentVolumeClaim.claimName
-          value: stackstorm-packs
+          path: spec.template.spec.volumes[2].emptyDir
+          value: {}
         documentIndex: 1
       - equal:
-          path: spec.template.spec.volumes[2].persistentVolumeClaim.claimName
-          value: stackstorm-packs
+          path: spec.template.spec.volumes[2].emptyDir
+          value: {}
         documentIndex: 2
       - equal:
-          path: spec.template.spec.volumes[2].persistentVolumeClaim.claimName
-          value: stackstorm-packs
+          path: spec.template.spec.volumes[2].emptyDir
+          value: {}
         documentIndex: 4
 
-  - it: mounts shared stackstorm packs PVC for stackstorm-register when enabled
+  - it: uses local emptyDir packs volume for stackstorm-register when enabled
     set:
       stackstormServices.register.enabled: true
     asserts:
       - equal:
-          path: spec.template.spec.volumes[2].persistentVolumeClaim.claimName
-          value: stackstorm-packs
+          path: spec.template.spec.volumes[2].emptyDir
+          value: {}
         documentIndex: 0
+
+  - it: adds pack sync sidecar for pack-consuming services by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: stackstorm-pack-sync
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: stackstorm-pack-sync
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: stackstorm-pack-sync
+        documentIndex: 4
+
+  - it: can disable pack sync sidecars
+    set:
+      stackstormPackSync.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[1]
+        documentIndex: 1
+      - isNull:
+          path: spec.template.spec.containers[1]
+        documentIndex: 2
+      - isNull:
+          path: spec.template.spec.containers[1]
+        documentIndex: 4
 
   - it: supports hardened overrides for stackstorm and utility container profiles
     set:

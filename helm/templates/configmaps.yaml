@@ -17,6 +17,8 @@ metadata:
 data:
   st2-entrypoint.sh: |
 {{ .Files.Get "files/st2-init/st2-entrypoint.sh" | indent 4 }}
+  stackstorm-pack-sync.sh: |
+{{ .Files.Get "files/st2-init/stackstorm-pack-sync.sh" | indent 4 }}
   automated-setup.sh: |
 {{ .Files.Get "files/scripts/automated-setup.sh" | indent 4 }}
   mongodb-init.sh: |

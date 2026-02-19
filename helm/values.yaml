@@ -62,6 +62,7 @@ secrets:
   rabbitmqPassword: ""
   st2AuthUser: st2admin
   st2AuthPassword: ""
+  packSyncToken: ""
 
 persistence:
   storageClassName: ""
@@ -81,16 +82,17 @@ persistence:
     size: 2Gi
     accessMode: ReadWriteOnce
     storageClassName: ""
-  stackstormPacks:
-    # Shared RWX volume for dynamic workflow/action files written by poundcake-api
-    # and consumed by StackStorm services under /opt/stackstorm/packs/poundcake.
-    size: 2Gi
-    accessMode: ReadWriteMany
-    storageClassName: ""
   config:
     size: 1Gi
     accessMode: ReadWriteMany
     storageClassName: ""
+
+stackstormPackSync:
+  enabled: true
+  endpoint: "http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz"
+  pollIntervalSeconds: 20
+  bootstrapPollIntervalSeconds: 5
+  timeoutSeconds: 10
 
 services:
   api:

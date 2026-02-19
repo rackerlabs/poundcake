@@ -49,16 +49,3 @@ spec:
     requests:
       storage: {{ .Values.persistence.redis.size }}
   {{- include "poundcake-standalone.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.redis.storageClassName) | nindent 2 }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: stackstorm-packs
-  labels:
-    {{- include "poundcake-standalone.labels" . | nindent 4 }}
-spec:
-  accessModes: ["{{ .Values.persistence.stackstormPacks.accessMode | default "ReadWriteMany" }}"]
-  resources:
-    requests:
-      storage: {{ .Values.persistence.stackstormPacks.size }}
-  {{- include "poundcake-standalone.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.stackstormPacks.storageClassName) | nindent 2 }}

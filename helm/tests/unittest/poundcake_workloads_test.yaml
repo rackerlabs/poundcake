@@ -163,13 +163,16 @@ tests:
           path: spec.template.spec.volumes[2].configMap.name
           value: poundcake-alembic
         documentIndex: 0
+
+  - it: exposes pack sync token to poundcake-api
+    asserts:
       - equal:
-          path: spec.template.spec.volumes[3].name
-          value: packs
+          path: spec.template.spec.containers[0].env[22].name
+          value: POUNDCAKE_PACK_SYNC_TOKEN
         documentIndex: 0
       - equal:
-          path: spec.template.spec.volumes[3].persistentVolumeClaim.claimName
-          value: stackstorm-packs
+          path: spec.template.spec.containers[0].env[22].valueFrom.secretKeyRef.name
+          value: poundcake-secrets
         documentIndex: 0
 
   - it: mounts stackstorm API key secret into poundcake-api and exposes env var/file path
