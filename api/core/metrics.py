@@ -102,6 +102,12 @@ MAPPINGS_MATCHED = Counter(
     ["mapping_name"],
 )
 
+POUNDCAKE_BAKERY_REQUEST_FAILURES = Counter(
+    "poundcake_bakery_request_failures_total",
+    "Total failed requests from PoundCake to Bakery",
+    ["action", "reason"],
+)
+
 
 def init_app_info(app_name: str, version: str) -> None:
     """Initialize application info metric.
@@ -232,3 +238,8 @@ def record_mapping_match(mapping_name: str) -> None:
         mapping_name: Name of the matched mapping
     """
     MAPPINGS_MATCHED.labels(mapping_name=mapping_name).inc()
+
+
+def record_bakery_request_failure(action: str, reason: str) -> None:
+    """Record a PoundCake-to-Bakery request failure."""
+    POUNDCAKE_BAKERY_REQUEST_FAILURES.labels(action=action, reason=reason).inc()

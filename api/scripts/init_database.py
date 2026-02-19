@@ -147,17 +147,19 @@ async def seed_default_recipes() -> None:
             await db.rollback()
 
 
-if __name__ == "__main__":
+async def main() -> None:
+    """Run initialization and seed in a single event loop."""
     logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
     logger.info("PoundCake Database Initialization", extra={"req_id": "SYSTEM-DB-INIT"})
     logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
 
-    # Initialize tables
-    asyncio.run(init_database())
-
-    # Seed default recipes
-    asyncio.run(seed_default_recipes())
+    await init_database()
+    await seed_default_recipes()
 
     logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
     logger.info("Database initialization complete", extra={"req_id": "SYSTEM-DB-INIT"})
     logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

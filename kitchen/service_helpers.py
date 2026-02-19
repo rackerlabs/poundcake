@@ -7,11 +7,24 @@
 #
 """Shared helpers for kitchen services."""
 
+import os
 import time
 from typing import Any
 
 from api.core.http_client import request_with_retry_sync
 from api.core.config import get_settings
+
+
+def get_service_headers(req_id: str) -> dict[str, str]:
+    """Build shared headers for internal service-to-service API calls."""
+    headers = {"X-Request-ID": req_id}
+    internal_api_key = (
+        os.getenv("POUNDCAKE_AUTH_INTERNAL_API_KEY", "").strip()
+        or os.getenv("POUNDCAKE_INTERNAL_API_KEY", "").strip()
+    )
+    if internal_api_key:
+        headers["X-Internal-API-Key"] = internal_api_key
+    return headers
 
 
 def wait_for_api(
@@ -37,6 +50,7 @@ def wait_for_api(
             resp = request_with_retry_sync(
                 "GET",
                 f"{api_base_url}/health",
+                headers=get_service_headers(system_req_id),
                 timeout=5,
                 retries=retries,
             )

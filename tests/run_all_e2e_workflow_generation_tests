@@ -9,10 +9,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-start_test_target
-register_cleanup_trap
-export TEST_TARGET_STARTED=1
 
 TEST_SCRIPTS=(
   "${SCRIPT_DIR}/run_single_task_non_blocking_test"
@@ -22,28 +18,28 @@ TEST_SCRIPTS=(
   "${SCRIPT_DIR}/run_reuse_recipe_two_webhooks_test"
 )
 
-suite_start=$(date +%s)
-log_info "Running ${#TEST_SCRIPTS[@]} e2e workflow-generation tests..."
+echo "Running ${#TEST_SCRIPTS[@]} e2e workflow-generation tests..."
+echo
 
 passed=0
 failed=0
 
 for test_script in "${TEST_SCRIPTS[@]}"; do
   test_name="$(basename "${test_script}")"
-  log_info "=== ${test_name} ==="
+  echo "=== ${test_name} ==="
 
   if "${test_script}"; then
-    log_info "PASS: ${test_name}"
+    echo "PASS: ${test_name}"
     passed=$((passed + 1))
   else
-    log_error "FAIL: ${test_name}"
+    echo "FAIL: ${test_name}"
     failed=$((failed + 1))
   fi
 
+  echo
 done
 
-elapsed=$(( $(date +%s) - suite_start ))
-log_info "Suite complete: ${passed} passed, ${failed} failed (elapsed=${elapsed}s)"
+echo "Suite complete: ${passed} passed, ${failed} failed"
 
 if [ "${failed}" -gt 0 ]; then
   exit 1

@@ -13,7 +13,7 @@ FROM python:3.11-slim AS builder
 WORKDIR /build
 
 # Install build dependencies (needed for compiling Python packages)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     gcc \
     default-libmysqlclient-dev \
     pkg-config \
@@ -27,8 +27,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Install Python dependencies into the venv
-COPY requirements-prod.txt .
-RUN pip install --no-cache-dir -r requirements-prod.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image
@@ -38,8 +38,9 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install only runtime dependencies (no build tools)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     curl \
+    default-libmysqlclient-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -52,6 +53,8 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --chown=appuser:appuser api/ /app/api/
 COPY --chown=appuser:appuser kitchen/ /app/kitchen/
 COPY --chown=appuser:appuser docker/scripts/ /app/scripts/
+COPY --chown=appuser:appuser alembic/ /app/alembic/
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 
 # Make scripts executable
 RUN chmod +x /app/api/scripts/entrypoint-auto-migrate.sh \

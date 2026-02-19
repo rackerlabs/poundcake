@@ -6,7 +6,7 @@
 #
 """Pre-heat service - Creates new orders or increments existing ones."""
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
@@ -126,7 +126,7 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
 
                     # Order already exists; increment counter atomically
                     await db.execute(
-                        Order.__table__.update()
+                        update(Order)
                         .where(Order.id == existing.id)
                         .values(
                             counter=Order.counter + 1,
@@ -223,7 +223,7 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                 existing = result.scalars().first()
                 if existing:
                     await db.execute(
-                        Order.__table__.update()
+                        update(Order)
                         .where(Order.id == existing.id)
                         .values(
                             counter=Order.counter + 1,

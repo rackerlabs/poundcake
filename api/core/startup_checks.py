@@ -34,22 +34,13 @@ async def wait_for_stackstorm_ready(
         delay_sec = settings.stackstorm_startup_delay_seconds
 
     for attempt in range(1, max_attempts + 1):
-        api_key = settings.get_stackstorm_api_key()
-        if not api_key:
-            logger.info(
-                "Waiting for StackStorm API key",
-                extra={"attempt": attempt, "max_attempts": max_attempts},
-            )
-            await asyncio.sleep(delay_sec)
-            continue
-
         is_healthy = await client.health_check(req_id="SYSTEM-STARTUP")
         if is_healthy:
             logger.info("StackStorm API is ready", extra={"attempt": attempt})
             return True
 
         logger.info(
-            "Waiting for StackStorm API health",
+            "Waiting for StackStorm API health/auth availability",
             extra={"attempt": attempt, "max_attempts": max_attempts},
         )
         await asyncio.sleep(delay_sec)

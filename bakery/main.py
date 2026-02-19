@@ -7,15 +7,15 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import structlog
 
 from bakery import __version__
 from bakery.config import settings
 from bakery.api.health import router as health_router
-from bakery.api.messages import router as messages_router
 from bakery.api.mixers import router as mixers_router
 from bakery.api.tickets import router as tickets_router
+from bakery.metrics import render_metrics
 
 
 # Configure structured logging
@@ -75,17 +75,8 @@ tags_metadata = [
     {
         "name": "tickets",
         "description": (
-            "Submit ticket requests for asynchronous processing. "
-            "PoundCake API sends requests here; results are delivered "
-            "via the messages endpoint."
-        ),
-    },
-    {
-        "name": "messages",
-        "description": (
-            "Message queue for retrieving ticket operation results. "
-            "PoundCake API polls this endpoint to get responses from "
-            "ticketing systems."
+            "Submit and query logical tickets and ticket operations. "
+            "Mutating endpoints return operation handles and are processed asynchronously."
         ),
     },
     {
@@ -106,12 +97,11 @@ app = FastAPI(
         "Bakery acts as a translation layer between the PoundCake API and "
         "external ticketing systems (ServiceNow, Jira, GitHub Issues, "
         "PagerDuty, Rackspace Core). It receives generic ticket requests, "
-        "translates them into system-specific API calls, and returns the "
-        "results via a message queue.\n\n"
+        "queues operations, and processes them asynchronously via worker(s).\n\n"
         "## Request Flow\n\n"
-        "1. `POST /api/v1/tickets` - Submit a request (returns 202 immediately)\n"
-        "2. `GET /api/v1/tickets/{correlation_id}` - Check request status\n"
-        "3. `GET /api/v1/messages?correlation_id=...` - Retrieve results\n"
+        "1. `POST /api/v1/tickets` - Submit create request (returns 202 with UUID handles)\n"
+        "2. `GET /api/v1/operations/{operation_id}` - Poll operation status\n"
+        "3. `GET /api/v1/tickets/{ticket_id}` - Read logical ticket state\n"
     ),
     version=__version__,
     lifespan=lifespan,
@@ -155,8 +145,13 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # Include routers
 app.include_router(health_router, prefix=settings.api_prefix, tags=["health"])
 app.include_router(tickets_router, prefix=settings.api_prefix, tags=["tickets"])
-app.include_router(messages_router, prefix=settings.api_prefix, tags=["messages"])
 app.include_router(mixers_router, prefix=settings.api_prefix, tags=["mixers"])
+
+
+@app.get("/metrics")
+async def metrics() -> Response:
+    payload, content_type = render_metrics()
+    return Response(content=payload, media_type=content_type)
 
 
 # Root endpoint

@@ -20,7 +20,7 @@ sequenceDiagram
     participant DW as Dishwasher
 
     Note over AM, API: Phase 1: Intake (pre_heat)
-    AM->>API: POST /api/v1/webhook (with X-Request-ID)
+    AM->>API: POST /api/v1/webhook (with X-Internal-API-Key header)
     API->>DB: Store Order (processing_status: new)
     API-->>AM: 202 Accepted
 
@@ -198,70 +198,82 @@ output:
 # Install via Docker Compose
 ./install/install-docker.sh
 
-# Install via Helm
+# Install via Helm (wrapper around bin/install-poundcake.sh)
 ./install/install-helm.sh
 ```
 
 ### Helm Install
 
 ```bash
-# Helm-based install script
-./helm/bin/install-poundcake.sh
+# Helm-based install script (3-phase full install)
+./bin/install-poundcake.sh
 
 # Optional: pass extra Helm args through
-./helm/bin/install-poundcake.sh -f /path/to/values.yaml
+./bin/install-poundcake.sh -f /path/to/values.yaml
 ```
 
-Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
-
-### Helm Install With Private GHCR Images
+Bakery-only deployment (no PoundCake or StackStorm resources):
 
 ```bash
-source ./install/set-env-helper.sh
-export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
-./install/install-helm.sh
+./bin/install-poundcake.sh --mode bakery-only -f /path/to/values.yaml
 ```
 
-Installer env controls for private pulls:
-- `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-pull`)
-- `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` (default: `true`)
-- `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` (default: `noreply@local`)
-- `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)
+Provide Bakery Rackspace Core credentials interactively (full or bakery-only):
 
-Chart value controls:
-- Canonical (PoundCake-only): `poundcakeImage.pullSecrets`
-- Legacy fallback (temporary): `imagePullSecrets`
+```bash
+./bin/install-poundcake.sh --interactive-bakery-creds
+```
 
-Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
-- Ensure image exists at `POUNDCAKE_IMAGE_REPO:POUNDCAKE_IMAGE_TAG`
-- Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
-- Ensure PAT has `read:packages` and package visibility grants access
-- Verify pull secret is on a PoundCake pod:
-  `kubectl -n <namespace> get pod <poundcake-pod> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
+Or non-interactively:
+
+```bash
+./bin/install-poundcake.sh \
+  --bakery-rackspace-url "https://10.12.223.241" \
+  --bakery-rackspace-username "poundcake" \
+  --bakery-rackspace-password "<password>"
+```
+
+Bakery Gateway API exposure (optional):
+
+```yaml
+bakery:
+  gateway:
+    enabled: true
+    gatewayName: flex-gateway
+    gatewayNamespace: envoy-gateway
+    listener:
+      name: bakery-https
+      hostname: bakery.api.ord.cloudmunchers.net
+      port: 443
+      protocol: HTTPS
+      tlsSecretName: bakery-gw-tls-secret
+      allowedNamespaces: All
+      updateIfExists: true
+    hostnames:
+      - bakery.api.ord.cloudmunchers.net
+```
+
+Bakery HMAC auth for PoundCake-to-Bakery calls (recommended):
+
+```yaml
+bakery:
+  auth:
+    enabled: true
+    mode: hmac
+    existingSecret: bakery-hmac
+  client:
+    enabled: true
+    baseUrl: "https://bakery.api.ord.cloudmunchers.net"
+    auth:
+      mode: hmac
+      existingSecret: bakery-hmac
+```
+
+See `/docs/DEPLOY.md` for full secret key mapping and header format.
 
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
-Startup jobs are hook-driven (`post-install,post-upgrade`), so the installer defaults to
-`POUNDCAKE_HELM_WAIT=false` to avoid deadlocks with marker-gated init containers.
 
-If a rollout gets stuck in `Init`, re-run without wait semantics:
-
-```bash
-POUNDCAKE_HELM_WAIT=false ./install/install-helm.sh
-kubectl -n rackspace get jobs
-```
-
-StackStorm service startup now renders runtime config at `/tmp/st2/st2.conf` to avoid non-root writes to `/etc`.
-Successful startup hook jobs are auto-cleaned by default; failed ones are retained for debugging.
-
-One-time cleanup for existing completed startup jobs:
-
-```bash
-kubectl -n rackspace get jobs \
-  -o jsonpath='{range .items[?(@.status.succeeded==1)]}{.metadata.name}{"\n"}{end}' \
-  | grep -E '^(stackstorm-.*ready|stackstorm-mongodb-user-sync|stackstorm-startup-markers-reset|stackstorm-bootstrap|poundcake-.*)$' \
-  | xargs -r -I{} kubectl -n rackspace delete job {}
-kubectl -n rackspace get jobs,pods
-```
+In full mode, StackStorm is installed as a separate Helm release by `bin/install-poundcake.sh`.
 
 ### Docker Compose Install
 
@@ -285,36 +297,6 @@ curl http://localhost:8000/api/v1/health
 docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
 ```
 
-#### Docker Compose Dependency Gates
-
-```mermaid
-flowchart LR
-  mongodb["stackstorm-mongodb"] -->|service_healthy| st2api["stackstorm-api"]
-  rabbitmq["stackstorm-rabbitmq"] -->|service_healthy| st2api
-  redis["stackstorm-redis"] -->|service_healthy| st2api
-
-  st2api -->|service_healthy| st2auth["stackstorm-auth"]
-  st2api -->|service_healthy| st2bootstrap["stackstorm-bootstrap"]
-  st2auth -->|service_healthy| st2bootstrap
-
-  packinit["poundcake-pack-init"] -->|service_completed_successfully| api["api"]
-  mariadb["mariadb"] -->|service_healthy| api
-  st2api -->|service_healthy| api
-
-  api -->|service_started| pcbootstrap["poundcake-bootstrap"]
-  packinit -->|service_completed_successfully| pcbootstrap
-  st2api -->|service_healthy| pcbootstrap
-
-  api -->|service_healthy| chef["chef"]
-  api -->|service_healthy| prepchef["prep-chef"]
-  api -->|service_healthy| timer["timer"]
-  api -->|service_healthy| dishwasher["dishwasher"]
-  pcbootstrap -->|service_completed_successfully| chef
-  pcbootstrap -->|service_completed_successfully| prepchef
-  pcbootstrap -->|service_completed_successfully| timer
-  pcbootstrap -->|service_completed_successfully| dishwasher
-```
-
 Services:
 - PoundCake API: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs` (debug only)
@@ -329,11 +311,69 @@ Important environment variables:
 DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
 
 # StackStorm
-POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
+POUNDCAKE_STACKSTORM_URL=http://poundcake-st2api:9101
 POUNDCAKE_ST2_PACK_ROOT=/app/stackstorm-packs
+
+# Auth (required when auth is enabled)
+POUNDCAKE_AUTH_DEV_USERNAME=admin
+POUNDCAKE_AUTH_DEV_PASSWORD=change-me
+POUNDCAKE_AUTH_INTERNAL_API_KEY=shared-internal-key
 ```
 
 `config/st2_api_key` is created by `st2client` during bootstrap.
+
+## Alertmanager Integration (Kubernetes)
+
+When PoundCake auth is enabled, Alertmanager must send the `X-Internal-API-Key` header.
+
+Get the key:
+
+```bash
+kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.internal-api-key}' | base64 -d
+```
+
+Webhook URL (in-cluster):
+
+```text
+http://poundcake.rackspace.svc.cluster.local:8080/api/v1/webhook
+```
+
+Example `alertmanager.yml` receiver:
+
+```yaml
+receivers:
+  - name: poundcake
+    webhook_configs:
+      - url: http://poundcake.rackspace.svc.cluster.local:8080/api/v1/webhook
+        send_resolved: true
+        http_config:
+          headers:
+            X-Internal-API-Key: "<internal-api-key>"
+```
+
+Example Prometheus Operator `AlertmanagerConfig` receiver:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: poundcake
+  namespace: prometheus
+spec:
+  route:
+    receiver: poundcake
+    groupBy: ["alertname"]
+  receivers:
+    - name: poundcake
+      webhookConfigs:
+        - url: http://poundcake.rackspace.svc.cluster.local:8080/api/v1/webhook
+          sendResolved: true
+          httpConfig:
+            headers:
+              X-Internal-API-Key: "<internal-api-key>"
+```
+
+If the header/key is missing, PoundCake returns `401` for `/api/v1/webhook`.
 
 ## API Reference
 
