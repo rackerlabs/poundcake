@@ -392,6 +392,7 @@ All credentials are stored in Kubernetes Secrets. Each mixer supports two modes:
 | `GITHUB_TOKEN` | GitHub | Personal access token (Secret) |
 | `PAGERDUTY_API_KEY` | PagerDuty | API key (Secret) |
 | `RACKSPACE_CORE_URL` | Rackspace Core | CTKAPI base URL (default: `https://ws.core.rackspace.com`) |
+| `RACKSPACE_CORE_VERIFY_SSL` | Rackspace Core | Verify TLS certificates for CTKAPI calls (`true` by default; set `false` only for controlled testing) |
 | `RACKSPACE_CORE_USERNAME` | Rackspace Core | Username |
 | `RACKSPACE_CORE_PASSWORD` | Rackspace Core | Password (Secret) |
 | `RACKSPACE_CORE_DEFAULT_QUEUE` | Rackspace Core | Default queue used when `coreQueue` is not provided (default: `CloudBuilders Support`) |

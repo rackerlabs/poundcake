@@ -25,6 +25,7 @@ class RackspaceCoreMixer(BaseMixer):
         self.username = settings.rackspace_core_username
         self.password = settings.rackspace_core_password
         self.timeout = settings.mixer_timeout_sec
+        self.verify_ssl = settings.rackspace_core_verify_ssl
         self._auth_token: Optional[str] = None
 
     async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,7 +110,7 @@ class RackspaceCoreMixer(BaseMixer):
         Returns:
             Parsed JSON response from CTKAPI
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify_ssl) as client:
             # Ensure we have a token
             if not self._auth_token:
                 await self._authenticate(client)
@@ -433,7 +434,7 @@ class RackspaceCoreMixer(BaseMixer):
             return False
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify_ssl) as client:
                 token = await self._authenticate(client)
                 response = await client.get(
                     f"{self.base_url}/ctkapi/session/{token}",

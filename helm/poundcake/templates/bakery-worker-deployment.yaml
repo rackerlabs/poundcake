@@ -223,6 +223,8 @@ spec:
                   name: {{ include "poundcake.bakerySecretName" . }}
                   key: rackspace-core-password
             {{- end }}
+            - name: RACKSPACE_CORE_VERIFY_SSL
+              value: {{ .Values.bakery.rackspaceCore.verifySsl | quote }}
           resources:
             {{- toYaml .Values.bakery.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
