@@ -151,9 +151,7 @@ def _overall_status(components: dict[str, ComponentHealth]) -> str:
 def _readiness_status(components: dict[str, ComponentHealth]) -> str:
     """Compute readiness status from blocking dependencies only."""
     blocking_components = ("database", "stackstorm", "mongodb", "rabbitmq", "redis")
-    blocking = {
-        name: components[name] for name in blocking_components if name in components
-    }
+    blocking = {name: components[name] for name in blocking_components if name in components}
 
     # Any hard failure in blocking dependencies makes the pod not ready.
     if any(c.status == "unhealthy" for c in blocking.values()):

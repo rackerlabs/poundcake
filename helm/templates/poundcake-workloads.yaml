@@ -112,6 +112,11 @@ spec:
                   key: st2_api_key
             - name: ST2_API_KEY_FILE
               value: /run/secrets/st2/st2_api_key
+            - name: POUNDCAKE_PACK_SYNC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: poundcake-secrets
+                  key: PACK_SYNC_TOKEN
           ports:
             - containerPort: 8000
               name: http
@@ -141,8 +146,6 @@ spec:
             - name: poundcake-alembic
               mountPath: /app/alembic
               subPath: alembic
-            - name: packs
-              mountPath: /app/stackstorm-packs/poundcake
       volumes:
         - name: app-config
           projected:
@@ -170,9 +173,6 @@ spec:
                 path: alembic/versions/__init__.py
               - key: 2026_02_03_1600_initial_schema.py
                 path: alembic/versions/2026_02_03_1600_initial_schema.py
-        - name: packs
-          persistentVolumeClaim:
-            claimName: stackstorm-packs
 ---
 apiVersion: apps/v1
 kind: Deployment

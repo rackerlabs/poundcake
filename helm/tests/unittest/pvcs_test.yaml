@@ -5,7 +5,7 @@ tests:
   - it: renders all required PVCs
     asserts:
       - hasDocuments:
-          count: 5
+          count: 4
       - equal:
           path: metadata.name
           value: poundcake-mariadb
@@ -14,10 +14,6 @@ tests:
           path: metadata.name
           value: stackstorm-redis
         documentIndex: 3
-      - equal:
-          path: metadata.name
-          value: stackstorm-packs
-        documentIndex: 4
 
   - it: applies storageClass values from global and per-pvc settings
     set:
@@ -36,10 +32,6 @@ tests:
           path: spec.storageClassName
           value: standard
         documentIndex: 3
-      - equal:
-          path: spec.storageClassName
-          value: standard
-        documentIndex: 4
 
   - it: omits storageClassName when all storage class values are empty
     set:
@@ -61,6 +53,3 @@ tests:
       - notExists:
           path: spec.storageClassName
         documentIndex: 3
-      - notExists:
-          path: spec.storageClassName
-        documentIndex: 4

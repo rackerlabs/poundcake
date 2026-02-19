@@ -62,6 +62,34 @@ spec:
               mountPath: /opt/stackstorm/packs/poundcake
             - name: app-config
               mountPath: /app/config
+        {{- if .Values.stackstormPackSync.enabled }}
+        - name: stackstorm-pack-sync
+          image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
+          imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["/bin/bash", "/stackstorm-pack-sync.sh"]
+          env:
+            - name: POUNDCAKE_PACK_SYNC_URL
+              value: {{ .Values.stackstormPackSync.endpoint | quote }}
+            - name: POUNDCAKE_PACK_SYNC_POLL_INTERVAL
+              value: {{ .Values.stackstormPackSync.pollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_BOOTSTRAP_INTERVAL
+              value: {{ .Values.stackstormPackSync.bootstrapPollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_TIMEOUT
+              value: {{ .Values.stackstormPackSync.timeoutSeconds | quote }}
+            - name: PACK_SYNC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-secrets
+                  key: PACK_SYNC_TOKEN
+          volumeMounts:
+            - name: packs
+              mountPath: /opt/stackstorm/packs/poundcake
+            - name: scripts
+              mountPath: /stackstorm-pack-sync.sh
+              subPath: stackstorm-pack-sync.sh
+        {{- end }}
       volumes:
         - name: stackstorm-config
           configMap:
@@ -71,8 +99,7 @@ spec:
             name: stackstorm-scripts
             defaultMode: 0755
         - name: packs
-          persistentVolumeClaim:
-            claimName: stackstorm-packs
+          emptyDir: {}
         - name: app-config
           projected:
             sources:
@@ -230,6 +257,34 @@ spec:
               mountPath: /opt/stackstorm/packs/poundcake
             - name: app-config
               mountPath: /app/config
+        {{- if .Values.stackstormPackSync.enabled }}
+        - name: stackstorm-pack-sync
+          image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
+          imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["/bin/bash", "/stackstorm-pack-sync.sh"]
+          env:
+            - name: POUNDCAKE_PACK_SYNC_URL
+              value: {{ .Values.stackstormPackSync.endpoint | quote }}
+            - name: POUNDCAKE_PACK_SYNC_POLL_INTERVAL
+              value: {{ .Values.stackstormPackSync.pollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_BOOTSTRAP_INTERVAL
+              value: {{ .Values.stackstormPackSync.bootstrapPollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_TIMEOUT
+              value: {{ .Values.stackstormPackSync.timeoutSeconds | quote }}
+            - name: PACK_SYNC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-secrets
+                  key: PACK_SYNC_TOKEN
+          volumeMounts:
+            - name: packs
+              mountPath: /opt/stackstorm/packs/poundcake
+            - name: scripts
+              mountPath: /stackstorm-pack-sync.sh
+              subPath: stackstorm-pack-sync.sh
+        {{- end }}
       volumes:
         - name: stackstorm-config
           configMap:
@@ -239,8 +294,7 @@ spec:
             name: stackstorm-scripts
             defaultMode: 0755
         - name: packs
-          persistentVolumeClaim:
-            claimName: stackstorm-packs
+          emptyDir: {}
         - name: app-config
           projected:
             sources:
@@ -306,6 +360,34 @@ spec:
               mountPath: /opt/stackstorm/packs/poundcake
             - name: app-config
               mountPath: /app/config
+        {{- if .Values.stackstormPackSync.enabled }}
+        - name: stackstorm-pack-sync
+          image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
+          imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["/bin/bash", "/stackstorm-pack-sync.sh"]
+          env:
+            - name: POUNDCAKE_PACK_SYNC_URL
+              value: {{ .Values.stackstormPackSync.endpoint | quote }}
+            - name: POUNDCAKE_PACK_SYNC_POLL_INTERVAL
+              value: {{ .Values.stackstormPackSync.pollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_BOOTSTRAP_INTERVAL
+              value: {{ .Values.stackstormPackSync.bootstrapPollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_TIMEOUT
+              value: {{ .Values.stackstormPackSync.timeoutSeconds | quote }}
+            - name: PACK_SYNC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-secrets
+                  key: PACK_SYNC_TOKEN
+          volumeMounts:
+            - name: packs
+              mountPath: /opt/stackstorm/packs/poundcake
+            - name: scripts
+              mountPath: /stackstorm-pack-sync.sh
+              subPath: stackstorm-pack-sync.sh
+        {{- end }}
       volumes:
         - name: stackstorm-config
           configMap:
@@ -315,8 +397,7 @@ spec:
             name: stackstorm-scripts
             defaultMode: 0755
         - name: packs
-          persistentVolumeClaim:
-            claimName: stackstorm-packs
+          emptyDir: {}
         - name: app-config
           projected:
             sources:
@@ -453,6 +534,34 @@ spec:
               mountPath: /opt/stackstorm/packs/poundcake
             - name: app-config
               mountPath: /app/config
+        {{- if .Values.stackstormPackSync.enabled }}
+        - name: stackstorm-pack-sync
+          image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
+          imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command: ["/bin/bash", "/stackstorm-pack-sync.sh"]
+          env:
+            - name: POUNDCAKE_PACK_SYNC_URL
+              value: {{ .Values.stackstormPackSync.endpoint | quote }}
+            - name: POUNDCAKE_PACK_SYNC_POLL_INTERVAL
+              value: {{ .Values.stackstormPackSync.pollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_BOOTSTRAP_INTERVAL
+              value: {{ .Values.stackstormPackSync.bootstrapPollIntervalSeconds | quote }}
+            - name: POUNDCAKE_PACK_SYNC_TIMEOUT
+              value: {{ .Values.stackstormPackSync.timeoutSeconds | quote }}
+            - name: PACK_SYNC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-secrets
+                  key: PACK_SYNC_TOKEN
+          volumeMounts:
+            - name: packs
+              mountPath: /opt/stackstorm/packs/poundcake
+            - name: scripts
+              mountPath: /stackstorm-pack-sync.sh
+              subPath: stackstorm-pack-sync.sh
+        {{- end }}
       volumes:
         - name: stackstorm-config
           configMap:
@@ -462,8 +571,7 @@ spec:
             name: stackstorm-scripts
             defaultMode: 0755
         - name: packs
-          persistentVolumeClaim:
-            claimName: stackstorm-packs
+          emptyDir: {}
         - name: app-config
           projected:
             sources:

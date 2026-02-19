@@ -158,7 +158,9 @@ def test_ready_endpoint_503_when_rabbitmq_amqp_unreachable(client):
         ),
         patch(
             "api.api.health.check_rabbitmq",
-            new=AsyncMock(return_value=ComponentHealth(status="unhealthy", message="AMQP unavailable")),
+            new=AsyncMock(
+                return_value=ComponentHealth(status="unhealthy", message="AMQP unavailable")
+            ),
         ),
         patch(
             "api.api.health.check_redis",
@@ -183,7 +185,9 @@ def test_ready_endpoint_503_when_redis_unreachable(client):
         ),
         patch(
             "api.api.health.check_redis",
-            new=AsyncMock(return_value=ComponentHealth(status="unhealthy", message="Cannot connect")),
+            new=AsyncMock(
+                return_value=ComponentHealth(status="unhealthy", message="Cannot connect")
+            ),
         ),
         patch("api.api.health._bootstrap_ready", return_value=True),
     ):

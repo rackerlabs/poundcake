@@ -220,12 +220,18 @@ persistence:
     size: "5Gi"
   redis:
     size: "2Gi"
-  stackstormPacks:
-    size: "2Gi"
-    accessMode: "ReadWriteMany"
 ```
 
-`persistence.stackstormPacks` must use a RWX-capable storage class. It is the shared volume between PoundCake (`/app/stackstorm-packs/poundcake`) and StackStorm (`/opt/stackstorm/packs/poundcake`) for dynamic workflow/action registration.
+Dynamic StackStorm pack propagation is RWO-safe by default. Pack content is served by PoundCake API and synchronized into each StackStorm pod via sidecar using `emptyDir`, so no shared RWX volume is required.
+
+```yaml
+stackstormPackSync:
+  enabled: true
+  endpoint: "http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz"
+  pollIntervalSeconds: 20
+  bootstrapPollIntervalSeconds: 5
+  timeoutSeconds: 10
+```
 
 #### Service Configuration
 
