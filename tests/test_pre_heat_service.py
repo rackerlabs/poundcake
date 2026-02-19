@@ -62,7 +62,8 @@ async def test_pre_heat_no_alerts():
     db = AsyncMock()
     db.begin = Mock(return_value=DummyBegin())
 
-    result = await pre_heat({"alerts": []}, db=db, req_id="REQ-1")
+    with patch("api.services.pre_heat.find_first_matching_suppression", new_callable=AsyncMock):
+        result = await pre_heat({"alerts": []}, db=db, req_id="REQ-1")
     assert result["status"] == "no_alerts"
     assert result["results"] == []
 
@@ -96,7 +97,11 @@ async def test_pre_heat_firing_creates_order():
         ]
     }
 
-    result = await pre_heat(payload, db=db, req_id="REQ-1")
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await pre_heat(payload, db=db, req_id="REQ-1")
     assert result["status"] == "created"
     assert result["order_id"] == 123
 
@@ -119,7 +124,11 @@ async def test_pre_heat_firing_increments_existing():
         ]
     }
 
-    result = await pre_heat(payload, db=db, req_id="REQ-1")
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await pre_heat(payload, db=db, req_id="REQ-1")
     assert result["status"] == "counter_incremented"
     assert result["order_id"] == existing.id
 
@@ -143,10 +152,54 @@ async def test_pre_heat_resolved_marks_canceled_and_records_metric():
         ]
     }
 
-    with patch("api.services.pre_heat.record_order_resolved_before_dish_start") as record_metric:
+    with (
+        patch(
+            "api.services.pre_heat.find_first_matching_suppression",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("api.services.pre_heat.record_order_resolved_before_dish_start") as record_metric,
+    ):
         result = await pre_heat(payload, db=db, req_id="REQ-1")
 
     assert result["status"] == "resolved"
     assert existing.processing_status == "canceled"
     assert existing.is_active is False
     record_metric.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_pre_heat_firing_suppressed_does_not_create_order():
+    db = AsyncMock()
+    db.begin = Mock(return_value=DummyBegin())
+    db.execute = AsyncMock(return_value=ScalarResult(first=None))
+    db.flush = AsyncMock()
+
+    suppression = Mock()
+    suppression.id = 10
+
+    payload = {
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {"alertname": "CPUHigh", "instance": "host1"},
+                "annotations": {},
+                "fingerprint": "fp-sup",
+            }
+        ]
+    }
+
+    with (
+        patch(
+            "api.services.pre_heat.find_first_matching_suppression",
+            new=AsyncMock(return_value=suppression),
+        ),
+        patch(
+            "api.services.pre_heat.save_suppressed_event",
+            new=AsyncMock(),
+        ) as save_event,
+    ):
+        result = await pre_heat(payload, db=db, req_id="REQ-SUP")
+
+    assert result["status"] == "ignored_suppressed"
+    assert result["results"][0]["suppression_id"] == 10
+    save_event.assert_awaited_once()

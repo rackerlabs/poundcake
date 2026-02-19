@@ -16,6 +16,7 @@ This document reflects the current PoundCake API surface.
 - `GET /health`
 - `GET /stats`
 - `GET /settings`
+- `GET /observability/overview`
 
 ### Prometheus
 - `GET /prometheus/rules`
@@ -65,6 +66,7 @@ This document reflects the current PoundCake API surface.
 - `GET /orders`
 - `POST /orders`
 - `GET /orders/{order_id}`
+- `GET /orders/{order_id}/timeline`
 - `PUT /orders/{order_id}`
 
 ### Dishes
@@ -78,6 +80,19 @@ This document reflects the current PoundCake API surface.
 
 ### Webhook
 - `POST /webhook`
+
+### Suppressions
+- `GET /suppressions`
+- `POST /suppressions`
+- `GET /suppressions/{suppression_id}`
+- `PATCH /suppressions/{suppression_id}`
+- `POST /suppressions/{suppression_id}/cancel`
+- `GET /suppressions/{suppression_id}/stats`
+- `GET /activity/suppressed`
+- `POST /suppressions/run-lifecycle` (internal worker trigger)
+
+### Ticketing / Bakery
+- `GET /ticketing/bakery`
 
 ## Debug (only when `settings.debug=true`)
 - `GET /docs`

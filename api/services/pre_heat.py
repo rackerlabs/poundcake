@@ -12,11 +12,14 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 from dateutil import parser as dateutil_parser
 from api.models.models import Order
+from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.metrics import record_order_resolved_before_dish_start
 from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
+from api.services.suppression_service import find_first_matching_suppression, save_suppressed_event
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 
 async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
@@ -59,6 +62,41 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                 "fingerprint": fingerprint,
             },
         )
+
+        if settings.suppressions_enabled:
+            suppression = await find_first_matching_suppression(
+                db=db,
+                labels=labels,
+                received_at=datetime.now(timezone.utc),
+            )
+            if suppression:
+                await save_suppressed_event(
+                    db=db,
+                    suppression=suppression,
+                    alert_data=alert_data,
+                    req_id=req_id,
+                    received_at=datetime.now(timezone.utc),
+                )
+                logger.info(
+                    "Alert suppressed by active suppression window",
+                    extra={
+                        "req_id": req_id,
+                        "suppression_id": suppression.id,
+                        "fingerprint": fingerprint,
+                        "alert_name": alert_name,
+                    },
+                )
+                results.append(
+                    {
+                        "status": "ignored_suppressed",
+                        "suppression_id": suppression.id,
+                        "order_id": None,
+                        "fingerprint": fingerprint,
+                        "alert_name": alert_name,
+                        "alert_status": alert_status,
+                    }
+                )
+                continue
 
         try:
             async with db.begin():

@@ -8,8 +8,8 @@ apiVersion: v2
 name: poundcake
 description: Auto-remediation platform bridging Prometheus Alertmanager with StackStorm and optional Bakery ticket translation
 type: application
-version: 2.0.87
-appVersion: "2.0.87"
+version: 2.0.95
+appVersion: "2.0.95"
 maintainers:
   - name: Jake Briggs
 keywords:
@@ -21,11 +21,3 @@ keywords:
 home: https://github.com/aedan/poundCake
 sources:
   - https://github.com/aedan/poundCake
-dependencies:
-  - name: stackstorm-ha
-    version: "1.1.0"
-    repository: "https://helm.stackstorm.com/"
-    condition: internal.renderEmbeddedStackstormSubchart
-    alias: stackstorm-chart
-    tags:
-      - stackstorm

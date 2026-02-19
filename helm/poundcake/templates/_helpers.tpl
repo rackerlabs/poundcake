@@ -274,14 +274,14 @@ Get the database URL - prioritizes explicit config over operator
 {{- end }}
 
 {{/*
-Get StackStorm API URL - either from subchart service or external URL
+Get StackStorm API URL - either from explicit values or release-based defaults
 */}}
 {{- define "poundcake.stackstormSubchartPrefix" -}}
 {{- default "stackstorm" .Values.stackstorm.releaseName -}}
 {{- end }}
 
 {{/*
-Get StackStorm auth secret name from subchart
+Get StackStorm auth secret name from StackStorm release prefix
 */}}
 {{- define "poundcake.stackstormAuthSecretName" -}}
 {{- printf "%s-st2-auth" (include "poundcake.stackstormSubchartPrefix" .) -}}
@@ -296,7 +296,7 @@ Get StackStorm auth secret name from subchart
 {{- end }}
 
 {{/*
-Get StackStorm Auth URL - either from subchart service or external URL
+Get StackStorm Auth URL - either from explicit values or release-based defaults
 */}}
 {{- define "poundcake.stackstormAuthUrl" -}}
 {{- if .Values.stackstorm.authUrl }}

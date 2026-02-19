@@ -73,6 +73,7 @@ flowchart TD
 - **Prep Chef**: Polls for new orders, creates a Dish per order.
 - **Chef**: Claims dishes, registers workflows, executes StackStorm workflows.
 - **Timer**: Monitors StackStorm workflow execution and records results.
+- **Suppression Lifecycle (via Timer)**: Finalizes ended suppression windows and creates/auto-closes summary tickets through Bakery.
 - **Dishwasher**: Periodically syncs StackStorm actions and packs into Ingredients/Recipes.
 - **StackStorm**: Executes remediation workflows.
 - **MariaDB**: Central state store.
@@ -85,6 +86,17 @@ flowchart TD
 - `recipe_ingredients`: Ordered ingredients for a recipe.
 - `dishes`: Execution instance for a recipe/order.
 - `dish_ingredients`: Per-task execution data (task_id, st2_execution_id, status, timestamps, result).
+- `alert_suppressions`: Time-windowed suppression windows (`scope=all|matchers`).
+- `alert_suppression_matchers`: Label-matcher rules (`eq|neq|regex|nregex|exists|not_exists`).
+- `suppressed_events`: Suppressed webhook events (audit trail).
+- `suppression_summaries`: Aggregated suppression stats + Bakery summary ticket create/close refs.
+
+## Alert Suppression
+
+- Suppression matching is evaluated in webhook receive-time order before order creation.
+- If an alert matches an active suppression window, PoundCake records the suppressed event and does not create/update/cancel orders for that alert event.
+- Overlapping windows use first-created attribution (`created_at ASC`), and each event is counted once.
+- Ended windows are summarized by lifecycle processing and generate a Bakery summary ticket which is immediately auto-closed after create succeeds.
 
 ## Workflow Graph Generation (DB -> Orquesta)
 
@@ -212,6 +224,21 @@ output:
 ./bin/install-poundcake.sh -f /path/to/values.yaml
 ```
 
+By default, the installer uses `--operators-mode install-missing` and will auto-install missing required operators:
+- `mariadb-operator`
+- `redis-operator` (full mode)
+- `rabbitmq-cluster-operator` (full mode)
+
+Operator modes:
+
+```bash
+# Verify operators exist but do not install
+./bin/install-poundcake.sh --operators-mode verify
+
+# Skip operator checks/installs
+./bin/install-poundcake.sh --operators-mode skip
+```
+
 Bakery-only deployment (no PoundCake or StackStorm resources):
 
 ```bash
@@ -274,6 +301,13 @@ See `/docs/DEPLOY.md` for full secret key mapping and header format.
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
 
 In full mode, StackStorm is installed as a separate Helm release by `bin/install-poundcake.sh`.
+
+Installer chart versions are read from `/etc/genestack/helm-chart-versions.yaml`:
+- `poundcake`
+- `stackstorm`
+- `mariadb-operator`
+- `redis-operator`
+- `rabbitmq-cluster-operator`
 
 ### Docker Compose Install
 

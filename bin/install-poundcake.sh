@@ -29,6 +29,99 @@ perform_preflight_checks() {
   check_cluster_connection
 }
 
+crd_exists() {
+  local crd_name=$1
+  kubectl get crd "$crd_name" >/dev/null 2>&1
+}
+
+install_or_verify_operator() {
+  local operator_key=$1
+  local crd_name=$2
+  local release_name=$3
+  local chart_name=$4
+  local chart_repo_url=$5
+  local chart_version=$6
+  local chart_namespace=$7
+
+  if crd_exists "$crd_name"; then
+    echo "Operator '${operator_key}' already present (CRD ${crd_name}); skipping install."
+    return 0
+  fi
+
+  case "$OPERATOR_MODE" in
+    skip)
+      echo "Operator mode is skip. Not installing '${operator_key}' (missing CRD ${crd_name})."
+      return 0
+      ;;
+    verify)
+      echo "Error: operator '${operator_key}' is missing (CRD ${crd_name})." >&2
+      echo "Set --operators-mode install-missing to auto-install missing operators." >&2
+      exit 1
+      ;;
+    install-missing)
+      echo "Installing missing operator '${operator_key}' (chart ${chart_name}:${chart_version})..."
+      helm upgrade --install "$release_name" "$chart_name" \
+        --repo "$chart_repo_url" \
+        --version "$chart_version" \
+        --namespace "$chart_namespace" \
+        --create-namespace \
+        --wait \
+        --atomic \
+        --cleanup-on-fail \
+        --timeout "${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}"
+      ;;
+    *)
+      echo "Error: unsupported operators mode '${OPERATOR_MODE}'." >&2
+      exit 1
+      ;;
+  esac
+
+  if ! crd_exists "$crd_name"; then
+    echo "Error: operator '${operator_key}' install completed but CRD ${crd_name} is still missing." >&2
+    exit 1
+  fi
+}
+
+ensure_required_operators() {
+  echo "Operator mode: ${OPERATOR_MODE}"
+
+  if [[ "$OPERATOR_MODE" == "skip" ]]; then
+    echo "Skipping operator checks/installs."
+    return 0
+  fi
+
+  # MariaDB operator is used by PoundCake and Bakery when mariadbOperator.enabled=true.
+  install_or_verify_operator \
+    "mariadb-operator" \
+    "mariadbs.k8s.mariadb.com" \
+    "$MARIADB_OPERATOR_RELEASE_NAME" \
+    "$MARIADB_OPERATOR_CHART_NAME" \
+    "$MARIADB_OPERATOR_CHART_REPO_URL" \
+    "$MARIADB_OPERATOR_VERSION" \
+    "$MARIADB_OPERATOR_NAMESPACE"
+
+  # Full mode uses Redis and RabbitMQ operator-backed resources for StackStorm dependencies.
+  if [[ "$INSTALL_MODE" == "full" ]]; then
+    install_or_verify_operator \
+      "redis-operator" \
+      "redis.redis.opstreelabs.in" \
+      "$REDIS_OPERATOR_RELEASE_NAME" \
+      "$REDIS_OPERATOR_CHART_NAME" \
+      "$REDIS_OPERATOR_CHART_REPO_URL" \
+      "$REDIS_OPERATOR_VERSION" \
+      "$REDIS_OPERATOR_NAMESPACE"
+
+    install_or_verify_operator \
+      "rabbitmq-cluster-operator" \
+      "rabbitmqclusters.rabbitmq.com" \
+      "$RABBITMQ_OPERATOR_RELEASE_NAME" \
+      "$RABBITMQ_OPERATOR_CHART_NAME" \
+      "$RABBITMQ_OPERATOR_CHART_REPO_URL" \
+      "$RABBITMQ_OPERATOR_VERSION" \
+      "$RABBITMQ_OPERATOR_NAMESPACE"
+  fi
+}
+
 ensure_oci_registry_auth() {
   local chart_ref=$1
 
@@ -138,6 +231,25 @@ STACKSTORM_RELEASE_NAME="${POUNDCAKE_STACKSTORM_RELEASE_NAME:-stackstorm}"
 STACKSTORM_CHART_NAME="${POUNDCAKE_STACKSTORM_CHART_NAME:-stackstorm-ha}"
 STACKSTORM_CHART_REPO_URL="${POUNDCAKE_STACKSTORM_CHART_REPO_URL:-https://helm.stackstorm.com/}"
 STACKSTORM_VERSION_DEFAULT="${POUNDCAKE_STACKSTORM_CHART_VERSION:-1.1.0}"
+OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
+
+MARIADB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME:-mariadb-operator}"
+MARIADB_OPERATOR_NAMESPACE="${POUNDCAKE_MARIADB_OPERATOR_NAMESPACE:-mariadb-operator}"
+MARIADB_OPERATOR_CHART_NAME="${POUNDCAKE_MARIADB_OPERATOR_CHART_NAME:-mariadb-operator}"
+MARIADB_OPERATOR_CHART_REPO_URL="${POUNDCAKE_MARIADB_OPERATOR_CHART_REPO_URL:-https://mariadb-operator.github.io/mariadb-operator}"
+MARIADB_OPERATOR_VERSION_DEFAULT="${POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION:-25.10.4}"
+
+REDIS_OPERATOR_RELEASE_NAME="${POUNDCAKE_REDIS_OPERATOR_RELEASE_NAME:-redis-operator}"
+REDIS_OPERATOR_NAMESPACE="${POUNDCAKE_REDIS_OPERATOR_NAMESPACE:-redis-operator}"
+REDIS_OPERATOR_CHART_NAME="${POUNDCAKE_REDIS_OPERATOR_CHART_NAME:-redis-operator}"
+REDIS_OPERATOR_CHART_REPO_URL="${POUNDCAKE_REDIS_OPERATOR_CHART_REPO_URL:-https://ot-container-kit.github.io/helm-charts/}"
+REDIS_OPERATOR_VERSION_DEFAULT="${POUNDCAKE_REDIS_OPERATOR_CHART_VERSION:-0.23.0}"
+
+RABBITMQ_OPERATOR_RELEASE_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_RELEASE_NAME:-rabbitmq-cluster-operator}"
+RABBITMQ_OPERATOR_NAMESPACE="${POUNDCAKE_RABBITMQ_OPERATOR_NAMESPACE:-rabbitmq-system}"
+RABBITMQ_OPERATOR_CHART_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_NAME:-rabbitmq-cluster-operator}"
+RABBITMQ_OPERATOR_CHART_REPO_URL="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_REPO_URL:-https://charts.bitnami.com/bitnami}"
+RABBITMQ_OPERATOR_VERSION_DEFAULT="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_VERSION:-4.4.34}"
 APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
@@ -270,6 +382,18 @@ while [[ $# -gt 0 ]]; do
       BOOTSTRAP_DIRS=false
       shift
       ;;
+    --operators-mode)
+      OPERATOR_MODE="$2"
+      shift 2
+      ;;
+    --skip-operators)
+      OPERATOR_MODE="skip"
+      shift
+      ;;
+    --verify-operators)
+      OPERATOR_MODE="verify"
+      shift
+      ;;
     --interactive-bakery-creds|--interactive-bakery-credentials)
       INTERACTIVE_BAKERY_CREDS=true
       shift
@@ -302,6 +426,11 @@ if [[ "$INSTALL_MODE" != "full" && "$INSTALL_MODE" != "bakery-only" ]]; then
   exit 1
 fi
 
+if [[ "$OPERATOR_MODE" != "install-missing" && "$OPERATOR_MODE" != "verify" && "$OPERATOR_MODE" != "skip" ]]; then
+  echo "Error: invalid operators mode '$OPERATOR_MODE'. Valid values: install-missing, verify, skip" >&2
+  exit 1
+fi
+
 if [[ "$SKIP_PREFLIGHT" != "true" ]]; then
   perform_preflight_checks
 fi
@@ -327,10 +456,16 @@ fi
 
 POUNDCAKE_VERSION="$(get_chart_version "poundcake" "$VERSION_FILE_MANAGED" || true)"
 STACKSTORM_VERSION="$(get_chart_version "stackstorm" "$VERSION_FILE_MANAGED" || true)"
+MARIADB_OPERATOR_VERSION="$(get_chart_version "mariadb-operator" "$VERSION_FILE_MANAGED" || true)"
+REDIS_OPERATOR_VERSION="$(get_chart_version "redis-operator" "$VERSION_FILE_MANAGED" || true)"
+RABBITMQ_OPERATOR_VERSION="$(get_chart_version "rabbitmq-cluster-operator" "$VERSION_FILE_MANAGED" || true)"
 
 LOCAL_POUNDCAKE_VERSION="$(get_local_poundcake_chart_version || true)"
 POUNDCAKE_VERSION="${POUNDCAKE_VERSION:-${POUNDCAKE_CHART_VERSION:-$LOCAL_POUNDCAKE_VERSION}}"
 STACKSTORM_VERSION="${STACKSTORM_VERSION:-$STACKSTORM_VERSION_DEFAULT}"
+MARIADB_OPERATOR_VERSION="${MARIADB_OPERATOR_VERSION:-$MARIADB_OPERATOR_VERSION_DEFAULT}"
+REDIS_OPERATOR_VERSION="${REDIS_OPERATOR_VERSION:-$REDIS_OPERATOR_VERSION_DEFAULT}"
+RABBITMQ_OPERATOR_VERSION="${RABBITMQ_OPERATOR_VERSION:-$RABBITMQ_OPERATOR_VERSION_DEFAULT}"
 
 if [[ -z "${POUNDCAKE_VERSION}" ]]; then
   echo "Error: could not determine PoundCake chart version. Set /etc/genestack/helm-chart-versions.yaml key 'poundcake' or env POUNDCAKE_CHART_VERSION." >&2
@@ -339,6 +474,11 @@ fi
 
 ensure_chart_version_key "$VERSION_FILE_MANAGED" "poundcake" "$POUNDCAKE_VERSION"
 ensure_chart_version_key "$VERSION_FILE_MANAGED" "stackstorm" "$STACKSTORM_VERSION"
+ensure_chart_version_key "$VERSION_FILE_MANAGED" "mariadb-operator" "$MARIADB_OPERATOR_VERSION"
+ensure_chart_version_key "$VERSION_FILE_MANAGED" "redis-operator" "$REDIS_OPERATOR_VERSION"
+ensure_chart_version_key "$VERSION_FILE_MANAGED" "rabbitmq-cluster-operator" "$RABBITMQ_OPERATOR_VERSION"
+
+ensure_required_operators
 
 STACKSTORM_API_URL="http://${STACKSTORM_RELEASE_NAME}-st2api.${NAMESPACE}.svc.cluster.local:9101"
 STACKSTORM_AUTH_URL="http://${STACKSTORM_RELEASE_NAME}-st2auth.${NAMESPACE}.svc.cluster.local:9100"

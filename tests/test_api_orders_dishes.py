@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.models.models import Dish, Order
+from api.models.models import Dish, DishIngredient, Order
 
 
 class ScalarResult:
@@ -105,6 +105,27 @@ def _make_dish(dish_id: int = 1, status: str = "new") -> Dish:
     )
 
 
+def _make_dish_ingredient(ingredient_id: int = 1) -> DishIngredient:
+    now = datetime.now(timezone.utc)
+    return DishIngredient(
+        id=ingredient_id,
+        dish_id=1,
+        recipe_ingredient_id=None,
+        task_id="core.local",
+        st2_execution_id="st2-1",
+        status="succeeded",
+        started_at=now,
+        completed_at=now,
+        canceled_at=None,
+        result={},
+        error_message=None,
+        deleted=False,
+        deleted_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
 def test_fetch_orders_returns_list(client, mock_db_session):
     order = _make_order()
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(all_=[order]))
@@ -187,3 +208,27 @@ def test_update_dish_updates_order_when_terminal(client, mock_db_session):
     assert response.status_code == 200
     assert order.processing_status == "complete"
     assert order.is_active is False
+
+
+def test_get_order_timeline(client, mock_db_session):
+    order = _make_order(status="processing")
+    order.bakery_ticket_id = "ticket-1"
+    order.bakery_operation_id = "op-1"
+    dish = _make_dish(status="processing")
+    ingredient = _make_dish_ingredient()
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),
+            ScalarResult(all_=[dish]),
+            ScalarResult(all_=[ingredient]),
+        ]
+    )
+
+    with patch("api.api.orders.get_operation", new=AsyncMock(return_value={"status": "running"})):
+        response = client.get("/api/v1/orders/1/timeline")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["order"]["id"] == 1
+    assert len(data["events"]) >= 3
+    assert any(event["event_type"] == "bakery" for event in data["events"])

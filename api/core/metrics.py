@@ -108,6 +108,28 @@ POUNDCAKE_BAKERY_REQUEST_FAILURES = Counter(
     ["action", "reason"],
 )
 
+POUNDCAKE_SUPPRESSED_EVENTS = Counter(
+    "poundcake_suppressed_events_total",
+    "Total suppressed events attributed to suppression windows",
+    ["suppression_id", "alertname", "severity"],
+)
+
+POUNDCAKE_ACTIVE_SUPPRESSIONS = Gauge(
+    "poundcake_active_suppressions",
+    "Number of currently active alert suppression windows",
+)
+
+POUNDCAKE_SUPPRESSION_SUMMARY_TICKETS = Counter(
+    "poundcake_suppression_summary_tickets_total",
+    "Total suppression summary ticket create/close outcomes",
+    ["status"],
+)
+
+POUNDCAKE_SUPPRESSION_SUMMARY_FAILURES = Counter(
+    "poundcake_suppression_summary_failures_total",
+    "Total suppression summary lifecycle failures",
+)
+
 
 def init_app_info(app_name: str, version: str) -> None:
     """Initialize application info metric.
@@ -243,3 +265,27 @@ def record_mapping_match(mapping_name: str) -> None:
 def record_bakery_request_failure(action: str, reason: str) -> None:
     """Record a PoundCake-to-Bakery request failure."""
     POUNDCAKE_BAKERY_REQUEST_FAILURES.labels(action=action, reason=reason).inc()
+
+
+def record_suppressed_event(suppression_id: int, alertname: str, severity: str) -> None:
+    """Record a suppressed alert event."""
+    POUNDCAKE_SUPPRESSED_EVENTS.labels(
+        suppression_id=str(suppression_id),
+        alertname=alertname or "unknown",
+        severity=severity or "unknown",
+    ).inc()
+
+
+def set_active_suppressions(count: int) -> None:
+    """Set active suppression gauge."""
+    POUNDCAKE_ACTIVE_SUPPRESSIONS.set(count)
+
+
+def record_suppression_summary_ticket(status: str) -> None:
+    """Record suppression summary create/close status."""
+    POUNDCAKE_SUPPRESSION_SUMMARY_TICKETS.labels(status=status).inc()
+
+
+def record_suppression_summary_failure() -> None:
+    """Record suppression lifecycle failure."""
+    POUNDCAKE_SUPPRESSION_SUMMARY_FAILURES.inc()

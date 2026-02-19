@@ -100,6 +100,8 @@ spec:
               value: {{ printf "%s/v1" (include "poundcake.stackstormApiUrl" .) | quote }}
             - name: TIMER_INTERVAL
               value: {{ .Values.timer.interval | quote }}
+            - name: SUPPRESSION_LIFECYCLE_INTERVAL
+              value: {{ .Values.suppressions.lifecycleIntervalSeconds | quote }}
             - name: SLA_BUFFER_PERCENT
               value: {{ .Values.timer.slaBufferPercent | default "0.2" | quote }}
             - name: LOG_LEVEL

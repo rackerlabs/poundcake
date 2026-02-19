@@ -18,6 +18,7 @@ from . import (
     ingredients,
     webhook,
     settings,
+    suppressions,
 )
 
 __all__ = [
@@ -31,4 +32,5 @@ __all__ = [
     "ingredients",
     "webhook",
     "settings",
+    "suppressions",
 ]

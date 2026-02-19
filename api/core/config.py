@@ -203,6 +203,14 @@ class Settings(BaseSettings):
     bakery_poll_interval_seconds: float = 2.0
     bakery_poll_timeout_seconds: int = 60
 
+    # ==========================================================================
+    # Alert Suppression Settings
+    # ==========================================================================
+    suppressions_enabled: bool = True
+    suppression_lifecycle_enabled: bool = True
+    suppression_lifecycle_interval_seconds: int = 30
+    suppression_lifecycle_batch_limit: int = 25
+
 
 settings = Settings()
 

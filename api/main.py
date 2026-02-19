@@ -28,6 +28,7 @@ from api.api.auth import require_auth_if_enabled
 from api.api.settings import router as settings_router
 from api.api.ingredients import router as ingredients_router
 from api.api.webhook import router as webhook_router
+from api.api.suppressions import router as suppressions_router
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -97,6 +98,7 @@ app.include_router(dishes_router, prefix="/api/v1", tags=["executor"])
 # 5. Alert Ingestion (webhook)
 app.include_router(webhook_router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(orders_router, prefix="/api/v1", tags=["ingestion"])
+app.include_router(suppressions_router, prefix="/api/v1", tags=["ingestion"])
 
 
 @app.get("/")

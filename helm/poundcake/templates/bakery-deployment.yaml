@@ -227,6 +227,12 @@ spec:
                   name: {{ include "poundcake.bakerySecretName" . }}
                   key: rackspace-core-password
             {{- end }}
+            - name: RACKSPACE_CORE_DEFAULT_QUEUE
+              value: {{ .Values.bakery.rackspaceCore.defaultQueue | quote }}
+            - name: RACKSPACE_CORE_DEFAULT_SUBCATEGORY
+              value: {{ .Values.bakery.rackspaceCore.defaultSubcategory | quote }}
+            - name: RACKSPACE_CORE_VERIFY_SSL
+              value: {{ .Values.bakery.rackspaceCore.verifySsl | quote }}
           livenessProbe:
             httpGet:
               path: /api/v1/health

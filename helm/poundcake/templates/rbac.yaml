@@ -16,7 +16,7 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
-  # Allow staged startup orchestration of StackStorm subchart deployments.
+  # Allow staged startup orchestration of StackStorm deployments.
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/scale"]
     verbs: ["get", "list", "watch", "patch", "update"]

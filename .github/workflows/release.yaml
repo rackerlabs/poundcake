@@ -165,12 +165,6 @@ jobs:
         run: |
           echo ${{ secrets.CR_PAT || secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-      - name: Update Helm dependencies
-        run: |
-          cd helm/poundcake
-          helm dependency update
-          cd ../..
-
       - name: Package Helm chart
         run: |
           mkdir -p .helm-packages

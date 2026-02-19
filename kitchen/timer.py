@@ -24,6 +24,7 @@ API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 TIMER_INTERVAL = int(os.getenv("TIMER_INTERVAL", "10"))
 POLL_LIMIT = int(os.getenv("TIMER_LIMIT", "1"))
 SLA_BUFFER = float(os.getenv("SLA_BUFFER_PERCENT", "0.2"))
+SUPPRESSION_LIFECYCLE_INTERVAL = int(os.getenv("SUPPRESSION_LIFECYCLE_INTERVAL", "30"))
 
 # Configure Logging
 setup_logging()
@@ -32,6 +33,7 @@ POLLER_RETRIES = get_settings().poller_http_retries
 SYSTEM_REQ_ID = "SYSTEM-TIMER"
 MISSING_EXECUTION_TIMEOUT_SECONDS = get_settings().chef_missing_execution_timeout_seconds
 API_UNAVAILABLE_SINCE: float | None = None
+LAST_SUPPRESSION_LIFECYCLE_RUN = 0.0
 
 
 def update_dish(
@@ -575,6 +577,39 @@ def monitor_dishes() -> None:
             )
 
 
+def run_suppression_lifecycle() -> None:
+    """Run suppression summary lifecycle endpoint on a slower cadence."""
+    global LAST_SUPPRESSION_LIFECYCLE_RUN
+    now = time.time()
+    if now - LAST_SUPPRESSION_LIFECYCLE_RUN < SUPPRESSION_LIFECYCLE_INTERVAL:
+        return
+    LAST_SUPPRESSION_LIFECYCLE_RUN = now
+    try:
+        resp = request_with_retry_sync(
+            "POST",
+            f"{API_BASE_URL}/suppressions/run-lifecycle",
+            headers=get_service_headers(SYSTEM_REQ_ID),
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
+        if resp.status_code != 200:
+            logger.warning(
+                "Suppression lifecycle run returned non-200",
+                extra={"req_id": SYSTEM_REQ_ID, "status_code": resp.status_code},
+            )
+            return
+        payload = resp.json()
+        logger.debug(
+            "Suppression lifecycle completed",
+            extra={"req_id": SYSTEM_REQ_ID, "finalized": payload.get("finalized", 0)},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Suppression lifecycle run failed",
+            extra={"req_id": SYSTEM_REQ_ID, "error": str(exc)},
+        )
+
+
 if __name__ == "__main__":
     wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger)
     logger.info(
@@ -588,4 +623,5 @@ if __name__ == "__main__":
     )
     while True:
         monitor_dishes()
+        run_suppression_lifecycle()
         time.sleep(TIMER_INTERVAL)

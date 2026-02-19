@@ -259,3 +259,145 @@ class Order(Base):
     )
 
     dishes: Mapped[list["Dish"]] = relationship("Dish", back_populates="order")
+
+
+class AlertSuppression(Base):
+    """Maintenance window for suppressing webhook alerts."""
+
+    __tablename__ = "alert_suppressions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False, default="matchers")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    summary_ticket_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+    matchers: Mapped[list["AlertSuppressionMatcher"]] = relationship(
+        "AlertSuppressionMatcher",
+        back_populates="suppression",
+        cascade="all, delete-orphan",
+    )
+
+    suppressed_events: Mapped[list["SuppressedEvent"]] = relationship(
+        "SuppressedEvent",
+        back_populates="suppression",
+        cascade="all, delete-orphan",
+    )
+
+    summary: Mapped["SuppressionSummary | None"] = relationship(
+        "SuppressionSummary",
+        back_populates="suppression",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "idx_alert_suppressions_active_lookup",
+            "enabled",
+            "starts_at",
+            "ends_at",
+            "canceled_at",
+        ),
+    )
+
+
+class AlertSuppressionMatcher(Base):
+    """Label matcher row for suppression matching rules."""
+
+    __tablename__ = "alert_suppression_matchers"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    suppression_id: Mapped[int] = mapped_column(
+        ForeignKey("alert_suppressions.id"),
+        nullable=False,
+        index=True,
+    )
+    label_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    operator: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+
+    suppression: Mapped["AlertSuppression"] = relationship(
+        "AlertSuppression", back_populates="matchers"
+    )
+
+
+class SuppressedEvent(Base):
+    """Individual alert event captured by suppression windows."""
+
+    __tablename__ = "suppressed_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    suppression_id: Mapped[int] = mapped_column(
+        ForeignKey("alert_suppressions.id"),
+        nullable=False,
+        index=True,
+    )
+    received_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    alertname: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    severity: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    labels_json: Mapped[dict[str, Any]] = mapped_column(MYSQL_JSON, nullable=False)
+    annotations_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="firing")
+    payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    req_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+
+    suppression: Mapped["AlertSuppression"] = relationship(
+        "AlertSuppression",
+        back_populates="suppressed_events",
+    )
+
+    __table_args__ = (
+        Index("idx_suppressed_events_suppression_received_at", "suppression_id", "received_at"),
+        Index("idx_suppressed_events_fingerprint", "fingerprint"),
+    )
+
+
+class SuppressionSummary(Base):
+    """Aggregated suppression window summary and Bakery ticket refs."""
+
+    __tablename__ = "suppression_summaries"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    suppression_id: Mapped[int] = mapped_column(
+        ForeignKey("alert_suppressions.id"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    total_suppressed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    by_alertname_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    by_severity_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    first_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    summary_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    bakery_ticket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    bakery_create_operation_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    bakery_close_operation_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    summary_close_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+    suppression: Mapped["AlertSuppression"] = relationship(
+        "AlertSuppression", back_populates="summary"
+    )

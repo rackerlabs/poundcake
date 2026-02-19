@@ -20,6 +20,44 @@ from api.services.prometheus_crd_manager import get_prometheus_crd_manager
 logger = get_logger(__name__)
 
 
+def normalize_rule_data(rule_name: str, rule_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Normalize incoming rule payload to PrometheusRule schema.
+
+    Handles legacy UI/client payloads and strips unknown fields that are rejected
+    by the PrometheusRule admission webhook.
+    """
+    normalized = dict(rule_data)
+
+    # Backward-compat alias used by older UI payloads.
+    if "alert" not in normalized and "order" in normalized:
+        normalized["alert"] = normalized["order"]
+
+    # Accept client-side alias while writing valid PrometheusRule schema.
+    if "expr" not in normalized and "query" in normalized:
+        normalized["expr"] = normalized["query"]
+
+    # Ensure one of alert/record is always present for alert-rule workflows.
+    if "alert" not in normalized and "record" not in normalized:
+        normalized["alert"] = rule_name
+
+    allowed_fields = {
+        "alert",
+        "record",
+        "expr",
+        "for",
+        "labels",
+        "annotations",
+        "keep_firing_for",
+    }
+    cleaned: dict[str, Any] = {
+        key: value
+        for key, value in normalized.items()
+        if key in allowed_fields and value is not None
+    }
+    return cleaned
+
+
 def sanitize_crd_name(file_name: str) -> str:
     """
     Sanitize a file name to be a valid Kubernetes resource name.
@@ -128,12 +166,13 @@ class PrometheusRuleManager:
             "status": "success",
             "message": "Rule updated",
         }
+        normalized_rule_data = normalize_rule_data(rule_name, rule_data)
 
         # Mode 1: CRD Mode (immediate effect via Prometheus Operator)
         if self.settings.prometheus_use_crds:
             crd_name = sanitize_crd_name(file_name)
             crd_result = await self.crd_manager.create_or_update_rule(
-                rule_name, group_name, crd_name, rule_data
+                rule_name, group_name, crd_name, normalized_rule_data
             )
 
             if crd_result.get("status") == "error":
@@ -151,7 +190,9 @@ class PrometheusRuleManager:
 
         # Mode 2: Git Mode (persistence and audit trail)
         if self.settings.git_enabled:
-            git_result = await self._update_rule_in_git(rule_name, group_name, file_name, rule_data)
+            git_result = await self._update_rule_in_git(
+                rule_name, group_name, file_name, normalized_rule_data
+            )
 
             if git_result.get("status") == "error":
                 if self.settings.prometheus_use_crds:
@@ -321,12 +362,13 @@ class PrometheusRuleManager:
             "status": "success",
             "message": "Rule created",
         }
+        normalized_rule_data = normalize_rule_data(rule_name, rule_data)
 
         # Mode 1: CRD Mode (immediate effect via Prometheus Operator)
         if self.settings.prometheus_use_crds:
             crd_name = sanitize_crd_name(file_name)
             crd_result = await self.crd_manager.create_or_update_rule(
-                rule_name, group_name, crd_name, rule_data
+                rule_name, group_name, crd_name, normalized_rule_data
             )
 
             if crd_result.get("status") == "error":
@@ -344,7 +386,9 @@ class PrometheusRuleManager:
 
         # Mode 2: Git Mode (persistence and audit trail)
         if self.settings.git_enabled:
-            git_result = await self._create_rule_in_git(rule_name, group_name, file_name, rule_data)
+            git_result = await self._create_rule_in_git(
+                rule_name, group_name, file_name, normalized_rule_data
+            )
 
             if git_result.get("status") == "error":
                 if self.settings.prometheus_use_crds:
