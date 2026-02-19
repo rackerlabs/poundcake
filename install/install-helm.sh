@@ -15,4 +15,3 @@ fi
 exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" \
   --set "stackstorm.chart.enabled=${STACKSTORM_CHART_ENABLED}" \
   "$@"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
