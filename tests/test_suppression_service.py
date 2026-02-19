@@ -1,7 +1,7 @@
 """Unit tests for suppression service matching logic."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
