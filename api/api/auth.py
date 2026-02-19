@@ -146,6 +146,14 @@ def require_auth_if_enabled(
 
     # Alignment with main.py versioned routes
     public_paths = [
+
+        "/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/api/v1/live",
+        "/api/v1/ready",
+
         "/api/v1/health",
         "/api/v1/auth/login",
     ]

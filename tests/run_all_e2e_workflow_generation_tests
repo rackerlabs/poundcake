@@ -10,6 +10,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+source "${SCRIPT_DIR}/lib.sh"
+start_test_target
+register_cleanup_trap
+export TEST_TARGET_STARTED=1
+>>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
+
 TEST_SCRIPTS=(
   "${SCRIPT_DIR}/run_single_task_non_blocking_test"
   "${SCRIPT_DIR}/run_single_task_manual_order_test"
@@ -18,28 +24,32 @@ TEST_SCRIPTS=(
   "${SCRIPT_DIR}/run_reuse_recipe_two_webhooks_test"
 )
 
-echo "Running ${#TEST_SCRIPTS[@]} e2e workflow-generation tests..."
-echo
+
+suite_start=$(date +%s)
+log_info "Running ${#TEST_SCRIPTS[@]} e2e workflow-generation tests..."
+>>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 
 passed=0
 failed=0
 
 for test_script in "${TEST_SCRIPTS[@]}"; do
   test_name="$(basename "${test_script}")"
-  echo "=== ${test_name} ==="
+
+  log_info "=== ${test_name} ==="
 
   if "${test_script}"; then
-    echo "PASS: ${test_name}"
+    log_info "PASS: ${test_name}"
     passed=$((passed + 1))
   else
-    echo "FAIL: ${test_name}"
+    log_error "FAIL: ${test_name}"
     failed=$((failed + 1))
   fi
 
-  echo
 done
 
-echo "Suite complete: ${passed} passed, ${failed} failed"
+elapsed=$(( $(date +%s) - suite_start ))
+log_info "Suite complete: ${passed} passed, ${failed} failed (elapsed=${elapsed}s)"
+>>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 
 if [ "${failed}" -gt 0 ]; then
   exit 1

@@ -142,11 +142,5 @@ def prep_loop() -> None:
         time.sleep(PREP_INTERVAL)
 
 
-def _service_headers(req_id: str) -> dict[str, str]:
-    if hasattr(service_helpers, "get_service_headers"):
-        return service_helpers.get_service_headers(req_id)
-    return {"X-Request-ID": req_id}
-
-
 if __name__ == "__main__":
     prep_loop()

@@ -1,0 +1,233 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# Legacy global pull secret list. Use poundcakeImage.pullSecrets for new configs.
+imagePullSecrets: []
+
+poundcakeImage:
+  repository: poundcake
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+stackstormImage:
+  repository: stackstorm/st2
+  tag: "3.9.0"
+  pullPolicy: IfNotPresent
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+utilitySecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+images:
+  mariadb: mariadb:11.6
+  mongodb: mongo:7.0
+  rabbitmq: rabbitmq:3.13-management
+  redis: redis:7.4-alpine
+  alpine: alpine:3.19
+  busybox: busybox:1.36
+  kubectl: bitnami/kubectl:latest
+
+secrets:
+  # REQUIRED: Provide these values or they will be randomly generated on install
+  dbRootPassword: ""
+  dbName: poundcake
+  dbUser: poundcake
+  dbPassword: ""
+  mongoRootPassword: ""
+  mongoUsername: stackstorm
+  mongoPassword: ""
+  rabbitmqUser: stackstorm
+  rabbitmqPassword: ""
+  st2AuthUser: st2admin
+  st2AuthPassword: ""
+
+persistence:
+  storageClassName: ""
+  mariadb:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  mongo:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  rabbitmq:
+    size: 5Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  redis:
+    size: 2Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  stackstormPacks:
+    # Shared RWX volume for dynamic workflow/action files written by poundcake-api
+    # and consumed by StackStorm services under /opt/stackstorm/packs/poundcake.
+    size: 2Gi
+    accessMode: ReadWriteMany
+    storageClassName: ""
+  config:
+    size: 1Gi
+    accessMode: ReadWriteMany
+    storageClassName: ""
+
+services:
+  api:
+    type: ClusterIP
+    port: 8000
+    publishNotReadyAddresses: true
+  stackstormApi:
+    type: ClusterIP
+    port: 9101
+  stackstormAuth:
+    type: ClusterIP
+    port: 9100
+  stackstormStream:
+    type: ClusterIP
+    port: 9102
+  stackstormWeb:
+    type: ClusterIP
+    port: 8080
+
+stackstormComponents:
+  register:
+    enabled: false
+  stream:
+    enabled: false
+  web:
+    enabled: false
+  client:
+    enabled: false
+
+stackstormServices:
+  mongodb:
+    enabled: true
+  rabbitmq:
+    enabled: true
+  redis:
+    enabled: true
+  auth:
+    enabled: true
+  api:
+    enabled: true
+  actionrunner:
+    enabled: true
+  rulesengine:
+    enabled: true
+  workflowengine:
+    enabled: true
+  scheduler:
+    enabled: true
+  notifier:
+    enabled: false
+  garbagecollector:
+    enabled: true
+  timersengine:
+    enabled: false
+  sensorcontainer:
+    enabled: false
+  register:
+    enabled: false
+  stream:
+    enabled: false
+  web:
+    enabled: false
+  client:
+    enabled: false
+
+intervals:
+  chef: "5"
+  prepChef: "5"
+  timer: "10"
+  dishwasher: "300"
+  prepInterval: "5"
+
+logFormat: console
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Default resource requests and limits (can be overridden per component)
+defaultResources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Security context for all pods
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context for infrastructure services.
+# Stateful images may need writable root filesystem for sockets/temp files.
+infraSecurityContext:
+  mariadb:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+  mongodb:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+  rabbitmq:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+  redis:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+startupHooks:
+  cleanup:
+    enabled: true
+    deleteSuccessful: true
+    deleteFailed: false
+
+# Pod disruption budget settings
+pdb:
+  enabled: true

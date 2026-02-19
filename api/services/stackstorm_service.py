@@ -780,6 +780,12 @@ async def register_workflow_to_st2(
     workflows_dir.mkdir(parents=True, exist_ok=True)
     workflow_file = workflows_dir / f"{safe_name}.yaml"
     workflow_file.write_text(yaml_payload)
+    if not actions_dir.exists():
+        raise StackStormError(
+            "Pack actions directory is missing before action registration. "
+            f"Expected path: {actions_dir}. Ensure PoundCake and StackStorm share the same "
+            "stackstorm-packs PVC."
+        )
 
     st2_action_data = {
         "name": safe_name,
@@ -813,6 +819,14 @@ async def register_workflow_to_st2(
     if response.status_code == 409:
         # Action already exists; return expected ref
         return f"{pack_name}.{safe_name}"
+    if "Content pack" in response.text:
+        raise StackStormError(
+            "Failed to register ST2 action because StackStorm cannot resolve the generated pack. "
+            f"Local pack file: {workflow_file}. "
+            "Ensure StackStorm services mount the same shared stackstorm-packs PVC at "
+            f"/opt/stackstorm/packs/{pack_name}. "
+            f"StackStorm response: {response.text}"
+        )
     raise StackStormError(f"Failed to register ST2 action: {response.text}")
 
 
