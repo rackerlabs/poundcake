@@ -73,8 +73,7 @@ class RackspaceCoreMixer(BaseMixer):
         """
         response = await client.post(
             f"{self.base_url}/ctkapi/login/{self.username}",
-            content=self.password,
-            headers={"Content-Type": "text/plain"},
+            json={"password": self.password},
         )
         response.raise_for_status()
         result = response.json()
@@ -175,9 +174,14 @@ class RackspaceCoreMixer(BaseMixer):
             {
                 "class": "Account.Account",
                 "load_arg": str(account_number),
-                "action": "method",
                 "method": "addTicket",
                 "args": [queue, subcategory, source, severity, subject, body],
+                "keyword_args": {},
+                "result_map": {
+                    "number": "number",
+                    "status": "status.id",
+                    "account": "account.number",
+                },
             }
         ]
 
@@ -188,9 +192,18 @@ class RackspaceCoreMixer(BaseMixer):
         if isinstance(result, list) and len(result) > 0:
             first = result[0]
             if isinstance(first, dict):
-                ticket_number = str(
-                    first.get("ticket_number") or first.get("result") or first.get("id") or ""
-                )
+                result_obj = first.get("result")
+                if isinstance(result_obj, dict):
+                    ticket_number = str(
+                        result_obj.get("number")
+                        or result_obj.get("ticket_number")
+                        or result_obj.get("id")
+                        or ""
+                    )
+                elif result_obj:
+                    ticket_number = str(result_obj)
+                else:
+                    ticket_number = str(first.get("ticket_number") or first.get("id") or "")
 
         return {
             "success": True,
@@ -226,11 +239,8 @@ class RackspaceCoreMixer(BaseMixer):
             {
                 "class": "Ticket.Ticket",
                 "load_arg": str(ticket_number),
-                "action": "set_attribute",
-                "attribute": attr_name,
-                "value": attr_value,
+                "set_attribute": attributes,
             }
-            for attr_name, attr_value in attributes.items()
         ]
 
         result = await self._execute_query(query_set)
@@ -266,9 +276,9 @@ class RackspaceCoreMixer(BaseMixer):
             {
                 "class": "Ticket.Ticket",
                 "load_arg": str(ticket_number),
-                "action": "set_attribute",
-                "attribute": "status",
-                "value": status_value,
+                "set_attribute": {
+                    "status": status_value,
+                },
             }
         ]
 
@@ -303,9 +313,9 @@ class RackspaceCoreMixer(BaseMixer):
             {
                 "class": "Ticket.Ticket",
                 "load_arg": str(ticket_number),
-                "action": "method",
                 "method": "addComment",
                 "args": [comment],
+                "keyword_args": {},
             }
         ]
 
@@ -361,22 +371,32 @@ class RackspaceCoreMixer(BaseMixer):
             ]
         elif where_conditions:
             # Mode 2: Where-condition search via TicketWhere
-            where_list = []
-            for cond in where_conditions:
-                where_list.append(
-                    {
-                        "field": cond["field"],
-                        "op": cond.get("op", "eq"),
-                        "value": cond["value"],
-                    }
-                )
+            values: List[Any] = []
+            for idx, cond in enumerate(where_conditions):
+                if isinstance(cond, dict):
+                    field = cond["field"]
+                    op = cond.get("op", "=")
+                    value = cond["value"]
+                    values.append([field, op, value])
+                elif isinstance(cond, list) and len(cond) == 3:
+                    values.append(cond)
+                else:
+                    raise ValueError(
+                        "where_conditions entries must be dicts with "
+                        "{field, op, value} or 3-item arrays"
+                    )
+
+                if idx < len(where_conditions) - 1:
+                    values.append("&")
 
             query_set = [
                 {
-                    "class": "Ticket.TicketWhere",
-                    "action": "attributes",
+                    "class": "Ticket.Ticket",
+                    "load_arg": {
+                        "class": "Ticket.TicketWhere",
+                        "values": values,
+                    },
                     "attributes": attributes,
-                    "where": where_list,
                 }
             ]
         elif queue_label:
@@ -384,9 +404,11 @@ class RackspaceCoreMixer(BaseMixer):
             query_set = [
                 {
                     "class": "Ticket.Ticket",
-                    "action": "method",
-                    "method": "loadQueueView",
-                    "args": [queue_label],
+                    "load_method": "loadQueueView",
+                    "load_arg": {
+                        "label": queue_label,
+                    },
+                    "attributes": attributes,
                 }
             ]
         else:
