@@ -14,7 +14,6 @@ source "${SCRIPT_DIR}/lib.sh"
 start_test_target
 register_cleanup_trap
 export TEST_TARGET_STARTED=1
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 
 TEST_SCRIPTS=(
   "${SCRIPT_DIR}/run_single_task_non_blocking_test"
@@ -27,7 +26,6 @@ TEST_SCRIPTS=(
 
 suite_start=$(date +%s)
 log_info "Running ${#TEST_SCRIPTS[@]} e2e workflow-generation tests..."
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 
 passed=0
 failed=0
@@ -49,7 +47,6 @@ done
 
 elapsed=$(( $(date +%s) - suite_start ))
 log_info "Suite complete: ${passed} passed, ${failed} failed (elapsed=${elapsed}s)"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 
 if [ "${failed}" -gt 0 ]; then
   exit 1

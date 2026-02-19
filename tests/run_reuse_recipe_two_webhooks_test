@@ -13,7 +13,6 @@ source "${SCRIPT_DIR}/lib.sh"
 start_test_target
 register_cleanup_trap
 
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 TEST_TS=${TEST_TS:-$(date +%s)}
 TEST_RECIPE=${TEST_RECIPE:-AutomatedReuseRecipe-${TEST_TS}}
 REQ_ID_1=${REQ_ID_1:-AUTOMATED-REUSE-${TEST_TS}-1}
@@ -29,7 +28,6 @@ log_info "Using recipe: ${TEST_RECIPE}"
 
 # Find or create core.local ingredient.
 ING_ID=$(api_request_json GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
   ING_PAYLOAD=$(jq -n \
     '{
@@ -50,7 +48,6 @@ fi
 
 if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
   log_error "Failed to resolve ingredient core.local"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
   exit 1
 fi
 
@@ -91,7 +88,6 @@ RECIPE_ID=$(api_request_json POST "${API_URL}/recipes/" "${RECIPE_PAYLOAD}" | jq
 
 if [ -z "${RECIPE_ID}" ] || [ "${RECIPE_ID}" = "null" ]; then
   log_error "Failed to create recipe"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
   exit 1
 fi
 
@@ -128,7 +124,6 @@ JSON
 )
 
   REQUEST_ID="${req_id}" api_request_json POST "${API_URL}/webhook" "${payload}" >/dev/null
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 }
 
 wait_for_dish() {
@@ -138,7 +133,6 @@ wait_for_dish() {
   while true; do
 
     dishes=$(api_request_json GET "${API_URL}/dishes?req_id=${req_id}")
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
     count=$(echo "${dishes}" | jq -r 'length')
     if [ "${count}" != "0" ]; then
       echo "${dishes}" | jq -r '.[0]'
@@ -148,7 +142,6 @@ wait_for_dish() {
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
 
       log_error "Timed out waiting for dish for req_id=${req_id}"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
       return 1
     fi
     sleep "${INTERVAL}"
@@ -162,7 +155,6 @@ wait_for_order_inactive() {
   while true; do
 
     orders=$(api_request_json GET "${API_URL}/orders?req_id=${req_id}")
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
     count=$(echo "${orders}" | jq -r 'length')
     if [ "${count}" != "0" ]; then
       is_active=$(echo "${orders}" | jq -r '.[0].is_active')
@@ -175,7 +167,6 @@ wait_for_order_inactive() {
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
 
       log_error "Timed out waiting for order to become inactive for req_id=${req_id}"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
       return 1
     fi
     sleep "${INTERVAL}"
@@ -188,7 +179,6 @@ wait_for_workflow_id() {
   while true; do
 
     recipe=$(api_request_json GET "${API_URL}/recipes/by-name/${TEST_RECIPE}")
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
     workflow_id=$(echo "${recipe}" | jq -r '.workflow_id // empty')
     if [ -n "${workflow_id}" ] && [ "${workflow_id}" != "null" ]; then
       echo "${workflow_id}"
@@ -198,7 +188,6 @@ wait_for_workflow_id() {
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
 
       log_error "Timed out waiting for workflow_id on recipe ${TEST_RECIPE}"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
       return 1
     fi
     sleep "${INTERVAL}"
@@ -207,7 +196,6 @@ wait_for_workflow_id() {
 
 
 log_info "Posting first webhook (${REQ_ID_1})..."
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 post_webhook "${REQ_ID_1}"
 DISH1_JSON=$(wait_for_dish "${REQ_ID_1}")
 WORKFLOW_ID_1=$(wait_for_workflow_id)
@@ -216,7 +204,6 @@ wait_for_order_inactive "${REQ_ID_1}"
 
 
 log_info "Posting second webhook (${REQ_ID_2})..."
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 post_webhook "${REQ_ID_2}"
 DISH2_JSON=$(wait_for_dish "${REQ_ID_2}")
 WORKFLOW_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe.workflow_id')
@@ -225,7 +212,6 @@ RECIPE_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe_id')
 if [ "${RECIPE_ID_1}" != "${RECIPE_ID_2}" ]; then
 
   log_error "Recipe was not reused: first=${RECIPE_ID_1} second=${RECIPE_ID_2}"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
   exit 1
 fi
 
@@ -236,6 +222,5 @@ if [ "${WORKFLOW_ID_1}" != "${WORKFLOW_ID_2}" ]; then
 fi
 
 log_info "PASS: recipe and workflow reused across two webhook posts"
->>>>>>> 8706343 (feat: poundcake helm chart and test improvements)
 echo "recipe_id=${RECIPE_ID_1}"
 echo "workflow_id=${WORKFLOW_ID_1}"
