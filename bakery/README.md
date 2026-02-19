@@ -199,6 +199,33 @@ All non-health endpoints require HMAC auth (`Authorization: HMAC <key_id>:<signa
 
 Rackspace Core uses the CTKAPI query endpoint. Authentication is token-based and handled transparently by the mixer.
 
+When PoundCake submits generic create payloads, Bakery maps fields for Rackspace Core as follows:
+- `subject` <- request `title`
+- `body` <- request `description`
+- `account_number` <- first non-empty value from:
+  - `context.labels.coreAccountID`
+  - `context.labels.rackspace_com_coreAccountID`
+  - `context.annotations.coreAccountID`
+  - `context.annotations.rackspace_com_coreAccountID`
+- `queue` <- first non-empty value from:
+  - `context.coreQueue`
+  - `context.labels.coreQueue`
+  - `context.annotations.coreQueue`
+  - fallback default from `RACKSPACE_CORE_DEFAULT_QUEUE`
+- `subcategory` <- first non-empty value from:
+  - `context.coreSubcategory`
+  - `context.labels.coreSubcategory`
+  - `context.annotations.coreSubcategory`
+  - fallback default from `RACKSPACE_CORE_DEFAULT_SUBCATEGORY`
+
+Defaults:
+- `RACKSPACE_CORE_DEFAULT_QUEUE=CloudBuilders Support`
+- `RACKSPACE_CORE_DEFAULT_SUBCATEGORY=Monitoring`
+
+Safety check:
+- For `rackspace_core` create operations, Bakery performs preflight validation.
+- If any required field is missing (`account_number`, `queue`, `subcategory`, `subject`, `body`), Bakery logs an explicit error and marks the operation `dead_letter` without retrying.
+
 **create:**
 ```json
 {
@@ -264,6 +291,31 @@ Rackspace Core uses the CTKAPI query endpoint. Authentication is token-based and
   "queue_label": "Support"
 }
 ```
+
+## Alert Label Mapping by Mixer
+
+PoundCake remains provider-agnostic. The monitoring/operator side must provide provider-specific routing fields via alert labels (or annotations) so Bakery can translate requests for the active mixer.
+
+Bakery inspects these keys from `context.labels` and `context.annotations` on create requests:
+
+| Mixer | Required create fields | Supported label/annotation keys |
+|------|-------------------------|----------------------------------|
+| `rackspace_core` | `account_number`, `queue`, `subcategory`, `subject`, `body` | `coreAccountID` or `rackspace_com_coreAccountID` -> `account_number`; `coreQueue` -> `queue`; `coreSubcategory` -> `subcategory` |
+| `servicenow` | none beyond generic payload (`title`, `description`) | `serviceNowUrgency` -> `urgency`; `serviceNowImpact` -> `impact` |
+| `jira` | `project_key` | `jiraProjectKey` -> `project_key`; `jiraIssueType` -> `issue_type` |
+| `github` | `owner`, `repo` | `githubOwner` -> `owner`; `githubRepo` -> `repo`; `githubLabels` -> `labels` (comma-separated allowed); `githubAssignees` -> `assignees` (comma-separated allowed) |
+| `pagerduty` | `service_id`, `from_email` | `pagerDutyServiceId` -> `service_id`; `pagerDutyFromEmail` -> `from_email`; `pagerDutyUrgency` -> `urgency` |
+
+Rackspace Core defaults:
+- If `coreQueue` is not provided, Bakery uses `RACKSPACE_CORE_DEFAULT_QUEUE` (default `CloudBuilders Support`).
+- If `coreSubcategory` is not provided, Bakery uses `RACKSPACE_CORE_DEFAULT_SUBCATEGORY` (default `Monitoring`).
+
+Rackspace Core preflight behavior:
+- If required fields are still missing after label/default mapping, Bakery logs the missing field list and marks the operation `dead_letter` without retrying.
+
+Global preflight behavior:
+- Bakery validates required fields for the active mixer/action before any outbound provider call.
+- If requirements are not met, Bakery writes an explicit validation error to logs and marks the operation `dead_letter` without retrying.
 
 ## Response Format
 
@@ -342,6 +394,8 @@ All credentials are stored in Kubernetes Secrets. Each mixer supports two modes:
 | `RACKSPACE_CORE_URL` | Rackspace Core | CTKAPI base URL (default: `https://ws.core.rackspace.com`) |
 | `RACKSPACE_CORE_USERNAME` | Rackspace Core | Username |
 | `RACKSPACE_CORE_PASSWORD` | Rackspace Core | Password (Secret) |
+| `RACKSPACE_CORE_DEFAULT_QUEUE` | Rackspace Core | Default queue used when `coreQueue` is not provided (default: `CloudBuilders Support`) |
+| `RACKSPACE_CORE_DEFAULT_SUBCATEGORY` | Rackspace Core | Default subcategory used when `coreSubcategory` is not provided (default: `Monitoring`) |
 
 ## Deployment
 

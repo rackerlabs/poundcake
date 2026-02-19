@@ -81,6 +81,12 @@ class Settings:
         )
         self.rackspace_core_username: Optional[str] = os.getenv("RACKSPACE_CORE_USERNAME")
         self.rackspace_core_password: Optional[str] = os.getenv("RACKSPACE_CORE_PASSWORD")
+        self.rackspace_core_default_queue: str = os.getenv(
+            "RACKSPACE_CORE_DEFAULT_QUEUE", "CloudBuilders Support"
+        )
+        self.rackspace_core_default_subcategory: str = os.getenv(
+            "RACKSPACE_CORE_DEFAULT_SUBCATEGORY", "Monitoring"
+        )
 
     @property
     def database_url(self) -> str:
