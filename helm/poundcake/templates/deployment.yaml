@@ -90,6 +90,14 @@ spec:
               value: {{ .Values.config.defaultTimeout | quote }}
             - name: POUNDCAKE_MAX_CONCURRENT_REMEDIATIONS
               value: {{ .Values.config.maxConcurrentRemediations | quote }}
+            - name: POUNDCAKE_SUPPRESSIONS_ENABLED
+              value: {{ .Values.suppressions.enabled | quote }}
+            - name: POUNDCAKE_SUPPRESSION_LIFECYCLE_ENABLED
+              value: {{ .Values.suppressions.lifecycleEnabled | quote }}
+            - name: POUNDCAKE_SUPPRESSION_LIFECYCLE_INTERVAL_SECONDS
+              value: {{ .Values.suppressions.lifecycleIntervalSeconds | quote }}
+            - name: POUNDCAKE_SUPPRESSION_LIFECYCLE_BATCH_LIMIT
+              value: {{ .Values.suppressions.lifecycleBatchLimit | quote }}
             - name: DISHWASHER_DEFAULT_DURATION
               value: {{ .Values.dishwasher.defaultDuration | quote }}
             - name: DISHWASHER_DEFAULT_TIMEOUT

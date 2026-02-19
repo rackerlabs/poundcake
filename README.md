@@ -73,6 +73,7 @@ flowchart TD
 - **Prep Chef**: Polls for new orders, creates a Dish per order.
 - **Chef**: Claims dishes, registers workflows, executes StackStorm workflows.
 - **Timer**: Monitors StackStorm workflow execution and records results.
+- **Suppression Lifecycle (via Timer)**: Finalizes ended suppression windows and creates/auto-closes summary tickets through Bakery.
 - **Dishwasher**: Periodically syncs StackStorm actions and packs into Ingredients/Recipes.
 - **StackStorm**: Executes remediation workflows.
 - **MariaDB**: Central state store.
@@ -85,6 +86,17 @@ flowchart TD
 - `recipe_ingredients`: Ordered ingredients for a recipe.
 - `dishes`: Execution instance for a recipe/order.
 - `dish_ingredients`: Per-task execution data (task_id, st2_execution_id, status, timestamps, result).
+- `alert_suppressions`: Time-windowed suppression windows (`scope=all|matchers`).
+- `alert_suppression_matchers`: Label-matcher rules (`eq|neq|regex|nregex|exists|not_exists`).
+- `suppressed_events`: Suppressed webhook events (audit trail).
+- `suppression_summaries`: Aggregated suppression stats + Bakery summary ticket create/close refs.
+
+## Alert Suppression
+
+- Suppression matching is evaluated in webhook receive-time order before order creation.
+- If an alert matches an active suppression window, PoundCake records the suppressed event and does not create/update/cancel orders for that alert event.
+- Overlapping windows use first-created attribution (`created_at ASC`), and each event is counted once.
+- Ended windows are summarized by lifecycle processing and generate a Bakery summary ticket which is immediately auto-closed after create succeeds.
 
 ## Workflow Graph Generation (DB -> Orquesta)
 

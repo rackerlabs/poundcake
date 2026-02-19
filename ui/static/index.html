@@ -129,7 +129,7 @@
                     <div class="header-stats" id="header-stats"></div>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <span class="version-display" id="header-version">v2.0.92</span>
+                    <span class="version-display" id="header-version">v2.0.93</span>
                     <button class="btn" onclick="logout()" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Logout</button>
                 </div>
             </div>
@@ -140,6 +140,9 @@
         <div class="tabs">
             <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
             <button class="tab" onclick="showTab('orders')">Alert Status</button>
+            <button class="tab" onclick="showTab('incident')">Incident Detail</button>
+            <button class="tab" onclick="showTab('suppressions')">Suppressions</button>
+            <button class="tab" onclick="showTab('ticketing')">Ticketing/Bakery</button>
             <button class="tab" onclick="showTab('prometheus')">Prometheus Rules</button>
             <button class="tab" onclick="showTab('mappings')">Mappings</button>
             <button class="tab" onclick="showTab('actions')">StackStorm Actions</button>
@@ -192,9 +195,140 @@
                         <th>Alert Status</th>
                         <th>Received</th>
                         <th>Counter</th>
+                        <th>Ops</th>
                     </tr>
                 </thead>
                 <tbody id="orders-table"></tbody>
+            </table>
+            <div class="dashboard-card" style="margin-top: 15px;">
+                <h3>Incident Timeline</h3>
+                <div id="incident-timeline" class="activity-feed">
+                    <p style="color: #666; text-align: center;">Select an alert row to load timeline.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="incident" class="panel">
+            <h2 style="margin-bottom: 15px;">Incident Detail</h2>
+            <div class="filter-bar">
+                <input type="number" id="incident-order-id" placeholder="Order ID" min="1">
+                <button class="btn btn-primary btn-sm" onclick="loadIncidentDetail()">Load Incident</button>
+                <span id="incident-last-load" style="font-size: 12px; color: #666;"></span>
+            </div>
+            <div class="dashboard-grid">
+                <div class="dashboard-card">
+                    <h3>Order</h3>
+                    <div id="incident-order-summary">No incident selected.</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Bakery</h3>
+                    <div id="incident-bakery-summary">No incident selected.</div>
+                </div>
+            </div>
+            <div class="dashboard-grid">
+                <div class="dashboard-card">
+                    <h3>Dishes</h3>
+                    <div class="activity-feed" id="incident-dishes"></div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Tasks</h3>
+                    <div class="activity-feed" id="incident-tasks"></div>
+                </div>
+            </div>
+            <div class="dashboard-card">
+                <h3>Full Timeline</h3>
+                <div class="activity-feed" id="incident-full-timeline"></div>
+            </div>
+        </div>
+
+        <div id="suppressions" class="panel">
+            <h2 style="margin-bottom: 15px;">Alert Suppressions</h2>
+            <div class="filter-bar">
+                <select id="suppression-status-filter" onchange="loadSuppressions()">
+                    <option value="">All Statuses</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                    <option value="canceled">Canceled</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="loadSuppressions()">Refresh</button>
+            </div>
+            <div class="dashboard-grid">
+                <div class="dashboard-card">
+                    <h3>Create Window</h3>
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input id="supp-name" type="text" placeholder="Maintenance window">
+                    </div>
+                    <div class="form-group">
+                        <label>Reason</label>
+                        <input id="supp-reason" type="text" placeholder="Planned maintenance">
+                    </div>
+                    <div class="form-group">
+                        <label>Start (ISO)</label>
+                        <input id="supp-starts-at" type="text" placeholder="2026-02-20T12:00:00Z">
+                    </div>
+                    <div class="form-group">
+                        <label>End (ISO)</label>
+                        <input id="supp-ends-at" type="text" placeholder="2026-02-20T12:30:00Z">
+                    </div>
+                    <div class="form-group">
+                        <label>Scope</label>
+                        <select id="supp-scope">
+                            <option value="matchers">Matchers</option>
+                            <option value="all">All alerts</option>
+                        </select>
+                    </div>
+                    <label>Matchers</label>
+                    <div id="supp-matcher-list"></div>
+                    <button class="btn btn-primary btn-sm" type="button" onclick="addSuppressionMatcherRow()">Add Matcher</button>
+                    <button class="btn btn-success" onclick="createSuppression()">Create Suppression</button>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Suppression Activity</h3>
+                    <div class="activity-feed" id="suppressed-activity"></div>
+                </div>
+            </div>
+            <table style="margin-top: 15px;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Scope</th>
+                        <th>Window</th>
+                        <th>Total Suppressed</th>
+                        <th>Ops</th>
+                    </tr>
+                </thead>
+                <tbody id="suppressions-table"></tbody>
+            </table>
+        </div>
+
+        <div id="ticketing" class="panel">
+            <h2 style="margin-bottom: 15px;">Bakery Ticketing Operations</h2>
+            <div class="filter-bar">
+                <select id="ticketing-source-filter">
+                    <option value="">all sources</option>
+                    <option value="order">order</option>
+                    <option value="suppression_summary">suppression_summary</option>
+                </select>
+                <input type="text" id="ticketing-status-filter" placeholder="status filter (optional)">
+                <button class="btn btn-primary btn-sm" onclick="loadBakeryTicketing()">Refresh</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Reference</th>
+                        <th>Ticket ID</th>
+                        <th>Operation ID</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketing-table"></tbody>
             </table>
         </div>
 
@@ -528,6 +662,8 @@
         let editMode = false;
         let editActionMode = false;
         let autoRefreshInterval = null;
+        let currentIncidentOrderId = null;
+        let latestBakeryRows = [];
 
         function order(message) {
             alert(message);
@@ -558,10 +694,215 @@
 
             if (tab === 'dashboard') loadDashboard();
             if (tab === 'orders') { loadAlerts(); loadStats(); }
+            if (tab === 'incident' && currentIncidentOrderId) loadIncidentDetail(currentIncidentOrderId);
+            if (tab === 'suppressions') {
+                if (document.querySelectorAll('#supp-matcher-list .kv-pair').length === 0) {
+                    addSuppressionMatcherRow();
+                }
+                loadSuppressions();
+                loadSuppressedActivity();
+            }
+            if (tab === 'ticketing') loadBakeryTicketing();
             if (tab === 'prometheus') loadPrometheusRules();
             if (tab === 'mappings') loadMappings();
             if (tab === 'actions') { loadPacks(); loadActions(); }
             if (tab === 'history') loadHistory();
+        }
+
+        function getIncidentOrderIdFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const raw = params.get('incident_order_id');
+            const parsed = Number(raw || 0);
+            return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+        }
+
+        function updateIncidentUrlParam(orderId = null) {
+            const url = new URL(window.location.href);
+            if (orderId && Number(orderId) > 0) {
+                url.searchParams.set('incident_order_id', String(orderId));
+            } else {
+                url.searchParams.delete('incident_order_id');
+            }
+            window.history.replaceState({}, '', url.toString());
+        }
+
+        async function loadSuppressions() {
+            const status = document.getElementById('suppression-status-filter').value;
+            const url = status ? `/api/v1/suppressions?status=${status}` : '/api/v1/suppressions';
+            const res = await fetch(url);
+            const rows = await res.json();
+            const tbody = document.getElementById('suppressions-table');
+            tbody.innerHTML = '';
+
+            if (!Array.isArray(rows) || rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No suppressions found</td></tr>';
+                return;
+            }
+
+            for (const item of rows) {
+                const statsRes = await fetch(`/api/v1/suppressions/${item.id}/stats`);
+                const stats = statsRes.ok ? await statsRes.json() : { total_suppressed: 0 };
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${item.id}</td>
+                        <td><strong>${item.name}</strong><br><small>${item.reason || ''}</small></td>
+                        <td>${item.status}</td>
+                        <td>${item.scope}</td>
+                        <td>${new Date(item.starts_at).toLocaleString()}<br>${new Date(item.ends_at).toLocaleString()}</td>
+                        <td>${stats.total_suppressed || 0}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="cancelSuppression(${item.id})">Cancel</button>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function addSuppressionMatcherRow(defaults = {}) {
+            const list = document.getElementById('supp-matcher-list');
+            const row = document.createElement('div');
+            row.className = 'kv-pair';
+            row.innerHTML = `
+                <input type="text" class="supp-match-key" placeholder="label key (e.g. alertname)" value="${defaults.label_key || ''}">
+                <select class="supp-match-operator">
+                    <option value="eq">eq</option>
+                    <option value="neq">neq</option>
+                    <option value="regex">regex</option>
+                    <option value="nregex">nregex</option>
+                    <option value="exists">exists</option>
+                    <option value="not_exists">not_exists</option>
+                </select>
+                <input type="text" class="supp-match-value" placeholder="value (optional for exists/not_exists)" value="${defaults.value || ''}">
+                <button type="button" onclick="this.parentElement.remove()">X</button>
+            `;
+            list.appendChild(row);
+            const operatorSelect = row.querySelector('.supp-match-operator');
+            if (defaults.operator) operatorSelect.value = defaults.operator;
+        }
+
+        async function createSuppression() {
+            const name = document.getElementById('supp-name').value.trim();
+            const reason = document.getElementById('supp-reason').value.trim();
+            const startsAt = document.getElementById('supp-starts-at').value.trim();
+            const endsAt = document.getElementById('supp-ends-at').value.trim();
+            const scope = document.getElementById('supp-scope').value;
+
+            if (!name || !startsAt || !endsAt) {
+                order('Name, starts_at, and ends_at are required');
+                return;
+            }
+
+            const body = {
+                name,
+                reason: reason || null,
+                starts_at: startsAt,
+                ends_at: endsAt,
+                scope,
+                created_by: 'ui',
+                summary_ticket_enabled: true,
+                enabled: true,
+                matchers: []
+            };
+
+            if (scope === 'matchers') {
+                const rows = Array.from(document.querySelectorAll('#supp-matcher-list .kv-pair'));
+                const matchers = rows.map(row => {
+                    const labelKey = row.querySelector('.supp-match-key')?.value?.trim();
+                    const operator = row.querySelector('.supp-match-operator')?.value;
+                    const value = row.querySelector('.supp-match-value')?.value?.trim();
+                    return {
+                        label_key: labelKey,
+                        operator,
+                        value: value || null,
+                    };
+                }).filter(m => m.label_key);
+                if (matchers.length === 0) {
+                    order('At least one matcher is required when scope=matchers');
+                    return;
+                }
+                body.matchers = matchers;
+            }
+
+            const res = await fetch('/api/v1/suppressions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            if (!res.ok) {
+                const err = await res.text();
+                order(`Failed to create suppression: ${err}`);
+                return;
+            }
+
+            await loadSuppressions();
+            await loadSuppressedActivity();
+            await loadDashboard();
+        }
+
+        async function cancelSuppression(suppressionId) {
+            const res = await fetch(`/api/v1/suppressions/${suppressionId}/cancel`, { method: 'POST' });
+            if (!res.ok) {
+                order('Failed to cancel suppression');
+                return;
+            }
+            await loadSuppressions();
+            await loadDashboard();
+        }
+
+        async function loadSuppressedActivity() {
+            const res = await fetch('/api/v1/activity/suppressed?limit=30');
+            const data = await res.json();
+            const container = document.getElementById('suppressed-activity');
+            if (!Array.isArray(data) || data.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center;">No suppressed activity</p>';
+                return;
+            }
+            container.innerHTML = data.map(item => `
+                <div class="activity-item">
+                    <div><strong>${item.alertname || 'Unknown'}</strong> (${item.severity || 'unknown'})</div>
+                    <div>Suppression ID: ${item.suppression_id} | ${item.status}</div>
+                    <div class="time">${new Date(item.received_at).toLocaleString()}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadBakeryTicketing() {
+            const status = document.getElementById('ticketing-status-filter').value.trim();
+            const source = document.getElementById('ticketing-source-filter').value.trim();
+            const url = status ? `/api/v1/ticketing/bakery?status=${encodeURIComponent(status)}` : '/api/v1/ticketing/bakery';
+            const res = await fetch(url);
+            let data = await res.json();
+            if (source) {
+                data = (Array.isArray(data) ? data : []).filter(item => item.source === source);
+            }
+            latestBakeryRows = Array.isArray(data) ? data : [];
+            const tbody = document.getElementById('ticketing-table');
+            tbody.innerHTML = '';
+            if (!Array.isArray(data) || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No Bakery records found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map((item, idx) => `
+                <tr>
+                    <td>${item.source}</td>
+                    <td>${item.reference_id}</td>
+                    <td>${item.ticket_id || '-'}</td>
+                    <td>${item.operation_id || '-'}</td>
+                    <td>${item.status || '-'}</td>
+                    <td>${item.updated_at ? new Date(item.updated_at).toLocaleString() : '-'}</td>
+                    <td><button class="btn btn-sm" onclick="viewBakeryDetails(${idx})">View</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function viewBakeryDetails(index) {
+            const item = latestBakeryRows[index];
+            if (!item) {
+                order('No details found');
+                return;
+            }
+            order(JSON.stringify(item.details || {}, null, 2));
         }
 
         // Alert tracking functions
@@ -575,7 +916,7 @@
 
             const orders = Array.isArray(data) ? data : (data.orders || []);
             if (orders.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No orders found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #666;">No orders found</td></tr>';
                 return;
             }
 
@@ -593,9 +934,13 @@
                         <td>${order.alert_status || '-'}</td>
                         <td>${new Date(order.created_at).toLocaleString()}</td>
                         <td>${order.counter ?? 0}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); loadIncidentTimeline(${order.id})">Timeline</button>
+                            <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); openIncidentDetail(${order.id})">Detail</button>
+                        </td>
                     </tr>
                     <tr class="details-row" id="details-${order.id}">
-                        <td colspan="7">
+                        <td colspan="8">
                             <div class="details-content" id="content-${order.id}">
                                 Loading...
                             </div>
@@ -658,9 +1003,147 @@
                 ${order.ends_at ? `<div><strong>Ended:</strong> ${new Date(order.ends_at).toLocaleString()}</div>` : ''}
                 <div><strong>Created:</strong> ${new Date(order.created_at).toLocaleString()}</div>
                 <div><strong>Updated:</strong> ${new Date(order.updated_at).toLocaleString()}</div>
+                <div style="margin-top: 8px;">
+                    <button class="btn btn-primary btn-sm" onclick="loadIncidentTimeline(${order.id})">Open Incident Timeline</button>
+                </div>
             `;
 
             row.classList.add('active');
+        }
+
+        function copyToClipboard(value) {
+            if (!value) return;
+            navigator.clipboard.writeText(value).catch(() => {});
+        }
+
+        async function loadIncidentTimeline(orderId) {
+            const timeline = document.getElementById('incident-timeline');
+            timeline.innerHTML = '<p style="color: #666;">Loading timeline...</p>';
+            try {
+                const res = await fetch(`/api/v1/orders/${orderId}/timeline`);
+                if (!res.ok) {
+                    throw new Error(`Failed to load timeline (${res.status})`);
+                }
+                const data = await res.json();
+                const events = Array.isArray(data.events) ? data.events : [];
+                if (events.length === 0) {
+                    timeline.innerHTML = '<p style="color: #666;">No timeline events available.</p>';
+                    return;
+                }
+                timeline.innerHTML = events.map(ev => {
+                    const ids = Object.entries(ev.correlation_ids || {})
+                        .filter(([_, v]) => v)
+                        .map(([k, v]) => `<div><strong>${k}:</strong> ${v} <button class="btn btn-sm" onclick="copyToClipboard('${String(v).replace(/'/g, "\\'")}')">Copy</button></div>`)
+                        .join('');
+                    const details = ev.details ? `<pre>${JSON.stringify(ev.details, null, 2)}</pre>` : '';
+                    return `
+                        <div class="activity-item">
+                            <div><strong>${ev.title}</strong> <span class="status">${ev.status}</span></div>
+                            <div class="time">${ev.timestamp ? new Date(ev.timestamp).toLocaleString() : 'n/a'} | ${ev.event_type}</div>
+                            ${ids}
+                            ${details}
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                timeline.innerHTML = `<p style="color: #e74c3c;">${error.message}</p>`;
+            }
+        }
+
+        function openIncidentDetail(orderId) {
+            currentIncidentOrderId = orderId;
+            updateIncidentUrlParam(orderId);
+            const input = document.getElementById('incident-order-id');
+            if (input) input.value = String(orderId);
+            showTab('incident');
+            loadIncidentDetail(orderId);
+        }
+
+        function _renderIncidentEventList(containerId, events, emptyMessage) {
+            const container = document.getElementById(containerId);
+            if (!events || events.length === 0) {
+                container.innerHTML = `<p style="color: #666;">${emptyMessage}</p>`;
+                return;
+            }
+            container.innerHTML = events.map(ev => {
+                const ids = Object.entries(ev.correlation_ids || {})
+                    .filter(([_, v]) => v)
+                    .map(([k, v]) => `<div><strong>${k}:</strong> ${v} <button class="btn btn-sm" onclick="copyToClipboard('${String(v).replace(/'/g, "\\'")}')">Copy</button></div>`)
+                    .join('');
+                return `
+                    <div class="activity-item">
+                        <div><strong>${ev.title}</strong> <span class="status">${ev.status}</span></div>
+                        <div class="time">${ev.timestamp ? new Date(ev.timestamp).toLocaleString() : 'n/a'} | ${ev.event_type}</div>
+                        ${ids}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadIncidentDetail(orderId = null) {
+            const resolvedOrderId = orderId || Number(document.getElementById('incident-order-id').value || 0);
+            if (!resolvedOrderId) {
+                order('Order ID is required');
+                return;
+            }
+            currentIncidentOrderId = resolvedOrderId;
+            updateIncidentUrlParam(resolvedOrderId);
+            document.getElementById('incident-order-id').value = String(resolvedOrderId);
+
+            const orderSummary = document.getElementById('incident-order-summary');
+            const bakerySummary = document.getElementById('incident-bakery-summary');
+            const timelineContainer = document.getElementById('incident-full-timeline');
+            orderSummary.innerHTML = 'Loading...';
+            bakerySummary.innerHTML = 'Loading...';
+            timelineContainer.innerHTML = '<p style="color: #666;">Loading...</p>';
+
+            try {
+                const res = await fetch(`/api/v1/orders/${resolvedOrderId}/timeline`);
+                if (!res.ok) throw new Error(`Failed to load incident (${res.status})`);
+                const payload = await res.json();
+                const orderData = payload.order || {};
+                const events = Array.isArray(payload.events) ? payload.events : [];
+
+                orderSummary.innerHTML = `
+                    <div><strong>Order ID:</strong> ${orderData.id || '-'}</div>
+                    <div><strong>Group:</strong> ${orderData.alert_group_name || '-'}</div>
+                    <div><strong>Status:</strong> ${orderData.processing_status || '-'}</div>
+                    <div><strong>Alert Status:</strong> ${orderData.alert_status || '-'}</div>
+                    <div><strong>Req ID:</strong> ${orderData.req_id || '-'} <button class="btn btn-sm" onclick="copyToClipboard('${String(orderData.req_id || '').replace(/'/g, "\\'")}')">Copy</button></div>
+                    <div><strong>Fingerprint:</strong> ${orderData.fingerprint || '-'} <button class="btn btn-sm" onclick="copyToClipboard('${String(orderData.fingerprint || '').replace(/'/g, "\\'")}')">Copy</button></div>
+                `;
+
+                const bakeryEvents = events.filter(e => e.event_type === 'bakery');
+                if (bakeryEvents.length === 0) {
+                    bakerySummary.innerHTML = '<p style="color: #666;">No Bakery operations linked.</p>';
+                } else {
+                    bakerySummary.innerHTML = bakeryEvents.map(ev => {
+                        const ticketId = ev.correlation_ids?.bakery_ticket_id || '-';
+                        const opId = ev.correlation_ids?.bakery_operation_id || '-';
+                        return `
+                            <div class="activity-item">
+                                <div><strong>${ev.title}</strong> <span class="status">${ev.status}</span></div>
+                                <div><strong>Ticket:</strong> ${ticketId} <button class="btn btn-sm" onclick="copyToClipboard('${String(ticketId).replace(/'/g, "\\'")}')">Copy</button></div>
+                                <div><strong>Operation:</strong> ${opId} <button class="btn btn-sm" onclick="copyToClipboard('${String(opId).replace(/'/g, "\\'")}')">Copy</button></div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                const dishEvents = events.filter(e => e.event_type === 'dish');
+                const taskEvents = events.filter(e => e.event_type === 'task');
+                _renderIncidentEventList('incident-dishes', dishEvents, 'No dish events.');
+                _renderIncidentEventList('incident-tasks', taskEvents, 'No task events.');
+                _renderIncidentEventList('incident-full-timeline', events, 'No timeline events.');
+
+                document.getElementById('incident-last-load').textContent = `Last refresh: ${new Date().toLocaleString()}`;
+            } catch (error) {
+                orderSummary.innerHTML = `<p style="color: #e74c3c;">${error.message}</p>`;
+                bakerySummary.innerHTML = '';
+                _renderIncidentEventList('incident-dishes', [], 'Failed to load dishes.');
+                _renderIncidentEventList('incident-tasks', [], 'Failed to load tasks.');
+                _renderIncidentEventList('incident-full-timeline', [], 'Failed to load timeline.');
+            }
         }
 
         function toggleAutoRefresh() {
@@ -1516,55 +1999,23 @@
         }
 
         function showCreateModal() {
-            editMode = false;
-            document.getElementById('modal-title').textContent = 'Create Mapping';
-            document.getElementById('order-name').value = '';
-            document.getElementById('order-name').disabled = false;
-            document.getElementById('mapping-config').value = `handler: yaml_config
-actions:
-  - name: example_action
-    action: core.remote
-    parameters:
-      hosts: "{{instance}}"
-      cmd: "echo hello"
-    timeout: 60`;
-            document.getElementById('edit-modal').classList.add('active');
+            order('Mapping CRUD endpoints are not exposed by this API. Use Recipes endpoints for remediation definitions.');
         }
 
         async function editMapping(name) {
-            editMode = true;
-            const res = await fetch(`/api/v1/mappings/${name}`);
-            const data = await res.json();
-
-            document.getElementById('modal-title').textContent = 'Edit Mapping';
-            document.getElementById('order-name').value = name;
-            document.getElementById('order-name').disabled = true;
-            document.getElementById('mapping-config').value = jsyaml.dump(data.config);
-            document.getElementById('edit-modal').classList.add('active');
+            order(`Mapping edit is not exposed by this API (${name}). Use Recipes endpoints for remediation definitions.`);
         }
 
         async function saveMapping(e) {
             e.preventDefault();
-            const name = document.getElementById('order-name').value;
-            const config = jsyaml.load(document.getElementById('mapping-config').value);
-
-            const url = editMode ? `/api/v1/mappings/${name}` : '/api/v1/mappings';
-            const method = editMode ? 'PUT' : 'POST';
-            const body = editMode ? { config } : { alert_name: name, config };
-
-            await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-
+            order('Mapping save is not exposed by this API. Use Recipes endpoints for remediation definitions.');
             closeModal();
             loadMappings();
         }
 
         async function deleteMapping(name) {
             if (!confirm(`Delete mapping "${name}"?`)) return;
-            await fetch(`/api/v1/mappings/${name}`, { method: 'DELETE' });
+            order(`Mapping delete is not exposed by this API (${name}). Use Recipes endpoints.`);
             loadMappings();
         }
 
@@ -1582,23 +2033,13 @@ actions:
 
         async function importMappings(e) {
             e.preventDefault();
-            const yaml_content = document.getElementById('import-yaml').value;
-            const overwrite = document.getElementById('import-overwrite').checked;
-
-            const res = await fetch('/api/v1/mappings/import', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ yaml_content, overwrite })
-            });
-
-            const data = await res.json();
-            order(`Imported: ${data.imported}, Skipped: ${data.skipped}`);
+            order('Mapping import is not exposed by this API. Use Recipes endpoints or Git-backed rules flow.');
             closeImportModal();
             loadMappings();
         }
 
         async function exportMappings() {
-            window.open('/api/v1/mappings/export', '_blank');
+            order('Mapping export is not exposed by this API. Use Recipes list/export from your source of truth.');
         }
 
         async function showAction(ref) {
@@ -1695,14 +2136,18 @@ actions:
                     orders,
                     dishes,
                     executions,
-                    rulesResp
+                    rulesResp,
+                    overview,
+                    suppressedActivity
                 ] = await Promise.all([
                     fetchJson('/api/v1/health'),
                     fetchJson('/api/v1/stats'),
                     fetchJsonOrDefault('/api/v1/orders?limit=20', []),
                     fetchJsonOrDefault('/api/v1/dishes?limit=20', []),
                     fetchJsonOrDefault('/api/v1/cook/executions?limit=20', []),
-                    fetchJsonOrDefault('/api/v1/prometheus/rules', { rules: [] })
+                    fetchJsonOrDefault('/api/v1/prometheus/rules', { rules: [] }),
+                    fetchJsonOrDefault('/api/v1/observability/overview', { suppressions: { active: 0 }, failures: {}, queue: {}, bakery: {} }),
+                    fetchJsonOrDefault('/api/v1/activity/suppressed?limit=10', [])
                 ]);
 
             // Update header version from health API
@@ -1856,6 +2301,15 @@ actions:
                 });
             });
 
+            (Array.isArray(suppressedActivity) ? suppressedActivity : []).forEach(item => {
+                activity.push({
+                    timestamp: item.received_at,
+                    status: 'suppressed',
+                    title: `Suppressed: ${item.alertname || 'unknown'}`,
+                    details: `suppression=${item.suppression_id} severity=${item.severity || 'unknown'}`,
+                });
+            });
+
             activity.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
 
             if (activity.length === 0) {
@@ -1895,6 +2349,18 @@ actions:
                     <span class="metric-label">Recent Alerts (24h)</span>
                     <span class="metric-value">${stats.recent_alerts || 0}</span>
                 </div>
+                <div class="metric-row">
+                    <span class="metric-label">Active Suppressions</span>
+                    <span class="metric-value">${overview?.suppressions?.active || 0}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Retrying Suppression Ops</span>
+                    <span class="metric-value">${overview?.suppressions?.retrying_operations || 0}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Dead Letter (Suppression)</span>
+                    <span class="metric-value">${overview?.suppressions?.dead_letter || 0}</span>
+                </div>
             `;
 
             const platformSummaryDiv = document.getElementById('platform-summary');
@@ -1921,6 +2387,22 @@ actions:
                 <div class="metric-row">
                     <span class="metric-label">Execution Failures</span>
                     <span class="metric-value">${executionFailures}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Bakery Summary Failures</span>
+                    <span class="metric-value">${overview?.bakery?.summary_failures || 0}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Order Queue (new/processing)</span>
+                    <span class="metric-value">${overview?.queue?.orders_new || 0}/${overview?.queue?.orders_processing || 0}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Top Error</span>
+                    <span class="metric-value" style="font-size: 12px;">${overview?.failures?.top_errors?.[0]?.error || 'None'}</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Runbook Hint</span>
+                    <span class="metric-value" style="font-size: 12px;">${overview?.failures?.runbook_hints?.[0] || 'No active hints'}</span>
                 </div>
             `;
             } catch (error) {
@@ -1983,7 +2465,14 @@ actions:
 
                 if (res.ok) {
                     hideLoginModal();
-                    loadDashboard();
+                    const deepLinkIncidentOrderId = getIncidentOrderIdFromUrl();
+                    if (deepLinkIncidentOrderId) {
+                        currentIncidentOrderId = deepLinkIncidentOrderId;
+                        showTab('incident');
+                        loadIncidentDetail(deepLinkIncidentOrderId);
+                    } else {
+                        loadDashboard();
+                    }
                     toggleAutoRefresh();
                 } else {
                     const data = await res.json();
@@ -2035,9 +2524,19 @@ actions:
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async () => {
+            if (document.querySelectorAll('#supp-matcher-list .kv-pair').length === 0) {
+                addSuppressionMatcherRow();
+            }
             const isAuthenticated = await checkAuth();
             if (isAuthenticated) {
-                loadDashboard(); // Load dashboard by default
+                const deepLinkIncidentOrderId = getIncidentOrderIdFromUrl();
+                if (deepLinkIncidentOrderId) {
+                    currentIncidentOrderId = deepLinkIncidentOrderId;
+                    showTab('incident');
+                    loadIncidentDetail(deepLinkIncidentOrderId);
+                } else {
+                    loadDashboard(); // Load dashboard by default
+                }
                 toggleAutoRefresh(); // Start auto-refresh
             }
         });

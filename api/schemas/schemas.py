@@ -16,6 +16,9 @@ from api.types import (
     AlertStatus,
     OnSuccessAction,
     OnFailureAction,
+    SuppressionScope,
+    SuppressionStatus,
+    SuppressionMatcherOperator,
 )
 
 # =============================================================================
@@ -346,6 +349,134 @@ class OrderDetailResponse(OrderResponse):
     """Schema for detailed order responses (includes dishes)."""
 
     dishes: List[DishResponse] = []
+
+
+class IncidentTimelineEvent(BaseModel):
+    timestamp: Optional[datetime] = None
+    event_type: str
+    status: str
+    title: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+    correlation_ids: Dict[str, str] = Field(default_factory=dict)
+
+
+class IncidentTimelineResponse(BaseModel):
+    order: OrderResponse
+    events: List[IncidentTimelineEvent]
+
+
+# ============================================================================
+# Suppression Models
+# ============================================================================
+
+
+class SuppressionMatcher(BaseModel):
+    label_key: str = Field(..., min_length=1, max_length=255)
+    operator: SuppressionMatcherOperator
+    value: Optional[str] = None
+
+
+class SuppressionCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    starts_at: datetime
+    ends_at: datetime
+    scope: SuppressionScope = "matchers"
+    matchers: List[SuppressionMatcher] = Field(default_factory=list)
+    reason: Optional[str] = None
+    created_by: Optional[str] = Field(default=None, max_length=255)
+    summary_ticket_enabled: bool = True
+    enabled: bool = True
+
+
+class SuppressionUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    ends_at: Optional[datetime] = None
+    reason: Optional[str] = None
+    enabled: Optional[bool] = None
+    matchers: Optional[List[SuppressionMatcher]] = None
+
+
+class SuppressionResponse(BaseModel):
+    id: int
+    name: str
+    reason: Optional[str] = None
+    scope: SuppressionScope
+    status: SuppressionStatus
+    enabled: bool
+    starts_at: datetime
+    ends_at: datetime
+    canceled_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    summary_ticket_enabled: bool
+    created_at: datetime
+    updated_at: datetime
+    matchers: List[SuppressionMatcher] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuppressionStatsResponse(BaseModel):
+    suppression_id: int
+    total_suppressed: int
+    by_alertname: Dict[str, int]
+    by_severity: Dict[str, int]
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+
+
+class SuppressedActivityResponse(BaseModel):
+    id: int
+    suppression_id: int
+    received_at: datetime
+    fingerprint: Optional[str] = None
+    alertname: Optional[str] = None
+    severity: Optional[str] = None
+    status: str
+    req_id: Optional[str] = None
+    labels_json: Dict[str, Any]
+    annotations_json: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuppressionSummaryResponse(BaseModel):
+    state: str
+    total_suppressed: int
+    by_alertname_json: Optional[Dict[str, Any]] = None
+    by_severity_json: Optional[Dict[str, Any]] = None
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    bakery_ticket_id: Optional[str] = None
+    bakery_create_operation_id: Optional[str] = None
+    bakery_close_operation_id: Optional[str] = None
+    summary_created_at: Optional[datetime] = None
+    summary_close_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuppressionDetailResponse(SuppressionResponse):
+    summary: Optional[SuppressionSummaryResponse] = None
+    counters: SuppressionStatsResponse
+
+
+class ObservabilityOverviewResponse(BaseModel):
+    health: Dict[str, Any]
+    queue: Dict[str, int]
+    failures: Dict[str, Any]
+    bakery: Dict[str, Any]
+    suppressions: Dict[str, Any]
+
+
+class BakeryOperationRecord(BaseModel):
+    source: str
+    reference_id: str
+    ticket_id: Optional[str] = None
+    operation_id: Optional[str] = None
+    status: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    details: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================

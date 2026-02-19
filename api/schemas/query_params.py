@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from fastapi import Request, HTTPException
 
 from api.types import DishProcessingStatus, OrderProcessingStatus, AlertStatus
+from api.types import SuppressionStatus
 
 
 def validate_query_params(model_class: Type[BaseModel]) -> Callable[[Request], BaseModel]:
@@ -123,6 +124,46 @@ class OrderQueryParams(BaseModel):
     alert_group_name: Optional[str] = Field(
         None, min_length=1, max_length=255, description="Filter by alert group name"
     )
+    limit: int = Field(
+        100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
+    )
+    offset: int = Field(0, ge=0, description="Number of results to skip for pagination")
+
+
+class SuppressionQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/suppressions endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Optional[SuppressionStatus] = Field(
+        None, description="Filter by suppression status (scheduled|active|expired|canceled)"
+    )
+    enabled: Optional[bool] = Field(None, description="Filter by enabled state")
+    scope: Optional[str] = Field(None, description="Filter by scope (all|matchers)")
+    limit: int = Field(
+        100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
+    )
+    offset: int = Field(0, ge=0, description="Number of results to skip for pagination")
+
+
+class SuppressedActivityQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/activity/suppressed endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    suppression_id: Optional[int] = Field(None, ge=1, description="Filter by suppression ID")
+    limit: int = Field(
+        100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
+    )
+    offset: int = Field(0, ge=0, description="Number of results to skip for pagination")
+
+
+class BakeryOperationQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/ticketing/bakery endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Optional[str] = Field(None, description="Filter by operation/summary status")
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
     )

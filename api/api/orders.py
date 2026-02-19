@@ -15,9 +15,16 @@ from datetime import datetime, timezone
 from api.core.database import get_db
 from api.core.logging import get_logger
 from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
-from api.models.models import Order
-from api.schemas.schemas import OrderCreate, OrderResponse, OrderUpdate
+from api.models.models import Dish, DishIngredient, Order
+from api.schemas.schemas import (
+    IncidentTimelineEvent,
+    IncidentTimelineResponse,
+    OrderCreate,
+    OrderResponse,
+    OrderUpdate,
+)
 from api.schemas.query_params import OrderQueryParams, validate_query_params
+from api.services.bakery_client import get_operation
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -191,3 +198,111 @@ async def update_order(
     )
 
     return order
+
+
+@router.get("/orders/{order_id}/timeline", response_model=IncidentTimelineResponse)
+async def get_order_timeline(
+    request: Request,
+    order_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> IncidentTimelineResponse:
+    req_id = request.state.req_id
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalars().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    events: list[IncidentTimelineEvent] = [
+        IncidentTimelineEvent(
+            timestamp=order.created_at,
+            event_type="order",
+            status=order.processing_status,
+            title=f"Order {order.id} received",
+            details={
+                "alert_group_name": order.alert_group_name,
+                "alert_status": order.alert_status,
+                "counter": order.counter,
+            },
+            correlation_ids={
+                "req_id": order.req_id,
+                "fingerprint": order.fingerprint,
+            },
+        )
+    ]
+
+    dishes_result = await db.execute(
+        select(Dish).where(Dish.order_id == order.id).order_by(Dish.created_at.asc())
+    )
+    dishes = dishes_result.scalars().all()
+    for dish in dishes:
+        events.append(
+            IncidentTimelineEvent(
+                timestamp=dish.started_at or dish.created_at,
+                event_type="dish",
+                status=dish.processing_status,
+                title=f"Dish {dish.id} {dish.processing_status}",
+                details={
+                    "status": dish.status,
+                    "error_message": dish.error_message,
+                },
+                correlation_ids={
+                    "dish_id": str(dish.id),
+                    "workflow_execution_id": dish.workflow_execution_id or "",
+                },
+            )
+        )
+        ingredient_result = await db.execute(
+            select(DishIngredient)
+            .where(DishIngredient.dish_id == dish.id, DishIngredient.deleted.is_(False))
+            .order_by(DishIngredient.created_at.asc())
+        )
+        for ingredient in ingredient_result.scalars().all():
+            events.append(
+                IncidentTimelineEvent(
+                    timestamp=ingredient.started_at or ingredient.created_at,
+                    event_type="task",
+                    status=ingredient.status or "unknown",
+                    title=f"Task {ingredient.task_id or 'unknown'}",
+                    details={
+                        "error_message": ingredient.error_message,
+                    },
+                    correlation_ids={
+                        "st2_execution_id": ingredient.st2_execution_id or "",
+                        "dish_ingredient_id": str(ingredient.id),
+                    },
+                )
+            )
+
+    if order.bakery_ticket_id or order.bakery_operation_id:
+        bakery_status = "unknown"
+        bakery_details = {}
+        if order.bakery_operation_id:
+            try:
+                op_payload = await get_operation(order.bakery_operation_id)
+                bakery_status = str(op_payload.get("status") or "unknown")
+                bakery_details = op_payload
+            except Exception:
+                bakery_status = "unavailable"
+        events.append(
+            IncidentTimelineEvent(
+                timestamp=order.updated_at,
+                event_type="bakery",
+                status=bakery_status,
+                title="Bakery operation tracked on order",
+                details=bakery_details,
+                correlation_ids={
+                    "bakery_ticket_id": order.bakery_ticket_id or "",
+                    "bakery_operation_id": order.bakery_operation_id or "",
+                },
+            )
+        )
+
+    events.sort(
+        key=lambda item: item.timestamp or datetime(1970, 1, 1, tzinfo=timezone.utc),
+        reverse=False,
+    )
+    logger.debug(
+        "Built incident timeline",
+        extra={"req_id": req_id, "order_id": order_id, "event_count": len(events)},
+    )
+    return IncidentTimelineResponse(order=OrderResponse.model_validate(order), events=events)

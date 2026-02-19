@@ -126,6 +126,18 @@ Notes:
 - Bakery verifies timestamp freshness using `bakery.auth.hmac.timestampSkewSec`.
 - PoundCake uses `bakery.client.*` settings to sign outbound requests to Bakery.
 
+PoundCake suppression behavior (optional, enabled by default):
+
+```yaml
+suppressions:
+  enabled: true
+  lifecycleEnabled: true
+  lifecycleIntervalSeconds: 30
+  lifecycleBatchLimit: 25
+```
+
+The API uses these values to enforce suppression intake/lifecycle behavior, and timer uses `suppressions.lifecycleIntervalSeconds` for lifecycle trigger cadence.
+
 By default, install scripts source chart versions from:
 - `/etc/genestack/helm-chart-versions.yaml`
 

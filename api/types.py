@@ -131,3 +131,28 @@ LogFormat = Literal[
     "json",
     "console",
 ]
+
+# =============================================================================
+# Suppression Types
+# =============================================================================
+
+SuppressionScope = Literal[
+    "all",
+    "matchers",
+]
+
+SuppressionStatus = Literal[
+    "scheduled",
+    "active",
+    "expired",
+    "canceled",
+]
+
+SuppressionMatcherOperator = Literal[
+    "eq",
+    "neq",
+    "regex",
+    "nregex",
+    "exists",
+    "not_exists",
+]

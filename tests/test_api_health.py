@@ -96,3 +96,20 @@ def test_stats_endpoint(client):
     ]
     for field in required_fields:
         assert field in data, f"Missing field: {field}"
+
+
+def test_observability_overview_endpoint(client, mock_database):
+    """Test observability overview includes suppression/failure aggregates."""
+    mock_database.scalar = AsyncMock(return_value=0)
+
+    response = client.get("/api/v1/observability/overview")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "health" in data
+    assert "queue" in data
+    assert "failures" in data
+    assert "bakery" in data
+    assert "suppressions" in data
+    assert "top_errors" in data["failures"]
+    assert "runbook_hints" in data["failures"]
