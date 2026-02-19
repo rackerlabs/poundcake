@@ -53,7 +53,10 @@ def test_pack_artifact_endpoint_requires_token_and_supports_etag():
                 [
                     SimpleNamespace(
                         name="Recipe One",
-                        workflow_payload={"version": "1.0", "tasks": {"x": {"action": "core.noop"}}},
+                        workflow_payload={
+                            "version": "1.0",
+                            "tasks": {"x": {"action": "core.noop"}},
+                        },
                     )
                 ]
             )

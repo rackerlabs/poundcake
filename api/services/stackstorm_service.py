@@ -751,7 +751,7 @@ def build_stackstorm_pack_files(
 
     files: dict[str, bytes] = {
         "pack.yaml": (
-            f'name: {resolved_pack_name}\n'
+            f"name: {resolved_pack_name}\n"
             'version: "0.1.0"\n'
             'description: "PoundCake generated pack"\n'
             'author: "PoundCake"\n'
@@ -797,7 +797,7 @@ def build_stackstorm_pack_artifact(
         digest.update(b"\x00")
         digest.update(payload)
         digest.update(b"\x00")
-    etag = f"\"{digest.hexdigest()}\""
+    etag = f'"{digest.hexdigest()}"'
 
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
