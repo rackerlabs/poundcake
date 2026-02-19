@@ -22,11 +22,6 @@
 
 replicaCount: 1
 
-internal:
-  # Internal compatibility toggle while vendored legacy subchart files exist.
-  # Must remain false. StackStorm is installed separately by bin/install-poundcake.sh.
-  renderEmbeddedStackstormSubchart: false
-
 # Deployment mode:
 # - full: PoundCake + StackStorm workflow (and Bakery if bakery.enabled=true)
 # - bakery-only: only Bakery and its dependencies

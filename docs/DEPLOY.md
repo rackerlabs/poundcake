@@ -8,6 +8,21 @@ Preferred installer:
 ./bin/install-poundcake.sh
 ```
 
+Operator behavior (default):
+- `--operators-mode install-missing`
+- Installs missing `mariadb-operator` in all modes
+- Installs missing `redis-operator` and `rabbitmq-cluster-operator` in `full` mode
+
+Optional operator modes:
+
+```bash
+# Verify only (fail if required operators are missing)
+./bin/install-poundcake.sh --operators-mode verify
+
+# Skip operator checks/installs
+./bin/install-poundcake.sh --operators-mode skip
+```
+
 Wrapper script (equivalent):
 
 ```bash
@@ -41,6 +56,12 @@ Notes:
 - When Bakery credentials are provided, installer sets:
   - `bakery.enabled=true`
   - `bakery.rackspaceCore.existingSecret=<secret-name>`
+- Chart versions are sourced from `/etc/genestack/helm-chart-versions.yaml`:
+  - `poundcake`
+  - `stackstorm`
+  - `mariadb-operator`
+  - `redis-operator`
+  - `rabbitmq-cluster-operator`
 
 Bakery Gateway API exposure (optional):
 

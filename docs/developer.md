@@ -184,7 +184,12 @@ export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-bakery"
 ```
 
 Note:
-- `install/install-helm.sh` reads desired chart version from `/etc/genestack/helm-chart-versions.yaml` key `poundcake`.
+- `install/install-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
+  - `poundcake`
+  - `stackstorm`
+  - `mariadb-operator`
+  - `redis-operator`
+  - `rabbitmq-cluster-operator`
 
 ## 6) Secrets/Auth Handling
 

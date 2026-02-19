@@ -1,8 +1,4 @@
 {{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
-{{- if .Values.internal.renderEmbeddedStackstormSubchart -}}
-{{- fail "Embedded StackStorm mode is disabled. Install stackstorm-ha separately via bin/install-poundcake.sh." -}}
-{{- end -}}
-
 {{- if or (not .Values.stackstorm.url) (not .Values.stackstorm.authUrl) -}}
 {{- fail "Set stackstorm.url and stackstorm.authUrl for external StackStorm." -}}
 {{- end -}}

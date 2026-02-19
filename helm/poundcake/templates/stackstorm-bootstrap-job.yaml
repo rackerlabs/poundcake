@@ -133,7 +133,7 @@ spec:
             st2_auth_user="${ST2_AUTH_USER_DEFAULT}"
             st2_auth_password=""
 
-            # Prefer StackStorm auth secret (used by subchart), then fallback to PoundCake admin secret.
+            # Prefer StackStorm auth secret (from StackStorm release), then fallback to PoundCake admin secret.
             discovered_user="$(get_secret_value "${ST2_AUTH_SECRET}" "username")"
             if [ -z "${discovered_user}" ]; then
               discovered_user="$(get_secret_value "${ST2_AUTH_SECRET}" "ST2_AUTH_USERNAME")"

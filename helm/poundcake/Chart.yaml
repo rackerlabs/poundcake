@@ -21,11 +21,3 @@ keywords:
 home: https://github.com/aedan/poundCake
 sources:
   - https://github.com/aedan/poundCake
-dependencies:
-  - name: stackstorm-ha
-    version: "1.1.0"
-    repository: "https://helm.stackstorm.com/"
-    condition: internal.renderEmbeddedStackstormSubchart
-    alias: stackstorm-chart
-    tags:
-      - stackstorm

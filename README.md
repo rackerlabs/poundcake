@@ -224,6 +224,21 @@ output:
 ./bin/install-poundcake.sh -f /path/to/values.yaml
 ```
 
+By default, the installer uses `--operators-mode install-missing` and will auto-install missing required operators:
+- `mariadb-operator`
+- `redis-operator` (full mode)
+- `rabbitmq-cluster-operator` (full mode)
+
+Operator modes:
+
+```bash
+# Verify operators exist but do not install
+./bin/install-poundcake.sh --operators-mode verify
+
+# Skip operator checks/installs
+./bin/install-poundcake.sh --operators-mode skip
+```
+
 Bakery-only deployment (no PoundCake or StackStorm resources):
 
 ```bash
@@ -286,6 +301,13 @@ See `/docs/DEPLOY.md` for full secret key mapping and header format.
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
 
 In full mode, StackStorm is installed as a separate Helm release by `bin/install-poundcake.sh`.
+
+Installer chart versions are read from `/etc/genestack/helm-chart-versions.yaml`:
+- `poundcake`
+- `stackstorm`
+- `mariadb-operator`
+- `redis-operator`
+- `rabbitmq-cluster-operator`
 
 ### Docker Compose Install
 
