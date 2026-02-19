@@ -63,8 +63,7 @@ class Recipe(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-
-    source_type: Mapped[str] = mapped_column(String(50), default="stackstorm", nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)
 
     # Store the ST2 Ref (e.g. 'my_pack.my_workflow')
     workflow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -134,7 +133,7 @@ class Ingredient(Base):
 
 class Dish(Base):
     """
-    Execution instances - Tracks the actual run of a recipe.
+    Execution instances (Old Ovens) - Tracks the actual run of a recipe.
     """
 
     __tablename__ = "dishes"

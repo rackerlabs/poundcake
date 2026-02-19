@@ -7,9 +7,7 @@
 # Test: Create a two-step recipe with ingredients and tasks, without creating an order
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-
+API_URL=${API_URL:-http://localhost:8000/api/v1}
 TEST_RECIPE=${TEST_RECIPE:-}
 IS_BLOCKING=${IS_BLOCKING:-false}
 
@@ -18,16 +16,18 @@ if [ -z "$TEST_RECIPE" ]; then
   exit 1
 fi
 
-require_cmd curl
-require_cmd jq
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required"
+  exit 1
+fi
 
-log_info "Creating two-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
+echo "Creating two-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
 
 # Check if core.local ingredient already exists
-ING1_ID=$(api_request_json GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
+ING1_ID=$(curl -sS -X GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
 
 if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
-  log_info "Ingredient core.local not found, creating it..."
+  echo "Ingredient core.local not found, creating it..."
   ING1_PAYLOAD=$(jq -n \
     --argjson is_blocking "$IS_BLOCKING" \
     '{
@@ -49,14 +49,16 @@ if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
       on_failure: "stop"
     }')
 
-  ING1_ID=$(api_request_json POST "${API_URL}/ingredients/" "${ING1_PAYLOAD}" | jq -r '.id')
+  ING1_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
+    -H "Content-Type: application/json" \
+    -d "${ING1_PAYLOAD}" | jq -r '.id')
 
   if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
-    log_error "Failed to create first ingredient"
+    echo "Failed to create first ingredient"
     exit 1
   fi
 else
-  log_info "Using existing ingredient core.local (ID: $ING1_ID)"
+  echo "Using existing ingredient core.local (ID: $ING1_ID)"
 fi
 
 # For the second step, we'll use the same ingredient (core.local can be reused in different steps)
@@ -97,4 +99,6 @@ RECIPE_PAYLOAD=$(jq -n \
     ]
   }')
 
-api_request_json POST "${API_URL}/recipes/" "${RECIPE_PAYLOAD}" | jq -r '.id'
+curl -sS -X POST "${API_URL}/recipes/" \
+  -H "Content-Type: application/json" \
+  -d "${RECIPE_PAYLOAD}" | jq -r '.id'
