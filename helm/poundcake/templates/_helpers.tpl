@@ -51,6 +51,25 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+PoundCake log selector labels
+*/}}
+{{- define "poundcake.logGroupLabel" -}}
+poundcake.io/log-group: poundcake
+{{- end }}
+
+{{- define "poundcake.logRoleApi" -}}
+poundcake.io/log-role: api
+{{- end }}
+
+{{- define "poundcake.logRoleWorker" -}}
+poundcake.io/log-role: worker
+{{- end }}
+
+{{- define "poundcake.logRoleInfra" -}}
+poundcake.io/log-role: infra
+{{- end }}
+
+{{/*
 Create the name of the service account to use
 */}}
 {{- define "poundcake.serviceAccountName" -}}

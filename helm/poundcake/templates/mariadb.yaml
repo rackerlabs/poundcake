@@ -14,6 +14,12 @@ spec:
     name: {{ include "poundcake.mariadbRootSecretName" . }}
     key: {{ .Values.mariadbOperator.server.rootPasswordSecretKey | default "password" }}
 
+  podTemplate:
+    metadata:
+      labels:
+        {{- include "poundcake.logGroupLabel" . | nindent 8 }}
+        {{- include "poundcake.logRoleInfra" . | nindent 8 }}
+
   image: "{{ .Values.mariadbOperator.server.image.repository }}:{{ .Values.mariadbOperator.server.image.tag }}"
   imagePullPolicy: {{ .Values.mariadbOperator.server.image.pullPolicy }}
 

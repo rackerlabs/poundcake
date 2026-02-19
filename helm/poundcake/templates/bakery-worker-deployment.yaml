@@ -19,6 +19,8 @@ spec:
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: bakery-worker
+        {{- include "poundcake.logGroupLabel" . | nindent 8 }}
+        {{- include "poundcake.logRoleWorker" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

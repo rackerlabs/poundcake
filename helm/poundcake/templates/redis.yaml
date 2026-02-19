@@ -9,6 +9,8 @@ metadata:
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: infra
 spec:
   kubernetesConfig:
     image: {{ .Values.redis.image.repository | default "quay.io/opstree/redis" }}:{{ .Values.redis.image.tag | default "v7.0.15" }}

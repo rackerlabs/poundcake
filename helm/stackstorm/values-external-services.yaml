@@ -1,0 +1,87 @@
+# Default StackStorm overrides for external-services mode.
+# This file is consumed by bin/install-poundcake.sh when installing stackstorm-ha.
+# It sets pod labels used by kubectl log selectors.
+
+global:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+
+st2api:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: api
+
+st2auth:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2stream:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2actionrunner:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2sensorcontainer:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2rulesengine:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2workflowengine:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2scheduler:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2timersengine:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2notifier:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2garbagecollector:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2chatops:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+st2web:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: worker
+
+redis:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: infra
+
+rabbitmq:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: infra
+
+mongodb:
+  podLabels:
+    stackstorm.io/log-group: stackstorm
+    stackstorm.io/log-role: infra

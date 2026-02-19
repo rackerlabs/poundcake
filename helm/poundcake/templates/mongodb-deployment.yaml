@@ -21,6 +21,8 @@ spec:
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: mongodb
+        stackstorm.io/log-group: stackstorm
+        stackstorm.io/log-role: infra
     spec:
       securityContext:
         fsGroup: 999
