@@ -224,6 +224,16 @@ output:
 ./bin/install-poundcake.sh -f /path/to/values.yaml
 ```
 
+Legacy env-based installer (opt-in, compatibility workflow):
+
+```bash
+# Load fork/private-registry/local-chart defaults
+source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
+
+# Run the legacy env installer explicitly
+./helm/bin/install-poundcake-legacy-env.sh
+```
+
 By default, the installer uses `--operators-mode install-missing` and will auto-install missing required operators:
 - `mariadb-operator`
 - `redis-operator` (full mode)

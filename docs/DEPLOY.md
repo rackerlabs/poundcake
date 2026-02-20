@@ -8,6 +8,16 @@ Preferred installer:
 ./bin/install-poundcake.sh
 ```
 
+Legacy env installer (explicit opt-in):
+
+```bash
+# Load environment defaults for fork/private registry/local chart workflows
+source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
+
+# Run legacy env-compatible installer
+./helm/bin/install-poundcake-legacy-env.sh
+```
+
 Operator behavior (default):
 - `--operators-mode install-missing`
 - Installs missing `mariadb-operator` in all modes
