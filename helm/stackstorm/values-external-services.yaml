@@ -113,6 +113,14 @@ redis:
   enabled: true
   replicas: 1
   replicaCount: 1
+  image:
+    repository: redis
+    tag: "7.4-alpine"
+  # Keep sentinel aligned with Redis image when the chart enables sentinel.
+  sentinel:
+    image:
+      repository: redis
+      tag: "7.4-alpine"
   podLabels:
     stackstorm.io/log-group: stackstorm
     stackstorm.io/log-role: infra
@@ -121,6 +129,9 @@ rabbitmq:
   enabled: true
   replicas: 1
   replicaCount: 1
+  image:
+    repository: rabbitmq
+    tag: "3.13-management"
   podLabels:
     stackstorm.io/log-group: stackstorm
     stackstorm.io/log-role: infra
@@ -129,6 +140,9 @@ mongodb:
   enabled: true
   replicas: 1
   replicaCount: 1
+  image:
+    repository: mongo
+    tag: "7.0"
   podLabels:
     stackstorm.io/log-group: stackstorm
     stackstorm.io/log-role: infra
