@@ -100,6 +100,9 @@ Use the installer script defaults (non-waiting flow), or explicitly set:
 POUNDCAKE_HELM_WAIT=false ./install/install-helm.sh
 ```
 
+If you intentionally need wait semantics, set `POUNDCAKE_ALLOW_HOOK_WAIT=true` in the same invocation.
+Without that explicit override, the installer exits early to prevent hook deadlocks.
+
 If a rollout is stuck with pods in `Init`, stop the command and re-run with wait disabled, then verify:
 
 ```bash
@@ -109,6 +112,19 @@ kubectl -n <namespace> get secret stackstorm-startup-markers -o yaml
 
 By default, successful startup hook jobs are auto-cleaned (`hook-succeeded`) and failed jobs are retained for debugging.
 You can tune this with `startupHooks.cleanup.*` values.
+
+### Installer Validation and Preflight
+
+`/Users/chris.breu/code/poundcake/helm/bin/install-poundcake.sh` supports installer-specific flags:
+
+- `--validate`: run `helm lint` and `helm template --debug` before install
+- `--skip-preflight`: skip dependency/cluster connectivity checks
+- `--rotate-secrets`: delete known chart-managed secrets before install
+
+Validation can also be enabled via `POUNDCAKE_HELM_VALIDATE=true`.
+Current behavior is validate-then-install in the same run.
+
+Default preflight checks verify required binaries and cluster access (`kubectl cluster-info`).
 
 ### Log Streaming Selectors
 
@@ -140,9 +156,18 @@ If your PoundCake image is private, use the installer env vars to create and wir
 
 ```bash
 source ./install/set-env-helper.sh
+export HELM_REGISTRY_USERNAME="<gh-username>"
 export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
 ./install/install-helm.sh
 ```
+
+OCI chart authentication fallback chain:
+
+- Username: `HELM_REGISTRY_USERNAME` -> `GHCR_USERNAME` -> `GITHUB_ACTOR`
+- Password: `HELM_REGISTRY_PASSWORD` -> `GHCR_TOKEN` -> `CR_PAT` -> `GITHUB_TOKEN`
+
+For pull-secret creation (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true`), `HELM_REGISTRY_USERNAME` and
+`HELM_REGISTRY_PASSWORD` must be set explicitly.
 
 Installer controls:
 - `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-pull`)

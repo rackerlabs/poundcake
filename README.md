@@ -210,7 +210,15 @@ output:
 
 # Optional: pass extra Helm args through
 ./helm/bin/install-poundcake.sh -f /path/to/values.yaml
+
+# Validate chart rendering before install
+./helm/bin/install-poundcake.sh --validate
 ```
+
+Installer flags:
+- `--validate` runs `helm lint` + `helm template --debug` before install
+- `--skip-preflight` skips dependency and cluster connectivity checks
+- `--rotate-secrets` deletes known chart-managed secrets before install
 
 Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
 
@@ -218,6 +226,7 @@ Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/READ
 
 ```bash
 source ./install/set-env-helper.sh
+export HELM_REGISTRY_USERNAME="<gh-username>"
 export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
 ./install/install-helm.sh
 ```
@@ -239,9 +248,15 @@ Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
 - Verify pull secret is on a PoundCake pod:
   `kubectl -n <namespace> get pod <poundcake-pod> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
 
+OCI chart auth fallback chain used by the installer:
+- Username: `HELM_REGISTRY_USERNAME` -> `GHCR_USERNAME` -> `GITHUB_ACTOR`
+- Password: `HELM_REGISTRY_PASSWORD` -> `GHCR_TOKEN` -> `CR_PAT` -> `GITHUB_TOKEN`
+
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
 Startup jobs are hook-driven (`post-install,post-upgrade`), so the installer defaults to
 `POUNDCAKE_HELM_WAIT=false` to avoid deadlocks with marker-gated init containers.
+If you force wait semantics (`--wait`/`--atomic`), set `POUNDCAKE_ALLOW_HOOK_WAIT=true`
+or the installer will exit with a deadlock guard error.
 
 If a rollout gets stuck in `Init`, re-run without wait semantics:
 
