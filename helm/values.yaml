@@ -22,6 +22,7 @@ uiImage:
   repository: poundcake-ui
   tag: latest
   pullPolicy: IfNotPresent
+  containerPort: 8080
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000

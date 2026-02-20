@@ -129,6 +129,10 @@
           "enum": ["Always", "Never", "IfNotPresent"],
           "default": "IfNotPresent"
         },
+        "containerPort": {
+          "type": "integer",
+          "default": 8080
+        },
         "securityContext": {
           "type": "object",
           "properties": {

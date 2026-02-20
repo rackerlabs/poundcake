@@ -120,7 +120,7 @@ spec:
   ports:
     - name: http
       port: {{ .Values.services.ui.port }}
-      targetPort: 80
+      targetPort: {{ .Values.uiImage.containerPort }}
 ---
 apiVersion: v1
 kind: Service

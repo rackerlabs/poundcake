@@ -230,6 +230,7 @@ uiImage:
   repository: poundcake-ui
   tag: latest
   pullPolicy: IfNotPresent
+  containerPort: 8080
 
 stackstormImage:
   repository: stackstorm/st2
@@ -277,6 +278,10 @@ services:
     type: ClusterIP
     port: 9101
 ```
+
+The UI container listens on `uiImage.containerPort` (default `8080`) while the
+Kubernetes Service exposes `services.ui.port` (default `80`) and maps it to the
+internal container port.
 
 #### Pod Disruption Budgets
 

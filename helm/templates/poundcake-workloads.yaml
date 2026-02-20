@@ -291,12 +291,12 @@ spec:
             - name: SERVICE_NAME
               value: ui
           ports:
-            - containerPort: 80
+            - containerPort: {{ .Values.uiImage.containerPort }}
               name: http
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: {{ .Values.uiImage.containerPort }}
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 2
@@ -304,7 +304,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: 80
+              port: {{ .Values.uiImage.containerPort }}
             initialDelaySeconds: 20
             periodSeconds: 10
       volumes:
