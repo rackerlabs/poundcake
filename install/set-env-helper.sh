@@ -23,7 +23,8 @@ export POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="${POUNDCAKE_IMAGE_PULL_SECRET_ENABLE
 # Chart source selection
 # -----------------------------------------------------------------------------
 # Use OCI chart repo (recommended for release testing)
-export POUNDCAKE_CHART_REPO="${POUNDCAKE_CHART_REPO:-oci://ghcr.io/${FORK_OWNER}/charts/poundcake-standalone}"
+# Legacy/deprecated OCI path was charts/poundcake-standalone.
+export POUNDCAKE_CHART_REPO="${POUNDCAKE_CHART_REPO:-oci://ghcr.io/${FORK_OWNER}/charts/poundcake}"
 
 # Optional explicit chart version override. If empty, installer may read
 # /etc/genestack/helm-chart-versions.yaml (key: poundcake) when present.
@@ -67,7 +68,7 @@ export POUNDCAKE_STACKSTORM_CHART_ENABLED="${POUNDCAKE_STACKSTORM_CHART_ENABLED:
 # -----------------------------------------------------------------------------
 # Production defaults example:
 #   export FORK_OWNER="rackerlabs"
-#   export POUNDCAKE_CHART_REPO="oci://ghcr.io/rackerlabs/charts/poundcake-standalone"
+#   export POUNDCAKE_CHART_REPO="oci://ghcr.io/rackerlabs/charts/poundcake"
 #   export POUNDCAKE_IMAGE_REPO="ghcr.io/rackerlabs/poundcake"
 #   export POUNDCAKE_UI_IMAGE_REPO="ghcr.io/rackerlabs/poundcake-ui"
 #   export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/rackerlabs/poundcake-bakery"
