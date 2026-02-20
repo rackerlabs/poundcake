@@ -44,6 +44,8 @@ STACKSTORM_RELEASE_NAME="${POUNDCAKE_STACKSTORM_RELEASE_NAME:-stackstorm}"
 STACKSTORM_CHART_NAME="${POUNDCAKE_STACKSTORM_CHART_NAME:-stackstorm-ha}"
 STACKSTORM_CHART_REPO_URL="${POUNDCAKE_STACKSTORM_CHART_REPO_URL:-https://helm.stackstorm.com/}"
 STACKSTORM_VERSION_DEFAULT="${POUNDCAKE_STACKSTORM_CHART_VERSION:-1.1.0}"
+STACKSTORM_READY_TIMEOUT_SECONDS="${POUNDCAKE_STACKSTORM_READY_TIMEOUT_SECONDS:-900}"
+STACKSTORM_READY_POLL_SECONDS="${POUNDCAKE_STACKSTORM_READY_POLL_SECONDS:-5}"
 OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
 INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
 
@@ -128,6 +130,8 @@ Environment overrides:
   POUNDCAKE_BAKERY_IMAGE_REPO
   POUNDCAKE_STACKSTORM_IMAGE_REPO
   POUNDCAKE_STACKSTORM_IMAGE_TAG
+  POUNDCAKE_STACKSTORM_READY_TIMEOUT_SECONDS
+  POUNDCAKE_STACKSTORM_READY_POLL_SECONDS
   POUNDCAKE_RELEASE_NAME
   POUNDCAKE_NAMESPACE
   POUNDCAKE_HELM_TIMEOUT
@@ -197,6 +201,32 @@ wait_for_redis_api() {
   kubectl get crd | rg opstreelabs >&2 || true
   echo "Diagnostics: kubectl api-resources --api-group=redis.redis.opstreelabs.in" >&2
   kubectl api-resources --api-group=redis.redis.opstreelabs.in >&2 || true
+  return 1
+}
+
+wait_for_stackstorm_ready() {
+  local timeout_seconds=${STACKSTORM_READY_TIMEOUT_SECONDS}
+  local interval_seconds=${STACKSTORM_READY_POLL_SECONDS}
+  local elapsed=0
+
+  echo "Waiting for StackStorm API readiness at ${STACKSTORM_API_URL}/v1/actions (timeout=${timeout_seconds}s, poll=${interval_seconds}s)..."
+
+  while (( elapsed < timeout_seconds )); do
+    local http_code
+    http_code="$(curl -s -o /dev/null -w "%{http_code}" "${STACKSTORM_API_URL}/v1/actions" || true)"
+    if [[ "$http_code" == "200" || "$http_code" == "401" ]]; then
+      echo "StackStorm API is ready (HTTP ${http_code})."
+      return 0
+    fi
+    sleep "$interval_seconds"
+    elapsed=$((elapsed + interval_seconds))
+  done
+
+  echo "Error: StackStorm API did not become ready within ${timeout_seconds}s." >&2
+  echo "Diagnostics: curl -i ${STACKSTORM_API_URL}/v1/actions" >&2
+  curl -i "${STACKSTORM_API_URL}/v1/actions" >&2 || true
+  echo "Diagnostics: curl -i ${STACKSTORM_AUTH_URL}/" >&2
+  curl -i "${STACKSTORM_AUTH_URL}/" >&2 || true
   return 1
 }
 
@@ -851,8 +881,16 @@ POUNDCAKE_PHASE1_CMD=(
   --namespace "$NAMESPACE"
   --create-namespace
   --timeout "$HELM_TIMEOUT"
+  --set "replicaCount=0"
   --set "bootstrap.poundcakeBootstrap.enabled=false"
+  --set "bootstrap.packInit.enabled=false"
+  --set "bootstrap.stackstormBootstrap.enabled=false"
   --set "deployment.mode=full"
+  --set "ui.enabled=false"
+  --set "chef.enabled=false"
+  --set "prepChef.enabled=false"
+  --set "timer.enabled=false"
+  --set "dishwasher.enabled=false"
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "image.tag=${EFFECTIVE_IMAGE_TAG}"
   --set "image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
@@ -900,6 +938,13 @@ POUNDCAKE_PHASE3_CMD=(
   --namespace "$NAMESPACE"
   --create-namespace
   --timeout "$HELM_TIMEOUT"
+  --set "ui.enabled=true"
+  --set "chef.enabled=true"
+  --set "prepChef.enabled=true"
+  --set "timer.enabled=true"
+  --set "dishwasher.enabled=true"
+  --set "bootstrap.packInit.enabled=true"
+  --set "bootstrap.stackstormBootstrap.enabled=true"
   --set "bootstrap.poundcakeBootstrap.enabled=true"
   --set "deployment.mode=full"
   --set "image.repository=${APP_IMAGE_REPO}"
@@ -981,6 +1026,8 @@ echo "Phase 2/3: Install StackStorm as separate release"
 printf '%q ' "${STACKSTORM_CMD[@]}"
 echo
 "${STACKSTORM_CMD[@]}"
+
+wait_for_stackstorm_ready
 
 echo "Phase 3/3: Reconcile PoundCake after StackStorm is ready"
 printf '%q ' "${POUNDCAKE_PHASE3_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"

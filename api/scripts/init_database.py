@@ -149,16 +149,27 @@ async def seed_default_recipes() -> None:
 
 async def main() -> None:
     """Run initialization and seed in a single event loop."""
-    logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
-    logger.info("PoundCake Database Initialization", extra={"req_id": "SYSTEM-DB-INIT"})
-    logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
+    try:
+        logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
+        logger.info("PoundCake Database Initialization", extra={"req_id": "SYSTEM-DB-INIT"})
+        logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
 
-    await init_database()
-    await seed_default_recipes()
+        await init_database()
+        await seed_default_recipes()
 
-    logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
-    logger.info("Database initialization complete", extra={"req_id": "SYSTEM-DB-INIT"})
-    logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
+        logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
+        logger.info("Database initialization complete", extra={"req_id": "SYSTEM-DB-INIT"})
+        logger.info("=" * 60, extra={"req_id": "SYSTEM-DB-INIT"})
+    finally:
+        try:
+            await engine.dispose()
+            logger.info("Database engine disposed", extra={"req_id": "SYSTEM-DB-INIT"})
+        except Exception as e:
+            logger.warning(
+                "Database engine disposal encountered an error",
+                extra={"req_id": "SYSTEM-DB-INIT", "error": str(e)},
+                exc_info=True,
+            )
 
 
 if __name__ == "__main__":

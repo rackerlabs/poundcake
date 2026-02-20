@@ -681,6 +681,10 @@ bootstrap:
     defaultTimeout: 300
     pruneMissing: false
 
+  # One-shot job that prepares StackStorm API key and startup ordering.
+  stackstormBootstrap:
+    enabled: true
+
 # Bakery service configuration
 # API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)
 bakery:
