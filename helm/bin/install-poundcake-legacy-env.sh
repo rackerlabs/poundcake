@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 HELM_ROOT="${PROJECT_ROOT}/helm"
 
-DEFAULT_LOCAL_CHART="${HELM_ROOT}/poundcake"
+DEFAULT_LOCAL_CHART="${HELM_ROOT}"
 DEFAULT_VERSION_FILE="/etc/genestack/helm-chart-versions.yaml"
 HELM_TIMEOUT_DEFAULT="120m"
 

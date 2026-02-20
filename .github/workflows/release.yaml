@@ -168,7 +168,7 @@ jobs:
       - name: Package Helm chart
         run: |
           mkdir -p .helm-packages
-          helm package helm/poundcake -d .helm-packages
+          helm package helm -d .helm-packages
           ls -lah .helm-packages/
 
       - name: Push Helm chart to OCI registry

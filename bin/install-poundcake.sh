@@ -283,7 +283,7 @@ POUNDCAKE_OVERRIDE_ARGS=()
 STACKSTORM_OVERRIDE_ARGS=()
 
 get_local_poundcake_chart_version() {
-  local chart_file="${HELM_ROOT}/poundcake/Chart.yaml"
+  local chart_file="${HELM_ROOT}/Chart.yaml"
   if [[ -f "$chart_file" ]]; then
     grep -E "^[[:space:]]*version:" "$chart_file" | head -n1 | sed -E 's/^[[:space:]]*version:[[:space:]]*//'
   fi

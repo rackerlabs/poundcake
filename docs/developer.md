@@ -114,10 +114,10 @@ Coverage output:
 
 Versioning inputs:
 - App version tags: Git tags like `v0.0.2` trigger release workflow.
-- Helm chart publish version: `helm/poundcake/Chart.yaml` `version:` field.
+- Helm chart publish version: `helm/Chart.yaml` `version:` field.
 
 Rules:
-- Bump `helm/poundcake/Chart.yaml` `version:` before publishing a new chart version.
+- Bump `helm/Chart.yaml` `version:` before publishing a new chart version.
 - Pushing a `v*` tag runs `.github/workflows/release.yaml`.
 - Pushing to `main` runs `.github/workflows/build-push.yaml`.
 
