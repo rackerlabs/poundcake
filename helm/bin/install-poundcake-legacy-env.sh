@@ -165,6 +165,37 @@ perform_preflight_checks() {
   check_cluster_connection
 }
 
+helm_release_exists() {
+  local release_name=$1
+  local release_namespace=$2
+  helm status "$release_name" -n "$release_namespace" >/dev/null 2>&1
+}
+
+redis_api_ready() {
+  kubectl api-resources --api-group=redis.redis.opstreelabs.in 2>/dev/null | awk 'NR > 1 {print $1}' | grep -qx "redis"
+}
+
+wait_for_redis_api() {
+  local timeout_seconds=${1:-60}
+  local interval_seconds=${2:-5}
+  local elapsed=0
+
+  while (( elapsed < timeout_seconds )); do
+    if redis_api_ready; then
+      return 0
+    fi
+    sleep "$interval_seconds"
+    elapsed=$((elapsed + interval_seconds))
+  done
+
+  echo "Error: redis operator API resources are not discoverable after ${timeout_seconds}s." >&2
+  echo "Diagnostics: kubectl get crd | rg opstreelabs" >&2
+  kubectl get crd | rg opstreelabs >&2 || true
+  echo "Diagnostics: kubectl api-resources --api-group=redis.redis.opstreelabs.in" >&2
+  kubectl api-resources --api-group=redis.redis.opstreelabs.in >&2 || true
+  return 1
+}
+
 crd_exists() {
   local crd_name=$1
   kubectl get crd "$crd_name" >/dev/null 2>&1
@@ -178,6 +209,60 @@ install_or_verify_operator() {
   local chart_repo_url=$5
   local chart_version=$6
   local chart_namespace=$7
+
+  if [[ "$operator_key" == "redis-operator" ]]; then
+    if helm_release_exists "$release_name" "$chart_namespace"; then
+      echo "Operator '${operator_key}' release '${release_name}' already exists in namespace '${chart_namespace}'; skipping reinstall."
+      if ! wait_for_redis_api 60 5; then
+        echo "Error: operator '${operator_key}' release exists but Redis API resources are not ready." >&2
+        exit 1
+      fi
+      return 0
+    fi
+
+    case "$OPERATOR_MODE" in
+      skip)
+        echo "Operator mode is skip. Not installing '${operator_key}' (release ${release_name} missing in namespace ${chart_namespace})."
+        return 0
+        ;;
+      verify)
+        echo "Error: operator '${operator_key}' release '${release_name}' not found in namespace '${chart_namespace}'." >&2
+        echo "Set --operators-mode install-missing to install missing operators." >&2
+        exit 1
+        ;;
+      install-missing)
+        echo "Installing missing operator '${operator_key}' (chart ${chart_name}:${chart_version})..."
+        local redis_operator_cmd=(
+          helm upgrade --install "$release_name" "$chart_name"
+          --repo "$chart_repo_url"
+          --version "$chart_version"
+          --namespace "$chart_namespace"
+          --create-namespace
+          --timeout "$HELM_TIMEOUT"
+        )
+        if [[ "$HELM_WAIT" == "true" ]]; then
+          redis_operator_cmd+=(--wait)
+        fi
+        if [[ "$HELM_ATOMIC" == "true" ]]; then
+          redis_operator_cmd+=(--atomic)
+        fi
+        if [[ "$HELM_CLEANUP_ON_FAIL" == "true" ]]; then
+          redis_operator_cmd+=(--cleanup-on-fail)
+        fi
+        "${redis_operator_cmd[@]}"
+
+        if ! wait_for_redis_api 60 5; then
+          echo "Error: operator '${operator_key}' install completed but Redis API resources are still missing." >&2
+          exit 1
+        fi
+        return 0
+        ;;
+      *)
+        echo "Error: unsupported operators mode '${OPERATOR_MODE}'." >&2
+        exit 1
+        ;;
+    esac
+  fi
 
   if crd_exists "$crd_name"; then
     echo "Operator '${operator_key}' already present (CRD ${crd_name}); skipping install."
