@@ -114,13 +114,13 @@ redis:
   replicas: 1
   replicaCount: 1
   image:
-    repository: redis
-    tag: "7.4-alpine"
+    repository: bitnamilegacy/redis
+    tag: "7.2"
   # Keep sentinel aligned with Redis image when the chart enables sentinel.
   sentinel:
     image:
-      repository: redis
-      tag: "7.4-alpine"
+      repository: bitnamilegacy/redis-sentinel
+      tag: "7.2"
   podLabels:
     stackstorm.io/log-group: stackstorm
     stackstorm.io/log-role: infra
@@ -130,8 +130,8 @@ rabbitmq:
   replicas: 1
   replicaCount: 1
   image:
-    repository: rabbitmq
-    tag: "3.13-management"
+    repository: bitnamilegacy/rabbitmq
+    tag: "3.13"
   podLabels:
     stackstorm.io/log-group: stackstorm
     stackstorm.io/log-role: infra
@@ -141,8 +141,8 @@ mongodb:
   replicas: 1
   replicaCount: 1
   image:
-    repository: mongo
-    tag: "7.0"
+    repository: bitnamilegacy/mongodb
+    tag: "4.4"
   podLabels:
     stackstorm.io/log-group: stackstorm
     stackstorm.io/log-role: infra

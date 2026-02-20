@@ -106,6 +106,35 @@ class Settings(BaseSettings):
             except Exception:
                 continue
 
+        # Fall back to StackStorm legacy YAML secret format if present.
+        apikeys_yaml = Path("/app/config/st2-apikeys/apikeys.yaml")
+        if apikeys_yaml.exists():
+            try:
+                data = yaml.safe_load(apikeys_yaml.read_text())
+                if isinstance(data, str):
+                    key = data.strip()
+                    if key and key.lower() != "null":
+                        return key
+                elif isinstance(data, dict):
+                    key = str(data.get("key", "")).strip()
+                    if key:
+                        return key
+                    apikeys = data.get("apikeys")
+                    if isinstance(apikeys, list):
+                        for item in reversed(apikeys):
+                            if isinstance(item, dict):
+                                key = str(item.get("key", "")).strip()
+                                if key:
+                                    return key
+                elif isinstance(data, list):
+                    for item in reversed(data):
+                        if isinstance(item, dict):
+                            key = str(item.get("key", "")).strip()
+                            if key:
+                                return key
+            except Exception:
+                pass
+
         return ""
 
     # ==========================================================================

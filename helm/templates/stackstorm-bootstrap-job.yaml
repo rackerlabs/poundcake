@@ -95,6 +95,14 @@ spec:
             return 1
           }
 
+          wait_for_job_if_exists() {
+            job_name="$1"
+            if kubectl -n "${NS}" get job "${job_name}" >/dev/null 2>&1; then
+              echo "Waiting for job completion: ${job_name}"
+              kubectl -n "${NS}" wait --for=condition=complete --timeout="${TIMEOUT}" "job/${job_name}"
+            fi
+          }
+
           get_auth_token() {
             user="$1"
             pass="$2"
@@ -205,6 +213,9 @@ spec:
           wait_rollout_if_exists "${ST2_PREFIX}-st2auth"
           wait_rollout_if_exists "${ST2_PREFIX}-st2api"
           wait_for_api_ready
+          wait_for_job_if_exists "${ST2_PREFIX}-job-st2-apikey-load"
+          wait_for_job_if_exists "${ST2_PREFIX}-job-st2-key-load"
+          wait_for_job_if_exists "${ST2_PREFIX}-job-st2-register-content"
 
           # Bootstrap / validate st2_api_key and write it into a Kubernetes Secret.
           ensure_api_key_secret

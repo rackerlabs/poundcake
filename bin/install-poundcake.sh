@@ -34,27 +34,42 @@ crd_exists() {
   kubectl get crd "$crd_name" >/dev/null 2>&1
 }
 
+crd_exists_any() {
+  local crd_name
+  for crd_name in "$@"; do
+    if crd_exists "$crd_name"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 install_or_verify_operator() {
   local operator_key=$1
-  local crd_name=$2
+  local crd_names_raw=$2
   local release_name=$3
   local chart_name=$4
   local chart_repo_url=$5
   local chart_version=$6
   local chart_namespace=$7
+  local crd_names=()
+  local crd_name_display=""
 
-  if crd_exists "$crd_name"; then
-    echo "Operator '${operator_key}' already present (CRD ${crd_name}); skipping install."
+  IFS=',' read -r -a crd_names <<< "$crd_names_raw"
+  crd_name_display="${crd_names[0]}"
+
+  if crd_exists_any "${crd_names[@]}"; then
+    echo "Operator '${operator_key}' already present (CRD ${crd_name_display}); skipping install."
     return 0
   fi
 
   case "$OPERATOR_MODE" in
     skip)
-      echo "Operator mode is skip. Not installing '${operator_key}' (missing CRD ${crd_name})."
+      echo "Operator mode is skip. Not installing '${operator_key}' (missing CRD ${crd_name_display})."
       return 0
       ;;
     verify)
-      echo "Error: operator '${operator_key}' is missing (CRD ${crd_name})." >&2
+      echo "Error: operator '${operator_key}' is missing (CRD ${crd_name_display})." >&2
       echo "Set --operators-mode install-missing to auto-install missing operators." >&2
       exit 1
       ;;
@@ -76,8 +91,8 @@ install_or_verify_operator() {
       ;;
   esac
 
-  if ! crd_exists "$crd_name"; then
-    echo "Error: operator '${operator_key}' install completed but CRD ${crd_name} is still missing." >&2
+  if ! crd_exists_any "${crd_names[@]}"; then
+    echo "Error: operator '${operator_key}' install completed but CRD ${crd_name_display} is still missing." >&2
     exit 1
   fi
 }
@@ -104,7 +119,7 @@ ensure_required_operators() {
   if [[ "$INSTALL_MODE" == "full" ]]; then
     install_or_verify_operator \
       "redis-operator" \
-      "redis.redis.opstreelabs.in" \
+      "redis.redis.redis.opstreelabs.in,redis.redis.opstreelabs.in" \
       "$REDIS_OPERATOR_RELEASE_NAME" \
       "$REDIS_OPERATOR_CHART_NAME" \
       "$REDIS_OPERATOR_CHART_REPO_URL" \
@@ -253,6 +268,8 @@ RABBITMQ_OPERATOR_VERSION_DEFAULT="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_VERSION:-
 APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
+IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-ghcr-creds}"
+AUTO_IMAGE_PULL_SECRET="${POUNDCAKE_AUTO_IMAGE_PULL_SECRET:-true}"
 INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
 BAKERY_RACKSPACE_URL="${POUNDCAKE_BAKERY_RACKSPACE_URL:-}"
 BAKERY_RACKSPACE_USERNAME="${POUNDCAKE_BAKERY_RACKSPACE_USERNAME:-}"
@@ -360,6 +377,79 @@ apply_bakery_rackspace_secret() {
   POUNDCAKE_OVERRIDE_ARGS+=("--set" "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
 }
 
+has_image_pull_secret_override() {
+  local i=0
+  local next_index=0
+  local arg
+
+  for ((i = 0; i < ${#POUNDCAKE_OVERRIDE_ARGS[@]}; i++)); do
+    arg="${POUNDCAKE_OVERRIDE_ARGS[$i]}"
+    if [[ "$arg" == "--set" ]]; then
+      next_index=$((i + 1))
+      if [[ $next_index -lt ${#POUNDCAKE_OVERRIDE_ARGS[@]} ]] && [[ "${POUNDCAKE_OVERRIDE_ARGS[$next_index]}" == imagePullSecrets* ]]; then
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
+ensure_image_pull_secret() {
+  local should_manage=false
+  local username
+  local password
+
+  if [[ "$AUTO_IMAGE_PULL_SECRET" != "true" ]]; then
+    return 0
+  fi
+
+  for repo in "$APP_IMAGE_REPO" "$UI_IMAGE_REPO" "$BAKERY_IMAGE_REPO"; do
+    if [[ "$repo" == ghcr.io/* ]]; then
+      should_manage=true
+      break
+    fi
+  done
+
+  if [[ "$should_manage" != "true" ]]; then
+    return 0
+  fi
+
+  if has_image_pull_secret_override; then
+    echo "imagePullSecrets already configured via overrides; skipping auto pull-secret override."
+    return 0
+  fi
+
+  if ! kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
+    echo "Creating namespace '${NAMESPACE}' to store image pull secret..."
+    kubectl create namespace "$NAMESPACE" >/dev/null
+  fi
+
+  if kubectl -n "$NAMESPACE" get secret "$IMAGE_PULL_SECRET_NAME" >/dev/null 2>&1; then
+    echo "Using existing image pull secret '${IMAGE_PULL_SECRET_NAME}' in namespace '${NAMESPACE}'."
+    POUNDCAKE_OVERRIDE_ARGS+=("--set" "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
+    return 0
+  fi
+
+  username="${HELM_REGISTRY_USERNAME:-${GHCR_USERNAME:-${GITHUB_ACTOR:-}}}"
+  password="${HELM_REGISTRY_PASSWORD:-${GHCR_TOKEN:-${CR_PAT:-${GITHUB_TOKEN:-}}}}"
+
+  if [[ -z "$username" || -z "$password" ]]; then
+    echo "Warning: unable to auto-create image pull secret '${IMAGE_PULL_SECRET_NAME}' because registry credentials are unavailable." >&2
+    echo "Set HELM_REGISTRY_USERNAME/HELM_REGISTRY_PASSWORD (or GHCR_USERNAME/GHCR_TOKEN) or provide imagePullSecrets via overrides." >&2
+    return 0
+  fi
+
+  echo "Applying image pull secret '${IMAGE_PULL_SECRET_NAME}' in namespace '${NAMESPACE}'..."
+  kubectl -n "$NAMESPACE" create secret docker-registry "$IMAGE_PULL_SECRET_NAME" \
+    --docker-server=ghcr.io \
+    --docker-username="$username" \
+    --docker-password="$password" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  POUNDCAKE_OVERRIDE_ARGS+=("--set" "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode)
@@ -396,6 +486,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --interactive-bakery-creds|--interactive-bakery-credentials)
       INTERACTIVE_BAKERY_CREDS=true
+      shift
+      ;;
+    --image-pull-secret-name)
+      IMAGE_PULL_SECRET_NAME="$2"
+      shift 2
+      ;;
+    --skip-image-pull-secret)
+      AUTO_IMAGE_PULL_SECRET=false
       shift
       ;;
     --bakery-rackspace-url)
@@ -520,6 +618,7 @@ if [[ -d "$STACKSTORM_CONFIG_DIR" ]] && compgen -G "${STACKSTORM_CONFIG_DIR}/*.y
 fi
 
 apply_bakery_rackspace_secret
+ensure_image_pull_secret
 
 # Add post-renderer if available AND overlay exists.
 if [[ "$INSTALL_MODE" != "bakery-only" && -f "$KUSTOMIZE_RENDERER" && -d "$KUSTOMIZE_OVERLAY_DIR" ]]; then
@@ -549,6 +648,7 @@ POUNDCAKE_PHASE1_CMD=(
   --create-namespace
   --timeout "${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}"
   --set "bootstrap.poundcakeBootstrap.enabled=false"
+  --set "bootstrap.stackstormBootstrap.enabled=false"
   --set "deployment.mode=full"
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "image.tag=${POUNDCAKE_VERSION}"
@@ -586,6 +686,7 @@ POUNDCAKE_PHASE3_CMD=(
   --cleanup-on-fail
   --timeout "${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}"
   --set "bootstrap.poundcakeBootstrap.enabled=true"
+  --set "bootstrap.stackstormBootstrap.enabled=true"
   --set "deployment.mode=full"
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "image.tag=${POUNDCAKE_VERSION}"

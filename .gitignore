@@ -106,3 +106,7 @@ alembic/**/__pycache__/
 # Chart tarballs are downloaded dependencies, not source files
 helm/poundcake/charts/*.tgz
 # NOTE: Chart.lock should be committed to pin versions
+
+# Local agent handoff/context file (must stay local, do not commit)
+AGENTS.md
+agents.md
