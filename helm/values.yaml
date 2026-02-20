@@ -129,6 +129,22 @@ services:
     type: ClusterIP
     port: 8080
 
+gateway:
+  enabled: false
+  className: envoyproxy
+  name: poundcake-gateway
+  listeners:
+    api:
+      enabled: true
+      hostname: api.poundcake.local
+      port: 80
+      pathPrefix: /
+    ui:
+      enabled: true
+      hostname: ui.poundcake.local
+      port: 80
+      pathPrefix: /
+
 stackstormComponents:
   register:
     enabled: false

@@ -346,6 +346,37 @@
         }
       }
     },
+    "gateway": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "className": { "type": "string", "default": "envoyproxy" },
+        "name": { "type": "string", "default": "poundcake-gateway" },
+        "listeners": {
+          "type": "object",
+          "properties": {
+            "api": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean", "default": true },
+                "hostname": { "type": "string", "default": "api.poundcake.local" },
+                "port": { "type": "integer", "default": 80 },
+                "pathPrefix": { "type": "string", "default": "/" }
+              }
+            },
+            "ui": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean", "default": true },
+                "hostname": { "type": "string", "default": "ui.poundcake.local" },
+                "port": { "type": "integer", "default": 80 },
+                "pathPrefix": { "type": "string", "default": "/" }
+              }
+            }
+          }
+        }
+      }
+    },
     "stackstormComponents": {
       "type": "object",
       "description": "Optional StackStorm component toggles",

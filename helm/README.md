@@ -283,6 +283,26 @@ The UI container listens on `uiImage.containerPort` (default `8080`) while the
 Kubernetes Service exposes `services.ui.port` (default `80`) and maps it to the
 internal container port.
 
+#### Envoy Gateway Configuration
+
+```yaml
+gateway:
+  enabled: true
+  className: envoyproxy
+  name: poundcake-gateway
+  listeners:
+    api:
+      enabled: true
+      hostname: api.poundcake.local
+      port: 80
+      pathPrefix: /
+    ui:
+      enabled: true
+      hostname: ui.poundcake.local
+      port: 80
+      pathPrefix: /
+```
+
 #### Pod Disruption Budgets
 
 ```yaml
@@ -438,6 +458,14 @@ spec:
             name: poundcake-api
             port:
               number: 8000
+```
+
+Or enable the built-in Gateway API resources (for Envoy Gateway):
+
+```yaml
+gateway:
+  enabled: true
+  className: envoyproxy
 ```
 
 ## Troubleshooting
