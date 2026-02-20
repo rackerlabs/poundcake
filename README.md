@@ -322,6 +322,11 @@ Installer chart versions are read from `/etc/genestack/helm-chart-versions.yaml`
 - `redis-operator`
 - `rabbitmq-cluster-operator`
 
+StackStorm default profile (via `/Users/chris.breu/code/poundcake/helm/stackstorm/values-external-services.yaml`):
+- Enabled by default (1 pod each unless overridden): `st2api`, `st2auth`, `st2actionrunner`, `st2rulesengine`, `st2workflowengine`, `st2scheduler`, `st2notifier`, plus StackStorm-owned `mongodb`, `rabbitmq`, `redis`.
+- Disabled by default: `st2stream`, `st2web`, `st2chatops`, `st2garbagecollector`, `st2timersengine`, `st2sensorcontainer`.
+- Override behavior: add values files under `/etc/genestack/helm-configs/stackstorm/*.yaml` to re-enable components or scale replicas above 1.
+
 ### Docker Compose Install
 
 ```bash

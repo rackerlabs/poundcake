@@ -180,6 +180,11 @@ And overrides from:
 - `/etc/genestack/helm-configs/poundcake/*.yaml`
 - `/etc/genestack/helm-configs/stackstorm/*.yaml` (full mode)
 
+StackStorm default profile (via `/Users/chris.breu/code/poundcake/helm/stackstorm/values-external-services.yaml`):
+- Enabled by default (1 pod each unless overridden): `st2api`, `st2auth`, `st2actionrunner`, `st2rulesengine`, `st2workflowengine`, `st2scheduler`, `st2notifier`, and StackStorm-owned `mongodb`, `rabbitmq`, `redis`.
+- Disabled by default: `st2stream`, `st2web`, `st2chatops`, `st2garbagecollector`, `st2timersengine`, `st2sensorcontainer`.
+- To customize: add override files under `/etc/genestack/helm-configs/stackstorm/*.yaml` to re-enable optional services or increase replicas.
+
 ## Docker Compose (Local)
 
 ```bash
