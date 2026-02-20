@@ -29,6 +29,17 @@ tests:
           path: spec.template.metadata.labels["poundcake.io/log-group"]
           value: stackstorm-exec
         documentIndex: 6
+
+  - it: gates worker workloads on control-plane readiness marker
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "stackstorm_controlplane_ready"
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "stackstorm_controlplane_ready"
+        documentIndex: 6
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: garbagecollector

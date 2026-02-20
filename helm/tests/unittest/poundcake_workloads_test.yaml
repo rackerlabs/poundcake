@@ -111,6 +111,21 @@ tests:
           value: false
         documentIndex: 5
 
+  - it: gates UI startup on API reachability and bootstrap marker
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-stage10
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "nc -z poundcake-api 8000"
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "poundcake_bootstrap_ready"
+        documentIndex: 2
+
   - it: supports hardened overrides for app and utility container profiles
     set:
       poundcakeImage.securityContext.readOnlyRootFilesystem: true

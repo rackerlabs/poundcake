@@ -265,6 +265,20 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-stage10
+          image: {{ .Values.images.busybox }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z poundcake-api 8000; do sleep 2; done
+              until [ "$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)" = "true" ]; do sleep 2; done
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
       containers:
         - name: ui
           image: {{ .Values.uiImage.repository }}:{{ .Values.uiImage.tag }}
@@ -293,6 +307,13 @@ spec:
               port: 80
             initialDelaySeconds: 20
             periodSeconds: 10
+      volumes:
+        - name: app-config
+          projected:
+            sources:
+              - secret:
+                  name: stackstorm-startup-markers
+                  optional: true
 ---
 apiVersion: apps/v1
 kind: Deployment

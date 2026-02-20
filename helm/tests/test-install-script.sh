@@ -64,7 +64,7 @@ rg -q 'POUNDCAKE_VERSION_FILE' "${INSTALL_SCRIPT}"
 rg -q '/etc/genestack/helm-chart-version.yaml' "${INSTALL_SCRIPT}"
 rg -q '/etc/genestack/helm-chart-versions.yaml' "${INSTALL_SCRIPT}"
 
-# Wrapper pass-through contract
-rg -q 'stackstorm.chart.enabled=\$\{STACKSTORM_CHART_ENABLED\}' "${WRAPPER_SCRIPT}"
+# Wrapper should invoke the installer directly (no chart no-op flags)
+rg -q 'exec "\$PROJECT_ROOT/helm/bin/install-poundcake.sh" "\$@"' "${WRAPPER_SCRIPT}"
 
 echo "Installer and wrapper checks passed!"

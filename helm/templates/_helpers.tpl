@@ -154,7 +154,7 @@ poundcake.io/log-role: {{ $role | quote }}
   {{- else if has $component (list "stackstorm-actionrunner" "stackstorm-rulesengine" "stackstorm-workflowengine" "stackstorm-scheduler" "stackstorm-register" "stackstorm-garbagecollector" "stackstorm-client" "stackstorm-notifier" "stackstorm-timersengine" "stackstorm-sensorcontainer") -}}
     {{- $group = "stackstorm-exec" -}}
     {{- $subgroup = "control-exec" -}}
-  {{- else if has $component (list "stackstorm-startup-markers-reset" "stackstorm-mongodb-user-sync" "stackstorm-infra-ready" "stackstorm-apikey-init" "stackstorm-workers-ready" "stackstorm-edge-ready" "stackstorm-bootstrap") -}}
+  {{- else if has $component (list "stackstorm-startup-markers-reset" "stackstorm-mongodb-user-sync" "stackstorm-infra-ready" "stackstorm-controlplane-ready" "stackstorm-workers-ready" "stackstorm-edge-ready" "stackstorm-bootstrap") -}}
     {{- $group = "startup-hooks" -}}
     {{- $subgroup = "orchestration" -}}
     {{- $role = $component -}}

@@ -12,6 +12,10 @@ tests:
         documentIndex: 0
       - equal:
           path: metadata.name
+          value: stackstorm-controlplane-ready
+        documentIndex: 3
+      - equal:
+          path: metadata.name
           value: poundcake-bootstrap
         documentIndex: 8
       - equal:
@@ -30,6 +34,14 @@ tests:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
           value: before-hook-creation,hook-succeeded
         documentIndex: 8
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "deployment/stackstorm-auth"
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "stackstorm_controlplane_ready"
+        documentIndex: 3
 
   - it: applies startup hook log-streaming labels
     asserts:
@@ -49,6 +61,17 @@ tests:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: poundcake-bootstrap
         documentIndex: 8
+
+  - it: creates API key only in stackstorm-bootstrap
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "create secret generic stackstorm-apikeys"
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "create secret generic stackstorm-apikeys"
+        documentIndex: 6
 
   - it: applies image values and startup service account wiring
     set:

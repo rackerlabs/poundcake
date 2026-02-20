@@ -35,7 +35,7 @@ spec:
             - |
               NS="{{ .Release.Namespace }}"
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
-                -p '{"stringData":{"stackstorm_mongodb_user_ready":"false","stackstorm_infra_ready":"false","stackstorm_apikey_ready":"false","stackstorm_workers_ready":"false","stackstorm_edge_ready":"false","stackstorm_bootstrap_ready":"false","poundcake_mariadb_ready":"false","poundcake_bootstrap_ready":"false"}}'
+                -p '{"stringData":{"stackstorm_mongodb_user_ready":"false","stackstorm_infra_ready":"false","stackstorm_controlplane_ready":"false","stackstorm_workers_ready":"false","stackstorm_edge_ready":"false","stackstorm_bootstrap_ready":"false","poundcake_mariadb_ready":"false","poundcake_bootstrap_ready":"false"}}'
 ---
 apiVersion: batch/v1
 kind: Job
@@ -191,9 +191,9 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: stackstorm-apikey-init
+  name: stackstorm-controlplane-ready
   labels:
-    app.kubernetes.io/component: stackstorm-apikey-init
+    app.kubernetes.io/component: stackstorm-controlplane-ready
     {{- include "poundcake.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
@@ -204,8 +204,8 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: stackstorm-apikey-init
-        {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-apikey-init") | nindent 8 }}
+        app.kubernetes.io/component: stackstorm-controlplane-ready
+        {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-controlplane-ready") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
       {{- if .Values.podSecurityContext }}
@@ -214,49 +214,8 @@ spec:
       {{- end }}
       restartPolicy: OnFailure
       serviceAccountName: stackstorm-startup
-      initContainers:
-        - name: generate-apikey
-          image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
-          securityContext:
-            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
-          envFrom:
-            - secretRef:
-                name: stackstorm-secrets
-          env:
-            - name: ST2_AUTH_URL
-              value: http://stackstorm-auth:9100
-            - name: ST2_API_URL
-              value: http://stackstorm-api:9101
-          command:
-            - /bin/bash
-            - -ec
-            - |
-              until (echo > /dev/tcp/stackstorm-api/9101) >/dev/null 2>&1; do sleep 3; done
-              until (echo > /dev/tcp/stackstorm-auth/9100) >/dev/null 2>&1; do sleep 3; done
-
-              token=""
-              for i in $(seq 1 30); do
-                token="$(st2 auth "${ST2_AUTH_USER}" -p "${ST2_AUTH_PASSWORD}" -t 2>/dev/null || true)"
-                [ -n "${token}" ] && break
-                sleep 2
-              done
-              [ -n "${token}" ]
-              export ST2_AUTH_TOKEN="${token}"
-
-              key=""
-              for i in $(seq 1 30); do
-                key="$(st2 apikey create -k -m '{"description":"PoundCake-Internal"}' 2>/dev/null || true)"
-                [ -n "${key}" ] && break
-                sleep 2
-              done
-              [ -n "${key}" ]
-              printf "%s" "${key}" > /work/st2_api_key
-          volumeMounts:
-            - name: key-work
-              mountPath: /work
       containers:
-        - name: publish-apikey
+        - name: mark-controlplane-ready
           image: {{ .Values.images.kubectl }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
@@ -265,18 +224,13 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              key="$(cat /work/st2_api_key)"
-              kubectl -n "${NS}" create secret generic stackstorm-apikeys \
-                --from-literal=st2_api_key="${key}" \
-                --dry-run=client -o yaml | kubectl apply -f -
+              {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "register")) "true" }}
+              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-register --timeout=15m
+              {{- end }}
+              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-auth --timeout=15m
+              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-api --timeout=15m
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
-                -p '{"stringData":{"stackstorm_apikey_ready":"true"}}'
-          volumeMounts:
-            - name: key-work
-              mountPath: /work
-      volumes:
-        - name: key-work
-          emptyDir: {}
+                -p '{"stringData":{"stackstorm_controlplane_ready":"true"}}'
 ---
 apiVersion: batch/v1
 kind: Job

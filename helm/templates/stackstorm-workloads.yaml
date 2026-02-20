@@ -334,7 +334,7 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_apikey_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -437,7 +437,7 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_apikey_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -508,7 +508,7 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_apikey_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -611,7 +611,7 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_apikey_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -683,7 +683,7 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_apikey_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -755,7 +755,7 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_apikey_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -827,7 +827,7 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_apikey_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
           volumeMounts:
             - name: app-config
               mountPath: /app/config

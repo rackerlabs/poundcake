@@ -609,7 +609,7 @@ The chart uses Helm hooks to ensure proper startup order:
 1. Reset startup markers
 2. Create MongoDB user
 3. Wait for infrastructure (endpoints)
-4. Generate API keys
+4. Mark StackStorm control plane ready (auth + api availability)
 5. Wait for workers
 6. Wait for edge services
 7. Run StackStorm bootstrap
@@ -623,15 +623,15 @@ flowchart LR
   A["stackstorm-startup-markers-reset<br/>sets all markers=false"] --> B["stackstorm-mongodb-user-sync"]
   B -->|set stackstorm_mongodb_user_ready=true| C["stackstorm-infra-ready"]
   C -->|set stackstorm_infra_ready=true| D["Stage 2 deploys<br/>stackstorm-register/auth/api wait-stage2"]
-  D --> E["stackstorm-apikey-init"]
-  E -->|set stackstorm_apikey_ready=true| F["Stage 4 deploys<br/>worker services wait-stage4"]
+  D --> E["stackstorm-controlplane-ready"]
+  E -->|set stackstorm_controlplane_ready=true| F["Stage 4 deploys<br/>worker services wait-stage4"]
   F --> G["stackstorm-workers-ready"]
   G -->|set stackstorm_workers_ready=true| H["Stage 5 deploys<br/>edge services wait-stage5"]
   H --> I["stackstorm-edge-ready"]
   I -->|set stackstorm_edge_ready=true| J["stackstorm-bootstrap"]
   J -->|set stackstorm_bootstrap_ready=true| K["poundcake-mariadb-ready"]
   K -->|set poundcake_mariadb_ready=true| L["poundcake-bootstrap"]
-  L -->|set poundcake_bootstrap_ready=true| M["PoundCake runtime<br/>chef/prep-chef/timer/dishwasher"]
+  L -->|set poundcake_bootstrap_ready=true| M["PoundCake runtime<br/>chef/prep-chef/timer/dishwasher/ui"]
 
   N["Optional waits are conditional on<br/>stackstormServices.*.enabled<br/>(notifier/timersengine/sensorcontainer/stream/web)"]
   N -.-> G
