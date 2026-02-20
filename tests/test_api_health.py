@@ -36,7 +36,7 @@ def mock_database():
 @pytest.fixture(autouse=True)
 def mock_stackstorm():
     """Mock StackStorm API calls for all tests."""
-    with patch("api.services.stackstorm_service.get_stackstorm_client") as mock_client:
+    with patch("api.api.health.get_stackstorm_client") as mock_client:
         client = Mock()
         client.health_check = AsyncMock(return_value=True)
         mock_client.return_value = client
