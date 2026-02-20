@@ -5,7 +5,7 @@ tests:
   - it: renders all poundcake workloads
     asserts:
       - hasDocuments:
-          count: 5
+          count: 6
       - equal:
           path: metadata.name
           value: poundcake-api
@@ -14,6 +14,10 @@ tests:
           path: metadata.name
           value: poundcake-dishwasher
         documentIndex: 4
+      - equal:
+          path: metadata.name
+          value: poundcake-ui
+        documentIndex: 5
 
   - it: applies log-streaming labels to poundcake pod templates
     asserts:
@@ -39,6 +43,9 @@ tests:
       poundcakeImage.repository: custom/poundcake
       poundcakeImage.tag: "2.0.0"
       poundcakeImage.pullPolicy: Always
+      uiImage.repository: custom/poundcake-ui
+      uiImage.tag: "2.0.0"
+      uiImage.pullPolicy: Always
       intervals.prepInterval: "42"
     asserts:
       - equal:
@@ -76,6 +83,14 @@ tests:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: Always
         documentIndex: 4
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: custom/poundcake-ui:2.0.0
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+        documentIndex: 5
 
   - it: applies pod, app, and utility security contexts with writable defaults
     asserts:
@@ -118,6 +133,9 @@ tests:
       - isNull:
           path: spec.template.spec.imagePullSecrets
         documentIndex: 4
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 5
 
   - it: renders poundcakeImage pull secrets on PoundCake workloads
     set:
@@ -131,6 +149,10 @@ tests:
           path: spec.template.spec.imagePullSecrets[0].name
           value: ghcr-pull
         documentIndex: 4
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull
+        documentIndex: 5
 
   - it: falls back to legacy imagePullSecrets when poundcakeImage.pullSecrets is unset
     set:

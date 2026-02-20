@@ -1,4 +1,4 @@
-# poundcake-standalone Helm Chart
+# poundcake Helm Chart
 
 A standalone Helm chart for running PoundCake with StackStorm in Kubernetes. This chart is generated from the Docker Compose configuration and provides a production-ready deployment.
 

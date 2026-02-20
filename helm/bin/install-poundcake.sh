@@ -20,6 +20,7 @@ POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-d5dbf49}"
 STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
 STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-}"
+UI_IMAGE_TAG="${POUNDCAKE_UI_IMAGE_TAG:-}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-}"
 CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
 VERSION_FILE="${POUNDCAKE_VERSION_FILE:-/etc/genestack/helm-chart-versions.yaml}"
@@ -43,7 +44,8 @@ Environment overrides:
   POUNDCAKE_CHART_VERSION          (optional; for OCI repo installs)
   POUNDCAKE_IMAGE_REPO             (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake)
   POUNDCAKE_IMAGE_TAG              (default: d5dbf49)
-  POUNDCAKE_UI_IMAGE_REPO          (optional; accepted for compatibility)
+  POUNDCAKE_UI_IMAGE_REPO          (optional; sets uiImage.repository)
+  POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
   POUNDCAKE_BAKERY_IMAGE_REPO      (optional; accepted for compatibility)
   HELM_REGISTRY_USERNAME           (optional; for OCI login)
   HELM_REGISTRY_PASSWORD           (optional; for OCI login)
@@ -62,7 +64,7 @@ Environment overrides:
 Examples:
   ./install/install-helm.sh
   POUNDCAKE_GHCR_OWNER=rackerchris ./install/install-helm.sh
-  POUNDCAKE_CHART_REPO=oci://ghcr.io/rackerchris/charts/poundcake-standalone ./install/install-helm.sh
+  POUNDCAKE_CHART_REPO=oci://ghcr.io/rackerchris/charts/poundcake ./install/install-helm.sh
 EOF
 }
 
@@ -187,7 +189,10 @@ fi
 
 # Keep compatibility with legacy caller env/overrides even if chart doesn't consume all keys yet.
 if [[ -n "${UI_IMAGE_REPO}" ]]; then
-  HELM_CMD+=(--set "ui.image.repository=${UI_IMAGE_REPO}")
+  HELM_CMD+=(--set "uiImage.repository=${UI_IMAGE_REPO}")
+fi
+if [[ -n "${UI_IMAGE_TAG}" ]]; then
+  HELM_CMD+=(--set "uiImage.tag=${UI_IMAGE_TAG}")
 fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
   HELM_CMD+=(--set "bakery.image.repository=${BAKERY_IMAGE_REPO}")
@@ -284,6 +289,9 @@ fi
 echo "PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
 if [[ -n "${UI_IMAGE_REPO}" ]]; then
   echo "UI image repo override: ${UI_IMAGE_REPO}"
+fi
+if [[ -n "${UI_IMAGE_TAG}" ]]; then
+  echo "UI image tag override: ${UI_IMAGE_TAG}"
 fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
   echo "Bakery image repo override: ${BAKERY_IMAGE_REPO}"

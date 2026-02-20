@@ -3,49 +3,49 @@ kind: PersistentVolumeClaim
 metadata:
   name: poundcake-mariadb
   labels:
-    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+    {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   accessModes: ["{{ .Values.persistence.mariadb.accessMode | default "ReadWriteOnce" }}"]
   resources:
     requests:
       storage: {{ .Values.persistence.mariadb.size }}
-  {{- include "poundcake-standalone.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.mariadb.storageClassName) | nindent 2 }}
+  {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.mariadb.storageClassName) | nindent 2 }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: stackstorm-mongo
   labels:
-    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+    {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   accessModes: ["{{ .Values.persistence.mongo.accessMode | default "ReadWriteOnce" }}"]
   resources:
     requests:
       storage: {{ .Values.persistence.mongo.size }}
-  {{- include "poundcake-standalone.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.mongo.storageClassName) | nindent 2 }}
+  {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.mongo.storageClassName) | nindent 2 }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: stackstorm-rabbitmq
   labels:
-    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+    {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   accessModes: ["{{ .Values.persistence.rabbitmq.accessMode | default "ReadWriteOnce" }}"]
   resources:
     requests:
       storage: {{ .Values.persistence.rabbitmq.size }}
-  {{- include "poundcake-standalone.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.rabbitmq.storageClassName) | nindent 2 }}
+  {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.rabbitmq.storageClassName) | nindent 2 }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: stackstorm-redis
   labels:
-    {{- include "poundcake-standalone.labels" . | nindent 4 }}
+    {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   accessModes: ["{{ .Values.persistence.redis.accessMode | default "ReadWriteOnce" }}"]
   resources:
     requests:
       storage: {{ .Values.persistence.redis.size }}
-  {{- include "poundcake-standalone.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.redis.storageClassName) | nindent 2 }}
+  {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.redis.storageClassName) | nindent 2 }}

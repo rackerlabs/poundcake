@@ -1,5 +1,5 @@
 apiVersion: v2
-name: poundcake-standalone
+name: poundcake
 description: Standalone PoundCake + StackStorm chart generated from docker-compose
 type: application
 

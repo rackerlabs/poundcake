@@ -1,35 +1,35 @@
-{{- define "poundcake-standalone.name" -}}
+{{- define "poundcake.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "poundcake-standalone.fullname" -}}
+{{- define "poundcake.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- printf "%s-%s" .Release.Name (include "poundcake-standalone.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" .Release.Name (include "poundcake.name" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "poundcake-standalone.labels" -}}
+{{- define "poundcake.labels" -}}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-app.kubernetes.io/name: {{ include "poundcake-standalone.name" . }}
+app.kubernetes.io/name: {{ include "poundcake.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
-{{- define "poundcake-standalone.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "poundcake-standalone.name" . }}
+{{- define "poundcake.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "poundcake.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "poundcake-standalone.storageClass" -}}
+{{- define "poundcake.storageClass" -}}
 {{- if .Values.persistence.storageClassName }}
 storageClassName: {{ .Values.persistence.storageClassName | quote }}
 {{- end }}
 {{- end -}}
 
-{{- define "poundcake-standalone.poundcakePullSecrets" -}}
+{{- define "poundcake.poundcakePullSecrets" -}}
 {{- $pullSecrets := .Values.poundcakeImage.pullSecrets | default list -}}
 {{- if eq (len $pullSecrets) 0 -}}
 {{- $pullSecrets = .Values.imagePullSecrets | default list -}}
@@ -46,7 +46,7 @@ imagePullSecrets:
 {{- end }}
 {{- end -}}
 
-{{- define "poundcake-standalone.pvcStorageClass" -}}
+{{- define "poundcake.pvcStorageClass" -}}
 {{- $root := .root -}}
 {{- $pvcStorageClass := .pvcStorageClass | default "" -}}
 {{- if $pvcStorageClass }}
@@ -56,7 +56,7 @@ storageClassName: {{ $root.Values.persistence.storageClassName | quote }}
 {{- end }}
 {{- end -}}
 
-{{- define "poundcake-standalone.startupHookDeletePolicy" -}}
+{{- define "poundcake.startupHookDeletePolicy" -}}
 {{- $policies := list "before-hook-creation" -}}
 {{- if and .Values.startupHooks.cleanup.enabled .Values.startupHooks.cleanup.deleteSuccessful -}}
 {{- $policies = append $policies "hook-succeeded" -}}
@@ -67,7 +67,7 @@ storageClassName: {{ $root.Values.persistence.storageClassName | quote }}
 {{- join "," $policies -}}
 {{- end -}}
 
-{{- define "poundcake-standalone.stackstormServiceEnabled" -}}
+{{- define "poundcake.stackstormServiceEnabled" -}}
 {{- $root := .root -}}
 {{- $name := .name -}}
 {{- $services := $root.Values.stackstormServices | default dict -}}
@@ -102,11 +102,11 @@ storageClassName: {{ $root.Values.persistence.storageClassName | quote }}
 {{- end -}}
 {{- end -}}
 
-{{- define "poundcake-standalone.validateStackstormServiceSet" -}}
+{{- define "poundcake.validateStackstormServiceSet" -}}
 {{- $required := list "mongodb" "rabbitmq" "redis" "auth" "api" "actionrunner" "rulesengine" "workflowengine" "scheduler" "garbagecollector" -}}
 {{- $errors := list -}}
 {{- range $svc := $required -}}
-  {{- if ne (include "poundcake-standalone.stackstormServiceEnabled" (dict "root" $ "name" $svc)) "true" -}}
+  {{- if ne (include "poundcake.stackstormServiceEnabled" (dict "root" $ "name" $svc)) "true" -}}
     {{- $errors = append $errors (printf "stackstormServices.%s.enabled must be true for Poundcake operations" $svc) -}}
   {{- end -}}
 {{- end -}}
@@ -115,7 +115,7 @@ storageClassName: {{ $root.Values.persistence.storageClassName | quote }}
 {{- end -}}
 {{- end -}}
 
-{{- define "poundcake-standalone.logLabels" -}}
+{{- define "poundcake.logLabels" -}}
 {{- $group := .group | default "other" -}}
 {{- $subgroup := .subgroup | default "general" -}}
 {{- $role := .role | default "other" -}}
@@ -124,17 +124,19 @@ poundcake.io/log-subgroup: {{ $subgroup | quote }}
 poundcake.io/log-role: {{ $role | quote }}
 {{- end -}}
 
-{{- define "poundcake-standalone.logLabelsForComponent" -}}
+{{- define "poundcake.logLabelsForComponent" -}}
 {{- $component := .component | default "unknown" -}}
 {{- $group := "other" -}}
 {{- $subgroup := "general" -}}
 {{- $role := $component -}}
 
-{{- if has $component (list "api" "chef" "prep-chef" "timer" "dishwasher") -}}
+{{- if has $component (list "api" "ui" "chef" "prep-chef" "timer" "dishwasher") -}}
   {{- $group = "poundcake" -}}
   {{- $subgroup = "app" -}}
   {{- if eq $component "api" -}}
     {{- $role = "api" -}}
+  {{- else if eq $component "ui" -}}
+    {{- $role = "ui" -}}
   {{- else -}}
     {{- $role = "worker" -}}
   {{- end -}}
@@ -162,5 +164,5 @@ poundcake.io/log-role: {{ $role | quote }}
   {{- $subgroup = "orchestration" -}}
 {{- end -}}
 
-{{- include "poundcake-standalone.logLabels" (dict "group" $group "subgroup" $subgroup "role" $role) -}}
+{{- include "poundcake.logLabels" (dict "group" $group "subgroup" $subgroup "role" $role) -}}
 {{- end -}}

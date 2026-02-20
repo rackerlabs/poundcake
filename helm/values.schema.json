@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "poundcake-standalone",
+  "title": "poundcake",
   "type": "object",
   "required": ["secrets"],
   "properties": {
@@ -89,6 +89,40 @@
         "tag": {
           "type": "string",
           "default": "3.9.0"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "Never", "IfNotPresent"],
+          "default": "IfNotPresent"
+        },
+        "securityContext": {
+          "type": "object",
+          "properties": {
+            "runAsNonRoot": { "type": "boolean" },
+            "runAsUser": { "type": "integer" },
+            "allowPrivilegeEscalation": { "type": "boolean" },
+            "readOnlyRootFilesystem": { "type": "boolean", "default": false },
+            "capabilities": {
+              "type": "object",
+              "properties": {
+                "drop": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "uiImage": {
+      "type": "object",
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "default": "poundcake-ui"
+        },
+        "tag": {
+          "type": "string",
+          "default": "latest"
         },
         "pullPolicy": {
           "type": "string",
@@ -269,6 +303,13 @@
             "type": { "type": "string" },
             "port": { "type": "integer" },
             "publishNotReadyAddresses": { "type": "boolean", "default": true }
+          }
+        },
+        "ui": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string" },
+            "port": { "type": "integer" }
           }
         },
         "stackstormApi": {

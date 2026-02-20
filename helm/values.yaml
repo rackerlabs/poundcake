@@ -18,6 +18,19 @@ poundcakeImage:
       drop:
         - ALL
 
+uiImage:
+  repository: poundcake-ui
+  tag: latest
+  pullPolicy: IfNotPresent
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
 stackstormImage:
   repository: stackstorm/st2
   tag: "3.9.0"
@@ -99,6 +112,9 @@ services:
     type: ClusterIP
     port: 8000
     publishNotReadyAddresses: true
+  ui:
+    type: ClusterIP
+    port: 80
   stackstormApi:
     type: ClusterIP
     port: 9101
