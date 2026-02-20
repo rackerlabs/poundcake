@@ -30,10 +30,10 @@ def test_compose_chef_uses_chef_poll_interval_env() -> None:
 
 def test_helm_prep_chef_templates_use_prep_interval_env() -> None:
     prep_chef_template = (
-        REPO_ROOT / "helm" / "poundcake" / "templates" / "prep-chef-deployment.yaml"
+        REPO_ROOT / "helm" / "templates" / "prep-chef-deployment.yaml"
     ).read_text(encoding="utf-8")
     chef_template = (
-        REPO_ROOT / "helm" / "poundcake" / "templates" / "chef-deployment.yaml"
+        REPO_ROOT / "helm" / "templates" / "chef-deployment.yaml"
     ).read_text(encoding="utf-8")
 
     assert "name: PREP_INTERVAL" in prep_chef_template
