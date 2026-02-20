@@ -29,7 +29,7 @@ deployment:
   mode: full
 
 image:
-  repository: ghcr.io/aedan/poundcake
+  repository: ghcr.io/rackerlabs/poundcake
   pullPolicy: IfNotPresent
   tag: "2.0.95"  # Release tag
 
@@ -65,7 +65,7 @@ service:
 ui:
   enabled: true
   image:
-    repository: ghcr.io/aedan/poundcake-ui
+    repository: ghcr.io/rackerlabs/poundcake-ui
     pullPolicy: IfNotPresent
     tag: "2.0.95"  # Release tag
   service:
@@ -706,7 +706,7 @@ bakery:
 
   # Bakery image configuration
   image:
-    repository: ghcr.io/aedan/poundcake-bakery
+    repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: IfNotPresent
     tag: "2.0.95"
 

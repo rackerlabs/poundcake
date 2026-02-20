@@ -18,6 +18,6 @@ keywords:
   - auto-remediation
   - prometheus
   - automation
-home: https://github.com/aedan/poundCake
+home: https://github.com/rackerlabs/poundcake
 sources:
-  - https://github.com/aedan/poundCake
+  - https://github.com/rackerlabs/poundcake

@@ -3,8 +3,8 @@
 # This Dockerfile builds the container image for PoundCake UI, which is deployed
 # via the Helm chart. The image is published to GitHub Container Registry.
 #
-# Build: docker build -t ghcr.io/aedan/poundcake-ui:VERSION -f ui/Dockerfile .
-# Push:  docker push ghcr.io/aedan/poundcake-ui:VERSION
+# Build: docker build -t ghcr.io/rackerlabs/poundcake-ui:VERSION -f ui/Dockerfile .
+# Push:  docker push ghcr.io/rackerlabs/poundcake-ui:VERSION
 
 FROM nginx:alpine
 
@@ -26,7 +26,7 @@ EXPOSE 8080
 LABEL org.opencontainers.image.title="PoundCake UI" \
       org.opencontainers.image.description="Web UI for PoundCake auto-remediation framework" \
       org.opencontainers.image.authors="Jake Briggs" \
-      org.opencontainers.image.source="https://github.com/aedan/poundCake"
+      org.opencontainers.image.source="https://github.com/rackerlabs/poundcake"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

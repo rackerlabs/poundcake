@@ -300,8 +300,7 @@ class StackStormClient:
                     retries=0,
                 )
                 # 200 => authenticated and healthy
-                # 401 => API is reachable but auth is required/not configured
-                return response.status_code in (200, 401)
+                return response.status_code == 200
             except Exception as e:
                 latency_ms = int((time.time() - start_time) * 1000)
                 logger.warning(

@@ -22,9 +22,9 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  PACKAGE_OWNER: ${{ vars.GHCR_OWNER || github.repository_owner }}
-  REPO_NAME: ${{ vars.GHCR_REPO_NAME || github.event.repository.name }}
-  IMAGE_NAME: ${{ format('{0}/{1}', vars.GHCR_OWNER || github.repository_owner, vars.GHCR_REPO_NAME || github.event.repository.name) }}
+  PACKAGE_OWNER: ${{ github.repository_owner }}
+  REPO_NAME: ${{ github.event.repository.name }}
+  IMAGE_NAME: ${{ format('{0}/{1}', github.repository_owner, github.event.repository.name) }}
   CHART_NAME: poundcake
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.CR_PAT || secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN || secrets.CR_PAT }}
 
       - name: Extract metadata for Docker
         id: meta
@@ -163,7 +163,7 @@ jobs:
 
       - name: Log in to Container Registry
         run: |
-          echo ${{ secrets.CR_PAT || secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+          echo ${{ secrets.GITHUB_TOKEN || secrets.CR_PAT }} | helm registry login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
       - name: Package Helm chart
         run: |

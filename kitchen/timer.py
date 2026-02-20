@@ -203,6 +203,7 @@ def monitor_dishes() -> None:
                 "GET",
                 f"{API_BASE_URL}/dishes",
                 params={"processing_status": status, "limit": POLL_LIMIT},
+                headers=get_service_headers(SYSTEM_REQ_ID),
                 timeout=10,
                 retries=POLLER_RETRIES,
             )
@@ -237,7 +238,7 @@ def monitor_dishes() -> None:
             claim_resp = request_with_retry_sync(
                 "POST",
                 f"{API_BASE_URL}/dishes/{dish.get('id')}/finalize-claim",
-                headers={"X-Request-ID": req_id},
+                headers=get_service_headers(req_id),
                 timeout=10,
                 retries=POLLER_RETRIES,
             )

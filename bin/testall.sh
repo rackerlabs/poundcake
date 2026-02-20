@@ -53,6 +53,19 @@ print_warning() {
     echo -e "${YELLOW}⚠ $1${NC}"
 }
 
+print_section "Validating chart/image source defaults"
+if grep -R --line-number "ghcr.io/aedan" \
+    "$PROJECT_ROOT/bin/install-poundcake.sh" \
+    "$PROJECT_ROOT/helm/values.yaml" >/dev/null 2>&1; then
+    print_error "Legacy registry source 'ghcr.io/aedan' found in install/chart defaults"
+    echo "Update defaults to ghcr.io/rackerlabs before pushing."
+    grep -R --line-number "ghcr.io/aedan" \
+        "$PROJECT_ROOT/bin/install-poundcake.sh" \
+        "$PROJECT_ROOT/helm/values.yaml" || true
+    exit 1
+fi
+print_success "Install/chart defaults point to ghcr.io/rackerlabs"
+
 # Install pre-push hook if it doesn't exist
 # Use git rev-parse to find the correct git dir (works in worktrees too)
 GIT_DIR="$(git rev-parse --git-dir)"

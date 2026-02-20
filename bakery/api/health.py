@@ -4,6 +4,7 @@
 import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from bakery import __version__
@@ -25,7 +26,7 @@ def check_database(db: Session) -> ComponentHealth:
     """
     try:
         # Simple query to verify database is accessible
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         return ComponentHealth(status="healthy", message="Database accessible")
     except Exception as e:
         return ComponentHealth(

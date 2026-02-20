@@ -129,5 +129,5 @@ AUTHENTICATION ENABLED:
 {{- end }}
 
 For more information:
-  https://github.com/aedan/poundcake
+  https://github.com/rackerlabs/poundcake
 {{- end }}

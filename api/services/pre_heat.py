@@ -77,6 +77,7 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                     req_id=req_id,
                     received_at=datetime.now(timezone.utc),
                 )
+                await db.commit()
                 logger.info(
                     "Alert suppressed by active suppression window",
                     extra={
@@ -97,6 +98,9 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                     }
                 )
                 continue
+
+        if db.in_transaction():
+            await db.rollback()
 
         try:
             async with db.begin():

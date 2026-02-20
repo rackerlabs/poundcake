@@ -448,7 +448,7 @@ When `bakery.gateway.enabled=true`, the chart also creates:
 The image is built via GitHub Actions and pushed to:
 
 ```
-ghcr.io/aedan/poundcake-bakery
+ghcr.io/rackerlabs/poundcake-bakery
 ```
 
 The Dockerfile uses a multi-stage build:
