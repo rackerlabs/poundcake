@@ -53,6 +53,13 @@ spec:
           # Change to project root where alembic.ini lives
           cd /app
 
+          echo "Debug: current working directory"
+          pwd
+          echo "Debug: listing /app"
+          ls -la /app
+          echo "Debug: listing /app/api"
+          ls -la /app/api || true
+
           # Debug: Check if alembic.ini exists and is readable
           echo "Checking alembic.ini..."
           if [ -f /app/alembic.ini ]; then

@@ -30,6 +30,7 @@ IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-ghcr-pull}"
 CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-true}"
 IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-noreply@local}"
 IMAGE_PULL_SECRET_ENABLED="${POUNDCAKE_IMAGE_PULL_SECRET_ENABLED:-true}"
+IMAGE_CONTRACT_CHECK="${POUNDCAKE_IMAGE_CONTRACT_CHECK:-true}"
 
 APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
 IMAGE_TAG_OVERRIDE="${POUNDCAKE_IMAGE_TAG-}"
@@ -131,6 +132,7 @@ Environment overrides:
   POUNDCAKE_HELM_WAIT
   POUNDCAKE_HELM_ATOMIC
   POUNDCAKE_HELM_CLEANUP_ON_FAIL
+  POUNDCAKE_IMAGE_CONTRACT_CHECK
 
 Examples:
   source ${PROJECT_ROOT}/install/set-env-helper.sh
@@ -193,6 +195,68 @@ wait_for_redis_api() {
   kubectl get crd | rg opstreelabs >&2 || true
   echo "Diagnostics: kubectl api-resources --api-group=redis.redis.opstreelabs.in" >&2
   kubectl api-resources --api-group=redis.redis.opstreelabs.in >&2 || true
+  return 1
+}
+
+verify_image_contract() {
+  local pod_name="poundcake-image-check-$(date +%s)"
+  local image_ref="${APP_IMAGE_REPO}:${EFFECTIVE_IMAGE_TAG}"
+  local timeout_seconds=60
+  local interval_seconds=2
+  local elapsed=0
+  local phase
+
+  local check_script='
+set -eu
+test -f /app/alembic.ini
+test -d /app/alembic
+test -f /app/api/scripts/init_database.py
+echo "Image contract OK"
+'
+
+  echo "Running image contract check pod '${pod_name}' using ${image_ref}..."
+
+  if [[ "$IMAGE_PULL_SECRET_ENABLED" == "true" ]]; then
+    kubectl -n "$NAMESPACE" run "$pod_name" \
+      --image="$image_ref" \
+      --restart=Never \
+      --overrides="{\"spec\":{\"imagePullSecrets\":[{\"name\":\"${IMAGE_PULL_SECRET_NAME}\"}]}}" \
+      --command -- /bin/sh -lc "$check_script" >/dev/null
+  else
+    kubectl -n "$NAMESPACE" run "$pod_name" \
+      --image="$image_ref" \
+      --restart=Never \
+      --command -- /bin/sh -lc "$check_script" >/dev/null
+  fi
+
+  while (( elapsed < timeout_seconds )); do
+    phase="$(kubectl -n "$NAMESPACE" get pod "$pod_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+    case "$phase" in
+      Succeeded)
+        kubectl -n "$NAMESPACE" delete pod "$pod_name" --ignore-not-found >/dev/null 2>&1 || true
+        echo "Image contract check passed."
+        return 0
+        ;;
+      Failed)
+        echo "Error: image contract check failed for ${image_ref}." >&2
+        kubectl -n "$NAMESPACE" logs "$pod_name" >&2 || true
+        kubectl -n "$NAMESPACE" describe pod "$pod_name" >&2 || true
+        kubectl -n "$NAMESPACE" delete pod "$pod_name" --ignore-not-found >/dev/null 2>&1 || true
+        echo "Your latest image is missing migration files." >&2
+        echo "Rebuild/push latest from current source tree before install." >&2
+        return 1
+        ;;
+    esac
+    sleep "$interval_seconds"
+    elapsed=$((elapsed + interval_seconds))
+  done
+
+  echo "Error: image contract check timed out for ${image_ref} after ${timeout_seconds}s." >&2
+  kubectl -n "$NAMESPACE" logs "$pod_name" >&2 || true
+  kubectl -n "$NAMESPACE" describe pod "$pod_name" >&2 || true
+  kubectl -n "$NAMESPACE" delete pod "$pod_name" --ignore-not-found >/dev/null 2>&1 || true
+  echo "Your latest image is missing migration files." >&2
+  echo "Rebuild/push latest from current source tree before install." >&2
   return 1
 }
 
@@ -678,6 +742,12 @@ echo "Using image tags: ${EFFECTIVE_IMAGE_TAG}"
 echo "StackStorm image controls (compat only): ${STACKSTORM_IMAGE_REPO}:${STACKSTORM_IMAGE_TAG}"
 
 ensure_oci_registry_auth "$CHART_REPO"
+
+if [[ "$IMAGE_CONTRACT_CHECK" == "true" ]]; then
+  verify_image_contract
+else
+  echo "Skipping image contract check (POUNDCAKE_IMAGE_CONTRACT_CHECK=${IMAGE_CONTRACT_CHECK})."
+fi
 
 if [[ -f "$POUNDCAKE_BASE_OVERRIDES" ]]; then
   POUNDCAKE_OVERRIDE_ARGS+=("-f" "$POUNDCAKE_BASE_OVERRIDES")
