@@ -120,6 +120,65 @@ tests:
           value: 8080
         documentIndex: 2
 
+  - it: mounts writable nginx runtime paths on UI by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: ui-nginx-confd
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /etc/nginx/conf.d
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: ui-nginx-cache
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /var/cache/nginx
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].name
+          value: ui-nginx-run
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].mountPath
+          value: /var/run
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.volumes[1].name
+          value: ui-nginx-confd
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.volumes[2].name
+          value: ui-nginx-cache
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.volumes[3].name
+          value: ui-nginx-run
+        documentIndex: 2
+      - isNotNull:
+          path: spec.template.spec.volumes[1].emptyDir
+        documentIndex: 2
+      - isNotNull:
+          path: spec.template.spec.volumes[2].emptyDir
+        documentIndex: 2
+      - isNotNull:
+          path: spec.template.spec.volumes[3].emptyDir
+        documentIndex: 2
+
+  - it: allows disabling writable nginx runtime path mounts for UI
+    set:
+      uiImage.runtimeWritablePaths.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+        documentIndex: 2
+      - isNull:
+          path: spec.template.spec.volumes[1]
+        documentIndex: 2
+
   - it: applies pod, app, and utility security contexts with writable defaults
     asserts:
       - equal:
