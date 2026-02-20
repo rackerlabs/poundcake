@@ -13,11 +13,11 @@ tests:
       - equal:
           path: metadata.name
           value: poundcake-dishwasher
-        documentIndex: 4
+        documentIndex: 5
       - equal:
           path: metadata.name
           value: poundcake-ui
-        documentIndex: 5
+        documentIndex: 2
 
   - it: applies log-streaming labels to poundcake pod templates
     asserts:
@@ -78,7 +78,7 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[7].value
           value: "42"
-        documentIndex: 3
+        documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: Always
@@ -86,11 +86,11 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: custom/poundcake-ui:2.0.0
-        documentIndex: 5
+        documentIndex: 2
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: Always
-        documentIndex: 5
+        documentIndex: 2
 
   - it: applies pod, app, and utility security contexts with writable defaults
     asserts:
@@ -109,7 +109,7 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: false
-        documentIndex: 4
+        documentIndex: 5
 
   - it: supports hardened overrides for app and utility container profiles
     set:
@@ -132,6 +132,9 @@ tests:
         documentIndex: 0
       - isNull:
           path: spec.template.spec.imagePullSecrets
+        documentIndex: 2
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
         documentIndex: 4
       - isNull:
           path: spec.template.spec.imagePullSecrets
@@ -145,6 +148,10 @@ tests:
           path: spec.template.spec.imagePullSecrets[0].name
           value: ghcr-pull
         documentIndex: 0
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull
+        documentIndex: 2
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
           value: ghcr-pull

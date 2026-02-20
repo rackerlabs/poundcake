@@ -201,6 +201,11 @@ poundcakeImage:
   tag: latest
   pullPolicy: IfNotPresent
 
+uiImage:
+  repository: poundcake-ui
+  tag: latest
+  pullPolicy: IfNotPresent
+
 stackstormImage:
   repository: stackstorm/st2
   tag: "3.9.0"
@@ -240,6 +245,9 @@ services:
   api:
     type: ClusterIP
     port: 8000
+  ui:
+    type: ClusterIP
+    port: 80
   stackstormApi:
     type: ClusterIP
     port: 9101
