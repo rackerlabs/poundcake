@@ -34,6 +34,7 @@ IMAGE_CONTRACT_CHECK="${POUNDCAKE_IMAGE_CONTRACT_CHECK:-true}"
 
 APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
 IMAGE_TAG_OVERRIDE="${POUNDCAKE_IMAGE_TAG-}"
+IMAGE_PULL_POLICY_OVERRIDE="${POUNDCAKE_IMAGE_PULL_POLICY:-auto}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
 STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
@@ -122,6 +123,7 @@ Environment overrides:
   POUNDCAKE_GHCR_OWNER
   POUNDCAKE_IMAGE_REPO
   POUNDCAKE_IMAGE_TAG
+  POUNDCAKE_IMAGE_PULL_POLICY
   POUNDCAKE_UI_IMAGE_REPO
   POUNDCAKE_BAKERY_IMAGE_REPO
   POUNDCAKE_STACKSTORM_IMAGE_REPO
@@ -455,6 +457,28 @@ get_local_poundcake_chart_version() {
   fi
 }
 
+resolve_pull_policy() {
+  local image_tag=$1
+  local policy_override=$2
+
+  case "$policy_override" in
+    ""|auto)
+      if [[ "$image_tag" == "latest" ]]; then
+        echo "Always"
+      else
+        echo "IfNotPresent"
+      fi
+      ;;
+    Always|IfNotPresent|Never)
+      echo "$policy_override"
+      ;;
+    *)
+      echo "Error: invalid POUNDCAKE_IMAGE_PULL_POLICY='${policy_override}'. Valid values: auto, Always, IfNotPresent, Never." >&2
+      return 1
+      ;;
+  esac
+}
+
 run_helm_validation() {
   local chart_ref=$1
   local version=$2
@@ -733,12 +757,15 @@ else
   EFFECTIVE_IMAGE_TAG="$POUNDCAKE_VERSION"
 fi
 
+EFFECTIVE_IMAGE_PULL_POLICY="$(resolve_pull_policy "$EFFECTIVE_IMAGE_TAG" "$IMAGE_PULL_POLICY_OVERRIDE")"
+
 STACKSTORM_API_URL="http://${STACKSTORM_RELEASE_NAME}-st2api.${NAMESPACE}.svc.cluster.local:9101"
 STACKSTORM_AUTH_URL="http://${STACKSTORM_RELEASE_NAME}-st2auth.${NAMESPACE}.svc.cluster.local:9100"
 
 echo "Installing PoundCake chart version: ${POUNDCAKE_VERSION}"
 echo "Installing StackStorm chart version: ${STACKSTORM_VERSION}"
 echo "Using image tags: ${EFFECTIVE_IMAGE_TAG}"
+echo "Using image pull policy: ${EFFECTIVE_IMAGE_PULL_POLICY} (override=${IMAGE_PULL_POLICY_OVERRIDE})"
 echo "StackStorm image controls (compat only): ${STACKSTORM_IMAGE_REPO}:${STACKSTORM_IMAGE_TAG}"
 
 ensure_oci_registry_auth "$CHART_REPO"
@@ -799,10 +826,13 @@ VALIDATION_ARGS=(
   --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
   --set "ui.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "ui.image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
   --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "bakery.image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   "${POUNDCAKE_OVERRIDE_ARGS[@]}"
   "${POST_RENDER_ARGS[@]}"
   "${POUNDCAKE_EXTRA_ARGS[@]}"
@@ -825,10 +855,13 @@ POUNDCAKE_PHASE1_CMD=(
   --set "deployment.mode=full"
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
   --set "ui.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "ui.image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
   --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "bakery.image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
   --set "stackstorm.url=${STACKSTORM_API_URL}"
   --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
@@ -871,10 +904,13 @@ POUNDCAKE_PHASE3_CMD=(
   --set "deployment.mode=full"
   --set "image.repository=${APP_IMAGE_REPO}"
   --set "image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
   --set "ui.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "ui.image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
   --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "bakery.image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
   --set "stackstorm.url=${STACKSTORM_API_URL}"
   --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
@@ -906,6 +942,7 @@ BAKERY_ONLY_CMD=(
   --set "bakery.enabled=true"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
   --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "bakery.image.pullPolicy=${EFFECTIVE_IMAGE_PULL_POLICY}"
   "${POUNDCAKE_OVERRIDE_ARGS[@]}"
   "${POUNDCAKE_EXTRA_ARGS[@]}"
 )

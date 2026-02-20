@@ -41,6 +41,7 @@ export POUNDCAKE_GHCR_OWNER="${POUNDCAKE_GHCR_OWNER:-$FORK_OWNER}"
 # -----------------------------------------------------------------------------
 export POUNDCAKE_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${FORK_OWNER}/poundcake}"
 export POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-latest}"
+export POUNDCAKE_IMAGE_PULL_POLICY="${POUNDCAKE_IMAGE_PULL_POLICY:-auto}"
 
 # Passed through for compatibility with existing workflows.
 export POUNDCAKE_UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${FORK_OWNER}/poundcake-ui}"
@@ -66,6 +67,7 @@ export POUNDCAKE_HELM_CLEANUP_ON_FAIL="${POUNDCAKE_HELM_CLEANUP_ON_FAIL:-false}"
 echo "PoundCake env helper loaded."
 echo "  Chart repo:  ${POUNDCAKE_CHART_REPO}"
 echo "  Image repo:  ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
+echo "  Image pull policy mode: ${POUNDCAKE_IMAGE_PULL_POLICY}"
 echo "  Namespace:   ${POUNDCAKE_NAMESPACE}"
 echo "  Release:     ${POUNDCAKE_RELEASE_NAME}"
 echo "  Operators mode: ${POUNDCAKE_OPERATORS_MODE}"
