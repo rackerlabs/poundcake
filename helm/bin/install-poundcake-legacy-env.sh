@@ -4,21 +4,25 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-DEFAULT_LOCAL_CHART="${PROJECT_ROOT}/helm/poundcake"
+HELM_ROOT="${PROJECT_ROOT}/helm"
+
+DEFAULT_LOCAL_CHART="${HELM_ROOT}/poundcake"
+DEFAULT_VERSION_FILE="/etc/genestack/helm-chart-versions.yaml"
+HELM_TIMEOUT_DEFAULT="120m"
 
 FORK_OWNER="${FORK_OWNER:-rackerlabs}"
 GHCR_OWNER="${POUNDCAKE_GHCR_OWNER:-$FORK_OWNER}"
 
 RELEASE_NAME="${POUNDCAKE_RELEASE_NAME:-poundcake}"
 NAMESPACE="${POUNDCAKE_NAMESPACE:-rackspace}"
-HELM_TIMEOUT="${POUNDCAKE_HELM_TIMEOUT:-120m}"
+HELM_TIMEOUT="${POUNDCAKE_HELM_TIMEOUT:-${HELM_TIMEOUT:-$HELM_TIMEOUT_DEFAULT}}"
 HELM_WAIT="${POUNDCAKE_HELM_WAIT:-false}"
 HELM_ATOMIC="${POUNDCAKE_HELM_ATOMIC:-false}"
 HELM_CLEANUP_ON_FAIL="${POUNDCAKE_HELM_CLEANUP_ON_FAIL:-false}"
 
 CHART_REPO="${POUNDCAKE_CHART_REPO:-}"
-CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
-VERSION_FILE="${POUNDCAKE_VERSION_FILE:-/etc/genestack/helm-chart-versions.yaml}"
+CHART_VERSION_OVERRIDE="${POUNDCAKE_CHART_VERSION:-}"
+VERSION_FILE="${POUNDCAKE_VERSION_FILE:-$DEFAULT_VERSION_FILE}"
 
 HELM_REGISTRY_USERNAME="${HELM_REGISTRY_USERNAME:-$FORK_OWNER}"
 HELM_REGISTRY_PASSWORD="${HELM_REGISTRY_PASSWORD:-}"
@@ -27,19 +31,81 @@ CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-true}"
 IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-noreply@local}"
 IMAGE_PULL_SECRET_ENABLED="${POUNDCAKE_IMAGE_PULL_SECRET_ENABLED:-true}"
 
-POUNDCAKE_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
-POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-latest}"
+APP_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
+IMAGE_TAG_OVERRIDE="${POUNDCAKE_IMAGE_TAG-}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-bakery}"
 STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
 STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
 
-EXTRA_ARGS=("$@")
+STACKSTORM_RELEASE_NAME="${POUNDCAKE_STACKSTORM_RELEASE_NAME:-stackstorm}"
+STACKSTORM_CHART_NAME="${POUNDCAKE_STACKSTORM_CHART_NAME:-stackstorm-ha}"
+STACKSTORM_CHART_REPO_URL="${POUNDCAKE_STACKSTORM_CHART_REPO_URL:-https://helm.stackstorm.com/}"
+STACKSTORM_VERSION_DEFAULT="${POUNDCAKE_STACKSTORM_CHART_VERSION:-1.1.0}"
+OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
+INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
+
+MARIADB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME:-mariadb-operator}"
+MARIADB_OPERATOR_NAMESPACE="${POUNDCAKE_MARIADB_OPERATOR_NAMESPACE:-mariadb-operator}"
+MARIADB_OPERATOR_CHART_NAME="${POUNDCAKE_MARIADB_OPERATOR_CHART_NAME:-mariadb-operator}"
+MARIADB_OPERATOR_CHART_REPO_URL="${POUNDCAKE_MARIADB_OPERATOR_CHART_REPO_URL:-https://mariadb-operator.github.io/mariadb-operator}"
+MARIADB_OPERATOR_VERSION_DEFAULT="${POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION:-25.10.4}"
+
+REDIS_OPERATOR_RELEASE_NAME="${POUNDCAKE_REDIS_OPERATOR_RELEASE_NAME:-redis-operator}"
+REDIS_OPERATOR_NAMESPACE="${POUNDCAKE_REDIS_OPERATOR_NAMESPACE:-redis-operator}"
+REDIS_OPERATOR_CHART_NAME="${POUNDCAKE_REDIS_OPERATOR_CHART_NAME:-redis-operator}"
+REDIS_OPERATOR_CHART_REPO_URL="${POUNDCAKE_REDIS_OPERATOR_CHART_REPO_URL:-https://ot-container-kit.github.io/helm-charts/}"
+REDIS_OPERATOR_VERSION_DEFAULT="${POUNDCAKE_REDIS_OPERATOR_CHART_VERSION:-0.23.0}"
+
+RABBITMQ_OPERATOR_RELEASE_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_RELEASE_NAME:-rabbitmq-cluster-operator}"
+RABBITMQ_OPERATOR_NAMESPACE="${POUNDCAKE_RABBITMQ_OPERATOR_NAMESPACE:-rabbitmq-system}"
+RABBITMQ_OPERATOR_CHART_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_NAME:-rabbitmq-cluster-operator}"
+RABBITMQ_OPERATOR_CHART_REPO_URL="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_REPO_URL:-https://charts.bitnami.com/bitnami}"
+RABBITMQ_OPERATOR_VERSION_DEFAULT="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_VERSION:-4.4.34}"
+
+GLOBAL_OVERRIDES_DIR="/etc/genestack/helm-configs/global_overrides"
+POUNDCAKE_CONFIG_DIR="/etc/genestack/helm-configs/poundcake"
+STACKSTORM_CONFIG_DIR="/etc/genestack/helm-configs/stackstorm"
+POUNDCAKE_BASE_OVERRIDES="/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml"
+STACKSTORM_BASE_OVERRIDES="/opt/genestack/base-helm-configs/stackstorm/stackstorm-helm-overrides.yaml"
+STACKSTORM_DEFAULT_OVERRIDES="${HELM_ROOT}/stackstorm/values-external-services.yaml"
+KUSTOMIZE_RENDERER="/etc/genestack/kustomize/kustomize.sh"
+KUSTOMIZE_OVERLAY_DIR="/etc/genestack/kustomize/poundcake/overlay"
+KUSTOMIZE_OVERLAY_ARG="poundcake/overlay"
+
+BAKERY_RACKSPACE_URL="${POUNDCAKE_BAKERY_RACKSPACE_URL:-}"
+BAKERY_RACKSPACE_USERNAME="${POUNDCAKE_BAKERY_RACKSPACE_USERNAME:-}"
+BAKERY_RACKSPACE_PASSWORD="${POUNDCAKE_BAKERY_RACKSPACE_PASSWORD:-}"
+BAKERY_RACKSPACE_SECRET_NAME="${POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME:-bakery-rackspace-core}"
+
+ROTATE_SECRETS=false
+VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
+SKIP_PREFLIGHT=false
+INTERACTIVE_BAKERY_CREDS=false
+POUNDCAKE_EXTRA_ARGS=()
+POST_RENDER_ARGS=()
+GLOBAL_OVERRIDE_ARGS=()
+POUNDCAKE_OVERRIDE_ARGS=()
+STACKSTORM_OVERRIDE_ARGS=()
 
 usage() {
-  cat <<EOF
+  cat <<EOF_USAGE
 Usage:
-  $(basename "$0") [helm upgrade/install args]
+  $(basename "$0") [options] [helm upgrade/install args]
+
+Options:
+  --mode <full|bakery-only>
+  --operators-mode <install-missing|verify|skip>
+  --skip-operators
+  --verify-operators
+  --skip-preflight
+  --validate
+  --rotate-secrets
+  --interactive-bakery-creds
+  --bakery-rackspace-url <url>
+  --bakery-rackspace-username <username>
+  --bakery-rackspace-password <password>
+  --bakery-rackspace-secret-name <name>
 
 Environment overrides:
   FORK_OWNER
@@ -69,8 +135,8 @@ Environment overrides:
 Examples:
   source ${PROJECT_ROOT}/install/set-env-helper.sh
   ${SCRIPT_DIR}/$(basename "$0")
-  ${SCRIPT_DIR}/$(basename "$0") -f /path/to/values.yaml
-EOF
+  ${SCRIPT_DIR}/$(basename "$0") --mode bakery-only -f /path/to/values.yaml
+EOF_USAGE
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -87,30 +153,122 @@ check_dependencies() {
   done
 }
 
-check_dependencies helm
-
-get_chart_version() {
-  local service=$1
-  local version_file=$2
-  if [[ -f "$version_file" ]]; then
-    grep "^[[:space:]]*${service}:" "$version_file" | sed "s/.*${service}: *//" | head -n1
+check_cluster_connection() {
+  if ! kubectl cluster-info >/dev/null 2>&1; then
+    echo "Error: cannot connect to Kubernetes cluster (kubectl cluster-info failed)." >&2
+    exit 1
   fi
 }
 
-if [[ -z "$CHART_REPO" ]]; then
-  CHART_SOURCE="$DEFAULT_LOCAL_CHART"
-else
-  CHART_SOURCE="$CHART_REPO"
-fi
+perform_preflight_checks() {
+  check_dependencies helm kubectl grep sed
+  check_cluster_connection
+}
 
-if [[ ! -e "$CHART_SOURCE" && "$CHART_SOURCE" != oci://* ]]; then
-  echo "Error: chart source '${CHART_SOURCE}' does not exist." >&2
-  exit 1
-fi
+crd_exists() {
+  local crd_name=$1
+  kubectl get crd "$crd_name" >/dev/null 2>&1
+}
 
-if [[ -z "$CHART_VERSION" ]]; then
-  CHART_VERSION="$(get_chart_version "poundcake" "$VERSION_FILE" || true)"
-fi
+install_or_verify_operator() {
+  local operator_key=$1
+  local crd_name=$2
+  local release_name=$3
+  local chart_name=$4
+  local chart_repo_url=$5
+  local chart_version=$6
+  local chart_namespace=$7
+
+  if crd_exists "$crd_name"; then
+    echo "Operator '${operator_key}' already present (CRD ${crd_name}); skipping install."
+    return 0
+  fi
+
+  case "$OPERATOR_MODE" in
+    skip)
+      echo "Operator mode is skip. Not installing '${operator_key}' (missing CRD ${crd_name})."
+      return 0
+      ;;
+    verify)
+      echo "Error: operator '${operator_key}' is missing (CRD ${crd_name})." >&2
+      echo "Set --operators-mode install-missing to auto-install missing operators." >&2
+      exit 1
+      ;;
+    install-missing)
+      echo "Installing missing operator '${operator_key}' (chart ${chart_name}:${chart_version})..."
+      local operator_cmd=(
+        helm upgrade --install "$release_name" "$chart_name"
+        --repo "$chart_repo_url"
+        --version "$chart_version"
+        --namespace "$chart_namespace"
+        --create-namespace
+        --timeout "$HELM_TIMEOUT"
+      )
+      if [[ "$HELM_WAIT" == "true" ]]; then
+        operator_cmd+=(--wait)
+      fi
+      if [[ "$HELM_ATOMIC" == "true" ]]; then
+        operator_cmd+=(--atomic)
+      fi
+      if [[ "$HELM_CLEANUP_ON_FAIL" == "true" ]]; then
+        operator_cmd+=(--cleanup-on-fail)
+      fi
+      "${operator_cmd[@]}"
+      ;;
+    *)
+      echo "Error: unsupported operators mode '${OPERATOR_MODE}'." >&2
+      exit 1
+      ;;
+  esac
+
+  if ! crd_exists "$crd_name"; then
+    echo "Error: operator '${operator_key}' install completed but CRD ${crd_name} is still missing." >&2
+    exit 1
+  fi
+}
+
+ensure_required_operators() {
+  echo "Operator mode: ${OPERATOR_MODE}"
+
+  if [[ "$OPERATOR_MODE" == "skip" ]]; then
+    echo "Skipping operator checks/installs."
+    return 0
+  fi
+
+  install_or_verify_operator \
+    "mariadb-operator" \
+    "mariadbs.k8s.mariadb.com" \
+    "$MARIADB_OPERATOR_RELEASE_NAME" \
+    "$MARIADB_OPERATOR_CHART_NAME" \
+    "$MARIADB_OPERATOR_CHART_REPO_URL" \
+    "$MARIADB_OPERATOR_VERSION" \
+    "$MARIADB_OPERATOR_NAMESPACE"
+
+  if [[ "$INSTALL_MODE" == "full" ]]; then
+    install_or_verify_operator \
+      "redis-operator" \
+      "redis.redis.opstreelabs.in" \
+      "$REDIS_OPERATOR_RELEASE_NAME" \
+      "$REDIS_OPERATOR_CHART_NAME" \
+      "$REDIS_OPERATOR_CHART_REPO_URL" \
+      "$REDIS_OPERATOR_VERSION" \
+      "$REDIS_OPERATOR_NAMESPACE"
+
+    install_or_verify_operator \
+      "rabbitmq-cluster-operator" \
+      "rabbitmqclusters.rabbitmq.com" \
+      "$RABBITMQ_OPERATOR_RELEASE_NAME" \
+      "$RABBITMQ_OPERATOR_CHART_NAME" \
+      "$RABBITMQ_OPERATOR_CHART_REPO_URL" \
+      "$RABBITMQ_OPERATOR_VERSION" \
+      "$RABBITMQ_OPERATOR_NAMESPACE"
+  fi
+}
+
+is_local_chart_source() {
+  local chart_ref=$1
+  [[ -e "$chart_ref" && "$chart_ref" != oci://* ]]
+}
 
 ensure_oci_registry_auth() {
   local chart_ref=$1
@@ -131,6 +289,240 @@ ensure_oci_registry_auth() {
   fi
 }
 
+get_chart_version() {
+  local service=$1
+  local version_file=$2
+
+  if [[ -f "$version_file" ]]; then
+    grep "^[[:space:]]*${service}:" "$version_file" | sed "s/.*${service}: *//" | head -n1
+  fi
+}
+
+get_local_poundcake_chart_version() {
+  local chart_path=$1
+  local chart_file="${chart_path%/}/Chart.yaml"
+  if [[ -f "$chart_file" ]]; then
+    grep -E "^[[:space:]]*version:" "$chart_file" | head -n1 | sed -E 's/^[[:space:]]*version:[[:space:]]*//'
+  fi
+}
+
+run_helm_validation() {
+  local chart_ref=$1
+  local version=$2
+  local namespace=$3
+  local release_name=$4
+  shift 4
+  local render_args=("$@")
+  local lint_args=()
+  local template_args=()
+  local skip_next=0
+
+  for arg in "${render_args[@]}"; do
+    template_args+=("$arg")
+
+    if [[ $skip_next -eq 1 ]]; then
+      skip_next=0
+      continue
+    fi
+
+    if [[ "$arg" == "--post-renderer" || "$arg" == "--post-renderer-args" ]]; then
+      skip_next=1
+      continue
+    fi
+
+    lint_args+=("$arg")
+  done
+
+  if is_local_chart_source "$chart_ref"; then
+    echo "Running helm lint (local chart)..."
+    helm lint "$chart_ref" "${lint_args[@]}"
+
+    echo "Running helm template --debug (local chart)..."
+    local template_cmd=(
+      helm template "$release_name" "$chart_ref"
+      --namespace "$namespace"
+      "${template_args[@]}"
+      --debug
+    )
+    "${template_cmd[@]}" >/dev/null
+    return
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+
+  helm pull "$chart_ref" --version "$version" --untar --untardir "$tmpdir"
+  local chart_dir
+  chart_dir="$(find "$tmpdir" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+
+  echo "Running helm lint..."
+  helm lint "$chart_dir" "${lint_args[@]}"
+
+  echo "Running helm template --debug..."
+  helm template "$release_name" "$chart_ref" \
+    --version "$version" \
+    --namespace "$namespace" \
+    "${template_args[@]}" \
+    --debug >/dev/null
+
+  rm -rf "$tmpdir"
+}
+
+rotate_chart_secrets() {
+  local namespace=$1
+  local release_name=$2
+
+  local secrets=(
+    "${release_name}-poundcake-admin"
+    "${release_name}-poundcake-stackstorm"
+    "${release_name}-stackstorm-ha-st2-apikeys"
+    "st2-st2-apikeys"
+    "st2-mongodb-secret"
+    "st2-rabbitmq"
+    "${release_name}-poundcake-mariadb-root"
+    "${release_name}-poundcake-mariadb-user"
+    "poundcake-st2-auth"
+  )
+
+  echo "Rotating selected chart-managed secrets (if present)..."
+  for s in "${secrets[@]}"; do
+    kubectl -n "$namespace" delete secret "$s" --ignore-not-found >/dev/null || true
+  done
+}
+
+apply_bakery_rackspace_secret() {
+  local should_manage_secret=false
+
+  if [[ "$INTERACTIVE_BAKERY_CREDS" == "true" ]]; then
+    should_manage_secret=true
+
+    local prompt_url_default="${BAKERY_RACKSPACE_URL:-https://ws.core.rackspace.com}"
+    local prompt_user_default="${BAKERY_RACKSPACE_USERNAME:-}"
+
+    read -r -p "Bakery Rackspace Core URL [${prompt_url_default}]: " prompt_url
+    BAKERY_RACKSPACE_URL="${prompt_url:-$prompt_url_default}"
+
+    read -r -p "Bakery Rackspace Core username [${prompt_user_default}]: " prompt_user
+    BAKERY_RACKSPACE_USERNAME="${prompt_user:-$prompt_user_default}"
+
+    read -r -s -p "Bakery Rackspace Core password: " prompt_password
+    echo
+    BAKERY_RACKSPACE_PASSWORD="$prompt_password"
+  fi
+
+  if [[ -n "${BAKERY_RACKSPACE_URL}${BAKERY_RACKSPACE_USERNAME}${BAKERY_RACKSPACE_PASSWORD}" ]]; then
+    should_manage_secret=true
+  fi
+
+  if [[ "$should_manage_secret" != "true" ]]; then
+    return 0
+  fi
+
+  if [[ -z "$BAKERY_RACKSPACE_URL" || -z "$BAKERY_RACKSPACE_USERNAME" || -z "$BAKERY_RACKSPACE_PASSWORD" ]]; then
+    echo "Error: Bakery Rackspace Core credentials require url, username, and password." >&2
+    echo "Use --interactive-bakery-creds or provide all of:" >&2
+    echo "  --bakery-rackspace-url --bakery-rackspace-username --bakery-rackspace-password" >&2
+    exit 1
+  fi
+
+  if ! kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
+    echo "Creating namespace '${NAMESPACE}' to store Bakery credential secret..."
+    kubectl create namespace "$NAMESPACE" >/dev/null
+  fi
+
+  echo "Applying Bakery Rackspace Core secret '${BAKERY_RACKSPACE_SECRET_NAME}' in namespace '${NAMESPACE}'..."
+  kubectl -n "$NAMESPACE" create secret generic "$BAKERY_RACKSPACE_SECRET_NAME" \
+    --from-literal=rackspace-core-url="$BAKERY_RACKSPACE_URL" \
+    --from-literal=rackspace-core-username="$BAKERY_RACKSPACE_USERNAME" \
+    --from-literal=rackspace-core-password="$BAKERY_RACKSPACE_PASSWORD" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  POUNDCAKE_OVERRIDE_ARGS+=("--set" "bakery.enabled=true")
+  POUNDCAKE_OVERRIDE_ARGS+=("--set" "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      INSTALL_MODE="$2"
+      shift 2
+      ;;
+    --rotate-secrets)
+      ROTATE_SECRETS=true
+      shift
+      ;;
+    --validate)
+      VALIDATE=true
+      shift
+      ;;
+    --skip-preflight)
+      SKIP_PREFLIGHT=true
+      shift
+      ;;
+    --operators-mode)
+      OPERATOR_MODE="$2"
+      shift 2
+      ;;
+    --skip-operators)
+      OPERATOR_MODE="skip"
+      shift
+      ;;
+    --verify-operators)
+      OPERATOR_MODE="verify"
+      shift
+      ;;
+    --interactive-bakery-creds|--interactive-bakery-credentials)
+      INTERACTIVE_BAKERY_CREDS=true
+      shift
+      ;;
+    --bakery-rackspace-url)
+      BAKERY_RACKSPACE_URL="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-username)
+      BAKERY_RACKSPACE_USERNAME="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-password)
+      BAKERY_RACKSPACE_PASSWORD="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-secret-name)
+      BAKERY_RACKSPACE_SECRET_NAME="$2"
+      shift 2
+      ;;
+    *)
+      POUNDCAKE_EXTRA_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ "$INSTALL_MODE" != "full" && "$INSTALL_MODE" != "bakery-only" ]]; then
+  echo "Error: invalid mode '$INSTALL_MODE'. Valid values: full, bakery-only" >&2
+  exit 1
+fi
+
+if [[ "$OPERATOR_MODE" != "install-missing" && "$OPERATOR_MODE" != "verify" && "$OPERATOR_MODE" != "skip" ]]; then
+  echo "Error: invalid operators mode '$OPERATOR_MODE'. Valid values: install-missing, verify, skip" >&2
+  exit 1
+fi
+
+if [[ -z "$CHART_REPO" ]]; then
+  CHART_REPO="$DEFAULT_LOCAL_CHART"
+fi
+
+if ! is_local_chart_source "$CHART_REPO" && [[ "$CHART_REPO" != oci://* ]]; then
+  echo "Error: chart source '${CHART_REPO}' is neither an existing filesystem path nor an OCI reference." >&2
+  exit 1
+fi
+
+if [[ "$SKIP_PREFLIGHT" != "true" ]]; then
+  perform_preflight_checks
+else
+  check_dependencies helm
+fi
+
 if [[ "$IMAGE_PULL_SECRET_ENABLED" == "true" && -z "$IMAGE_PULL_SECRET_NAME" ]]; then
   echo "Error: POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true requires POUNDCAKE_IMAGE_PULL_SECRET_NAME." >&2
   exit 1
@@ -143,8 +535,8 @@ if [[ "$CREATE_IMAGE_PULL_SECRET" == "true" ]]; then
     exit 1
   fi
 
-  image_registry="${POUNDCAKE_IMAGE_REPO%%/*}"
-  if [[ -z "$image_registry" || "$image_registry" == "$POUNDCAKE_IMAGE_REPO" ]]; then
+  image_registry="${APP_IMAGE_REPO%%/*}"
+  if [[ -z "$image_registry" || "$image_registry" == "$APP_IMAGE_REPO" ]]; then
     image_registry="ghcr.io"
   fi
 
@@ -164,58 +556,241 @@ else
   echo "Skipping image pull secret creation (POUNDCAKE_CREATE_IMAGE_PULL_SECRET=${CREATE_IMAGE_PULL_SECRET})."
 fi
 
-ensure_oci_registry_auth "$CHART_SOURCE"
+POUNDCAKE_VERSION_FILE_VALUE="$(get_chart_version "poundcake" "$VERSION_FILE" || true)"
+STACKSTORM_VERSION_FILE_VALUE="$(get_chart_version "stackstorm" "$VERSION_FILE" || true)"
+MARIADB_OPERATOR_VERSION="$(get_chart_version "mariadb-operator" "$VERSION_FILE" || true)"
+REDIS_OPERATOR_VERSION="$(get_chart_version "redis-operator" "$VERSION_FILE" || true)"
+RABBITMQ_OPERATOR_VERSION="$(get_chart_version "rabbitmq-cluster-operator" "$VERSION_FILE" || true)"
 
-HELM_CMD=(
-  helm upgrade --install "$RELEASE_NAME" "$CHART_SOURCE"
+LOCAL_POUNDCAKE_VERSION=""
+if is_local_chart_source "$CHART_REPO"; then
+  LOCAL_POUNDCAKE_VERSION="$(get_local_poundcake_chart_version "$CHART_REPO" || true)"
+fi
+
+POUNDCAKE_VERSION="${CHART_VERSION_OVERRIDE:-${POUNDCAKE_VERSION_FILE_VALUE:-$LOCAL_POUNDCAKE_VERSION}}"
+STACKSTORM_VERSION="${STACKSTORM_VERSION_FILE_VALUE:-$STACKSTORM_VERSION_DEFAULT}"
+MARIADB_OPERATOR_VERSION="${MARIADB_OPERATOR_VERSION:-$MARIADB_OPERATOR_VERSION_DEFAULT}"
+REDIS_OPERATOR_VERSION="${REDIS_OPERATOR_VERSION:-$REDIS_OPERATOR_VERSION_DEFAULT}"
+RABBITMQ_OPERATOR_VERSION="${RABBITMQ_OPERATOR_VERSION:-$RABBITMQ_OPERATOR_VERSION_DEFAULT}"
+
+if [[ -z "$POUNDCAKE_VERSION" ]]; then
+  echo "Error: could not determine PoundCake chart version. Set ${VERSION_FILE} key 'poundcake' or env POUNDCAKE_CHART_VERSION." >&2
+  exit 1
+fi
+
+if [[ -n "$IMAGE_TAG_OVERRIDE" ]]; then
+  EFFECTIVE_IMAGE_TAG="$IMAGE_TAG_OVERRIDE"
+else
+  EFFECTIVE_IMAGE_TAG="$POUNDCAKE_VERSION"
+fi
+
+STACKSTORM_API_URL="http://${STACKSTORM_RELEASE_NAME}-st2api.${NAMESPACE}.svc.cluster.local:9101"
+STACKSTORM_AUTH_URL="http://${STACKSTORM_RELEASE_NAME}-st2auth.${NAMESPACE}.svc.cluster.local:9100"
+
+echo "Installing PoundCake chart version: ${POUNDCAKE_VERSION}"
+echo "Installing StackStorm chart version: ${STACKSTORM_VERSION}"
+echo "Using image tags: ${EFFECTIVE_IMAGE_TAG}"
+echo "StackStorm image controls (compat only): ${STACKSTORM_IMAGE_REPO}:${STACKSTORM_IMAGE_TAG}"
+
+ensure_oci_registry_auth "$CHART_REPO"
+
+if [[ -f "$POUNDCAKE_BASE_OVERRIDES" ]]; then
+  POUNDCAKE_OVERRIDE_ARGS+=("-f" "$POUNDCAKE_BASE_OVERRIDES")
+fi
+
+if [[ -d "$GLOBAL_OVERRIDES_DIR" ]] && compgen -G "${GLOBAL_OVERRIDES_DIR}/*.yaml" >/dev/null; then
+  for yaml_file in "${GLOBAL_OVERRIDES_DIR}"/*.yaml; do
+    GLOBAL_OVERRIDE_ARGS+=("-f" "$yaml_file")
+  done
+fi
+
+POUNDCAKE_OVERRIDE_ARGS+=("${GLOBAL_OVERRIDE_ARGS[@]}")
+
+if [[ -d "$POUNDCAKE_CONFIG_DIR" ]] && compgen -G "${POUNDCAKE_CONFIG_DIR}/*.yaml" >/dev/null; then
+  for yaml_file in "${POUNDCAKE_CONFIG_DIR}"/*.yaml; do
+    POUNDCAKE_OVERRIDE_ARGS+=("-f" "$yaml_file")
+  done
+fi
+
+if [[ -f "$STACKSTORM_BASE_OVERRIDES" ]]; then
+  STACKSTORM_OVERRIDE_ARGS+=("-f" "$STACKSTORM_BASE_OVERRIDES")
+fi
+if [[ -f "$STACKSTORM_DEFAULT_OVERRIDES" ]]; then
+  STACKSTORM_OVERRIDE_ARGS+=("-f" "$STACKSTORM_DEFAULT_OVERRIDES")
+fi
+STACKSTORM_OVERRIDE_ARGS+=("${GLOBAL_OVERRIDE_ARGS[@]}")
+
+if [[ -d "$STACKSTORM_CONFIG_DIR" ]] && compgen -G "${STACKSTORM_CONFIG_DIR}/*.yaml" >/dev/null; then
+  for yaml_file in "${STACKSTORM_CONFIG_DIR}"/*.yaml; do
+    STACKSTORM_OVERRIDE_ARGS+=("-f" "$yaml_file")
+  done
+fi
+
+apply_bakery_rackspace_secret
+
+if [[ "$INSTALL_MODE" != "bakery-only" && -f "$KUSTOMIZE_RENDERER" && -d "$KUSTOMIZE_OVERLAY_DIR" ]]; then
+  POST_RENDER_ARGS+=("--post-renderer" "$KUSTOMIZE_RENDERER")
+  POST_RENDER_ARGS+=("--post-renderer-args" "$KUSTOMIZE_OVERLAY_ARG")
+fi
+
+if [[ "$ROTATE_SECRETS" == "true" ]]; then
+  rotate_chart_secrets "$NAMESPACE" "$RELEASE_NAME"
+fi
+
+VALIDATION_ARGS=(
+  --set "deployment.mode=${INSTALL_MODE}"
+  --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
+  --set "stackstorm.url=${STACKSTORM_API_URL}"
+  --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
+  --set "image.repository=${APP_IMAGE_REPO}"
+  --set "image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "ui.image.repository=${UI_IMAGE_REPO}"
+  --set "ui.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
+  --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  "${POUNDCAKE_OVERRIDE_ARGS[@]}"
+  "${POST_RENDER_ARGS[@]}"
+  "${POUNDCAKE_EXTRA_ARGS[@]}"
+)
+
+if [[ "$IMAGE_PULL_SECRET_ENABLED" == "true" ]]; then
+  VALIDATION_ARGS+=(--set "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
+fi
+
+if [[ "$VALIDATE" == "true" ]]; then
+  run_helm_validation "$CHART_REPO" "$POUNDCAKE_VERSION" "$NAMESPACE" "$RELEASE_NAME" "${VALIDATION_ARGS[@]}"
+fi
+
+POUNDCAKE_PHASE1_CMD=(
+  helm upgrade --install "$RELEASE_NAME" "$CHART_REPO"
   --namespace "$NAMESPACE"
   --create-namespace
   --timeout "$HELM_TIMEOUT"
-  --set "image.repository=${POUNDCAKE_IMAGE_REPO}"
-  --set "image.tag=${POUNDCAKE_IMAGE_TAG}"
+  --set "bootstrap.poundcakeBootstrap.enabled=false"
+  --set "deployment.mode=full"
+  --set "image.repository=${APP_IMAGE_REPO}"
+  --set "image.tag=${EFFECTIVE_IMAGE_TAG}"
   --set "ui.image.repository=${UI_IMAGE_REPO}"
-  --set "ui.image.tag=${POUNDCAKE_IMAGE_TAG}"
+  --set "ui.image.tag=${EFFECTIVE_IMAGE_TAG}"
   --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
-  --set "bakery.image.tag=${POUNDCAKE_IMAGE_TAG}"
+  --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
+  --set "stackstorm.url=${STACKSTORM_API_URL}"
+  --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
+  "${POUNDCAKE_OVERRIDE_ARGS[@]}"
+  "${POST_RENDER_ARGS[@]}"
 )
 
-if [[ "$CHART_SOURCE" == oci://* && -n "$CHART_VERSION" ]]; then
-  HELM_CMD+=(--version "$CHART_VERSION")
+if ! is_local_chart_source "$CHART_REPO"; then
+  POUNDCAKE_PHASE1_CMD+=(--version "$POUNDCAKE_VERSION")
+fi
+if [[ "$IMAGE_PULL_SECRET_ENABLED" == "true" ]]; then
+  POUNDCAKE_PHASE1_CMD+=(--set "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
 fi
 
+STACKSTORM_CMD=(
+  helm upgrade --install "$STACKSTORM_RELEASE_NAME" "$STACKSTORM_CHART_NAME"
+  --repo "$STACKSTORM_CHART_REPO_URL"
+  --version "$STACKSTORM_VERSION"
+  --namespace "$NAMESPACE"
+  --create-namespace
+  --timeout "$HELM_TIMEOUT"
+  "${STACKSTORM_OVERRIDE_ARGS[@]}"
+)
 if [[ "$HELM_WAIT" == "true" ]]; then
-  HELM_CMD+=(--wait)
+  STACKSTORM_CMD+=(--wait)
 fi
 if [[ "$HELM_ATOMIC" == "true" ]]; then
-  HELM_CMD+=(--atomic)
+  STACKSTORM_CMD+=(--atomic)
 fi
 if [[ "$HELM_CLEANUP_ON_FAIL" == "true" ]]; then
-  HELM_CMD+=(--cleanup-on-fail)
+  STACKSTORM_CMD+=(--cleanup-on-fail)
 fi
 
+POUNDCAKE_PHASE3_CMD=(
+  helm upgrade --install "$RELEASE_NAME" "$CHART_REPO"
+  --namespace "$NAMESPACE"
+  --create-namespace
+  --timeout "$HELM_TIMEOUT"
+  --set "bootstrap.poundcakeBootstrap.enabled=true"
+  --set "deployment.mode=full"
+  --set "image.repository=${APP_IMAGE_REPO}"
+  --set "image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "ui.image.repository=${UI_IMAGE_REPO}"
+  --set "ui.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
+  --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  --set "stackstorm.releaseName=${STACKSTORM_RELEASE_NAME}"
+  --set "stackstorm.url=${STACKSTORM_API_URL}"
+  --set "stackstorm.authUrl=${STACKSTORM_AUTH_URL}"
+  "${POUNDCAKE_OVERRIDE_ARGS[@]}"
+  "${POST_RENDER_ARGS[@]}"
+)
+if ! is_local_chart_source "$CHART_REPO"; then
+  POUNDCAKE_PHASE3_CMD+=(--version "$POUNDCAKE_VERSION")
+fi
+if [[ "$HELM_WAIT" == "true" ]]; then
+  POUNDCAKE_PHASE3_CMD+=(--wait)
+fi
+if [[ "$HELM_ATOMIC" == "true" ]]; then
+  POUNDCAKE_PHASE3_CMD+=(--atomic)
+fi
+if [[ "$HELM_CLEANUP_ON_FAIL" == "true" ]]; then
+  POUNDCAKE_PHASE3_CMD+=(--cleanup-on-fail)
+fi
 if [[ "$IMAGE_PULL_SECRET_ENABLED" == "true" ]]; then
-  HELM_CMD+=(--set "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
+  POUNDCAKE_PHASE3_CMD+=(--set "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
 fi
 
-echo "Installing PoundCake (legacy env installer)"
-echo "  Release: ${RELEASE_NAME}"
-echo "  Namespace: ${NAMESPACE}"
-echo "  Chart source: ${CHART_SOURCE}"
-if [[ "$CHART_SOURCE" == oci://* ]]; then
-  echo "  Chart version: ${CHART_VERSION:-"(not set)"}"
+BAKERY_ONLY_CMD=(
+  helm upgrade --install "$RELEASE_NAME" "$CHART_REPO"
+  --namespace "$NAMESPACE"
+  --create-namespace
+  --timeout "$HELM_TIMEOUT"
+  --set "deployment.mode=bakery-only"
+  --set "bakery.enabled=true"
+  --set "bakery.image.repository=${BAKERY_IMAGE_REPO}"
+  --set "bakery.image.tag=${EFFECTIVE_IMAGE_TAG}"
+  "${POUNDCAKE_OVERRIDE_ARGS[@]}"
+  "${POUNDCAKE_EXTRA_ARGS[@]}"
+)
+if ! is_local_chart_source "$CHART_REPO"; then
+  BAKERY_ONLY_CMD+=(--version "$POUNDCAKE_VERSION")
 fi
-echo "  PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
-echo "  UI image repo: ${UI_IMAGE_REPO}"
-echo "  Bakery image repo: ${BAKERY_IMAGE_REPO}"
-echo "  StackStorm image controls (compat): ${STACKSTORM_IMAGE_REPO}:${STACKSTORM_IMAGE_TAG}"
+if [[ "$HELM_WAIT" == "true" ]]; then
+  BAKERY_ONLY_CMD+=(--wait)
+fi
+if [[ "$HELM_ATOMIC" == "true" ]]; then
+  BAKERY_ONLY_CMD+=(--atomic)
+fi
+if [[ "$HELM_CLEANUP_ON_FAIL" == "true" ]]; then
+  BAKERY_ONLY_CMD+=(--cleanup-on-fail)
+fi
 if [[ "$IMAGE_PULL_SECRET_ENABLED" == "true" ]]; then
-  echo "  Image pull secret: enabled (${IMAGE_PULL_SECRET_NAME})"
-else
-  echo "  Image pull secret: disabled"
+  BAKERY_ONLY_CMD+=(--set "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
 fi
 
-echo "Executing Helm command:"
-printf '%q ' "${HELM_CMD[@]}" "${EXTRA_ARGS[@]}"
+if [[ "$INSTALL_MODE" == "bakery-only" ]]; then
+  echo "Mode: bakery-only"
+  printf '%q ' "${BAKERY_ONLY_CMD[@]}"
+  echo
+  "${BAKERY_ONLY_CMD[@]}"
+  exit 0
+fi
+
+ensure_required_operators
+
+echo "Phase 1/3: Install PoundCake prerequisites (external StackStorm mode)"
+printf '%q ' "${POUNDCAKE_PHASE1_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"
 echo
+"${POUNDCAKE_PHASE1_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"
 
-"${HELM_CMD[@]}" "${EXTRA_ARGS[@]}"
+echo "Phase 2/3: Install StackStorm as separate release"
+printf '%q ' "${STACKSTORM_CMD[@]}"
+echo
+"${STACKSTORM_CMD[@]}"
+
+echo "Phase 3/3: Reconcile PoundCake after StackStorm is ready"
+printf '%q ' "${POUNDCAKE_PHASE3_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"
+echo
+"${POUNDCAKE_PHASE3_CMD[@]}" "${POUNDCAKE_EXTRA_ARGS[@]}"

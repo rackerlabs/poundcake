@@ -224,14 +224,17 @@ output:
 ./bin/install-poundcake.sh -f /path/to/values.yaml
 ```
 
-Legacy env-based installer (opt-in, compatibility workflow):
+Legacy env-based installer (opt-in, full/bakery-only compatibility workflow):
 
 ```bash
 # Load fork/private-registry/local-chart defaults
 source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
 
-# Run the legacy env installer explicitly
+# Run the legacy env installer explicitly (supports full 3-phase flow)
 ./helm/bin/install-poundcake-legacy-env.sh
+
+# Bakery-only mode is also supported
+./helm/bin/install-poundcake-legacy-env.sh --mode bakery-only
 ```
 
 By default, the installer uses `--operators-mode install-missing` and will auto-install missing required operators:

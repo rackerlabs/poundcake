@@ -8,14 +8,17 @@ Preferred installer:
 ./bin/install-poundcake.sh
 ```
 
-Legacy env installer (explicit opt-in):
+Legacy env installer (explicit opt-in, full feature parity path):
 
 ```bash
 # Load environment defaults for fork/private registry/local chart workflows
 source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
 
-# Run legacy env-compatible installer
+# Run legacy env-compatible installer (full 3-phase PoundCake+StackStorm flow)
 ./helm/bin/install-poundcake-legacy-env.sh
+
+# Or bakery-only mode
+./helm/bin/install-poundcake-legacy-env.sh --mode bakery-only
 ```
 
 Operator behavior (default):
