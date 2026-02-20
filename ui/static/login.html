@@ -1,173 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PoundCake - Login</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            width: 100%;
-            max-width: 400px;
-        }
-        .login-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .login-header h1 {
-            font-size: 28px;
-            color: #2c3e50;
-            margin-bottom: 8px;
-        }
-        .login-header p {
-            color: #666;
-            font-size: 14px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        .btn-login {
-            width: 100%;
-            padding: 12px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        .btn-login:hover {
-            background: #5568d3;
-        }
-        .btn-login:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        .error-message {
-            display: none;
-            background: #fee;
-            color: #c33;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            border: 1px solid #fcc;
-        }
-        .error-message.show {
-            display: block;
-        }
-        .version-display {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            font-size: 12px;
-            color: rgba(255,255,255,0.8);
-            background: rgba(255,255,255,0.15);
-            padding: 6px 12px;
-            border-radius: 4px;
-            backdrop-filter: blur(10px);
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PoundCake | Login</title>
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/pages.css">
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-header">
-            <h1>PoundCake</h1>
-            <p>Auto-remediation Management</p>
-        </div>
-        <div id="error-message" class="error-message"></div>
-        <form id="login-form">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <button type="submit" class="btn-login">Login</button>
+  <main class="login-page" aria-label="PoundCake login">
+    <section class="login-shell">
+      <header class="login-banner">
+        <h1>PoundCake</h1>
+        <p>Remediation control plane login</p>
+      </header>
+
+      <div class="login-body">
+        <div class="login-error" id="login-error"></div>
+
+        <form id="login-form" novalidate>
+          <div class="form-field">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+          </div>
+
+          <div class="form-field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+          </div>
+
+          <div class="inline-actions mt-4">
+            <button class="btn primary" id="login-submit" type="submit">Login</button>
+          </div>
         </form>
-    </div>
+      </div>
+    </section>
+  </main>
 
-    <div class="version-display">v2.0.95</div>
-
-    <script>
-        const form = document.getElementById('login-form');
-        const errorMessage = document.getElementById('error-message');
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const submitBtn = form.querySelector('button[type="submit"]');
-
-            // Disable button and show loading state
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Logging in...';
-            errorMessage.classList.remove('show');
-
-            try {
-                const formData = new FormData();
-                formData.append('username', username);
-                formData.append('password', password);
-
-                const res = await fetch('/api/v1/auth/login', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await res.json();
-
-                if (res.ok) {
-                    // Redirect to UI on success
-                    window.location.href = data.redirect || '/';
-                } else {
-                    // Show error message
-                    errorMessage.textContent = data.detail || 'Invalid username or password';
-                    errorMessage.classList.add('show');
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Login';
-                }
-            } catch (err) {
-                errorMessage.textContent = 'An error occurred. Please try again.';
-                errorMessage.classList.add('show');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Login';
-            }
-        });
-    </script>
+  <script type="module" src="/assets/js/login.js"></script>
 </body>
 </html>

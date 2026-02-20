@@ -1,2546 +1,386 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PoundCake - Remediation Management</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        header { background: #2c3e50; color: white; padding: 20px; margin-bottom: 20px; }
-        header h1 { font-size: 24px; }
-        .header-stats { display: flex; gap: 20px; margin-top: 10px; font-size: 14px; }
-        .header-stats span { opacity: 0.9; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab { padding: 10px 20px; background: #ddd; border: none; cursor: pointer; border-radius: 4px; font-size: 14px; font-weight: 500; transition: all 0.2s; }
-        .tab:hover:not(.active) { background: #bbb; }
-        .tab.active { background: #3498db; color: white; }
-        .panel { display: none; background: white; padding: 20px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .panel.active { display: block; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #f8f9fa; font-weight: 600; }
-        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; }
-        .btn-primary { background: #3498db; color: white; }
-        .btn-danger { background: #e74c3c; color: white; }
-        .btn-success { background: #27ae60; color: white; }
-        .btn-sm { padding: 4px 8px; font-size: 12px; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-        .modal.active { display: flex; align-items: center; justify-content: center; }
-        .modal-content { background: white; padding: 20px; border-radius: 4px; width: 600px; max-height: 80vh; overflow-y: auto; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; }
-        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-        .form-group textarea { height: 200px; font-family: monospace; }
-        .status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
-        .status-received { background: #e3f2fd; color: #1565c0; }
-        .status-pending { background: #fff3e0; color: #ef6c00; }
-        .status-remediating { background: #fff3cd; color: #856404; }
-        .status-remediated { background: #d4edda; color: #155724; }
-        .status-resolved { background: #e8f5e9; color: #2e7d32; }
-        .status-success { background: #d4edda; color: #155724; }
-        .status-failed { background: #f8d7da; color: #721c24; }
-        .status-running { background: #fff3cd; color: #856404; }
-        .actions-list { max-height: 300px; overflow-y: auto; }
-        .action-item { padding: 10px; border: 1px solid #ddd; margin-bottom: 5px; border-radius: 4px; cursor: pointer; }
-        .action-item:hover { background: #f8f9fa; }
-        .action-item .pack { color: #666; font-size: 12px; }
-        pre { background: #f4f4f4; padding: 10px; border-radius: 4px; overflow-x: auto; }
-        .filter-bar { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
-        .filter-bar select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-        .auto-refresh { display: flex; align-items: center; gap: 5px; margin-left: auto; font-size: 14px; }
-        .stats-bar { display: flex; gap: 15px; margin-bottom: 15px; }
-        .stat-item { padding: 10px 15px; background: #f8f9fa; border-radius: 4px; }
-        .stat-item .label { font-size: 12px; color: #666; }
-        .stat-item .value { font-size: 20px; font-weight: 600; }
-        .expandable { cursor: pointer; }
-        .expandable:hover { background: #f8f9fa; }
-        .details-row { display: none; }
-        .details-row.active { display: table-row; }
-        .details-content { padding: 15px; background: #f8f9fa; }
-        .attempt-list { margin-top: 10px; }
-        .attempt-item { padding: 8px; border-left: 3px solid #ddd; margin-bottom: 5px; background: white; }
-        .attempt-item.success { border-color: #27ae60; }
-        .attempt-item.failed { border-color: #e74c3c; }
-        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px; }
-        .dashboard-card { background: #f8f9fa; padding: 20px; border-radius: 4px; border-left: 4px solid #3498db; }
-        .dashboard-card h3 { margin-bottom: 15px; font-size: 18px; color: #2c3e50; }
-        .dashboard-card.healthy { border-color: #27ae60; }
-        .dashboard-card.warning { border-color: #f39c12; }
-        .dashboard-card.error { border-color: #e74c3c; }
-        .metric-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd; }
-        .metric-row:last-child { border-bottom: none; }
-        .metric-label { color: #666; font-size: 14px; }
-        .metric-value { font-weight: 600; font-size: 16px; }
-        .health-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
-        .health-indicator.healthy { background: #27ae60; }
-        .health-indicator.warning { background: #f39c12; }
-        .health-indicator.error { background: #e74c3c; }
-        .health-indicator.unknown { background: #95a5a6; }
-        .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .status-badge.healthy { background: #27ae60; color: white; }
-        .status-badge.warning { background: #f39c12; color: white; }
-        .status-badge.error { background: #e74c3c; color: white; }
-        .dashboard-card.warning { border-left-color: #f39c12; }
-        .config-section { margin-bottom: 25px; }
-        .config-section h3 { margin-bottom: 15px; font-size: 18px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; }
-        .config-item { display: grid; grid-template-columns: 200px 1fr; padding: 12px; background: #f8f9fa; margin-bottom: 8px; border-radius: 4px; }
-        .config-item .key { font-weight: 600; color: #555; }
-        .config-item .value { color: #333; font-family: monospace; }
-        .activity-feed { max-height: 400px; overflow-y: auto; }
-        .activity-item { padding: 12px; border-left: 3px solid #3498db; margin-bottom: 8px; background: #f8f9fa; }
-        .activity-item.success { border-color: #27ae60; }
-        .activity-item.failed { border-color: #e74c3c; }
-        .activity-item .time { font-size: 12px; color: #666; }
-        .kv-pair { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; }
-        .kv-pair input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-        .kv-pair button { padding: 4px 8px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .version-display { font-size: 12px; color: rgba(255,255,255,0.8); margin-right: 15px; padding: 4px 10px; background: rgba(255,255,255,0.1); border-radius: 4px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PoundCake | Remediation Console</title>
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/pages.css">
 </head>
 <body>
-    <!-- Login Modal -->
-    <div id="login-modal" class="modal">
-        <div class="modal-content" style="max-width: 400px;">
-            <h2 style="margin-bottom: 20px;">PoundCake Login</h2>
-            <form id="login-form" onsubmit="handleLogin(event)">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" required autofocus>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" required>
-                </div>
-                <div id="login-error" style="color: #e74c3c; margin-bottom: 15px; display: none;"></div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
-            </form>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <h1>PoundCake Console</h1>
+          <p class="brand-subtitle" id="header-stats">Loading platform status...</p>
         </div>
-    </div>
-
-    <!-- Main Application (hidden until authenticated) -->
-    <div id="app-container" style="display: none;">
-    <header>
-        <div class="container">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h1>PoundCake - Remediation Management</h1>
-                    <div class="header-stats" id="header-stats"></div>
-                </div>
-                <div style="display: flex; align-items: center;">
-                    <span class="version-display" id="header-version">v2.0.95</span>
-                    <button class="btn" onclick="logout()" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">Logout</button>
-                </div>
-            </div>
+        <div class="topbar-actions">
+          <span class="header-version" id="header-version">v-</span>
+          <button class="btn ghost" id="logout-btn" type="button">Logout</button>
         </div>
+      </div>
     </header>
 
-    <div class="container" style="max-width: 95%; margin: 0 auto;">
-        <div class="tabs">
-            <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
-            <button class="tab" onclick="showTab('orders')">Alert Status</button>
-            <button class="tab" onclick="showTab('incident')">Incident Detail</button>
-            <button class="tab" onclick="showTab('suppressions')">Suppressions</button>
-            <button class="tab" onclick="showTab('ticketing')">Ticketing/Bakery</button>
-            <button class="tab" onclick="showTab('prometheus')">Prometheus Rules</button>
-            <button class="tab" onclick="showTab('mappings')">Mappings</button>
-            <button class="tab" onclick="showTab('actions')">StackStorm Actions</button>
-            <button class="tab" onclick="showTab('history')">Execution History</button>
+    <main class="page" aria-label="PoundCake application">
+      <nav class="nav-tabs" aria-label="Primary tabs">
+        <button class="tab-btn is-active" type="button" data-tab="dashboard">Dashboard</button>
+        <button class="tab-btn" type="button" data-tab="alerts">Alert Status</button>
+        <button class="tab-btn" type="button" data-tab="incident">Incident Detail</button>
+        <button class="tab-btn" type="button" data-tab="suppressions">Suppressions</button>
+        <button class="tab-btn" type="button" data-tab="ticketing">Ticketing</button>
+        <button class="tab-btn" type="button" data-tab="prometheus">Prometheus Rules</button>
+        <button class="tab-btn" type="button" data-tab="history">Execution History</button>
+      </nav>
+
+      <section id="tab-dashboard" class="panel is-active" aria-labelledby="dashboard-title">
+        <h2 class="section-title" id="dashboard-title">System Overview</h2>
+        <div class="grid cols-3" id="dashboard-metrics"></div>
+        <div class="grid cols-3 mt-4">
+          <article class="card">
+            <h3>Recent Activity</h3>
+            <div id="dashboard-activity"></div>
+          </article>
+          <article class="card">
+            <h3>Quick Stats</h3>
+            <div id="dashboard-quick-stats"></div>
+          </article>
+          <article class="card">
+            <h3>Platform Snapshot</h3>
+            <div id="dashboard-platform-summary"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="tab-alerts" class="panel" aria-labelledby="alerts-title">
+        <h2 class="section-title" id="alerts-title">Alert Status</h2>
+        <div class="filter-bar">
+          <label for="alerts-status-filter" class="muted">Processing</label>
+          <select id="alerts-status-filter">
+            <option value="">All</option>
+            <option value="new">New</option>
+            <option value="processing">Processing</option>
+            <option value="complete">Complete</option>
+            <option value="failed">Failed</option>
+            <option value="canceled">Canceled</option>
+          </select>
+          <button class="btn primary" type="button" id="alerts-refresh">Refresh</button>
+          <span class="spacer"></span>
+          <label class="inline-actions" for="alerts-auto-refresh">
+            <input type="checkbox" id="alerts-auto-refresh" checked>
+            <span>Auto-refresh (5s)</span>
+          </label>
         </div>
 
-        <div id="dashboard" class="panel active">
-            <h2 style="margin-bottom: 20px;">System Overview</h2>
-            <div class="dashboard-grid" id="dashboard-metrics"></div>
-            <div class="dashboard-grid">
-                <div class="dashboard-card">
-                    <h3>Recent Activity</h3>
-                    <div class="activity-feed" id="recent-activity"></div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Quick Stats</h3>
-                    <div id="quick-stats"></div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Platform Snapshot</h3>
-                    <div id="platform-summary"></div>
-                </div>
-            </div>
+        <div class="grid cols-3" id="alerts-stats"></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alert Name</th>
+                <th>Instance</th>
+                <th>Severity</th>
+                <th>Processing</th>
+                <th>Alert Status</th>
+                <th>Received</th>
+                <th>Counter</th>
+                <th>Ops</th>
+              </tr>
+            </thead>
+            <tbody id="alerts-table-body"></tbody>
+          </table>
         </div>
 
-        <div id="orders" class="panel">
-            <div class="filter-bar">
-                <select id="status-filter" onchange="loadAlerts()">
-                    <option value="">All Statuses</option>
-                    <option value="new">New</option>
-                    <option value="processing">Processing</option>
-                    <option value="complete">Complete</option>
-                    <option value="failed">Failed</option>
-                    <option value="canceled">Canceled</option>
+        <article class="card mt-4">
+          <h3>Incident Timeline</h3>
+          <div id="alerts-timeline"></div>
+        </article>
+      </section>
+
+      <section id="tab-incident" class="panel" aria-labelledby="incident-title">
+        <h2 class="section-title" id="incident-title">Incident Detail</h2>
+
+        <div class="filter-bar">
+          <input id="incident-order-id" type="number" min="1" placeholder="Order ID">
+          <button class="btn primary" type="button" id="incident-load-btn">Load Incident</button>
+          <span class="muted" id="incident-last-load"></span>
+        </div>
+
+        <div class="grid cols-2">
+          <article class="card">
+            <h3>Order</h3>
+            <div id="incident-order-summary"></div>
+          </article>
+          <article class="card">
+            <h3>Bakery</h3>
+            <div id="incident-bakery-summary"></div>
+          </article>
+        </div>
+
+        <div class="grid cols-2 mt-4">
+          <article class="card">
+            <h3>Dishes</h3>
+            <div id="incident-dishes"></div>
+          </article>
+          <article class="card">
+            <h3>Tasks</h3>
+            <div id="incident-tasks"></div>
+          </article>
+        </div>
+
+        <article class="card mt-4">
+          <h3>Full Timeline</h3>
+          <div id="incident-full-timeline"></div>
+        </article>
+      </section>
+
+      <section id="tab-suppressions" class="panel" aria-labelledby="suppressions-title">
+        <h2 class="section-title" id="suppressions-title">Alert Suppressions</h2>
+
+        <div class="filter-bar">
+          <label for="suppression-status-filter" class="muted">Status</label>
+          <select id="suppression-status-filter">
+            <option value="">All</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="canceled">Canceled</option>
+          </select>
+          <button class="btn primary" type="button" id="suppression-refresh">Refresh</button>
+        </div>
+
+        <div class="grid cols-2">
+          <article class="card">
+            <h3>Create Window</h3>
+            <div class="form-grid">
+              <div class="form-field full">
+                <label for="supp-name">Name</label>
+                <input id="supp-name" type="text" placeholder="Window name">
+              </div>
+              <div class="form-field full">
+                <label for="supp-reason">Reason</label>
+                <input id="supp-reason" type="text" placeholder="Reason (optional)">
+              </div>
+              <div class="form-field">
+                <label for="supp-starts-at">Starts At</label>
+                <input id="supp-starts-at" type="datetime-local">
+              </div>
+              <div class="form-field">
+                <label for="supp-ends-at">Ends At</label>
+                <input id="supp-ends-at" type="datetime-local">
+              </div>
+              <div class="form-field">
+                <label for="supp-scope">Scope</label>
+                <select id="supp-scope">
+                  <option value="matchers">Matchers</option>
+                  <option value="all">All alerts</option>
                 </select>
-                <button class="btn btn-primary btn-sm" onclick="loadAlerts()">Refresh</button>
-                <div class="auto-refresh">
-                    <input type="checkbox" id="auto-refresh" checked onchange="toggleAutoRefresh()">
-                    <label for="auto-refresh">Auto-refresh (5s)</label>
-                </div>
+              </div>
+              <div class="form-field">
+                <label>&nbsp;</label>
+                <label class="inline-actions" for="supp-summary-ticket">
+                  <input id="supp-summary-ticket" type="checkbox" checked>
+                  <span>Enable summary ticket</span>
+                </label>
+              </div>
             </div>
-            <div class="stats-bar" id="stats-bar"></div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Alert Name</th>
-                        <th>Instance</th>
-                        <th>Severity</th>
-                        <th>Processing</th>
-                        <th>Alert Status</th>
-                        <th>Received</th>
-                        <th>Counter</th>
-                        <th>Ops</th>
-                    </tr>
-                </thead>
-                <tbody id="orders-table"></tbody>
-            </table>
-            <div class="dashboard-card" style="margin-top: 15px;">
-                <h3>Incident Timeline</h3>
-                <div id="incident-timeline" class="activity-feed">
-                    <p style="color: #666; text-align: center;">Select an alert row to load timeline.</p>
-                </div>
+
+            <div class="mt-4">
+              <div class="row between mb-2">
+                <strong>Matchers</strong>
+                <button class="btn small ghost" id="supp-add-matcher" type="button">Add Matcher</button>
+              </div>
+              <div id="supp-matcher-list" class="stack"></div>
             </div>
+
+            <div class="inline-actions mt-4">
+              <button class="btn success" type="button" id="supp-create">Create Suppression</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>Suppressed Activity</h3>
+            <div id="suppressed-activity"></div>
+          </article>
         </div>
 
-        <div id="incident" class="panel">
-            <h2 style="margin-bottom: 15px;">Incident Detail</h2>
-            <div class="filter-bar">
-                <input type="number" id="incident-order-id" placeholder="Order ID" min="1">
-                <button class="btn btn-primary btn-sm" onclick="loadIncidentDetail()">Load Incident</button>
-                <span id="incident-last-load" style="font-size: 12px; color: #666;"></span>
-            </div>
-            <div class="dashboard-grid">
-                <div class="dashboard-card">
-                    <h3>Order</h3>
-                    <div id="incident-order-summary">No incident selected.</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Bakery</h3>
-                    <div id="incident-bakery-summary">No incident selected.</div>
-                </div>
-            </div>
-            <div class="dashboard-grid">
-                <div class="dashboard-card">
-                    <h3>Dishes</h3>
-                    <div class="activity-feed" id="incident-dishes"></div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Tasks</h3>
-                    <div class="activity-feed" id="incident-tasks"></div>
-                </div>
-            </div>
-            <div class="dashboard-card">
-                <h3>Full Timeline</h3>
-                <div class="activity-feed" id="incident-full-timeline"></div>
-            </div>
+        <div class="table-wrap mt-4">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Scope</th>
+                <th>Window</th>
+                <th>Suppressed</th>
+                <th>Ops</th>
+              </tr>
+            </thead>
+            <tbody id="supp-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-ticketing" class="panel" aria-labelledby="ticketing-title">
+        <h2 class="section-title" id="ticketing-title">Ticketing / Bakery</h2>
+
+        <div class="filter-bar">
+          <label for="ticketing-status-filter" class="muted">Status</label>
+          <input id="ticketing-status-filter" type="text" placeholder="pending, failed, created...">
+          <label for="ticketing-source-filter" class="muted">Source</label>
+          <select id="ticketing-source-filter">
+            <option value="">All</option>
+            <option value="order">order</option>
+            <option value="suppression_summary">suppression_summary</option>
+          </select>
+          <button class="btn primary" type="button" id="ticketing-refresh">Refresh</button>
         </div>
 
-        <div id="suppressions" class="panel">
-            <h2 style="margin-bottom: 15px;">Alert Suppressions</h2>
-            <div class="filter-bar">
-                <select id="suppression-status-filter" onchange="loadSuppressions()">
-                    <option value="">All Statuses</option>
-                    <option value="scheduled">Scheduled</option>
-                    <option value="active">Active</option>
-                    <option value="expired">Expired</option>
-                    <option value="canceled">Canceled</option>
-                </select>
-                <button class="btn btn-primary btn-sm" onclick="loadSuppressions()">Refresh</button>
-            </div>
-            <div class="dashboard-grid">
-                <div class="dashboard-card">
-                    <h3>Create Window</h3>
-                    <div class="form-group">
-                        <label>Name</label>
-                        <input id="supp-name" type="text" placeholder="Maintenance window">
-                    </div>
-                    <div class="form-group">
-                        <label>Reason</label>
-                        <input id="supp-reason" type="text" placeholder="Planned maintenance">
-                    </div>
-                    <div class="form-group">
-                        <label>Start (ISO)</label>
-                        <input id="supp-starts-at" type="text" placeholder="2026-02-20T12:00:00Z">
-                    </div>
-                    <div class="form-group">
-                        <label>End (ISO)</label>
-                        <input id="supp-ends-at" type="text" placeholder="2026-02-20T12:30:00Z">
-                    </div>
-                    <div class="form-group">
-                        <label>Scope</label>
-                        <select id="supp-scope">
-                            <option value="matchers">Matchers</option>
-                            <option value="all">All alerts</option>
-                        </select>
-                    </div>
-                    <label>Matchers</label>
-                    <div id="supp-matcher-list"></div>
-                    <button class="btn btn-primary btn-sm" type="button" onclick="addSuppressionMatcherRow()">Add Matcher</button>
-                    <button class="btn btn-success" onclick="createSuppression()">Create Suppression</button>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Suppression Activity</h3>
-                    <div class="activity-feed" id="suppressed-activity"></div>
-                </div>
-            </div>
-            <table style="margin-top: 15px;">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Status</th>
-                        <th>Scope</th>
-                        <th>Window</th>
-                        <th>Total Suppressed</th>
-                        <th>Ops</th>
-                    </tr>
-                </thead>
-                <tbody id="suppressions-table"></tbody>
-            </table>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Reference</th>
+                <th>Ticket ID</th>
+                <th>Operation ID</th>
+                <th>Status</th>
+                <th>Updated</th>
+                <th>Ops</th>
+              </tr>
+            </thead>
+            <tbody id="ticketing-table-body"></tbody>
+          </table>
         </div>
 
-        <div id="ticketing" class="panel">
-            <h2 style="margin-bottom: 15px;">Bakery Ticketing Operations</h2>
-            <div class="filter-bar">
-                <select id="ticketing-source-filter">
-                    <option value="">all sources</option>
-                    <option value="order">order</option>
-                    <option value="suppression_summary">suppression_summary</option>
-                </select>
-                <input type="text" id="ticketing-status-filter" placeholder="status filter (optional)">
-                <button class="btn btn-primary btn-sm" onclick="loadBakeryTicketing()">Refresh</button>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Source</th>
-                        <th>Reference</th>
-                        <th>Ticket ID</th>
-                        <th>Operation ID</th>
-                        <th>Status</th>
-                        <th>Updated</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody id="ticketing-table"></tbody>
-            </table>
+        <article class="card mt-4">
+          <h3>Details</h3>
+          <div id="ticketing-details" class="details-panel muted">Select a record to view details.</div>
+        </article>
+      </section>
+
+      <section id="tab-prometheus" class="panel" aria-labelledby="prometheus-title">
+        <div class="row between section-title">
+          <h2 id="prometheus-title">Prometheus Rules</h2>
+          <span class="badge" id="prom-persistence-status">Loading...</span>
         </div>
 
-        <div id="prometheus" class="panel">
-            <div class="filter-bar">
-                <input type="text" id="prom-search" placeholder="Search orders..." style="width: 250px;" oninput="loadPrometheusRules()">
-                <select id="prom-state-filter" onchange="loadPrometheusRules()">
-                    <option value="">All States</option>
-                    <option value="firing">Firing</option>
-                    <option value="pending">Pending</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-                <button class="btn btn-primary btn-sm" onclick="loadPrometheusRules()">Refresh</button>
-                <button class="btn btn-success btn-sm" onclick="createPrometheusRule()">Create Alert</button>
-                <span id="persistence-status" style="margin-left: 10px; font-size: 12px; color: #666;"></span>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Alert Name</th>
-                        <th>Query</th>
-                        <th>Duration</th>
-                        <th>State</th>
-                        <th>Group</th>
-                        <th>Operations</th>
-                    </tr>
-                </thead>
-                <tbody id="prometheus-table"></tbody>
-            </table>
+        <div class="filter-bar">
+          <label for="prom-state-filter" class="muted">State</label>
+          <select id="prom-state-filter">
+            <option value="">All</option>
+            <option value="firing">Firing</option>
+            <option value="pending">Pending</option>
+            <option value="inactive">Inactive</option>
+            <option value="unknown">Unknown</option>
+          </select>
+          <input id="prom-search" type="text" placeholder="Search name/query/group/source">
+          <button class="btn primary" type="button" id="prom-refresh">Refresh</button>
+          <button class="btn success" type="button" id="prom-create">Create Rule</button>
         </div>
 
-        <div id="mappings" class="panel">
-            <div style="margin-bottom: 15px;">
-                <button class="btn btn-primary" onclick="showCreateModal()">Create Mapping</button>
-                <button class="btn btn-success" onclick="exportMappings()">Export YAML</button>
-                <button class="btn" onclick="showImportModal()">Import YAML</button>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Alert Name</th>
-                        <th>Handler</th>
-                        <th>Actions</th>
-                        <th>Operations</th>
-                    </tr>
-                </thead>
-                <tbody id="mappings-table"></tbody>
-            </table>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Group</th>
+                <th>Duration</th>
+                <th>Source</th>
+                <th>State</th>
+                <th>Query</th>
+                <th>Ops</th>
+              </tr>
+            </thead>
+            <tbody id="prom-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-history" class="panel" aria-labelledby="history-title">
+        <div class="row between section-title">
+          <h2 id="history-title">Execution History</h2>
+          <button class="btn primary" type="button" id="history-refresh">Refresh</button>
         </div>
 
-        <div id="actions" class="panel">
-            <div style="margin-bottom: 15px;">
-                <button class="btn btn-primary" onclick="showCreateActionModal()">Create Action</button>
-                <select id="pack-filter" onchange="loadActions()" style="margin-left: 10px;">
-                    <option value="">All Packs</option>
-                </select>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Action Reference</th>
-                        <th>Description</th>
-                        <th>Pack</th>
-                        <th>Operations</th>
-                    </tr>
-                </thead>
-                <tbody id="actions-table"></tbody>
-            </table>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alert / Recipe</th>
+                <th>Action</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Execution ID</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-root" id="prom-modal-root" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prom-modal-title">
+      <h2 id="prom-modal-title">Rule</h2>
+      <form id="prom-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="prom-name">Rule Name</label>
+            <input id="prom-name" type="text" required>
+          </div>
+          <div class="form-field">
+            <label for="prom-group">Group Name</label>
+            <input id="prom-group" type="text" required>
+          </div>
+          <div class="form-field full">
+            <label for="prom-file">CRD Name or File Name</label>
+            <input id="prom-file" type="text" required>
+          </div>
+          <div class="form-field full">
+            <label for="prom-expr">PromQL Expression</label>
+            <textarea id="prom-expr" rows="6" required></textarea>
+          </div>
+          <div class="form-field">
+            <label for="prom-for">Duration (e.g. 5m)</label>
+            <input id="prom-for" type="text" placeholder="5m">
+          </div>
+          <div class="form-field full">
+            <label for="prom-labels">Labels (JSON object)</label>
+            <textarea id="prom-labels" rows="5" placeholder='{"severity":"warning"}'></textarea>
+          </div>
+          <div class="form-field full">
+            <label for="prom-annotations">Annotations (JSON object)</label>
+            <textarea id="prom-annotations" rows="5" placeholder='{"summary":"..."}'></textarea>
+          </div>
         </div>
 
-        <div id="history" class="panel">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Alert</th>
-                        <th>Action</th>
-                        <th>Status</th>
-                        <th>Started</th>
-                        <th>Execution ID</th>
-                    </tr>
-                </thead>
-                <tbody id="history-table"></tbody>
-            </table>
+        <div class="inline-actions mt-4 justify-end">
+          <button class="btn ghost" type="button" id="prom-modal-cancel">Cancel</button>
+          <button class="btn primary" type="submit" id="prom-modal-save">Save Rule</button>
         </div>
+      </form>
     </div>
+  </div>
 
-    <!-- Create/Edit Modal -->
-    <div id="edit-modal" class="modal">
-        <div class="modal-content">
-            <h3 id="modal-title">Create Mapping</h3>
-            <form id="mapping-form" onsubmit="saveMapping(event)">
-                <div class="form-group">
-                    <label>Alert Name</label>
-                    <input type="text" id="order-name" required>
-                </div>
-                <div class="form-group">
-                    <label>Configuration (YAML)</label>
-                    <textarea id="mapping-config" required></textarea>
-                </div>
-                <div style="text-align: right;">
-                    <button type="button" class="btn" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save</button>
-                </div>
-            </form>
-        </div>
+  <div class="confirm-overlay" id="confirm-overlay" aria-hidden="true">
+    <div class="confirm-box" role="dialog" aria-modal="true">
+      <p class="confirm-message" id="confirm-message">Are you sure?</p>
+      <div class="inline-actions justify-end">
+        <button class="btn ghost" id="confirm-cancel" type="button">Cancel</button>
+        <button class="btn danger" id="confirm-proceed" type="button">Confirm</button>
+      </div>
     </div>
+  </div>
 
-    <!-- Import Modal -->
-    <div id="import-modal" class="modal">
-        <div class="modal-content">
-            <h3>Import Mappings</h3>
-            <form onsubmit="importMappings(event)">
-                <div class="form-group">
-                    <label>YAML Content</label>
-                    <textarea id="import-yaml" required></textarea>
-                </div>
-                <div class="form-group">
-                    <label><input type="checkbox" id="import-overwrite"> Overwrite existing</label>
-                </div>
-                <div style="text-align: right;">
-                    <button type="button" class="btn" onclick="closeImportModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Import</button>
-                </div>
-            </form>
-        </div>
-    </div>
+  <div class="toast-wrap" id="toast-wrap" aria-live="polite" aria-atomic="true"></div>
 
-    <!-- Action Detail Modal -->
-    <div id="action-modal" class="modal">
-        <div class="modal-content">
-            <h3 id="action-title">Action Details</h3>
-            <pre id="action-details"></pre>
-            <div style="text-align: right; margin-top: 15px;">
-                <button class="btn btn-primary" onclick="useAction()">Use in Mapping</button>
-                <button class="btn" onclick="closeActionModal()">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Action Modal -->
-    <div id="edit-action-modal" class="modal">
-        <div class="modal-content">
-            <h3 id="action-modal-title">Edit Action</h3>
-            <form id="action-form" onsubmit="saveAction(event)">
-                <div class="form-group">
-                    <label>Action Reference (pack.action)</label>
-                    <input type="text" id="action-ref" required>
-                </div>
-                <div class="form-group">
-                    <label>Action Definition (JSON)</label>
-                    <textarea id="action-data" required style="height: 400px;"></textarea>
-                </div>
-                <div style="text-align: right;">
-                    <button type="button" class="btn" onclick="closeEditActionModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Edit Prometheus Rule Modal -->
-    <div id="edit-rule-modal" class="modal">
-        <div class="modal-content" style="width: 800px;">
-            <h3 id="rule-modal-title">Edit Prometheus Rule</h3>
-            <form id="rule-form" onsubmit="savePrometheusRule(event)">
-                <div class="form-group">
-                    <label>Alert Name</label>
-                    <input type="text" id="rule-name" required>
-                </div>
-                <div class="form-group">
-                    <label>Group Name</label>
-                    <input type="text" id="rule-group" required>
-                </div>
-                <div class="form-group">
-                    <label>File Name</label>
-                    <input type="text" id="rule-file" required>
-                </div>
-                <div class="form-group">
-                    <label>PromQL Expression</label>
-                    <div style="margin-bottom: 10px;">
-                        <button type="button" class="btn btn-sm" id="mode-basic" onclick="setPromQLMode('basic')">Basic</button>
-                        <button type="button" class="btn btn-sm" id="mode-advanced" onclick="setPromQLMode('advanced')">Advanced</button>
-                        <button type="button" class="btn btn-sm" id="mode-raw" onclick="setPromQLMode('raw')">Raw PromQL</button>
-                    </div>
-
-                    <!-- Basic Builder Mode -->
-                    <div id="promql-basic-builder" style="display: none; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px;">
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Metric</label>
-                            <input type="text" id="basic-metric-search" placeholder="Search metrics..." style="width: 100%; margin-bottom: 5px;" oninput="filterMetrics()">
-                            <select id="basic-metric" style="width: 100%;" onchange="onMetricChange()">
-                                <option value="">Select a metric...</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Labels (Filters)</label>
-                            <div id="basic-labels-container"></div>
-                            <button type="button" class="btn btn-sm" onclick="addBasicLabelFilter()" style="margin-top: 5px;">+ Add Label Filter</button>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Comparison</label>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <select id="basic-operator" style="flex: 0 0 100px;">
-                                    <option value=">">></option>
-                                    <option value="<"><</option>
-                                    <option value="==">==</option>
-                                    <option value="!=">!=</option>
-                                    <option value=">=">=</option>
-                                    <option value="<="><=</option>
-                                </select>
-                                <input type="text" id="basic-threshold" placeholder="Threshold value" style="flex: 1;">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Advanced Builder Mode -->
-                    <div id="promql-advanced-builder" style="display: none; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px;">
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Function (Optional)</label>
-                            <select id="advanced-function" style="width: 100%;" onchange="updatePromQLPreview()">
-                                <option value="">None</option>
-                                <option value="rate">rate() - Calculate per-second rate</option>
-                                <option value="irate">irate() - Instant rate</option>
-                                <option value="increase">increase() - Total increase</option>
-                                <option value="delta">delta() - Difference</option>
-                                <option value="deriv">deriv() - Derivative</option>
-                                <option value="avg_over_time">avg_over_time() - Average over time</option>
-                                <option value="min_over_time">min_over_time() - Minimum over time</option>
-                                <option value="max_over_time">max_over_time() - Maximum over time</option>
-                                <option value="sum_over_time">sum_over_time() - Sum over time</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 10px;" id="advanced-range-container" style="display: none;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Range (for rate/increase functions)</label>
-                            <input type="text" id="advanced-range" placeholder="e.g., 5m" style="width: 150px;">
-                            <small style="color: #666; display: block; margin-top: 3px;">Examples: 30s, 5m, 1h</small>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Metric</label>
-                            <input type="text" id="advanced-metric-search" placeholder="Search metrics..." style="width: 100%; margin-bottom: 5px;" oninput="filterMetricsAdvanced()">
-                            <select id="advanced-metric" style="width: 100%;" onchange="onMetricChangeAdvanced()">
-                                <option value="">Select a metric...</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Labels (Filters)</label>
-                            <div id="advanced-labels-container"></div>
-                            <button type="button" class="btn btn-sm" onclick="addAdvancedLabelFilter()" style="margin-top: 5px;">+ Add Label Filter</button>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Aggregation (Optional)</label>
-                            <div style="display: flex; gap: 10px; margin-bottom: 5px;">
-                                <select id="advanced-aggregation" style="flex: 1;" onchange="updatePromQLPreview()">
-                                    <option value="">None</option>
-                                    <option value="sum">sum - Sum values</option>
-                                    <option value="avg">avg - Average values</option>
-                                    <option value="min">min - Minimum value</option>
-                                    <option value="max">max - Maximum value</option>
-                                    <option value="count">count - Count metrics</option>
-                                    <option value="stddev">stddev - Standard deviation</option>
-                                    <option value="stdvar">stdvar - Standard variance</option>
-                                </select>
-                            </div>
-                            <div id="advanced-grouping-container" style="display: none;">
-                                <label style="display: block; margin: 5px 0; font-size: 0.9em;">Group by labels (comma-separated):</label>
-                                <input type="text" id="advanced-grouping" placeholder="e.g., instance, job" style="width: 100%;" oninput="updatePromQLPreview()">
-                            </div>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 10px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Comparison</label>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <select id="advanced-operator" style="flex: 0 0 100px;" onchange="updatePromQLPreview()">
-                                    <option value=">">></option>
-                                    <option value="<"><</option>
-                                    <option value="==">==</option>
-                                    <option value="!=">!=</option>
-                                    <option value=">=">=</option>
-                                    <option value="<="><=</option>
-                                </select>
-                                <input type="text" id="advanced-threshold" placeholder="Threshold value" style="flex: 1;" oninput="updatePromQLPreview()">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- PromQL Preview (shown in builder modes) -->
-                    <div id="promql-preview-container" style="display: none; margin-bottom: 10px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Generated PromQL:</label>
-                        <div style="background: #2d2d2d; color: #f8f8f2; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 13px; overflow-x: auto;" id="promql-preview"></div>
-                    </div>
-
-                    <!-- Raw PromQL Mode (original textarea) -->
-                    <div id="promql-raw-editor" style="display: none;">
-                        <textarea id="rule-expr" required style="height: 80px; font-family: monospace; width: 100%;" placeholder="up == 0"></textarea>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Duration (for)</label>
-                    <input type="text" id="rule-for" placeholder="5m" style="width: 200px;">
-                    <small style="color: #666; display: block; margin-top: 5px;">Examples: 30s, 5m, 1h, 2h30m</small>
-                </div>
-
-                <div class="form-group">
-                    <label>Labels</label>
-                    <div id="rule-labels-container"></div>
-                    <button type="button" class="btn btn-sm" onclick="addRuleLabelField()" style="margin-top: 5px;">+ Add Label</button>
-                </div>
-
-                <div class="form-group">
-                    <label>Annotations</label>
-                    <div id="rule-annotations-container"></div>
-                    <button type="button" class="btn btn-sm" onclick="addRuleAnnotationField()" style="margin-top: 5px;">+ Add Annotation</button>
-                </div>
-
-                <div style="text-align: right; margin-top: 20px;">
-                    <button type="button" class="btn" onclick="closeEditRuleModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="save-rule-btn">Save Rule</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        let currentAction = null;
-        let editMode = false;
-        let editActionMode = false;
-        let autoRefreshInterval = null;
-        let currentIncidentOrderId = null;
-        let latestBakeryRows = [];
-
-        function order(message) {
-            alert(message);
-        }
-
-        async function fetchJson(url) {
-            const res = await fetch(url);
-            if (!res.ok) {
-                throw new Error(`${url} failed (${res.status})`);
-            }
-            return await res.json();
-        }
-
-        async function fetchJsonOrDefault(url, fallback) {
-            try {
-                return await fetchJson(url);
-            } catch (error) {
-                console.warn(`Failed to fetch ${url}:`, error);
-                return fallback;
-            }
-        }
-
-        function showTab(tab) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            document.querySelector(`[onclick="showTab('${tab}')"]`).classList.add('active');
-            document.getElementById(tab).classList.add('active');
-
-            if (tab === 'dashboard') loadDashboard();
-            if (tab === 'orders') { loadAlerts(); loadStats(); }
-            if (tab === 'incident' && currentIncidentOrderId) loadIncidentDetail(currentIncidentOrderId);
-            if (tab === 'suppressions') {
-                if (document.querySelectorAll('#supp-matcher-list .kv-pair').length === 0) {
-                    addSuppressionMatcherRow();
-                }
-                loadSuppressions();
-                loadSuppressedActivity();
-            }
-            if (tab === 'ticketing') loadBakeryTicketing();
-            if (tab === 'prometheus') loadPrometheusRules();
-            if (tab === 'mappings') loadMappings();
-            if (tab === 'actions') { loadPacks(); loadActions(); }
-            if (tab === 'history') loadHistory();
-        }
-
-        function getIncidentOrderIdFromUrl() {
-            const params = new URLSearchParams(window.location.search);
-            const raw = params.get('incident_order_id');
-            const parsed = Number(raw || 0);
-            return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-        }
-
-        function updateIncidentUrlParam(orderId = null) {
-            const url = new URL(window.location.href);
-            if (orderId && Number(orderId) > 0) {
-                url.searchParams.set('incident_order_id', String(orderId));
-            } else {
-                url.searchParams.delete('incident_order_id');
-            }
-            window.history.replaceState({}, '', url.toString());
-        }
-
-        async function loadSuppressions() {
-            const status = document.getElementById('suppression-status-filter').value;
-            const url = status ? `/api/v1/suppressions?status=${status}` : '/api/v1/suppressions';
-            const res = await fetch(url);
-            const rows = await res.json();
-            const tbody = document.getElementById('suppressions-table');
-            tbody.innerHTML = '';
-
-            if (!Array.isArray(rows) || rows.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No suppressions found</td></tr>';
-                return;
-            }
-
-            for (const item of rows) {
-                const statsRes = await fetch(`/api/v1/suppressions/${item.id}/stats`);
-                const stats = statsRes.ok ? await statsRes.json() : { total_suppressed: 0 };
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${item.id}</td>
-                        <td><strong>${item.name}</strong><br><small>${item.reason || ''}</small></td>
-                        <td>${item.status}</td>
-                        <td>${item.scope}</td>
-                        <td>${new Date(item.starts_at).toLocaleString()}<br>${new Date(item.ends_at).toLocaleString()}</td>
-                        <td>${stats.total_suppressed || 0}</td>
-                        <td>
-                            <button class="btn btn-danger btn-sm" onclick="cancelSuppression(${item.id})">Cancel</button>
-                        </td>
-                    </tr>
-                `;
-            }
-        }
-
-        function addSuppressionMatcherRow(defaults = {}) {
-            const list = document.getElementById('supp-matcher-list');
-            const row = document.createElement('div');
-            row.className = 'kv-pair';
-            row.innerHTML = `
-                <input type="text" class="supp-match-key" placeholder="label key (e.g. alertname)" value="${defaults.label_key || ''}">
-                <select class="supp-match-operator">
-                    <option value="eq">eq</option>
-                    <option value="neq">neq</option>
-                    <option value="regex">regex</option>
-                    <option value="nregex">nregex</option>
-                    <option value="exists">exists</option>
-                    <option value="not_exists">not_exists</option>
-                </select>
-                <input type="text" class="supp-match-value" placeholder="value (optional for exists/not_exists)" value="${defaults.value || ''}">
-                <button type="button" onclick="this.parentElement.remove()">X</button>
-            `;
-            list.appendChild(row);
-            const operatorSelect = row.querySelector('.supp-match-operator');
-            if (defaults.operator) operatorSelect.value = defaults.operator;
-        }
-
-        async function createSuppression() {
-            const name = document.getElementById('supp-name').value.trim();
-            const reason = document.getElementById('supp-reason').value.trim();
-            const startsAt = document.getElementById('supp-starts-at').value.trim();
-            const endsAt = document.getElementById('supp-ends-at').value.trim();
-            const scope = document.getElementById('supp-scope').value;
-
-            if (!name || !startsAt || !endsAt) {
-                order('Name, starts_at, and ends_at are required');
-                return;
-            }
-
-            const body = {
-                name,
-                reason: reason || null,
-                starts_at: startsAt,
-                ends_at: endsAt,
-                scope,
-                created_by: 'ui',
-                summary_ticket_enabled: true,
-                enabled: true,
-                matchers: []
-            };
-
-            if (scope === 'matchers') {
-                const rows = Array.from(document.querySelectorAll('#supp-matcher-list .kv-pair'));
-                const matchers = rows.map(row => {
-                    const labelKey = row.querySelector('.supp-match-key')?.value?.trim();
-                    const operator = row.querySelector('.supp-match-operator')?.value;
-                    const value = row.querySelector('.supp-match-value')?.value?.trim();
-                    return {
-                        label_key: labelKey,
-                        operator,
-                        value: value || null,
-                    };
-                }).filter(m => m.label_key);
-                if (matchers.length === 0) {
-                    order('At least one matcher is required when scope=matchers');
-                    return;
-                }
-                body.matchers = matchers;
-            }
-
-            const res = await fetch('/api/v1/suppressions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-
-            if (!res.ok) {
-                const err = await res.text();
-                order(`Failed to create suppression: ${err}`);
-                return;
-            }
-
-            await loadSuppressions();
-            await loadSuppressedActivity();
-            await loadDashboard();
-        }
-
-        async function cancelSuppression(suppressionId) {
-            const res = await fetch(`/api/v1/suppressions/${suppressionId}/cancel`, { method: 'POST' });
-            if (!res.ok) {
-                order('Failed to cancel suppression');
-                return;
-            }
-            await loadSuppressions();
-            await loadDashboard();
-        }
-
-        async function loadSuppressedActivity() {
-            const res = await fetch('/api/v1/activity/suppressed?limit=30');
-            const data = await res.json();
-            const container = document.getElementById('suppressed-activity');
-            if (!Array.isArray(data) || data.length === 0) {
-                container.innerHTML = '<p style="color: #666; text-align: center;">No suppressed activity</p>';
-                return;
-            }
-            container.innerHTML = data.map(item => `
-                <div class="activity-item">
-                    <div><strong>${item.alertname || 'Unknown'}</strong> (${item.severity || 'unknown'})</div>
-                    <div>Suppression ID: ${item.suppression_id} | ${item.status}</div>
-                    <div class="time">${new Date(item.received_at).toLocaleString()}</div>
-                </div>
-            `).join('');
-        }
-
-        async function loadBakeryTicketing() {
-            const status = document.getElementById('ticketing-status-filter').value.trim();
-            const source = document.getElementById('ticketing-source-filter').value.trim();
-            const url = status ? `/api/v1/ticketing/bakery?status=${encodeURIComponent(status)}` : '/api/v1/ticketing/bakery';
-            const res = await fetch(url);
-            let data = await res.json();
-            if (source) {
-                data = (Array.isArray(data) ? data : []).filter(item => item.source === source);
-            }
-            latestBakeryRows = Array.isArray(data) ? data : [];
-            const tbody = document.getElementById('ticketing-table');
-            tbody.innerHTML = '';
-            if (!Array.isArray(data) || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No Bakery records found</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map((item, idx) => `
-                <tr>
-                    <td>${item.source}</td>
-                    <td>${item.reference_id}</td>
-                    <td>${item.ticket_id || '-'}</td>
-                    <td>${item.operation_id || '-'}</td>
-                    <td>${item.status || '-'}</td>
-                    <td>${item.updated_at ? new Date(item.updated_at).toLocaleString() : '-'}</td>
-                    <td><button class="btn btn-sm" onclick="viewBakeryDetails(${idx})">View</button></td>
-                </tr>
-            `).join('');
-        }
-
-        function viewBakeryDetails(index) {
-            const item = latestBakeryRows[index];
-            if (!item) {
-                order('No details found');
-                return;
-            }
-            order(JSON.stringify(item.details || {}, null, 2));
-        }
-
-        // Alert tracking functions
-        async function loadAlerts() {
-            const status = document.getElementById('status-filter').value;
-            const url = status ? `/api/v1/orders?processing_status=${status}` : '/api/v1/orders';
-            const res = await fetch(url);
-            const data = await res.json();
-            const tbody = document.getElementById('orders-table');
-            tbody.innerHTML = '';
-
-            const orders = Array.isArray(data) ? data : (data.orders || []);
-            if (orders.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #666;">No orders found</td></tr>';
-                return;
-            }
-
-            orders.forEach(order => {
-                const statusClass = `status-${order.processing_status}`;
-                const instance = order.labels?.instance || order.labels?.pod || order.labels?.node || '-';
-                const severity = order.labels?.severity || '-';
-
-                tbody.innerHTML += `
-                    <tr class="expandable" onclick="toggleDetails(${order.id})">
-                        <td><strong>${order.alert_group_name}</strong></td>
-                        <td>${instance}</td>
-                        <td>${severity}</td>
-                        <td><span class="status ${statusClass}">${order.processing_status}</span></td>
-                        <td>${order.alert_status || '-'}</td>
-                        <td>${new Date(order.created_at).toLocaleString()}</td>
-                        <td>${order.counter ?? 0}</td>
-                        <td>
-                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); loadIncidentTimeline(${order.id})">Timeline</button>
-                            <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); openIncidentDetail(${order.id})">Detail</button>
-                        </td>
-                    </tr>
-                    <tr class="details-row" id="details-${order.id}">
-                        <td colspan="8">
-                            <div class="details-content" id="content-${order.id}">
-                                Loading...
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            });
-        }
-
-        async function loadStats() {
-            const res = await fetch('/api/v1/stats');
-            const data = await res.json();
-
-            // Update header stats (API returns total_alerts and alerts_by_processing_status, not total and by_status)
-            const headerStats = document.getElementById('header-stats');
-            headerStats.innerHTML = `
-                <span>Total Orders: ${data.total_alerts || 0}</span>
-                <span>Total Recipes: ${data.total_recipes || 0}</span>
-                <span>Total Executions: ${data.total_executions || 0}</span>
-            `;
-
-            // Update stats bar
-            const statsBar = document.getElementById('stats-bar');
-            statsBar.innerHTML = '';
-
-            const statusOrder = ['new', 'processing', 'complete', 'failed'];
-            statusOrder.forEach(status => {
-                const count = data.alerts_by_processing_status?.[status] || 0;
-                if (count > 0 || status === 'received' || status === 'remediating') {
-                    statsBar.innerHTML += `
-                        <div class="stat-item">
-                            <div class="label">${status.charAt(0).toUpperCase() + status.slice(1)}</div>
-                            <div class="value">${count}</div>
-                        </div>
-                    `;
-                }
-            });
-        }
-
-        async function toggleDetails(orderId) {
-            const row = document.getElementById(`details-${orderId}`);
-            const content = document.getElementById(`content-${orderId}`);
-
-            if (row.classList.contains('active')) {
-                row.classList.remove('active');
-                return;
-            }
-
-            // Load full order details
-            const res = await fetch(`/api/v1/orders/${orderId}`);
-            const order = await res.json();
-
-            content.innerHTML = `
-                <div><strong>Fingerprint:</strong> ${order.fingerprint}</div>
-                <div><strong>Alert Status:</strong> ${order.alert_status}</div>
-                <div><strong>Processing Status:</strong> ${order.processing_status}</div>
-                <div><strong>Counter:</strong> ${order.counter}</div>
-                <div><strong>Active:</strong> ${order.is_active}</div>
-                <div><strong>Started:</strong> ${new Date(order.starts_at).toLocaleString()}</div>
-                ${order.ends_at ? `<div><strong>Ended:</strong> ${new Date(order.ends_at).toLocaleString()}</div>` : ''}
-                <div><strong>Created:</strong> ${new Date(order.created_at).toLocaleString()}</div>
-                <div><strong>Updated:</strong> ${new Date(order.updated_at).toLocaleString()}</div>
-                <div style="margin-top: 8px;">
-                    <button class="btn btn-primary btn-sm" onclick="loadIncidentTimeline(${order.id})">Open Incident Timeline</button>
-                </div>
-            `;
-
-            row.classList.add('active');
-        }
-
-        function copyToClipboard(value) {
-            if (!value) return;
-            navigator.clipboard.writeText(value).catch(() => {});
-        }
-
-        async function loadIncidentTimeline(orderId) {
-            const timeline = document.getElementById('incident-timeline');
-            timeline.innerHTML = '<p style="color: #666;">Loading timeline...</p>';
-            try {
-                const res = await fetch(`/api/v1/orders/${orderId}/timeline`);
-                if (!res.ok) {
-                    throw new Error(`Failed to load timeline (${res.status})`);
-                }
-                const data = await res.json();
-                const events = Array.isArray(data.events) ? data.events : [];
-                if (events.length === 0) {
-                    timeline.innerHTML = '<p style="color: #666;">No timeline events available.</p>';
-                    return;
-                }
-                timeline.innerHTML = events.map(ev => {
-                    const ids = Object.entries(ev.correlation_ids || {})
-                        .filter(([_, v]) => v)
-                        .map(([k, v]) => `<div><strong>${k}:</strong> ${v} <button class="btn btn-sm" onclick="copyToClipboard('${String(v).replace(/'/g, "\\'")}')">Copy</button></div>`)
-                        .join('');
-                    const details = ev.details ? `<pre>${JSON.stringify(ev.details, null, 2)}</pre>` : '';
-                    return `
-                        <div class="activity-item">
-                            <div><strong>${ev.title}</strong> <span class="status">${ev.status}</span></div>
-                            <div class="time">${ev.timestamp ? new Date(ev.timestamp).toLocaleString() : 'n/a'} | ${ev.event_type}</div>
-                            ${ids}
-                            ${details}
-                        </div>
-                    `;
-                }).join('');
-            } catch (error) {
-                timeline.innerHTML = `<p style="color: #e74c3c;">${error.message}</p>`;
-            }
-        }
-
-        function openIncidentDetail(orderId) {
-            currentIncidentOrderId = orderId;
-            updateIncidentUrlParam(orderId);
-            const input = document.getElementById('incident-order-id');
-            if (input) input.value = String(orderId);
-            showTab('incident');
-            loadIncidentDetail(orderId);
-        }
-
-        function _renderIncidentEventList(containerId, events, emptyMessage) {
-            const container = document.getElementById(containerId);
-            if (!events || events.length === 0) {
-                container.innerHTML = `<p style="color: #666;">${emptyMessage}</p>`;
-                return;
-            }
-            container.innerHTML = events.map(ev => {
-                const ids = Object.entries(ev.correlation_ids || {})
-                    .filter(([_, v]) => v)
-                    .map(([k, v]) => `<div><strong>${k}:</strong> ${v} <button class="btn btn-sm" onclick="copyToClipboard('${String(v).replace(/'/g, "\\'")}')">Copy</button></div>`)
-                    .join('');
-                return `
-                    <div class="activity-item">
-                        <div><strong>${ev.title}</strong> <span class="status">${ev.status}</span></div>
-                        <div class="time">${ev.timestamp ? new Date(ev.timestamp).toLocaleString() : 'n/a'} | ${ev.event_type}</div>
-                        ${ids}
-                    </div>
-                `;
-            }).join('');
-        }
-
-        async function loadIncidentDetail(orderId = null) {
-            const resolvedOrderId = orderId || Number(document.getElementById('incident-order-id').value || 0);
-            if (!resolvedOrderId) {
-                order('Order ID is required');
-                return;
-            }
-            currentIncidentOrderId = resolvedOrderId;
-            updateIncidentUrlParam(resolvedOrderId);
-            document.getElementById('incident-order-id').value = String(resolvedOrderId);
-
-            const orderSummary = document.getElementById('incident-order-summary');
-            const bakerySummary = document.getElementById('incident-bakery-summary');
-            const timelineContainer = document.getElementById('incident-full-timeline');
-            orderSummary.innerHTML = 'Loading...';
-            bakerySummary.innerHTML = 'Loading...';
-            timelineContainer.innerHTML = '<p style="color: #666;">Loading...</p>';
-
-            try {
-                const res = await fetch(`/api/v1/orders/${resolvedOrderId}/timeline`);
-                if (!res.ok) throw new Error(`Failed to load incident (${res.status})`);
-                const payload = await res.json();
-                const orderData = payload.order || {};
-                const events = Array.isArray(payload.events) ? payload.events : [];
-
-                orderSummary.innerHTML = `
-                    <div><strong>Order ID:</strong> ${orderData.id || '-'}</div>
-                    <div><strong>Group:</strong> ${orderData.alert_group_name || '-'}</div>
-                    <div><strong>Status:</strong> ${orderData.processing_status || '-'}</div>
-                    <div><strong>Alert Status:</strong> ${orderData.alert_status || '-'}</div>
-                    <div><strong>Req ID:</strong> ${orderData.req_id || '-'} <button class="btn btn-sm" onclick="copyToClipboard('${String(orderData.req_id || '').replace(/'/g, "\\'")}')">Copy</button></div>
-                    <div><strong>Fingerprint:</strong> ${orderData.fingerprint || '-'} <button class="btn btn-sm" onclick="copyToClipboard('${String(orderData.fingerprint || '').replace(/'/g, "\\'")}')">Copy</button></div>
-                `;
-
-                const bakeryEvents = events.filter(e => e.event_type === 'bakery');
-                if (bakeryEvents.length === 0) {
-                    bakerySummary.innerHTML = '<p style="color: #666;">No Bakery operations linked.</p>';
-                } else {
-                    bakerySummary.innerHTML = bakeryEvents.map(ev => {
-                        const ticketId = ev.correlation_ids?.bakery_ticket_id || '-';
-                        const opId = ev.correlation_ids?.bakery_operation_id || '-';
-                        return `
-                            <div class="activity-item">
-                                <div><strong>${ev.title}</strong> <span class="status">${ev.status}</span></div>
-                                <div><strong>Ticket:</strong> ${ticketId} <button class="btn btn-sm" onclick="copyToClipboard('${String(ticketId).replace(/'/g, "\\'")}')">Copy</button></div>
-                                <div><strong>Operation:</strong> ${opId} <button class="btn btn-sm" onclick="copyToClipboard('${String(opId).replace(/'/g, "\\'")}')">Copy</button></div>
-                            </div>
-                        `;
-                    }).join('');
-                }
-
-                const dishEvents = events.filter(e => e.event_type === 'dish');
-                const taskEvents = events.filter(e => e.event_type === 'task');
-                _renderIncidentEventList('incident-dishes', dishEvents, 'No dish events.');
-                _renderIncidentEventList('incident-tasks', taskEvents, 'No task events.');
-                _renderIncidentEventList('incident-full-timeline', events, 'No timeline events.');
-
-                document.getElementById('incident-last-load').textContent = `Last refresh: ${new Date().toLocaleString()}`;
-            } catch (error) {
-                orderSummary.innerHTML = `<p style="color: #e74c3c;">${error.message}</p>`;
-                bakerySummary.innerHTML = '';
-                _renderIncidentEventList('incident-dishes', [], 'Failed to load dishes.');
-                _renderIncidentEventList('incident-tasks', [], 'Failed to load tasks.');
-                _renderIncidentEventList('incident-full-timeline', [], 'Failed to load timeline.');
-            }
-        }
-
-        function toggleAutoRefresh() {
-            const checkbox = document.getElementById('auto-refresh');
-            if (checkbox.checked) {
-                autoRefreshInterval = setInterval(() => {
-                    if (document.getElementById('orders').classList.contains('active')) {
-                        loadAlerts();
-                        loadStats();
-                    }
-                }, 5000);
-            } else {
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
-                    autoRefreshInterval = null;
-                }
-            }
-        }
-
-        async function loadMappings() {
-            const res = await fetch('/api/v1/recipes/');
-            const data = await res.json();
-            const tbody = document.getElementById('mappings-table');
-            tbody.innerHTML = '';
-
-            // data is now an array of recipes, not an object with mappings
-            for (const recipe of data) {
-                const actions = recipe.ingredients ? recipe.ingredients.length : 0;
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${recipe.name}</td>
-                        <td>${recipe.description || 'N/A'}</td>
-                        <td>${actions}</td>
-                        <td>
-                            <button class="btn btn-primary" onclick="editMapping('${recipe.name}')">Edit</button>
-                            <button class="btn btn-danger" onclick="deleteMapping('${recipe.name}')">Delete</button>
-                        </td>
-                    </tr>
-                `;
-            }
-        }
-
-        async function loadPacks() {
-            const res = await fetch('/api/v1/cook/packs');
-            const data = await res.json();
-            const select = document.getElementById('pack-filter');
-            select.innerHTML = '<option value="">All Packs</option>';
-            data.packs.forEach(pack => {
-                const packRef = pack.ref || pack.name || '';
-                if (!packRef) return;
-                select.innerHTML += `<option value="${packRef}">${packRef}</option>`;
-            });
-        }
-
-        async function loadActions() {
-            const pack = document.getElementById('pack-filter').value;
-            const url = pack ? `/api/v1/cook/actions?pack=${pack}` : '/api/v1/cook/actions';
-            const res = await fetch(url);
-            const data = await res.json();
-            const tbody = document.getElementById('actions-table');
-            tbody.innerHTML = '';
-
-            if (data.actions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #666;">No actions found</td></tr>';
-                return;
-            }
-
-            data.actions.forEach(action => {
-                const pack = action.pack || action.ref.split('.')[0];
-                tbody.innerHTML += `
-                    <tr>
-                        <td><strong>${action.ref}</strong></td>
-                        <td>${action.description || 'No description'}</td>
-                        <td>${pack}</td>
-                        <td>
-                            <button class="btn btn-primary btn-sm" onclick="showAction('${action.ref}')">View</button>
-                        </td>
-                    </tr>
-                `;
-            });
-        }
-
-        async function loadPrometheusRules() {
-            const state = document.getElementById('prom-state-filter').value;
-            const searchTerm = document.getElementById('prom-search').value.toLowerCase();
-            const res = await fetch('/api/v1/prometheus/rules');
-            const data = await res.json();
-            const tbody = document.getElementById('prometheus-table');
-            tbody.innerHTML = '';
-
-            const settingsRes = await fetch('/api/v1/settings');
-            const settings = await settingsRes.json();
-
-            const statusEl = document.getElementById('persistence-status');
-            let statusParts = [];
-
-            // CRD mode (default for Kubernetes)
-            if (settings.prometheus_use_crds) {
-                statusParts.push(`✓ CRD (${settings.prometheus_crd_namespace})`);
-            }
-
-            // Git persistence (optional)
-            if (settings.git_enabled) {
-                statusParts.push(`✓ Git: ${settings.git_provider}`);
-            }
-
-            if (statusParts.length === 0) {
-                statusEl.textContent = '⚠ No backend configured';
-                statusEl.style.color = '#e74c3c';
-            } else {
-                statusEl.textContent = statusParts.join(' | ');
-                statusEl.style.color = '#27ae60';
-            }
-
-            // Tooltip
-            if (settings.prometheus_use_crds && settings.git_enabled) {
-                statusEl.title = 'CRD: Immediate effect | Git: Audit trail & persistence';
-            } else if (settings.prometheus_use_crds) {
-                statusEl.title = 'CRD mode: Changes apply immediately via Prometheus Operator';
-            }
-
-            let rules = data.rules || [];
-
-            // Filter by state
-            if (state) {
-                rules = rules.filter(r => r.state === state);
-            }
-
-            // Filter by search term
-            if (searchTerm) {
-                rules = rules.filter(r =>
-                    r.name.toLowerCase().includes(searchTerm) ||
-                    r.query.toLowerCase().includes(searchTerm) ||
-                    r.group.toLowerCase().includes(searchTerm) ||
-                    (r.file && r.file.toLowerCase().includes(searchTerm)) ||
-                    (r.crd && r.crd.toLowerCase().includes(searchTerm))
-                );
-            }
-
-            if (rules.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No rules found</td></tr>';
-                return;
-            }
-
-            rules.forEach(rule => {
-                const stateClass = rule.state === 'firing' ? 'status-failed' :
-                                 rule.state === 'pending' ? 'status-running' : 'status-success';
-                const canEdit = settings.prometheus_use_crds || settings.git_enabled;
-                // Use crd field if present (CRD mode), otherwise use file field (Prometheus API mode)
-                const fileOrCrd = rule.crd || rule.file || '';
-                const editBtn = canEdit ?
-                    `<div style="display: flex; gap: 4px; white-space: nowrap;">
-                        <button class="btn btn-primary btn-sm" onclick='editPrometheusRule(${JSON.stringify(rule)})'>Edit</button>
-                        <button class="btn btn-danger btn-sm" onclick='deletePrometheusRule("${rule.name}", "${rule.group}", "${fileOrCrd}")'>Delete</button>
-                    </div>` :
-                    '<span style="color: #999; font-size: 11px;">No backend</span>';
-
-                tbody.innerHTML += `
-                    <tr>
-                        <td><strong>${rule.name}</strong></td>
-                        <td><code>${rule.query.substring(0, 50)}${rule.query.length > 50 ? '...' : ''}</code></td>
-                        <td>${rule.duration}s</td>
-                        <td><span class="status ${stateClass}">${rule.state}</span></td>
-                        <td>${rule.group}</td>
-                        <td>${editBtn}</td>
-                    </tr>
-                `;
-            });
-        }
-
-        async function editPrometheusRule(rule) {
-            document.getElementById('rule-modal-title').textContent = 'Edit Prometheus Rule';
-            document.getElementById('rule-name').value = rule.name;
-            document.getElementById('rule-name').disabled = true;
-            document.getElementById('rule-group').value = rule.group;
-            // Use crd field if present (CRD mode), otherwise use file field (Prometheus API mode)
-            document.getElementById('rule-file').value = rule.crd || rule.file || '';
-            document.getElementById('rule-expr').value = rule.query;
-            document.getElementById('rule-for').value = rule.duration || '';
-
-            // Clear and populate labels
-            const labelsContainer = document.getElementById('rule-labels-container');
-            labelsContainer.innerHTML = '';
-            const labels = rule.labels || {};
-            Object.entries(labels).forEach(([key, value]) => {
-                addRuleLabelField(key, value);
-            });
-
-            // Clear and populate annotations
-            const annotationsContainer = document.getElementById('rule-annotations-container');
-            annotationsContainer.innerHTML = '';
-            const annotations = rule.annotations || {};
-            Object.entries(annotations).forEach(([key, value]) => {
-                addRuleAnnotationField(key, value);
-            });
-
-            // Initialize PromQL builder
-            await initPromQLBuilder();
-
-            // Clear builder containers
-            document.getElementById('basic-labels-container').innerHTML = '';
-            document.getElementById('advanced-labels-container').innerHTML = '';
-
-            // Reset builder inputs
-            document.getElementById('basic-metric').value = '';
-            document.getElementById('basic-operator').value = '>';
-            document.getElementById('basic-threshold').value = '';
-            document.getElementById('advanced-function').value = '';
-            document.getElementById('advanced-metric').value = '';
-            document.getElementById('advanced-operator').value = '>';
-            document.getElementById('advanced-threshold').value = '';
-            document.getElementById('advanced-aggregation').value = '';
-            document.getElementById('advanced-grouping').value = '';
-            document.getElementById('advanced-range').value = '';
-
-            // Set mode to raw by default (showing existing query)
-            setPromQLMode('raw');
-
-            // Update button text based on Git configuration
-            try {
-                const settingsRes = await fetch('/api/v1/settings');
-                const settings = await settingsRes.json();
-                const saveBtn = document.getElementById('save-rule-btn');
-                if (settings.git_enabled) {
-                    saveBtn.textContent = 'Save & Create PR';
-                } else {
-                    saveBtn.textContent = 'Save Rule';
-                }
-            } catch (error) {
-                console.error('Failed to fetch settings:', error);
-            }
-
-            // Mark form as editing (not creating)
-            document.getElementById('rule-form').dataset.mode = 'edit';
-
-            document.getElementById('edit-rule-modal').classList.add('active');
-        }
-
-        async function createPrometheusRule() {
-            document.getElementById('rule-modal-title').textContent = 'Create Prometheus Rule';
-            document.getElementById('rule-name').value = '';
-            document.getElementById('rule-name').disabled = false;
-            document.getElementById('rule-group').value = '';
-            document.getElementById('rule-file').value = '';
-            document.getElementById('rule-expr').value = '';
-            document.getElementById('rule-for').value = '';
-
-            // Clear labels and annotations
-            document.getElementById('rule-labels-container').innerHTML = '';
-            document.getElementById('rule-annotations-container').innerHTML = '';
-
-            // Initialize PromQL builder
-            await initPromQLBuilder();
-
-            // Clear builder containers
-            document.getElementById('basic-labels-container').innerHTML = '';
-            document.getElementById('advanced-labels-container').innerHTML = '';
-
-            // Reset builder inputs
-            document.getElementById('basic-metric').value = '';
-            document.getElementById('basic-operator').value = '>';
-            document.getElementById('basic-threshold').value = '';
-            document.getElementById('advanced-function').value = '';
-            document.getElementById('advanced-metric').value = '';
-            document.getElementById('advanced-operator').value = '>';
-            document.getElementById('advanced-threshold').value = '';
-            document.getElementById('advanced-aggregation').value = '';
-            document.getElementById('advanced-grouping').value = '';
-            document.getElementById('advanced-range').value = '';
-
-            // Set mode to basic by default for new rules
-            setPromQLMode('basic');
-
-            // Update button text based on Git configuration
-            try {
-                const settingsRes = await fetch('/api/v1/settings');
-                const settings = await settingsRes.json();
-                const saveBtn = document.getElementById('save-rule-btn');
-                if (settings.git_enabled) {
-                    saveBtn.textContent = 'Create & Create PR';
-                } else {
-                    saveBtn.textContent = 'Create Rule';
-                }
-            } catch (error) {
-                console.error('Failed to fetch settings:', error);
-            }
-
-            // Mark form as creating (not editing)
-            document.getElementById('rule-form').dataset.mode = 'create';
-
-            document.getElementById('edit-rule-modal').classList.add('active');
-        }
-
-        function addRuleLabelField(key = '', value = '') {
-            const container = document.getElementById('rule-labels-container');
-            const div = document.createElement('div');
-            div.className = 'kv-pair';
-            div.innerHTML = `
-                <input type="text" placeholder="Key" value="${key}" class="label-key">
-                <input type="text" placeholder="Value" value="${value}" class="label-value">
-                <button type="button" onclick="this.parentElement.remove()">Remove</button>
-            `;
-            container.appendChild(div);
-        }
-
-        function addRuleAnnotationField(key = '', value = '') {
-            const container = document.getElementById('rule-annotations-container');
-            const div = document.createElement('div');
-            div.className = 'kv-pair';
-            div.innerHTML = `
-                <input type="text" placeholder="Key" value="${key}" class="annotation-key">
-                <input type="text" placeholder="Value" value="${value}" class="annotation-value">
-                <button type="button" onclick="this.parentElement.remove()">Remove</button>
-            `;
-            container.appendChild(div);
-        }
-
-        async function savePrometheusRule(e) {
-            e.preventDefault();
-            const ruleName = document.getElementById('rule-name').value;
-            const groupName = document.getElementById('rule-group').value;
-            const fileName = document.getElementById('rule-file').value;
-
-            // Get PromQL expression based on current mode
-            let expr;
-            if (promqlMode === 'raw') {
-                expr = document.getElementById('rule-expr').value;
-            } else {
-                // Use generated PromQL from builder modes
-                expr = document.getElementById('promql-preview').textContent.trim();
-                // Remove comment lines (lines starting with #)
-                if (expr.startsWith('#')) {
-                    order('Please complete the PromQL builder or switch to Raw mode to enter a query manually.');
-                    return;
-                }
-            }
-
-            const forDuration = document.getElementById('rule-for').value;
-
-            // Collect labels
-            const labels = {};
-            document.querySelectorAll('#rule-labels-container .kv-pair').forEach(pair => {
-                const key = pair.querySelector('.label-key').value.trim();
-                const value = pair.querySelector('.label-value').value.trim();
-                if (key) labels[key] = value;
-            });
-
-            // Collect annotations
-            const annotations = {};
-            document.querySelectorAll('#rule-annotations-container .kv-pair').forEach(pair => {
-                const key = pair.querySelector('.annotation-key').value.trim();
-                const value = pair.querySelector('.annotation-value').value.trim();
-                if (key) annotations[key] = value;
-            });
-
-            try {
-                const ruleData = {
-                    alert: ruleName,
-                    expr: expr,
-                    for: forDuration || undefined,
-                    labels: Object.keys(labels).length > 0 ? labels : undefined,
-                    annotations: Object.keys(annotations).length > 0 ? annotations : undefined
-                };
-
-                // Check if we're creating or editing
-                const mode = document.getElementById('rule-form').dataset.mode || 'edit';
-                const isCreate = mode === 'create';
-
-                let res;
-                if (isCreate) {
-                    // POST request for creating a new rule
-                    res = await fetch(`/api/v1/prometheus/rules?rule_name=${ruleName}&group_name=${groupName}&file_name=${fileName}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(ruleData)
-                    });
-                } else {
-                    // PUT request for updating an existing rule
-                    res = await fetch(`/api/v1/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(ruleData)
-                    });
-                }
-
-                if (!res.ok) {
-                    const error = await res.json();
-                    order(`Failed to ${isCreate ? 'create' : 'update'} rule: ${error.detail || res.statusText}`);
-                    return;
-                }
-
-                const result = await res.json();
-                closeEditRuleModal();
-                loadPrometheusRules();
-
-                let message = `Rule ${isCreate ? 'created' : 'updated'} successfully!
-
-`;
-
-                // CRD result
-                if (result.crd) {
-                    message += `✓ CRD: ${result.crd.action} in ${result.crd.crd_name}\n\n`;
-                    message += `Note: Changes will appear in Prometheus within 5 minutes.\n`;
-                    message += `Refresh this tab to see the updated rule.\n`;
-                }
-
-                // Git result
-                if (result.git) {
-                    if (result.git.branch) {
-                        message += `✓ Git: ${result.git.branch}\n`;
-                    }
-                    if (result.git.pull_request) {
-                        message += `✓ PR #${result.git.pull_request.number}: ${result.git.pull_request.url}\n`;
-                    }
-                }
-
-                // Errors
-                if (result.git_error) {
-                    message += `⚠ Git error: ${result.git_error}\n`;
-                }
-
-                order(message);
-            } catch (err) {
-                order(`Error: ${err.message}`);
-            }
-        }
-
-        async function deletePrometheusRule(ruleName, groupName, fileName) {
-            if (!confirm(`Delete Prometheus rule "${ruleName}"?\n\nThis will create a PR to remove the rule.`)) return;
-
-            const res = await fetch(`/api/v1/prometheus/rules/${ruleName}?group_name=${groupName}&file_name=${fileName}`, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                const result = await res.json();
-                loadPrometheusRules();
-
-                let message = `Rule deleted successfully!
-
-`;
-
-                // CRD result
-                if (result.crd) {
-                    message += `✓ CRD: ${result.crd.action}\n`;
-                }
-
-                // Git result
-                if (result.git) {
-                    if (result.git.branch) {
-                        message += `✓ Git: ${result.git.branch}\n`;
-                    }
-                    if (result.git.pull_request) {
-                        message += `✓ PR #${result.git.pull_request.number}: ${result.git.pull_request.url}\n`;
-                    }
-                }
-
-                // Errors
-                if (result.git_error) {
-                    message += `⚠ Git error: ${result.git_error}\n`;
-                }
-
-                order(message);
-            } else {
-                const error = await res.json();
-                order(`Failed to delete rule: ${error.detail || res.statusText}`);
-            }
-        }
-
-        // PromQL Builder variables
-        let promqlMode = 'raw';
-        let availableMetrics = [];
-        let availableMetricsAdvanced = [];
-
-        // Initialize PromQL builder
-        async function initPromQLBuilder() {
-            try {
-                const res = await fetch('/api/v1/prometheus/metrics');
-                const data = await res.json();
-                availableMetrics = data.metrics || [];
-                availableMetricsAdvanced = [...availableMetrics];
-
-                // Populate metric dropdowns
-                populateMetricDropdown('basic-metric', availableMetrics);
-                populateMetricDropdown('advanced-metric', availableMetricsAdvanced);
-            } catch (error) {
-                console.error('Failed to load metrics:', error);
-            }
-        }
-
-        function populateMetricDropdown(selectId, metrics) {
-            const select = document.getElementById(selectId);
-            select.innerHTML = '<option value="">Select a metric...</option>';
-            metrics.forEach(metric => {
-                const option = document.createElement('option');
-                option.value = metric;
-                option.textContent = metric;
-                select.appendChild(option);
-            });
-        }
-
-        function filterMetrics() {
-            const search = document.getElementById('basic-metric-search').value.toLowerCase();
-            const filtered = availableMetrics.filter(m => m.toLowerCase().includes(search));
-            populateMetricDropdown('basic-metric', filtered);
-        }
-
-        function filterMetricsAdvanced() {
-            const search = document.getElementById('advanced-metric-search').value.toLowerCase();
-            const filtered = availableMetricsAdvanced.filter(m => m.toLowerCase().includes(search));
-            populateMetricDropdown('advanced-metric', filtered);
-        }
-
-        function setPromQLMode(mode) {
-            promqlMode = mode;
-
-            // Update button styles
-            ['basic', 'advanced', 'raw'].forEach(m => {
-                const btn = document.getElementById(`mode-${m}`);
-                if (m === mode) {
-                    btn.style.backgroundColor = '#2c5282';
-                    btn.style.color = 'white';
-                } else {
-                    btn.style.backgroundColor = '';
-                    btn.style.color = '';
-                }
-            });
-
-            // Show/hide relevant sections
-            document.getElementById('promql-basic-builder').style.display = mode === 'basic' ? 'block' : 'none';
-            document.getElementById('promql-advanced-builder').style.display = mode === 'advanced' ? 'block' : 'none';
-            document.getElementById('promql-raw-editor').style.display = mode === 'raw' ? 'block' : 'none';
-            document.getElementById('promql-preview-container').style.display = (mode === 'basic' || mode === 'advanced') ? 'block' : 'none';
-
-            // Sync data when switching modes
-            if (mode === 'raw') {
-                // When switching to raw, update textarea from current generated query
-                const preview = document.getElementById('promql-preview').textContent;
-                if (preview && preview.trim()) {
-                    document.getElementById('rule-expr').value = preview.trim();
-                }
-            } else if (mode === 'basic') {
-                updateBasicPromQL();
-            } else if (mode === 'advanced') {
-                updatePromQLPreview();
-            }
-        }
-
-        async function onMetricChange() {
-            const metric = document.getElementById('basic-metric').value;
-            updateBasicPromQL();
-        }
-
-        async function onMetricChangeAdvanced() {
-            const metric = document.getElementById('advanced-metric').value;
-            updatePromQLPreview();
-        }
-
-        function addBasicLabelFilter() {
-            const container = document.getElementById('basic-labels-container');
-            const div = document.createElement('div');
-            div.className = 'label-filter';
-            div.style.cssText = 'display: flex; gap: 10px; margin-bottom: 5px; align-items: center;';
-
-            const metric = document.getElementById('basic-metric').value;
-
-            div.innerHTML = `
-                <select class="basic-label-key" style="flex: 1;" onchange="loadBasicLabelValues(this)">
-                    <option value="">Loading labels...</option>
-                </select>
-                <select class="basic-label-op" style="flex: 0 0 60px;" onchange="updateBasicPromQL()">
-                    <option value="=">=</option>
-                    <option value="!=">!=</option>
-                    <option value="=~">=~</option>
-                    <option value="!~">!~</option>
-                </select>
-                <select class="basic-label-value" style="flex: 1;" onchange="updateBasicPromQL()">
-                    <option value="">Select value...</option>
-                </select>
-                <button type="button" class="btn btn-sm" onclick="this.parentElement.remove(); updateBasicPromQL();" style="padding: 5px 10px;">Remove</button>
-            `;
-            container.appendChild(div);
-
-            // Load available labels for this metric
-            loadBasicLabelKeys(div.querySelector('.basic-label-key'), metric);
-        }
-
-        async function loadBasicLabelKeys(select, metric) {
-            try {
-                const url = metric ? `/api/v1/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
-                const res = await fetch(url);
-                const data = await res.json();
-                const labels = data.labels || [];
-
-                select.innerHTML = '<option value="">Select label...</option>';
-                labels.forEach(label => {
-                    const option = document.createElement('option');
-                    option.value = label;
-                    option.textContent = label;
-                    select.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load labels:', error);
-                select.innerHTML = '<option value="">Error loading labels</option>';
-            }
-        }
-
-        async function loadBasicLabelValues(labelKeySelect) {
-            const labelKey = labelKeySelect.value;
-            if (!labelKey) return;
-
-            const valueSelect = labelKeySelect.parentElement.querySelector('.basic-label-value');
-            const metric = document.getElementById('basic-metric').value;
-
-            try {
-                const url = metric
-                    ? `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}?metric=${encodeURIComponent(metric)}`
-                    : `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                const values = data.values || [];
-
-                valueSelect.innerHTML = '<option value="">Select value...</option>';
-                values.forEach(value => {
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = value;
-                    valueSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load label values:', error);
-                valueSelect.innerHTML = '<option value="">Error loading values</option>';
-            }
-
-            updateBasicPromQL();
-        }
-
-        function addAdvancedLabelFilter() {
-            const container = document.getElementById('advanced-labels-container');
-            const div = document.createElement('div');
-            div.className = 'label-filter';
-            div.style.cssText = 'display: flex; gap: 10px; margin-bottom: 5px; align-items: center;';
-
-            const metric = document.getElementById('advanced-metric').value;
-
-            div.innerHTML = `
-                <select class="advanced-label-key" style="flex: 1;" onchange="loadAdvancedLabelValues(this)">
-                    <option value="">Loading labels...</option>
-                </select>
-                <select class="advanced-label-op" style="flex: 0 0 60px;" onchange="updatePromQLPreview()">
-                    <option value="=">=</option>
-                    <option value="!=">!=</option>
-                    <option value="=~">=~</option>
-                    <option value="!~">!~</option>
-                </select>
-                <select class="advanced-label-value" style="flex: 1;" onchange="updatePromQLPreview()">
-                    <option value="">Select value...</option>
-                </select>
-                <button type="button" class="btn btn-sm" onclick="this.parentElement.remove(); updatePromQLPreview();" style="padding: 5px 10px;">Remove</button>
-            `;
-            container.appendChild(div);
-
-            // Load available labels for this metric
-            loadAdvancedLabelKeys(div.querySelector('.advanced-label-key'), metric);
-        }
-
-        async function loadAdvancedLabelKeys(select, metric) {
-            try {
-                const url = metric ? `/api/v1/prometheus/labels?metric=${encodeURIComponent(metric)}` : '/api/v1/prometheus/labels';
-                const res = await fetch(url);
-                const data = await res.json();
-                const labels = data.labels || [];
-
-                select.innerHTML = '<option value="">Select label...</option>';
-                labels.forEach(label => {
-                    const option = document.createElement('option');
-                    option.value = label;
-                    option.textContent = label;
-                    select.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load labels:', error);
-                select.innerHTML = '<option value="">Error loading labels</option>';
-            }
-        }
-
-        async function loadAdvancedLabelValues(labelKeySelect) {
-            const labelKey = labelKeySelect.value;
-            if (!labelKey) return;
-
-            const valueSelect = labelKeySelect.parentElement.querySelector('.advanced-label-value');
-            const metric = document.getElementById('advanced-metric').value;
-
-            try {
-                const url = metric
-                    ? `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}?metric=${encodeURIComponent(metric)}`
-                    : `/api/v1/prometheus/label-values/${encodeURIComponent(labelKey)}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                const values = data.values || [];
-
-                valueSelect.innerHTML = '<option value="">Select value...</option>';
-                values.forEach(value => {
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = value;
-                    valueSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load label values:', error);
-                valueSelect.innerHTML = '<option value="">Error loading values</option>';
-            }
-
-            updatePromQLPreview();
-        }
-
-        function updateBasicPromQL() {
-            const metric = document.getElementById('basic-metric').value;
-            if (!metric) {
-                document.getElementById('promql-preview').textContent = '# Select a metric to start building your query';
-                return;
-            }
-
-            // Build label filters
-            const labelFilters = [];
-            document.querySelectorAll('#basic-labels-container .label-filter').forEach(filter => {
-                const key = filter.querySelector('.basic-label-key').value;
-                const op = filter.querySelector('.basic-label-op').value;
-                const value = filter.querySelector('.basic-label-value').value;
-
-                if (key && value) {
-                    // Escape quotes in value if using regex operators
-                    const escapedValue = (op === '=~' || op === '!~') ? value : `"${value}"`;
-                    labelFilters.push(`${key}${op}${escapedValue}`);
-                }
-            });
-
-            // Build base metric query
-            let query = metric;
-            if (labelFilters.length > 0) {
-                query += `{${labelFilters.join(',')}}`;
-            }
-
-            // Add comparison and threshold
-            const operator = document.getElementById('basic-operator').value;
-            const threshold = document.getElementById('basic-threshold').value;
-
-            if (threshold) {
-                query += ` ${operator} ${threshold}`;
-            }
-
-            document.getElementById('promql-preview').textContent = query;
-        }
-
-        function updatePromQLPreview() {
-            const func = document.getElementById('advanced-function').value;
-            const metric = document.getElementById('advanced-metric').value;
-            const aggregation = document.getElementById('advanced-aggregation').value;
-            const grouping = document.getElementById('advanced-grouping').value;
-            const operator = document.getElementById('advanced-operator').value;
-            const threshold = document.getElementById('advanced-threshold').value;
-            const range = document.getElementById('advanced-range').value;
-
-            if (!metric) {
-                document.getElementById('promql-preview').textContent = '# Select a metric to start building your query';
-                return;
-            }
-
-            // Show/hide range input based on function selection
-            const needsRange = ['rate', 'irate', 'increase', 'delta', 'deriv', 'avg_over_time', 'min_over_time', 'max_over_time', 'sum_over_time'].includes(func);
-            document.getElementById('advanced-range-container').style.display = needsRange ? 'block' : 'none';
-
-            // Show/hide grouping based on aggregation selection
-            document.getElementById('advanced-grouping-container').style.display = aggregation ? 'block' : 'none';
-
-            // Build label filters
-            const labelFilters = [];
-            document.querySelectorAll('#advanced-labels-container .label-filter').forEach(filter => {
-                const key = filter.querySelector('.advanced-label-key').value;
-                const op = filter.querySelector('.advanced-label-op').value;
-                const value = filter.querySelector('.advanced-label-value').value;
-
-                if (key && value) {
-                    const escapedValue = (op === '=~' || op === '!~') ? value : `"${value}"`;
-                    labelFilters.push(`${key}${op}${escapedValue}`);
-                }
-            });
-
-            // Build base metric query
-            let query = metric;
-            if (labelFilters.length > 0) {
-                query += `{${labelFilters.join(',')}}`;
-            }
-
-            // Add range for range vector functions
-            if (needsRange && func) {
-                if (range) {
-                    query += `[${range}]`;
-                } else {
-                    query += '[5m]'; // default range
-                }
-            }
-
-            // Wrap in function if selected
-            if (func) {
-                query = `${func}(${query})`;
-            }
-
-            // Wrap in aggregation if selected
-            if (aggregation) {
-                if (grouping) {
-                    const labels = grouping.split(',').map(l => l.trim()).filter(l => l);
-                    query = `${aggregation} by (${labels.join(',')}) (${query})`;
-                } else {
-                    query = `${aggregation}(${query})`;
-                }
-            }
-
-            // Add comparison and threshold
-            if (threshold) {
-                query += ` ${operator} ${threshold}`;
-            }
-
-            document.getElementById('promql-preview').textContent = query;
-        }
-
-        function closeEditRuleModal() {
-            document.getElementById('edit-rule-modal').classList.remove('active');
-        }
-
-        async function loadHistory() {
-            const res = await fetch('/api/v1/dishes?limit=50');
-            const data = await res.json();
-            const tbody = document.getElementById('history-table');
-            tbody.innerHTML = '';
-
-            data.forEach(r => {
-                const statusClass = r.processing_status === 'complete' ? 'status-success' :
-                                   r.processing_status === 'failed' ? 'status-failed' : 'status-running';
-                const alertName = r.recipe?.name || r.req_id || (r.order_id ? `Order ${r.order_id}` : 'Unknown');
-                const actionName = r.recipe?.workflow_id || 'Recipe dispatch';
-                const started = r.started_at || r.created_at;
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${alertName}</td>
-                        <td>${actionName}</td>
-                        <td><span class="status ${statusClass}">${r.processing_status}</span></td>
-                        <td>${started ? new Date(started).toLocaleString() : 'Pending'}</td>
-                        <td>${r.workflow_execution_id || '-'}</td>
-                    </tr>
-                `;
-            });
-        }
-
-        function showCreateModal() {
-            order('Mapping CRUD endpoints are not exposed by this API. Use Recipes endpoints for remediation definitions.');
-        }
-
-        async function editMapping(name) {
-            order(`Mapping edit is not exposed by this API (${name}). Use Recipes endpoints for remediation definitions.`);
-        }
-
-        async function saveMapping(e) {
-            e.preventDefault();
-            order('Mapping save is not exposed by this API. Use Recipes endpoints for remediation definitions.');
-            closeModal();
-            loadMappings();
-        }
-
-        async function deleteMapping(name) {
-            if (!confirm(`Delete mapping "${name}"?`)) return;
-            order(`Mapping delete is not exposed by this API (${name}). Use Recipes endpoints.`);
-            loadMappings();
-        }
-
-        function closeModal() {
-            document.getElementById('edit-modal').classList.remove('active');
-        }
-
-        function showImportModal() {
-            document.getElementById('import-modal').classList.add('active');
-        }
-
-        function closeImportModal() {
-            document.getElementById('import-modal').classList.remove('active');
-        }
-
-        async function importMappings(e) {
-            e.preventDefault();
-            order('Mapping import is not exposed by this API. Use Recipes endpoints or Git-backed rules flow.');
-            closeImportModal();
-            loadMappings();
-        }
-
-        async function exportMappings() {
-            order('Mapping export is not exposed by this API. Use Recipes list/export from your source of truth.');
-        }
-
-        async function showAction(ref) {
-            const res = await fetch(`/api/v1/cook/actions/${ref}`);
-            currentAction = await res.json();
-            document.getElementById('action-title').textContent = ref;
-            document.getElementById('action-details').textContent = JSON.stringify(currentAction, null, 2);
-            document.getElementById('action-modal').classList.add('active');
-        }
-
-        function closeActionModal() {
-            document.getElementById('action-modal').classList.remove('active');
-        }
-
-        function useAction() {
-            if (!currentAction) return;
-            const params = {};
-            if (currentAction.parameters) {
-                Object.keys(currentAction.parameters).forEach(k => {
-                    params[k] = `{{${k}}}`;
-                });
-            }
-
-            const config = {
-                handler: 'yaml_config',
-                actions: [{
-                    name: currentAction.ref.replace('.', '_'),
-                    action: currentAction.ref,
-                    description: currentAction.description || '',
-                    parameters: params,
-                    timeout: 300
-                }]
-            };
-
-            closeActionModal();
-            showCreateModal();
-            document.getElementById('mapping-config').value = jsyaml.dump(config);
-        }
-
-        async function editAction(ref) {
-            const res = await fetch(`/api/v1/cook/actions/${ref}`);
-            const action = await res.json();
-
-            editActionMode = true;
-            document.getElementById('action-modal-title').textContent = 'Edit Action';
-            document.getElementById('action-ref').value = ref;
-            document.getElementById('action-ref').disabled = true;
-            document.getElementById('action-data').value = JSON.stringify(action, null, 2);
-            document.getElementById('edit-action-modal').classList.add('active');
-        }
-
-        function showCreateActionModal() {
-            editActionMode = false;
-            document.getElementById('action-modal-title').textContent = 'Create Action';
-            document.getElementById('action-ref').value = '';
-            document.getElementById('action-ref').disabled = false;
-            document.getElementById('action-data').value = JSON.stringify({
-                "name": "",
-                "pack": "",
-                "description": "",
-                "enabled": true,
-                "runner_type": "remote-shell-cmd",
-                "parameters": {
-                    "cmd": {
-                        "type": "string",
-                        "description": "Command to execute",
-                        "required": true
-                    }
-                }
-            }, null, 2);
-            document.getElementById('edit-action-modal').classList.add('active');
-        }
-
-        async function saveAction(e) {
-            e.preventDefault();
-            closeEditActionModal();
-            order('Action create/update is not exposed by the current API. Use StackStorm directly for edits.');
-        }
-
-        async function deleteAction(ref) {
-            order('Action deletion is not exposed by the current API. Use StackStorm directly for deletes.');
-        }
-
-        function closeEditActionModal() {
-            document.getElementById('edit-action-modal').classList.remove('active');
-        }
-
-        // Dashboard functions
-        async function loadDashboard() {
-            try {
-                const [
-                    health,
-                    stats,
-                    orders,
-                    dishes,
-                    executions,
-                    rulesResp,
-                    overview,
-                    suppressedActivity
-                ] = await Promise.all([
-                    fetchJson('/api/v1/health'),
-                    fetchJson('/api/v1/stats'),
-                    fetchJsonOrDefault('/api/v1/orders?limit=20', []),
-                    fetchJsonOrDefault('/api/v1/dishes?limit=20', []),
-                    fetchJsonOrDefault('/api/v1/cook/executions?limit=20', []),
-                    fetchJsonOrDefault('/api/v1/prometheus/rules', { rules: [] }),
-                    fetchJsonOrDefault('/api/v1/observability/overview', { suppressions: { active: 0 }, failures: {}, queue: {}, bakery: {} }),
-                    fetchJsonOrDefault('/api/v1/activity/suppressed?limit=10', [])
-                ]);
-
-            // Update header version from health API
-            const headerVersion = document.getElementById('header-version');
-            if (headerVersion && health.version) {
-                headerVersion.textContent = `v${health.version}`;
-            }
-
-            // Update dashboard metrics
-            const metricsDiv = document.getElementById('dashboard-metrics');
-            const overallClass = health.status === 'healthy' ? 'healthy' : (health.status === 'degraded' ? 'warning' : 'error');
-
-            // Helper function to get component status class
-            const getStatusClass = (component) => {
-                if (!component) return 'error';
-                return component.status === 'healthy' ? 'healthy' : (component.status === 'degraded' ? 'warning' : 'error');
-            };
-
-            // Helper function to display component status
-            const getStatusBadge = (component) => {
-                if (!component) return '<span class="status-badge error">UNKNOWN</span>';
-                const statusClass = getStatusClass(component);
-                return `<span class="status-badge ${statusClass}">${component.status.toUpperCase()}</span>`;
-            };
-
-            metricsDiv.innerHTML = `
-                <div class="dashboard-card ${overallClass}">
-                    <h3><span class="health-indicator ${overallClass}"></span>Overall System</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Status</span>
-                        <span class="metric-value">${health.status.toUpperCase()}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Version</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.version}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Instance ID</span>
-                        <span class="metric-value" style="font-size: 11px;">${health.instance_id || 'Unknown'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Last Updated</span>
-                        <span class="metric-value" style="font-size: 12px;">${new Date(health.timestamp).toLocaleString()}</span>
-                    </div>
-                </div>
-                <div class="dashboard-card ${getStatusClass(health.components?.database)}">
-                    <h3><span class="health-indicator ${getStatusClass(health.components?.database)}"></span>Database (MariaDB)</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Status</span>
-                        ${getStatusBadge(health.components?.database)}
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Message</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.components?.database?.message || 'N/A'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Total Orders</span>
-                        <span class="metric-value">${stats.total_alerts || 0}</span>
-                    </div>
-                </div>
-                <div class="dashboard-card ${getStatusClass(health.components?.stackstorm)}">
-                    <h3><span class="health-indicator ${getStatusClass(health.components?.stackstorm)}"></span>StackStorm</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Status</span>
-                        ${getStatusBadge(health.components?.stackstorm)}
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Message</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.components?.stackstorm?.message || 'N/A'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Total Recipes</span>
-                        <span class="metric-value">${stats.total_recipes || 0}</span>
-                    </div>
-                </div>
-                <div class="dashboard-card ${getStatusClass(health.components?.mongodb)}">
-                    <h3><span class="health-indicator ${getStatusClass(health.components?.mongodb)}"></span>MongoDB</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Status</span>
-                        ${getStatusBadge(health.components?.mongodb)}
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Message</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.components?.mongodb?.message || 'N/A'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Used By</span>
-                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
-                    </div>
-                </div>
-                <div class="dashboard-card ${getStatusClass(health.components?.rabbitmq)}">
-                    <h3><span class="health-indicator ${getStatusClass(health.components?.rabbitmq)}"></span>RabbitMQ</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Status</span>
-                        ${getStatusBadge(health.components?.rabbitmq)}
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Message</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.components?.rabbitmq?.message || 'N/A'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Used By</span>
-                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
-                    </div>
-                </div>
-                <div class="dashboard-card ${getStatusClass(health.components?.redis)}">
-                    <h3><span class="health-indicator ${getStatusClass(health.components?.redis)}"></span>Redis</h3>
-                    <div class="metric-row">
-                        <span class="metric-label">Status</span>
-                        ${getStatusBadge(health.components?.redis)}
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Message</span>
-                        <span class="metric-value" style="font-size: 12px;">${health.components?.redis?.message || 'N/A'}</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">Used By</span>
-                        <span class="metric-value" style="font-size: 12px;">StackStorm</span>
-                    </div>
-                </div>
-            `;
-
-            // Build recent activity from orders, dish processing, and StackStorm executions
-            const activityDiv = document.getElementById('recent-activity');
-            const activity = [];
-
-            (Array.isArray(orders) ? orders : []).forEach(o => {
-                activity.push({
-                    timestamp: o.updated_at || o.created_at,
-                    status: o.processing_status || 'new',
-                    title: `Alert: ${o.alert_group_name}`,
-                    details: `${o.alert_status || 'unknown'} (${o.req_id || 'no-req-id'})`,
-                });
-            });
-
-            (Array.isArray(dishes) ? dishes : []).forEach(d => {
-                activity.push({
-                    timestamp: d.updated_at || d.started_at || d.created_at,
-                    status: d.processing_status || 'new',
-                    title: `Dish: ${d.recipe?.name || d.req_id || 'unknown'}`,
-                    details: d.workflow_execution_id ? `Execution ${d.workflow_execution_id}` : 'Awaiting execution ID',
-                });
-            });
-
-            (Array.isArray(executions) ? executions : []).forEach(exe => {
-                activity.push({
-                    timestamp: exe.start_timestamp || exe.end_timestamp,
-                    status: exe.status || 'unknown',
-                    title: `Execution: ${exe.action?.ref || exe.action || 'unknown action'}`,
-                    details: `id=${exe.id || 'n/a'}`,
-                });
-            });
-
-            (Array.isArray(suppressedActivity) ? suppressedActivity : []).forEach(item => {
-                activity.push({
-                    timestamp: item.received_at,
-                    status: 'suppressed',
-                    title: `Suppressed: ${item.alertname || 'unknown'}`,
-                    details: `suppression=${item.suppression_id} severity=${item.severity || 'unknown'}`,
-                });
-            });
-
-            activity.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-
-            if (activity.length === 0) {
-                activityDiv.innerHTML = '<p style="color: #666; text-align: center;">No recent activity</p>';
-            } else {
-                activityDiv.innerHTML = activity.slice(0, 8).map(item => {
-                    const normalized = String(item.status).toLowerCase();
-                    const statusClass = (normalized === 'complete' || normalized === 'succeeded') ? 'success' :
-                        (normalized === 'failed' || normalized === 'error') ? 'failed' : '';
-                    const time = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'unknown time';
-                    return `
-                        <div class="activity-item ${statusClass}">
-                            <div><strong>${item.title}</strong></div>
-                            <div>${item.details}</div>
-                            <div class="time">${time} - ${item.status}</div>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            // Update quick stats
-            const quickStatsDiv = document.getElementById('quick-stats');
-            quickStatsDiv.innerHTML = `
-                <div class="metric-row">
-                    <span class="metric-label">Active Orders</span>
-                    <span class="metric-value">${stats.alerts_by_processing_status?.processing || stats.alerts_by_processing_status?.new || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Total Executions</span>
-                    <span class="metric-value">${stats.total_executions || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Total Orders</span>
-                    <span class="metric-value">${stats.total_alerts || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Recent Alerts (24h)</span>
-                    <span class="metric-value">${stats.recent_alerts || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Active Suppressions</span>
-                    <span class="metric-value">${overview?.suppressions?.active || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Retrying Suppression Ops</span>
-                    <span class="metric-value">${overview?.suppressions?.retrying_operations || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Dead Letter (Suppression)</span>
-                    <span class="metric-value">${overview?.suppressions?.dead_letter || 0}</span>
-                </div>
-            `;
-
-            const platformSummaryDiv = document.getElementById('platform-summary');
-            const rules = Array.isArray(rulesResp.rules) ? rulesResp.rules : [];
-            const firingRules = rules.filter(r => String(r.state).toLowerCase() === 'firing').length;
-            const pendingRules = rules.filter(r => String(r.state).toLowerCase() === 'pending').length;
-            const executionFailures = (Array.isArray(executions) ? executions : [])
-                .filter(exe => ['failed', 'error', 'timed_out', 'abandoned'].includes(String(exe.status).toLowerCase()))
-                .length;
-
-            platformSummaryDiv.innerHTML = `
-                <div class="metric-row">
-                    <span class="metric-label">Prometheus Rules</span>
-                    <span class="metric-value">${rules.length}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Rules Firing</span>
-                    <span class="metric-value">${firingRules}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Rules Pending</span>
-                    <span class="metric-value">${pendingRules}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Execution Failures</span>
-                    <span class="metric-value">${executionFailures}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Bakery Summary Failures</span>
-                    <span class="metric-value">${overview?.bakery?.summary_failures || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Order Queue (new/processing)</span>
-                    <span class="metric-value">${overview?.queue?.orders_new || 0}/${overview?.queue?.orders_processing || 0}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Top Error</span>
-                    <span class="metric-value" style="font-size: 12px;">${overview?.failures?.top_errors?.[0]?.error || 'None'}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Runbook Hint</span>
-                    <span class="metric-value" style="font-size: 12px;">${overview?.failures?.runbook_hints?.[0] || 'No active hints'}</span>
-                </div>
-            `;
-            } catch (error) {
-                console.error('Error loading dashboard:', error);
-                document.getElementById('dashboard-metrics').innerHTML =
-                    '<div class="dashboard-card error"><h3>Error Loading Dashboard</h3><p>' + error.message + '</p></div>';
-            }
-        }
-
-        // Load js-yaml from CDN
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js';
-        document.head.appendChild(script);
-
-        // Authentication functions
-        async function checkAuth() {
-            try {
-                const res = await fetch('/api/v1/settings');
-                if (res.status === 401) {
-                    showLoginModal();
-                    return false;
-                }
-                if (res.ok) {
-                    hideLoginModal();
-                    return true;
-                }
-                showLoginModal();
-                return false;
-            } catch (err) {
-                console.error('Auth check failed:', err);
-                showLoginModal();
-                return false;
-            }
-        }
-
-        function showLoginModal() {
-            document.getElementById('login-modal').classList.add('active');
-            document.getElementById('app-container').style.display = 'none';
-            document.getElementById('login-error').style.display = 'none';
-        }
-
-        function hideLoginModal() {
-            document.getElementById('login-modal').classList.remove('active');
-            document.getElementById('app-container').style.display = 'block';
-        }
-
-        async function handleLogin(event) {
-            event.preventDefault();
-
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('login-error');
-
-            try {
-                const res = await fetch('/api/v1/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-
-                if (res.ok) {
-                    hideLoginModal();
-                    const deepLinkIncidentOrderId = getIncidentOrderIdFromUrl();
-                    if (deepLinkIncidentOrderId) {
-                        currentIncidentOrderId = deepLinkIncidentOrderId;
-                        showTab('incident');
-                        loadIncidentDetail(deepLinkIncidentOrderId);
-                    } else {
-                        loadDashboard();
-                    }
-                    toggleAutoRefresh();
-                } else {
-                    const data = await res.json();
-                    errorDiv.textContent = data.detail || 'Invalid credentials';
-                    errorDiv.style.display = 'block';
-                }
-            } catch (err) {
-                errorDiv.textContent = 'Login failed. Please try again.';
-                errorDiv.style.display = 'block';
-            }
-        }
-
-        // Logout function
-        async function logout() {
-            if (!confirm('Are you sure you want to logout?')) return;
-
-            try {
-                const res = await fetch('/api/v1/auth/logout', {
-                    method: 'POST'
-                });
-
-                if (res.ok) {
-                    showLoginModal();
-                    document.getElementById('login-form').reset();
-                } else {
-                    order('Failed to logout. Please try again.');
-                }
-            } catch (err) {
-                order('An error occurred during logout.');
-            }
-        }
-
-        // Global fetch wrapper to handle 401 responses
-        // Skip showing login for auth check and login/logout endpoints
-        const originalFetch = window.fetch;
-        window.fetch = async function(...args) {
-            const response = await originalFetch(...args);
-            const url = args[0];
-
-            // Don't show login modal for these endpoints - they handle 401 themselves
-            const skipUrls = ['/api/v1/settings', '/api/v1/auth/login', '/api/v1/auth/logout'];
-            const shouldSkip = typeof url === 'string' && skipUrls.some(skip => url.includes(skip));
-
-            if (response.status === 401 && !shouldSkip) {
-                showLoginModal();
-            }
-            return response;
-        };
-
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', async () => {
-            if (document.querySelectorAll('#supp-matcher-list .kv-pair').length === 0) {
-                addSuppressionMatcherRow();
-            }
-            const isAuthenticated = await checkAuth();
-            if (isAuthenticated) {
-                const deepLinkIncidentOrderId = getIncidentOrderIdFromUrl();
-                if (deepLinkIncidentOrderId) {
-                    currentIncidentOrderId = deepLinkIncidentOrderId;
-                    showTab('incident');
-                    loadIncidentDetail(deepLinkIncidentOrderId);
-                } else {
-                    loadDashboard(); // Load dashboard by default
-                }
-                toggleAutoRefresh(); // Start auto-refresh
-            }
-        });
-    </script>
-    </div> <!-- End app-container -->
+  <script type="module" src="/assets/js/main.js"></script>
 </body>
 </html>
