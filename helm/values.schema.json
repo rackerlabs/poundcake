@@ -133,6 +133,12 @@
           "type": "integer",
           "default": 8080
         },
+        "runtimeWritablePaths": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true }
+          }
+        },
         "securityContext": {
           "type": "object",
           "properties": {

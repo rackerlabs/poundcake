@@ -23,6 +23,8 @@ uiImage:
   tag: latest
   pullPolicy: IfNotPresent
   containerPort: 8080
+  runtimeWritablePaths:
+    enabled: true
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000

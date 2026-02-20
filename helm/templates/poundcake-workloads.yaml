@@ -285,6 +285,15 @@ spec:
           imagePullPolicy: {{ .Values.uiImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.uiImage.securityContext | nindent 12 }}
+          {{- if .Values.uiImage.runtimeWritablePaths.enabled }}
+          volumeMounts:
+            - name: ui-nginx-confd
+              mountPath: /etc/nginx/conf.d
+            - name: ui-nginx-cache
+              mountPath: /var/cache/nginx
+            - name: ui-nginx-run
+              mountPath: /var/run
+          {{- end }}
           env:
             - name: API_URL
               value: http://poundcake-api:8000
@@ -314,6 +323,14 @@ spec:
               - secret:
                   name: stackstorm-startup-markers
                   optional: true
+        {{- if .Values.uiImage.runtimeWritablePaths.enabled }}
+        - name: ui-nginx-confd
+          emptyDir: {}
+        - name: ui-nginx-cache
+          emptyDir: {}
+        - name: ui-nginx-run
+          emptyDir: {}
+        {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
