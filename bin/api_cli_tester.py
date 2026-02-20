@@ -99,7 +99,9 @@ GROUPS: dict[str, list[Endpoint]] = {
         ),
     ],
     "Recipes": [
-        Endpoint("List recipes", "GET", "/api/v1/recipes/", default_query={"limit": 50, "offset": 0}),
+        Endpoint(
+            "List recipes", "GET", "/api/v1/recipes/", default_query={"limit": 50, "offset": 0}
+        ),
         Endpoint("Get recipe by id", "GET", "/api/v1/recipes/{recipe_id}"),
         Endpoint("Get recipe by name", "GET", "/api/v1/recipes/by-name/{recipe_name}"),
         Endpoint(
@@ -147,8 +149,12 @@ GROUPS: dict[str, list[Endpoint]] = {
             default_query={"limit": 50, "offset": 0},
         ),
         Endpoint("Get ingredient by id", "GET", "/api/v1/ingredients/{ingredient_id}"),
-        Endpoint("Get ingredients by recipe id", "GET", "/api/v1/ingredients/by-recipe/{recipe_id}"),
-        Endpoint("Get ingredients by recipe name", "GET", "/api/v1/ingredients/by-name/{recipe_name}"),
+        Endpoint(
+            "Get ingredients by recipe id", "GET", "/api/v1/ingredients/by-recipe/{recipe_id}"
+        ),
+        Endpoint(
+            "Get ingredients by recipe name", "GET", "/api/v1/ingredients/by-name/{recipe_name}"
+        ),
         Endpoint(
             "Create ingredient",
             "POST",
@@ -419,7 +425,11 @@ def run_group(
             return
         endpoint = endpoints[choice - 1]
         path = resolve_path(endpoint.path)
-        params = build_query(endpoint.default_query) if prompt_yes_no("Add query params?", False) else None
+        params = (
+            build_query(endpoint.default_query)
+            if prompt_yes_no("Add query params?", False)
+            else None
+        )
         body = (
             prompt_json("Request body", endpoint.body_template)
             if endpoint.method in {"POST", "PUT", "PATCH"}
