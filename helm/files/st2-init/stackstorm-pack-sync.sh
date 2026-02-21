@@ -47,7 +47,8 @@ while true; do
     tmp_dir="$(mktemp -d /tmp/pack-sync/unpack.XXXXXX)"
     if tar -xzf "${archive_file}" -C "${tmp_dir}"; then
       find "${PACK_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      cp -a "${tmp_dir}/." "${PACK_DIR}/"
+      # Do not preserve mtime/ownership; restricted filesystems can reject utime/chown.
+      cp -R "${tmp_dir}/." "${PACK_DIR}/"
       etag_line="$(grep -i '^etag:' "${headers_file}" | tail -n1 || true)"
       if [ -n "${etag_line}" ]; then
         last_etag="$(echo "${etag_line#*:}" | tr -d '\r' | xargs)"
