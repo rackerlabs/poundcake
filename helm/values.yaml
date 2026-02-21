@@ -10,7 +10,7 @@ poundcakeImage:
   tag: ""
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   pullSecrets: []
   securityContext:
     runAsNonRoot: true

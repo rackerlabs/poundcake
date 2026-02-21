@@ -227,7 +227,7 @@ poundcakeImage:
   repository: poundcake
   # Defaults to Chart.appVersion when omitted/empty.
   tag: ""
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 uiImage:
   repository: poundcake-ui
