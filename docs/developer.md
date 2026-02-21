@@ -176,7 +176,9 @@ export HELM_REGISTRY_USERNAME="<github-user>"
 export HELM_REGISTRY_PASSWORD="<github-token-with-read:packages>"
 
 export POUNDCAKE_GHCR_OWNER="$FORK_OWNER"
-export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake-standalone"
+# Default helper behavior is local chart install (POUNDCAKE_CHART_REPO unset).
+# Set POUNDCAKE_CHART_REPO only when you explicitly want OCI chart source.
+# export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake"
 export POUNDCAKE_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake"
 export POUNDCAKE_UI_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-ui"
 export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-bakery"
@@ -190,7 +192,7 @@ Note:
 
 ### 5.1) Installer Environment Variables
 
-Defaults below are installer defaults from `helm/bin/install-poundcake.sh` unless noted.
+Defaults below are installer defaults from `helm/bin/install-poundcake-with-env.sh` unless noted.
 If you source `install/set-env-helper.sh`, those helper exports may override these defaults.
 
 | Variable | Default | Required? | Purpose | When to set |
@@ -199,7 +201,7 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `HELM_REGISTRY_USERNAME` | `""` (helper: `$FORK_OWNER`) | Required for private GHCR | Used for Helm OCI login and docker-registry secret creation | Set when chart/images are private |
 | `HELM_REGISTRY_PASSWORD` | `""` | Required for private GHCR | Token/password for OCI login and pull-secret auth; must include `read:packages` for private pulls | Set when using private GHCR |
 | `POUNDCAKE_GHCR_OWNER` | `rackerlabs` (helper: `$FORK_OWNER`) | Optional | Owner used to derive default image repo | Set when pulling from a fork/private owner |
-| `POUNDCAKE_CHART_REPO` | local chart path (`./helm`) (helper sets OCI URL) | Optional | Chart source (`oci://...` or local) | Set for OCI-based deployments |
+| `POUNDCAKE_CHART_REPO` | local chart path (`./helm`) (helper leaves unset for local mode) | Optional | Chart source (`oci://...` or local) | Set for OCI-based deployments |
 | `POUNDCAKE_CHART_VERSION` | `""` | Optional | Explicit OCI chart version | Pin chart version for repeatable deploys |
 | `POUNDCAKE_VERSION_FILE` | `/etc/genestack/helm-chart-versions.yaml` | Optional | Source for auto-detected chart version key `poundcake` | Change only if your version file is elsewhere |
 | `POUNDCAKE_IMAGE_REPO` | `ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake` | Optional | PoundCake image repository | Set for fork/private image repo |
@@ -215,7 +217,6 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `POUNDCAKE_ALLOW_HOOK_WAIT` | `false` | Optional | Bypass wait deadlock guard | Set only when intentionally forcing wait/atomic |
 | `POUNDCAKE_HELM_ATOMIC` | `false` | Optional | Enable Helm `--atomic` | Use only if you accept hook/wait behavior implications |
 | `POUNDCAKE_HELM_CLEANUP_ON_FAIL` | `false` | Optional | Enable Helm cleanup on failure | Enable in strict CI environments |
-| `POUNDCAKE_STACKSTORM_CHART_ENABLED` | `true` | Optional | Wrapper-level pass-through (`--set stackstorm.chart.enabled=...`) | Disable only for targeted/testing scenarios |
 | `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `ghcr-pull` | Optional | Pull secret name created/reused by installer | Set when org requires naming convention |
 | `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `true` | Optional | Auto-create/apply docker-registry secret | Disable if secret is pre-provisioned |
 | `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` | `noreply@local` | Optional | Email field used when creating docker-registry secret | Set if your policy requires real address |

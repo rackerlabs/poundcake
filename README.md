@@ -206,13 +206,13 @@ output:
 
 ```bash
 # Helm-based install script
-./helm/bin/install-poundcake.sh
+./helm/bin/install-poundcake-with-env.sh
 
 # Optional: pass extra Helm args through
-./helm/bin/install-poundcake.sh -f /path/to/values.yaml
+./helm/bin/install-poundcake-with-env.sh -f /path/to/values.yaml
 
 # Validate chart rendering before install
-./helm/bin/install-poundcake.sh --validate
+./helm/bin/install-poundcake-with-env.sh --validate
 ```
 
 Installer flags:
@@ -228,6 +228,8 @@ Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/READ
 source ./install/set-env-helper.sh
 export HELM_REGISTRY_USERNAME="<gh-username>"
 export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
+# Optional OCI chart source override; helper defaults to local chart install (./helm)
+# export POUNDCAKE_CHART_REPO="oci://ghcr.io/<owner>/charts/poundcake"
 ./install/install-helm.sh
 ```
 

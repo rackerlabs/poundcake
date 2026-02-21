@@ -115,7 +115,7 @@ You can tune this with `startupHooks.cleanup.*` values.
 
 ### Installer Validation and Preflight
 
-`/Users/chris.breu/code/poundcake/helm/bin/install-poundcake.sh` supports installer-specific flags:
+`/Users/chris.breu/code/poundcake/helm/bin/install-poundcake-with-env.sh` supports installer-specific flags:
 
 - `--validate`: run `helm lint` and `helm template --debug` before install
 - `--skip-preflight`: skip dependency/cluster connectivity checks
