@@ -17,6 +17,11 @@ if [ -z "${API_URL:-}" ]; then
   else
     API_URL="http://localhost:8000/api/v1"
   fi
+  if [ "${DEBUG}" = "1" ]; then
+    echo "[DEBUG] API_URL defaulted by lib.sh to ${API_URL}" >&2
+  fi
+elif [ "${DEBUG}" = "1" ]; then
+  echo "[DEBUG] API_URL inherited by lib.sh as ${API_URL}" >&2
 fi
 
 log_info() {

@@ -86,6 +86,17 @@ Common optional vars:
 - `POUNDCAKE_LOCAL_PORT` (default: `8000`, k8s mode local port-forward)
 - `POUNDCAKE_REMOTE_PORT` (default: `8000`, k8s mode service port)
 
+## API URL Resolution Precedence
+
+`lib.sh` sets initial defaults first, then `run_e2e.sh` finalizes runtime `API_URL` after CLI parsing with this precedence:
+
+1. `--api-url <url>` (always wins)
+2. `--target k8s` with explicit `--service <name>`:
+   `http://<service>.<namespace>.svc.cluster.local:<remote-port>/api/v1`
+3. Target defaults:
+   - k8s: `http://localhost:<local-port>/api/v1`
+   - compose: `http://localhost:8000/api/v1`
+
 ## Execution Targets
 
 ### Compose mode (default)
@@ -125,6 +136,8 @@ Custom service/port example:
   --local-port 18000 \
   --remote-port 8000
 ```
+
+When `--service` is explicitly provided in k8s mode, `API_URL` resolves to service FQDN form (`<service>.<namespace>.svc.cluster.local`) while port-forward startup behavior remains unchanged.
 
 ## Quick Start
 
