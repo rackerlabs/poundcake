@@ -244,7 +244,9 @@ Chart value controls:
 - Legacy fallback (temporary): `imagePullSecrets`
 
 Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
-- Ensure image exists at `POUNDCAKE_IMAGE_REPO:POUNDCAKE_IMAGE_TAG`
+- Ensure image pin is explicit via either:
+  - `POUNDCAKE_IMAGE_REPO:POUNDCAKE_IMAGE_TAG`, or
+  - `POUNDCAKE_IMAGE_REPO@POUNDCAKE_IMAGE_DIGEST`
 - Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
 - Ensure PAT has `read:packages` and package visibility grants access
 - Verify pull secret is on a PoundCake pod:
@@ -347,8 +349,10 @@ DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
 
 # StackStorm
 POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
-# StackStorm packs are served by API endpoint /api/v1/internal/stackstorm/pack.tgz
+# StackStorm packs are served by API endpoint /api/v1/cook/packs
 # and synchronized into StackStorm pods by the pack-sync sidecar.
+# Legacy compatibility endpoint /api/v1/internal/stackstorm/pack.tgz remains
+# temporarily available and will be removed after a migration window.
 ```
 
 `config/st2_api_key` is created by `st2client` during bootstrap.

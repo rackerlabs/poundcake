@@ -38,7 +38,8 @@ export POUNDCAKE_GHCR_OWNER="${POUNDCAKE_GHCR_OWNER:-$FORK_OWNER}"
 # Image repositories/tags
 # -----------------------------------------------------------------------------
 export POUNDCAKE_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${FORK_OWNER}/poundcake}"
-export POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-latest}"
+export POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-}"
+export POUNDCAKE_IMAGE_DIGEST="${POUNDCAKE_IMAGE_DIGEST:-}"
 
 # Passed through for compatibility with existing workflows.
 export POUNDCAKE_UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${FORK_OWNER}/poundcake-ui}"
@@ -48,6 +49,7 @@ export POUNDCAKE_BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-ghcr.io/${FOR
 # StackStorm image controls
 export POUNDCAKE_STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
 export POUNDCAKE_STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
+export POUNDCAKE_PACK_SYNC_ENDPOINT="${POUNDCAKE_PACK_SYNC_ENDPOINT:-http://poundcake-api:8000/api/v1/cook/packs}"
 
 # -----------------------------------------------------------------------------
 # Release behavior
@@ -96,8 +98,20 @@ fi
 echo "PoundCake env helper loaded."
 echo "  Chart mode:  ${CHART_MODE_DISPLAY}"
 echo "  Chart repo:  ${CHART_SOURCE_DISPLAY}"
-echo "  Image repo:  ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
+if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+  echo "  [WARN] Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST"
+elif [[ -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+  echo "  [WARN] Image pin required: export POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST"
+fi
+
+if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+  echo "  Image repo:  ${POUNDCAKE_IMAGE_REPO}@${POUNDCAKE_IMAGE_DIGEST}"
+else
+  echo "  Image repo:  ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
+fi
 echo "  Namespace:   ${POUNDCAKE_NAMESPACE}"
 echo "  Release:     ${POUNDCAKE_RELEASE_NAME}"
 echo "  Pull secret: ${POUNDCAKE_IMAGE_PULL_SECRET_NAME} (enabled=${POUNDCAKE_IMAGE_PULL_SECRET_ENABLED}, create=${POUNDCAKE_CREATE_IMAGE_PULL_SECRET})"
 echo "  Helm wait:   ${POUNDCAKE_HELM_WAIT} (allow_hook_wait=${POUNDCAKE_ALLOW_HOOK_WAIT})"
+echo "  Probe contract: /api/v1/live + /api/v1/ready"
+echo "  Pack endpoint: ${POUNDCAKE_PACK_SYNC_ENDPOINT}"

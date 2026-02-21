@@ -6,6 +6,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.api.cook import router as cook_router
 from api.api.internal_stackstorm import router as internal_stackstorm_router
 from api.core.database import get_db
 from api.services.stackstorm_service import build_stackstorm_pack_artifact
@@ -32,6 +33,7 @@ def test_build_stackstorm_pack_artifact_contains_pack_yaml_and_workflows():
 
 def test_pack_artifact_endpoint_requires_token_and_supports_etag():
     app = FastAPI()
+    app.include_router(cook_router, prefix="/api/v1")
     app.include_router(internal_stackstorm_router, prefix="/api/v1")
 
     class _Result:
@@ -69,12 +71,15 @@ def test_pack_artifact_endpoint_requires_token_and_supports_etag():
     client = TestClient(app)
     settings = SimpleNamespace(pack_sync_token="token123")
 
-    with patch("api.api.internal_stackstorm.get_settings", return_value=settings):
-        denied = client.get("/api/v1/internal/stackstorm/pack.tgz")
+    with (
+        patch("api.services.pack_sync_service.get_settings", return_value=settings),
+        patch("api.api.internal_stackstorm.record_deprecated_endpoint_hit") as deprecated_metric,
+    ):
+        denied = client.get("/api/v1/cook/packs")
         assert denied.status_code == 401
 
         ok = client.get(
-            "/api/v1/internal/stackstorm/pack.tgz",
+            "/api/v1/cook/packs",
             headers={"X-Pack-Sync-Token": "token123"},
         )
         assert ok.status_code == 200
@@ -82,10 +87,17 @@ def test_pack_artifact_endpoint_requires_token_and_supports_etag():
         assert ok.headers.get("cache-control") == "no-cache"
 
         not_modified = client.get(
-            "/api/v1/internal/stackstorm/pack.tgz",
+            "/api/v1/cook/packs",
             headers={
                 "X-Pack-Sync-Token": "token123",
                 "If-None-Match": ok.headers["etag"],
             },
         )
         assert not_modified.status_code == 304
+
+        alias = client.get(
+            "/api/v1/internal/stackstorm/pack.tgz",
+            headers={"X-Pack-Sync-Token": "token123"},
+        )
+        assert alias.status_code == 200
+        deprecated_metric.assert_called_once()

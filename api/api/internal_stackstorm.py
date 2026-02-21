@@ -8,18 +8,13 @@
 
 from __future__ import annotations
 
-import secrets
-
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
-from api.core.config import get_settings
 from api.core.database import get_db
 from api.core.logging import get_logger
-from api.models.models import Recipe, RecipeIngredient
-from api.services.stackstorm_service import build_stackstorm_pack_artifact
+from api.core.metrics import record_deprecated_endpoint_hit
+from api.services.pack_sync_service import get_pack_sync_artifact_response
 
 logger = get_logger(__name__)
 
@@ -32,36 +27,21 @@ async def get_stackstorm_pack_tgz(
     db: AsyncSession = Depends(get_db),
     pack_sync_token: str | None = Header(default=None, alias="X-Pack-Sync-Token"),
 ):
-    """Return the current generated PoundCake StackStorm pack as tar.gz."""
-    settings = get_settings()
-    expected_token = settings.pack_sync_token
-
-    if not expected_token:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Pack sync endpoint is not configured",
-        )
-
-    if not pack_sync_token or not secrets.compare_digest(pack_sync_token, expected_token):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid pack sync token",
-        )
-
-    result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .where(Recipe.deleted.is_(False))
-        .where(Recipe.enabled.is_(True))
-        .where(Recipe.source_type == "stackstorm")
+    """Deprecated pack-sync endpoint kept for migration compatibility."""
+    logger.warning(
+        "Deprecated pack-sync endpoint called",
+        extra={
+            "event": "endpoint_deprecated",
+            "deprecated_endpoint": "/api/v1/internal/stackstorm/pack.tgz",
+            "replacement_endpoint": "/api/v1/cook/packs",
+        },
     )
-    recipes = result.unique().scalars().all()
-    artifact_bytes, etag = build_stackstorm_pack_artifact(recipes=recipes)
-
-    headers = {"ETag": etag, "Cache-Control": "no-cache"}
-
-    request_etag = request.headers.get("if-none-match", "").strip()
-    if request_etag == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
-
-    return Response(content=artifact_bytes, media_type="application/gzip", headers=headers)
+    record_deprecated_endpoint_hit(
+        endpoint="/api/v1/internal/stackstorm/pack.tgz",
+        replacement="/api/v1/cook/packs",
+    )
+    return await get_pack_sync_artifact_response(
+        request=request,
+        db=db,
+        pack_sync_token=pack_sync_token,
+    )

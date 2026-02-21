@@ -44,7 +44,7 @@ spec:
               readOnly: true
       containers:
         - name: api
-          image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
+          image: {{ include "poundcake.poundcakeImageRef" . }}
           imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
@@ -217,7 +217,7 @@ spec:
               mountPath: /app/config
       containers:
         - name: chef
-          image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
+          image: {{ include "poundcake.poundcakeImageRef" . }}
           imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
@@ -382,7 +382,7 @@ spec:
               mountPath: /app/config
       containers:
         - name: prep-chef
-          image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
+          image: {{ include "poundcake.poundcakeImageRef" . }}
           imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
@@ -454,7 +454,7 @@ spec:
               mountPath: /app/config
       containers:
         - name: timer
-          image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
+          image: {{ include "poundcake.poundcakeImageRef" . }}
           imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}
@@ -533,7 +533,7 @@ spec:
               mountPath: /app/config
       containers:
         - name: dishwasher
-          image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
+          image: {{ include "poundcake.poundcakeImageRef" . }}
           imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.poundcakeImage.securityContext | nindent 12 }}

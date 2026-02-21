@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-PACK_SYNC_URL="${POUNDCAKE_PACK_SYNC_URL:-http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz}"
+PACK_SYNC_URL="${POUNDCAKE_PACK_SYNC_URL:-http://poundcake-api:8000/api/v1/cook/packs}"
 PACK_SYNC_TOKEN="${PACK_SYNC_TOKEN:-}"
 PACK_SYNC_TIMEOUT="${POUNDCAKE_PACK_SYNC_TIMEOUT:-10}"
 POLL_INTERVAL="${POUNDCAKE_PACK_SYNC_POLL_INTERVAL:-20}"

@@ -691,7 +691,7 @@ spec:
               echo "${resp:-no-response}"
               exit 1
         - name: run-bootstrap
-          image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
+          image: {{ include "poundcake.poundcakeImageRef" . }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
           imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}

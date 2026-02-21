@@ -40,6 +40,10 @@
           "type": "string",
           "default": ""
         },
+        "digest": {
+          "type": "string",
+          "default": ""
+        },
         "pullPolicy": {
           "type": "string",
           "enum": ["Always", "Never", "IfNotPresent"],

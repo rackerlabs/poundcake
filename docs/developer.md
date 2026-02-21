@@ -205,7 +205,8 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `POUNDCAKE_CHART_VERSION` | `""` | Optional | Explicit OCI chart version | Pin chart version for repeatable deploys |
 | `POUNDCAKE_VERSION_FILE` | `/etc/genestack/helm-chart-versions.yaml` | Optional | Source for auto-detected chart version key `poundcake` | Change only if your version file is elsewhere |
 | `POUNDCAKE_IMAGE_REPO` | `ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake` | Optional | PoundCake image repository | Set for fork/private image repo |
-| `POUNDCAKE_IMAGE_TAG` | `d5dbf49` (helper: `latest`) | Optional | PoundCake image tag | Set for release pinning |
+| `POUNDCAKE_IMAGE_TAG` | `""` | Conditionally required | PoundCake image tag | Set when not using digest pin |
+| `POUNDCAKE_IMAGE_DIGEST` | `""` | Conditionally required | PoundCake image digest (`sha256:...`) | Set when not using tag pin; preferred for immutable deploys |
 | `POUNDCAKE_UI_IMAGE_REPO` | `""` (helper sets fork path) | Optional | Compatibility override passed through Helm args | Set only if your workflow consumes it |
 | `POUNDCAKE_BAKERY_IMAGE_REPO` | `""` (helper sets fork path) | Optional | Compatibility override passed through Helm args | Set only if your workflow consumes it |
 | `POUNDCAKE_STACKSTORM_IMAGE_REPO` | `stackstorm/st2` | Optional | StackStorm image repository | Set when using custom/private StackStorm image |
@@ -221,6 +222,7 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `true` | Optional | Auto-create/apply docker-registry secret | Disable if secret is pre-provisioned |
 | `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` | `noreply@local` | Optional | Email field used when creating docker-registry secret | Set if your policy requires real address |
 | `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` | `true` | Optional | Inject pull secret into PoundCake workloads | Set `false` only when all images are public or pull handled elsewhere |
+| `POUNDCAKE_PACK_SYNC_ENDPOINT` | `http://poundcake-api:8000/api/v1/cook/packs` | Optional | Canonical StackStorm pack-sync endpoint | Override only for explicit compatibility migrations |
 
 Important clarifications:
 - `HELM_REGISTRY_PASSWORD` must have `read:packages` for private GHCR pulls.
@@ -260,7 +262,8 @@ export HELM_REGISTRY_PASSWORD="<github-token-with-read:packages>"
 
 # Optional overrides
 # export POUNDCAKE_IMAGE_REPO="ghcr.io/<owner>/poundcake"
-# export POUNDCAKE_IMAGE_TAG="latest"
+# export POUNDCAKE_IMAGE_TAG="release-20260221-1200"
+# export POUNDCAKE_IMAGE_DIGEST="sha256:<64-hex>"
 # export POUNDCAKE_NAMESPACE="rackspace"
 
 ./install/install-helm.sh

@@ -16,7 +16,8 @@ ALLOW_HOOK_WAIT="${POUNDCAKE_ALLOW_HOOK_WAIT:-false}"
 GHCR_OWNER="${POUNDCAKE_GHCR_OWNER:-rackerlabs}"
 CHART_REPO="${POUNDCAKE_CHART_REPO:-}"
 POUNDCAKE_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
-POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-d5dbf49}"
+POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-}"
+POUNDCAKE_IMAGE_DIGEST="${POUNDCAKE_IMAGE_DIGEST:-}"
 STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
 STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-}"
@@ -30,6 +31,7 @@ IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-ghcr-pull}"
 CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-true}"
 IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-noreply@local}"
 IMAGE_PULL_SECRET_ENABLED="${POUNDCAKE_IMAGE_PULL_SECRET_ENABLED:-true}"
+PACK_SYNC_ENDPOINT="${POUNDCAKE_PACK_SYNC_ENDPOINT:-http://poundcake-api:8000/api/v1/cook/packs}"
 
 BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml}"
 GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-configs/global_overrides}"
@@ -102,7 +104,8 @@ Environment overrides:
   POUNDCAKE_INSTALL_DEBUG         (default: false; same as --debug)
   POUNDCAKE_HELM_VALIDATE          (default: false; same as --validate)
   POUNDCAKE_IMAGE_REPO             (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake)
-  POUNDCAKE_IMAGE_TAG              (default: d5dbf49)
+  POUNDCAKE_IMAGE_TAG              (optional; required when digest unset)
+  POUNDCAKE_IMAGE_DIGEST           (optional; sha256:...; required when tag unset)
   POUNDCAKE_UI_IMAGE_REPO          (optional; sets uiImage.repository)
   POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
   POUNDCAKE_BAKERY_IMAGE_REPO      (optional; accepted for compatibility)
@@ -112,6 +115,7 @@ Environment overrides:
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET   (default: true)
   POUNDCAKE_IMAGE_PULL_SECRET_EMAIL    (default: noreply@local)
   POUNDCAKE_IMAGE_PULL_SECRET_ENABLED  (default: true)
+  POUNDCAKE_PACK_SYNC_ENDPOINT     (default: http://poundcake-api:8000/api/v1/cook/packs)
   POUNDCAKE_RELEASE_NAME           (default: poundcake)
   POUNDCAKE_NAMESPACE              (default: rackspace)
   POUNDCAKE_HELM_TIMEOUT           (default: 120m)
@@ -313,6 +317,59 @@ rotate_chart_secrets() {
   done
 }
 
+validate_image_pin_input() {
+  if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+    log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
+    exit 1
+  fi
+  if [[ -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+    log_error "Image pin required: set POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
+    exit 1
+  fi
+  if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]] && [[ ! "${POUNDCAKE_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    log_error "POUNDCAKE_IMAGE_DIGEST must match sha256:<64-hex>."
+    exit 1
+  fi
+}
+
+verify_rendered_endpoint_contract() {
+  local rendered_manifest="$1"
+  local expected_pack_sync_endpoint="$2"
+  local canonical_pack_sync_endpoint="http://poundcake-api:8000/api/v1/cook/packs"
+
+  if ! awk '
+    BEGIN { kind=""; name=""; inmeta=0; want=0; probe=""; ready=0; live=0 }
+    /^kind:[[:space:]]+/ { kind=$2; next }
+    /^metadata:[[:space:]]*$/ { inmeta=1; next }
+    inmeta && /^  name:[[:space:]]+/ {
+      name=$2
+      inmeta=0
+      if (kind=="Deployment" && name=="poundcake-api") {
+        want=1
+      }
+      next
+    }
+    want && /^[[:space:]]+readinessProbe:[[:space:]]*$/ { probe="ready"; next }
+    want && /^[[:space:]]+livenessProbe:[[:space:]]*$/ { probe="live"; next }
+    want && probe=="ready" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/ready[[:space:]]*$/ { ready=1; next }
+    want && probe=="live" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/live[[:space:]]*$/ { live=1; next }
+    /^---[[:space:]]*$/ { kind=""; name=""; inmeta=0; want=0; probe="" }
+    END { exit((ready && live) ? 0 : 1) }
+  ' "${rendered_manifest}"; then
+    log_error "Rendered manifest contract failed: poundcake-api probes must target /api/v1/ready and /api/v1/live."
+    exit 1
+  fi
+
+  if ! grep -Fq "${expected_pack_sync_endpoint}" "${rendered_manifest}"; then
+    log_error "Rendered manifest contract failed: pack sync endpoint '${expected_pack_sync_endpoint}' not found."
+    exit 1
+  fi
+
+  if [[ "${expected_pack_sync_endpoint}" != "${canonical_pack_sync_endpoint}" ]]; then
+    log_warn "Using non-canonical pack sync endpoint override: ${expected_pack_sync_endpoint}"
+  fi
+}
+
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   usage
   exit 0
@@ -358,6 +415,9 @@ if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
 else
   log_info "Skipping preflight checks (--skip-preflight)."
 fi
+
+log_phase "image pin validation"
+validate_image_pin_input
 
 if [[ "${CREATE_IMAGE_PULL_SECRET}" == "true" ]] && ! command -v kubectl >/dev/null 2>&1; then
   log_error "kubectl is required when POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true."
@@ -455,24 +515,32 @@ if [[ -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
 fi
 
 INSTALLER_SET_ARGS=(
-  --set "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
-  --set "poundcakeImage.tag=${POUNDCAKE_IMAGE_TAG}"
-  --set "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
-  --set "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
+  --set-string "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
+  --set-string "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
+  --set-string "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
+  --set-string "stackstormPackSync.endpoint=${PACK_SYNC_ENDPOINT}"
 )
 
+if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.tag=")
+  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.digest=${POUNDCAKE_IMAGE_DIGEST}")
+else
+  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.tag=${POUNDCAKE_IMAGE_TAG}")
+  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.digest=")
+fi
+
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
-  INSTALLER_SET_ARGS+=(--set "poundcakeImage.pullSecrets[0]=${IMAGE_PULL_SECRET_NAME}")
+  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.pullSecrets[0]=${IMAGE_PULL_SECRET_NAME}")
 fi
 
 if [[ -n "${UI_IMAGE_REPO}" ]]; then
-  INSTALLER_SET_ARGS+=(--set "uiImage.repository=${UI_IMAGE_REPO}")
+  INSTALLER_SET_ARGS+=(--set-string "uiImage.repository=${UI_IMAGE_REPO}")
 fi
 if [[ -n "${UI_IMAGE_TAG}" ]]; then
-  INSTALLER_SET_ARGS+=(--set "uiImage.tag=${UI_IMAGE_TAG}")
+  INSTALLER_SET_ARGS+=(--set-string "uiImage.tag=${UI_IMAGE_TAG}")
 fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
-  INSTALLER_SET_ARGS+=(--set "bakery.image.repository=${BAKERY_IMAGE_REPO}")
+  INSTALLER_SET_ARGS+=(--set-string "bakery.image.repository=${BAKERY_IMAGE_REPO}")
 fi
 
 COMMON_HELM_ARGS=(
@@ -523,32 +591,34 @@ if [[ "${HELM_CLEANUP_ON_FAIL}" == "true" ]]; then
   HELM_CMD+=(--cleanup-on-fail)
 fi
 
+log_phase "rendered manifest contract verification"
+TEMPLATE_ARGS=()
+if (( ${#EXTRA_ARGS[@]} )); then
+  for arg in "${EXTRA_ARGS[@]}"; do
+    case "${arg}" in
+      --wait|--atomic|--cleanup-on-fail|--create-namespace)
+        continue
+        ;;
+    esac
+    TEMPLATE_ARGS+=("${arg}")
+  done
+fi
+
+RENDERED_MANIFEST="$(mktemp)"
+HELM_TEMPLATE_CMD=(
+  helm template "${RELEASE_NAME}" "${CHART_SOURCE}"
+  "${COMMON_HELM_ARGS[@]}"
+)
+
+if (( ${#TEMPLATE_ARGS[@]} )); then
+  "${HELM_TEMPLATE_CMD[@]}" "${TEMPLATE_ARGS[@]}" > "${RENDERED_MANIFEST}"
+else
+  "${HELM_TEMPLATE_CMD[@]}" > "${RENDERED_MANIFEST}"
+fi
+
+verify_rendered_endpoint_contract "${RENDERED_MANIFEST}" "${PACK_SYNC_ENDPOINT}"
+
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
-  log_phase "image pull secret render verification"
-  TEMPLATE_ARGS=()
-  if (( ${#EXTRA_ARGS[@]} )); then
-    for arg in "${EXTRA_ARGS[@]}"; do
-      case "${arg}" in
-        --wait|--atomic|--cleanup-on-fail|--create-namespace)
-          continue
-          ;;
-      esac
-      TEMPLATE_ARGS+=("${arg}")
-    done
-  fi
-
-  RENDERED_MANIFEST="$(mktemp)"
-  HELM_TEMPLATE_CMD=(
-    helm template "${RELEASE_NAME}" "${CHART_SOURCE}"
-    "${COMMON_HELM_ARGS[@]}"
-  )
-
-  if (( ${#TEMPLATE_ARGS[@]} )); then
-    "${HELM_TEMPLATE_CMD[@]}" "${TEMPLATE_ARGS[@]}" > "${RENDERED_MANIFEST}"
-  else
-    "${HELM_TEMPLATE_CMD[@]}" > "${RENDERED_MANIFEST}"
-  fi
-
   if ! awk -v secret_name="${IMAGE_PULL_SECRET_NAME}" '
     BEGIN {kind=""; name=""; want=0; seen=0; found=0}
     /^kind:[[:space:]]+/ {kind=$2}
@@ -580,13 +650,13 @@ if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
       exit(seen ? 0 : 1)
     }
   ' "${RENDERED_MANIFEST}"; then
-    rm -f "${RENDERED_MANIFEST}"
     log_error "Rendered PoundCake manifests do not include imagePullSecrets '${IMAGE_PULL_SECRET_NAME}'."
     log_error "Refusing install to avoid anonymous private-registry pulls."
+    rm -f "${RENDERED_MANIFEST}"
     exit 1
   fi
-  rm -f "${RENDERED_MANIFEST}"
 fi
+rm -f "${RENDERED_MANIFEST}"
 
 log_phase "helm install execution"
 log_info "Installing PoundCake release: ${RELEASE_NAME}"
@@ -595,7 +665,12 @@ log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
   log_info "Chart version: ${CHART_VERSION:-"(not set)"}"
 fi
-log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
+if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+  log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}@${POUNDCAKE_IMAGE_DIGEST}"
+else
+  log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
+fi
+log_info "Pack sync endpoint: ${PACK_SYNC_ENDPOINT}"
 if [[ -n "${UI_IMAGE_REPO}" ]]; then
   log_info "UI image repo override: ${UI_IMAGE_REPO}"
 fi

@@ -60,7 +60,7 @@ tests:
         documentIndex: 3
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
-          pattern: "PACK_SYNC_ENDPOINT=\\\"http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz\\\""
+          pattern: "PACK_SYNC_ENDPOINT=\\\"http://poundcake-api:8000/api/v1/cook/packs\\\""
         documentIndex: 8
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
@@ -81,11 +81,11 @@ tests:
 
   - it: allows overriding bootstrap wait-api pack sync endpoint
     set:
-      stackstormPackSync.endpoint: "http://poundcake-api:8000/api/v1/cook/packs"
+      stackstormPackSync.endpoint: "http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz"
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
-          pattern: "PACK_SYNC_ENDPOINT=\\\"http://poundcake-api:8000/api/v1/cook/packs\\\""
+          pattern: "PACK_SYNC_ENDPOINT=\\\"http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz\\\""
         documentIndex: 8
 
   - it: applies startup hook log-streaming labels
@@ -154,6 +154,17 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[2].image
           value: poundcake:1.0.0
+        documentIndex: 8
+
+  - it: supports immutable digest image references for poundcake-bootstrap job
+    set:
+      poundcakeImage.repository: ghcr.io/example/poundcake
+      poundcakeImage.tag: ""
+      poundcakeImage.digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[2].image
+          value: ghcr.io/example/poundcake@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         documentIndex: 8
 
   - it: applies pod and utility security contexts to startup jobs

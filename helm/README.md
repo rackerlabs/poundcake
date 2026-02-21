@@ -241,6 +241,8 @@ stackstormImage:
   pullPolicy: IfNotPresent
 ```
 
+Use immutable image pins for PoundCake releases. Set either a fixed tag or digest (`repository@sha256:...`) and avoid mutable `latest` in production installs.
+
 #### Persistence Configuration
 
 ```yaml
@@ -257,12 +259,13 @@ persistence:
 ```
 
 Dynamic StackStorm pack propagation is RWO-safe by default. Pack content is served by PoundCake API and synchronized into each StackStorm pod via sidecar using `emptyDir`, so no shared RWX volume is required.
-Greenfield installs require `/api/v1/internal/stackstorm/pack.tgz` to be available from `poundcake-api`.
+Greenfield installs require `/api/v1/cook/packs` to be available from `poundcake-api`.
+Legacy compatibility endpoint `/api/v1/internal/stackstorm/pack.tgz` remains temporarily available.
 
 ```yaml
 stackstormPackSync:
   enabled: true
-  endpoint: "http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz"
+  endpoint: "http://poundcake-api:8000/api/v1/cook/packs"
   pollIntervalSeconds: 20
   bootstrapPollIntervalSeconds: 5
   timeoutSeconds: 10

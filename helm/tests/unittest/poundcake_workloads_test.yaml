@@ -139,6 +139,17 @@ tests:
           value: poundcake:1.0.0
         documentIndex: 5
 
+  - it: supports immutable digest image references for PoundCake workloads
+    set:
+      poundcakeImage.repository: ghcr.io/example/poundcake
+      poundcakeImage.tag: ""
+      poundcakeImage.digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        documentIndex: 0
+
   - it: defaults UI container and probe ports to 8080
     asserts:
       - equal:

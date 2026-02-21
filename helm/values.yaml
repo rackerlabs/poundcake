@@ -8,6 +8,8 @@ poundcakeImage:
   repository: poundcake
   # Defaults to Chart.appVersion when empty.
   tag: ""
+  # Optional immutable image digest (sha256:...); overrides tag when set.
+  digest: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
   securityContext:
@@ -114,7 +116,7 @@ persistence:
 
 stackstormPackSync:
   enabled: true
-  endpoint: "http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz"
+  endpoint: "http://poundcake-api:8000/api/v1/cook/packs"
   pollIntervalSeconds: 20
   bootstrapPollIntervalSeconds: 5
   timeoutSeconds: 10

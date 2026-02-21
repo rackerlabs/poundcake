@@ -46,6 +46,15 @@ imagePullSecrets:
 {{- end }}
 {{- end -}}
 
+{{- define "poundcake.poundcakeImageRef" -}}
+{{- $digest := .Values.poundcakeImage.digest | default "" -}}
+{{- if $digest -}}
+{{- printf "%s@%s" .Values.poundcakeImage.repository $digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.poundcakeImage.repository (default .Chart.AppVersion .Values.poundcakeImage.tag) -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.pvcStorageClass" -}}
 {{- $root := .root -}}
 {{- $pvcStorageClass := .pvcStorageClass | default "" -}}
