@@ -112,6 +112,8 @@ kubectl -n <namespace> get secret stackstorm-startup-markers -o yaml
 
 By default, successful startup hook jobs are auto-cleaned (`hook-succeeded`) and failed jobs are retained for debugging.
 You can tune this with `startupHooks.cleanup.*` values.
+Init-gate logging is enabled by default and emits periodic progress lines for marker/endpoint waits.
+Tune cadence and format with `startupHooks.gateLogging.enabled`, `startupHooks.gateLogging.intervalSeconds`, and `startupHooks.gateLogging.prefix`.
 
 ### Installer Validation and Preflight
 

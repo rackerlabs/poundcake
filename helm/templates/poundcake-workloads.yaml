@@ -32,9 +32,10 @@ spec:
             - sh
             - -ec
             - |
-              until [ "$(cat /app/config/poundcake_mariadb_ready 2>/dev/null)" = "true" ]; do sleep 2; done
-              until [ "$(cat /app/config/stackstorm_bootstrap_ready 2>/dev/null)" = "true" ]; do sleep 2; done
-              until [ -n "$(cat /run/secrets/st2/st2_api_key 2>/dev/null)" ]; do sleep 2; done
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/poundcake_mariadb_ready" "wait-stage-ready-mariadb" "marker poundcake_mariadb_ready"
+              gate_wait_for_true_file "/app/config/stackstorm_bootstrap_ready" "wait-stage-ready-stackstorm-bootstrap" "marker stackstorm_bootstrap_ready"
+              gate_wait_for_nonempty_file "/run/secrets/st2/st2_api_key" "wait-stage-ready-st2-apikey" "st2 api key file"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -204,7 +205,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_tcp "poundcake-api" "8000" "wait-api-port" "tcp poundcake-api:8000"
+              gate_wait_for_true_file "/app/config/poundcake_bootstrap_ready" "wait-api-bootstrap" "marker poundcake_bootstrap_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -274,8 +281,9 @@ spec:
             - sh
             - -ec
             - |
-              until nc -z poundcake-api 8000; do sleep 2; done
-              until [ "$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)" = "true" ]; do sleep 2; done
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_tcp "poundcake-api" "8000" "wait-stage10-api-port" "tcp poundcake-api:8000"
+              gate_wait_for_true_file "/app/config/poundcake_bootstrap_ready" "wait-stage10-bootstrap" "marker poundcake_bootstrap_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -362,7 +370,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_tcp "poundcake-api" "8000" "wait-api-port" "tcp poundcake-api:8000"
+              gate_wait_for_true_file "/app/config/poundcake_bootstrap_ready" "wait-api-bootstrap" "marker poundcake_bootstrap_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -428,7 +442,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_tcp "poundcake-api" "8000" "wait-api-port" "tcp poundcake-api:8000"
+              gate_wait_for_true_file "/app/config/poundcake_bootstrap_ready" "wait-api-bootstrap" "marker poundcake_bootstrap_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -501,7 +521,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done; until [ \"$(cat /app/config/poundcake_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_tcp "poundcake-api" "8000" "wait-api-port" "tcp poundcake-api:8000"
+              gate_wait_for_true_file "/app/config/poundcake_bootstrap_ready" "wait-api-bootstrap" "marker poundcake_bootstrap_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config

@@ -607,6 +607,15 @@
             }
           }
         },
+        "gateLogging": {
+          "type": "object",
+          "description": "Logging controls for startup and init-container gate waits",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "intervalSeconds": { "type": "integer", "default": 30, "minimum": 1 },
+            "prefix": { "type": "string", "default": "[gate]" }
+          }
+        },
         "cleanup": {
           "type": "object",
           "properties": {

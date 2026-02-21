@@ -29,7 +29,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_mongodb_user_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done; until [ \"$(cat /app/config/stackstorm_infra_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_mongodb_user_ready" "wait-stage2-mongodb-user" "marker stackstorm_mongodb_user_ready"
+              gate_wait_for_true_file "/app/config/stackstorm_infra_ready" "wait-stage2-infra" "marker stackstorm_infra_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -140,7 +146,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_mongodb_user_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done; until [ \"$(cat /app/config/stackstorm_infra_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_mongodb_user_ready" "wait-stage2-mongodb-user" "marker stackstorm_mongodb_user_ready"
+              gate_wait_for_true_file "/app/config/stackstorm_infra_ready" "wait-stage2-infra" "marker stackstorm_infra_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -223,7 +235,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_mongodb_user_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done; until [ \"$(cat /app/config/stackstorm_infra_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_mongodb_user_ready" "wait-stage2-mongodb-user" "marker stackstorm_mongodb_user_ready"
+              gate_wait_for_true_file "/app/config/stackstorm_infra_ready" "wait-stage2-infra" "marker stackstorm_infra_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -334,7 +352,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -437,7 +460,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -508,7 +536,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -611,7 +644,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -683,7 +721,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -755,7 +798,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -827,7 +875,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_controlplane_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -900,7 +953,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_workers_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_workers_ready" "wait-stage5-workers" "marker stackstorm_workers_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -973,7 +1031,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_workers_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_workers_ready" "wait-stage5-workers" "marker stackstorm_workers_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -1049,7 +1112,12 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_workers_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_workers_ready" "wait-stage5-workers" "marker stackstorm_workers_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -1125,7 +1193,13 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until [ \"$(cat /app/config/stackstorm_bootstrap_ready 2>/dev/null)\" = \"true\" ]; do sleep 2; done; until [ -n \"$(cat /app/config/st2_api_key 2>/dev/null)\" ]; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/stackstorm_bootstrap_ready" "wait-stage7-bootstrap" "marker stackstorm_bootstrap_ready"
+              gate_wait_for_nonempty_file "/app/config/st2_api_key" "wait-stage7-apikey" "st2 api key material"
           volumeMounts:
             - name: app-config
               mountPath: /app/config

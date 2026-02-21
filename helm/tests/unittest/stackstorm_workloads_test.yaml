@@ -38,12 +38,35 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_ENABLED=\\\"true\\\""
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
           pattern: "stackstorm_controlplane_ready"
         documentIndex: 6
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: garbagecollector
         documentIndex: 6
+
+  - it: supports gate logging overrides on stackstorm init gates
+    set:
+      startupHooks.gateLogging.enabled: false
+      startupHooks.gateLogging.intervalSeconds: 5
+      startupHooks.gateLogging.prefix: "[ss-gate]"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_ENABLED=\\\"false\\\""
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_INTERVAL=\\\"5\\\""
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_PREFIX=\\\"\\[ss-gate\\]\\\""
+        documentIndex: 0
 
   - it: applies stackstorm-exec labels to optional execution services
     set:

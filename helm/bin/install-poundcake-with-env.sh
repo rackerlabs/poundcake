@@ -39,16 +39,51 @@ POST_RENDERER_ARGS="${POUNDCAKE_HELM_POST_RENDERER_ARGS:-poundcake/overlay}"
 POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/genestack/kustomize/poundcake/overlay}"
 
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
+INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
 SKIP_PREFLIGHT="false"
 ROTATE_SECRETS="false"
+CURRENT_PHASE="initialization"
 EXTRA_ARGS=()
+
+timestamp_utc() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+log_info() {
+  printf '[%s] [INFO] %s\n' "$(timestamp_utc)" "$*"
+}
+
+log_warn() {
+  printf '[%s] [WARN] %s\n' "$(timestamp_utc)" "$*" >&2
+}
+
+log_error() {
+  printf '[%s] [ERROR] %s\n' "$(timestamp_utc)" "$*" >&2
+}
+
+log_phase() {
+  CURRENT_PHASE="$*"
+  log_info "Phase: ${CURRENT_PHASE}"
+}
+
+on_error() {
+  local line_no="$1"
+  local failed_command="$2"
+  local exit_code="$3"
+  trap - ERR
+  log_error "Fatal: phase='${CURRENT_PHASE:-unknown}' line=${line_no} exit=${exit_code} cmd=${failed_command}"
+  exit "${exit_code}"
+}
+
+trap 'on_error "$LINENO" "$BASH_COMMAND" "$?"' ERR
 
 usage() {
   cat <<'USAGE_EOF'
 Usage:
-  install-poundcake.sh [installer options] [helm upgrade/install args]
+  install-poundcake-with-env.sh [installer options] [helm upgrade/install args]
 
 Installer options:
+  --debug           Enable shell tracing for installer execution
   --validate        Run helm lint + helm template --debug before install
   --skip-preflight  Skip dependency/cluster preflight checks
   --rotate-secrets  Delete known chart-managed secrets before install
@@ -64,6 +99,7 @@ Environment overrides:
   POUNDCAKE_HELM_POST_RENDERER     (optional; post-renderer script path)
   POUNDCAKE_HELM_POST_RENDERER_ARGS (optional; post-renderer args)
   POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR (optional; overlay path guard)
+  POUNDCAKE_INSTALL_DEBUG         (default: false; same as --debug)
   POUNDCAKE_HELM_VALIDATE          (default: false; same as --validate)
   POUNDCAKE_IMAGE_REPO             (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake)
   POUNDCAKE_IMAGE_TAG              (default: d5dbf49)
@@ -92,10 +128,11 @@ USAGE_EOF
 }
 
 check_dependencies() {
+  log_info "Checking required command dependencies..."
   local missing=0
   for cmd in "$@"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
-      echo "Error: required command '$cmd' not found in PATH." >&2
+      log_error "Required command '$cmd' not found in PATH."
       missing=1
     fi
   done
@@ -105,8 +142,9 @@ check_dependencies() {
 }
 
 check_cluster_connection() {
+  log_info "Checking Kubernetes cluster connectivity..."
   if ! kubectl cluster-info >/dev/null 2>&1; then
-    echo "Error: cannot connect to Kubernetes cluster (kubectl cluster-info failed)." >&2
+    log_error "Cannot connect to Kubernetes cluster (kubectl cluster-info failed)."
     exit 1
   fi
 }
@@ -130,10 +168,10 @@ ensure_oci_registry_auth() {
   password="${HELM_REGISTRY_PASSWORD:-${GHCR_TOKEN:-${CR_PAT:-${GITHUB_TOKEN:-}}}}"
 
   if [[ -n "${username}" && -n "${password}" ]]; then
-    echo "Authenticating Helm OCI client to ${registry_host} as ${username}..."
+    log_info "Authenticating Helm OCI client to ${registry_host} as ${username}..."
     printf '%s' "${password}" | helm registry login "${registry_host}" -u "${username}" --password-stdin >/dev/null
   else
-    echo "Note: ${chart_source} is OCI-based. Set HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD for private charts." >&2
+    log_warn "${chart_source} is OCI-based. Set HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD for private charts."
   fi
 }
 
@@ -142,6 +180,7 @@ collect_yaml_files() {
   if [[ -d "${directory}" ]]; then
     find "${directory}" -maxdepth 1 -type f -name '*.yaml' | LC_ALL=C sort
   fi
+  return 0
 }
 
 get_chart_version_from_file() {
@@ -167,6 +206,7 @@ get_chart_version_from_file() {
 
 resolve_chart_version() {
   if [[ -n "${CHART_VERSION}" ]]; then
+    log_info "Using chart version from POUNDCAKE_CHART_VERSION: ${CHART_VERSION}"
     return
   fi
 
@@ -183,15 +223,26 @@ resolve_chart_version() {
   for candidate in "${candidate_files[@]}"; do
     [[ -f "${candidate}" ]] || continue
 
+    log_info "Inspecting chart version file: ${candidate}"
     CHART_VERSION="$(get_chart_version_from_file "${candidate}" "poundcake")"
     if [[ -z "${CHART_VERSION}" ]]; then
-      CHART_VERSION="$(grep -E '^[[:space:]]*poundcake:[[:space:]]*' "${candidate}" | sed -E 's/^[[:space:]]*poundcake:[[:space:]]*//' | head -n1)"
+      local matched_line=""
+      matched_line="$(grep -E '^[[:space:]]*poundcake:[[:space:]]*' "${candidate}" | head -n1 || true)"
+      if [[ -n "${matched_line}" ]]; then
+        CHART_VERSION="${matched_line#*:}"
+        CHART_VERSION="$(echo "${CHART_VERSION}" | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      else
+        log_warn "No poundcake version entry in ${candidate}; continuing without explicit --version."
+      fi
     fi
 
     if [[ -n "${CHART_VERSION}" ]]; then
+      log_info "Resolved chart version '${CHART_VERSION}' from ${candidate}"
       return
     fi
   done
+
+  log_info "No chart version override resolved from configured version files."
 }
 
 run_helm_validation() {
@@ -225,10 +276,10 @@ run_helm_validation() {
     lint_chart_source="$(find "${tmpdir}" -mindepth 1 -maxdepth 1 -type d | head -n1)"
   fi
 
-  echo "Running helm lint..."
+  log_info "Running helm lint..."
   helm lint "${lint_chart_source}" "${lint_args[@]}"
 
-  echo "Running helm template --debug..."
+  log_info "Running helm template --debug..."
   helm template "${release_name}" "${chart_source}" \
     --namespace "${namespace}" \
     "${template_args[@]}" \
@@ -255,7 +306,7 @@ rotate_chart_secrets() {
     "poundcake-st2-auth"
   )
 
-  echo "Rotating selected chart-managed secrets (if present)..."
+  log_info "Rotating selected chart-managed secrets (if present)..."
   local s
   for s in "${secrets[@]}"; do
     kubectl -n "${namespace}" delete secret "${s}" --ignore-not-found >/dev/null || true
@@ -267,8 +318,13 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
+log_phase "argument parsing"
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --debug)
+      INSTALL_DEBUG="true"
+      shift
+      ;;
     --validate)
       VALIDATE="true"
       shift
@@ -288,15 +344,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${INSTALL_DEBUG}" == "true" ]]; then
+  log_info "Debug tracing enabled."
+  PS4='+ [${BASH_SOURCE##*/}:${LINENO}${FUNCNAME[0]:+:${FUNCNAME[0]}}] '
+  set -x
+fi
+
+log_info "Installer options: validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
+
+log_phase "preflight checks"
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
   perform_preflight_checks
+else
+  log_info "Skipping preflight checks (--skip-preflight)."
 fi
 
 if [[ "${CREATE_IMAGE_PULL_SECRET}" == "true" ]] && ! command -v kubectl >/dev/null 2>&1; then
-  echo "Error: kubectl is required when POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true." >&2
+  log_error "kubectl is required when POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true."
   exit 1
 fi
 
+log_phase "chart source and version resolution"
 if [[ -z "${CHART_REPO}" ]]; then
   CHART_SOURCE="${CHART_DIR}"
 else
@@ -304,6 +372,8 @@ else
 fi
 
 resolve_chart_version
+
+log_phase "oci authentication"
 ensure_oci_registry_auth "${CHART_SOURCE}"
 
 wait_requested="false"
@@ -320,28 +390,29 @@ if (( ${#EXTRA_ARGS[@]} )); then
 fi
 
 if [[ "${wait_requested}" == "true" && "${ALLOW_HOOK_WAIT}" != "true" ]]; then
-  echo "Error: startup jobs are Helm post-install/post-upgrade hooks and workload init containers are marker-gated." >&2
-  echo "Using --wait/--atomic can deadlock before hook jobs run, so jobs may never be created." >&2
-  echo "Re-run with POUNDCAKE_HELM_WAIT=false (recommended)." >&2
-  echo "If you intentionally want wait semantics, set POUNDCAKE_ALLOW_HOOK_WAIT=true." >&2
+  log_error "Startup jobs are Helm post-install/post-upgrade hooks and workload init containers are marker-gated."
+  log_error "Using --wait/--atomic can deadlock before hook jobs run, so jobs may never be created."
+  log_error "Re-run with POUNDCAKE_HELM_WAIT=false (recommended)."
+  log_error "If you intentionally want wait semantics, set POUNDCAKE_ALLOW_HOOK_WAIT=true."
   exit 1
 fi
 
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" && -z "${IMAGE_PULL_SECRET_NAME}" ]]; then
-  echo "Error: POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true requires POUNDCAKE_IMAGE_PULL_SECRET_NAME." >&2
+  log_error "POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true requires POUNDCAKE_IMAGE_PULL_SECRET_NAME."
   exit 1
 fi
 
+log_phase "image pull secret configuration"
 if [[ "${CREATE_IMAGE_PULL_SECRET}" == "true" ]]; then
   if [[ -z "${HELM_REGISTRY_USERNAME}" || -z "${HELM_REGISTRY_PASSWORD}" ]]; then
-    echo "Error: POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true requires HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD." >&2
+    log_error "POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true requires HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD."
     exit 1
   fi
   if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-    echo "Namespace '${NAMESPACE}' does not exist; creating it for image pull secret setup..."
+    log_info "Namespace '${NAMESPACE}' does not exist; creating it for image pull secret setup..."
     kubectl create namespace "${NAMESPACE}"
   fi
-  echo "Creating/updating image pull secret '${IMAGE_PULL_SECRET_NAME}' in namespace '${NAMESPACE}'..."
+  log_info "Creating/updating image pull secret '${IMAGE_PULL_SECRET_NAME}' in namespace '${NAMESPACE}'..."
   kubectl -n "${NAMESPACE}" create secret docker-registry "${IMAGE_PULL_SECRET_NAME}" \
     --docker-server=ghcr.io \
     --docker-username="${HELM_REGISTRY_USERNAME}" \
@@ -349,13 +420,15 @@ if [[ "${CREATE_IMAGE_PULL_SECRET}" == "true" ]]; then
     --docker-email="${IMAGE_PULL_SECRET_EMAIL}" \
     --dry-run=client -o yaml | kubectl apply -f -
 else
-  echo "Skipping image pull secret creation (POUNDCAKE_CREATE_IMAGE_PULL_SECRET=${CREATE_IMAGE_PULL_SECRET})."
+  log_info "Skipping image pull secret creation (POUNDCAKE_CREATE_IMAGE_PULL_SECRET=${CREATE_IMAGE_PULL_SECRET})."
 fi
 
 if [[ "${ROTATE_SECRETS}" == "true" ]]; then
+  log_phase "secret rotation"
   rotate_chart_secrets "${NAMESPACE}" "${RELEASE_NAME}"
 fi
 
+log_phase "values file discovery"
 OVERRIDE_ARGS=()
 if [[ -n "${BASE_OVERRIDES}" && -f "${BASE_OVERRIDES}" ]]; then
   OVERRIDE_ARGS+=("-f" "${BASE_OVERRIDES}")
@@ -370,6 +443,8 @@ while IFS= read -r yaml_file; do
   [[ -n "${yaml_file}" ]] || continue
   OVERRIDE_ARGS+=("-f" "${yaml_file}")
 done < <(collect_yaml_files "${SERVICE_CONFIG_DIR}")
+
+log_info "Resolved override file argument count: ${#OVERRIDE_ARGS[@]}"
 
 POST_RENDER_ARGS=()
 if [[ -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
@@ -403,21 +478,35 @@ fi
 COMMON_HELM_ARGS=(
   --namespace "${NAMESPACE}"
   --timeout "${HELM_TIMEOUT}"
-  "${OVERRIDE_ARGS[@]}"
-  "${POST_RENDER_ARGS[@]}"
-  "${INSTALLER_SET_ARGS[@]}"
 )
+
+if (( ${#OVERRIDE_ARGS[@]} )); then
+  COMMON_HELM_ARGS+=("${OVERRIDE_ARGS[@]}")
+fi
+if (( ${#POST_RENDER_ARGS[@]} )); then
+  COMMON_HELM_ARGS+=("${POST_RENDER_ARGS[@]}")
+fi
+if (( ${#INSTALLER_SET_ARGS[@]} )); then
+  COMMON_HELM_ARGS+=("${INSTALLER_SET_ARGS[@]}")
+fi
 
 if [[ -n "${CHART_VERSION}" ]]; then
   COMMON_HELM_ARGS+=(--version "${CHART_VERSION}")
 fi
 
 if [[ "${VALIDATE}" == "true" ]]; then
-  run_helm_validation "${CHART_SOURCE}" "${NAMESPACE}" "${RELEASE_NAME}" \
-    "${COMMON_HELM_ARGS[@]}" \
-    "${EXTRA_ARGS[@]}"
+  log_phase "helm validation"
+  if (( ${#EXTRA_ARGS[@]} )); then
+    run_helm_validation "${CHART_SOURCE}" "${NAMESPACE}" "${RELEASE_NAME}" \
+      "${COMMON_HELM_ARGS[@]}" \
+      "${EXTRA_ARGS[@]}"
+  else
+    run_helm_validation "${CHART_SOURCE}" "${NAMESPACE}" "${RELEASE_NAME}" \
+      "${COMMON_HELM_ARGS[@]}"
+  fi
 fi
 
+log_phase "helm command assembly"
 HELM_CMD=(
   helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}"
   --create-namespace
@@ -435,15 +524,18 @@ if [[ "${HELM_CLEANUP_ON_FAIL}" == "true" ]]; then
 fi
 
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
+  log_phase "image pull secret render verification"
   TEMPLATE_ARGS=()
-  for arg in "${EXTRA_ARGS[@]}"; do
-    case "${arg}" in
-      --wait|--atomic|--cleanup-on-fail|--create-namespace)
-        continue
-        ;;
-    esac
-    TEMPLATE_ARGS+=("${arg}")
-  done
+  if (( ${#EXTRA_ARGS[@]} )); then
+    for arg in "${EXTRA_ARGS[@]}"; do
+      case "${arg}" in
+        --wait|--atomic|--cleanup-on-fail|--create-namespace)
+          continue
+          ;;
+      esac
+      TEMPLATE_ARGS+=("${arg}")
+    done
+  fi
 
   RENDERED_MANIFEST="$(mktemp)"
   HELM_TEMPLATE_CMD=(
@@ -451,9 +543,11 @@ if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
     "${COMMON_HELM_ARGS[@]}"
   )
 
-  "${HELM_TEMPLATE_CMD[@]}" \
-    "${TEMPLATE_ARGS[@]}" \
-    > "${RENDERED_MANIFEST}"
+  if (( ${#TEMPLATE_ARGS[@]} )); then
+    "${HELM_TEMPLATE_CMD[@]}" "${TEMPLATE_ARGS[@]}" > "${RENDERED_MANIFEST}"
+  else
+    "${HELM_TEMPLATE_CMD[@]}" > "${RENDERED_MANIFEST}"
+  fi
 
   if ! awk -v secret_name="${IMAGE_PULL_SECRET_NAME}" '
     BEGIN {kind=""; name=""; want=0; seen=0; found=0}
@@ -487,38 +581,46 @@ if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
     }
   ' "${RENDERED_MANIFEST}"; then
     rm -f "${RENDERED_MANIFEST}"
-    echo "Error: rendered PoundCake manifests do not include imagePullSecrets '${IMAGE_PULL_SECRET_NAME}'." >&2
-    echo "Refusing install to avoid anonymous private-registry pulls." >&2
+    log_error "Rendered PoundCake manifests do not include imagePullSecrets '${IMAGE_PULL_SECRET_NAME}'."
+    log_error "Refusing install to avoid anonymous private-registry pulls."
     exit 1
   fi
   rm -f "${RENDERED_MANIFEST}"
 fi
 
-echo "Installing PoundCake release: ${RELEASE_NAME}"
-echo "Namespace: ${NAMESPACE}"
-echo "Chart source: ${CHART_SOURCE}"
+log_phase "helm install execution"
+log_info "Installing PoundCake release: ${RELEASE_NAME}"
+log_info "Namespace: ${NAMESPACE}"
+log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
-  echo "Chart version: ${CHART_VERSION:-"(not set)"}"
+  log_info "Chart version: ${CHART_VERSION:-"(not set)"}"
 fi
-echo "PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
+log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
 if [[ -n "${UI_IMAGE_REPO}" ]]; then
-  echo "UI image repo override: ${UI_IMAGE_REPO}"
+  log_info "UI image repo override: ${UI_IMAGE_REPO}"
 fi
 if [[ -n "${UI_IMAGE_TAG}" ]]; then
-  echo "UI image tag override: ${UI_IMAGE_TAG}"
+  log_info "UI image tag override: ${UI_IMAGE_TAG}"
 fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
-  echo "Bakery image repo override: ${BAKERY_IMAGE_REPO}"
+  log_info "Bakery image repo override: ${BAKERY_IMAGE_REPO}"
 fi
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
-  echo "Image pull secret injection: enabled (${IMAGE_PULL_SECRET_NAME})"
-  echo "Image pull secret key: poundcakeImage.pullSecrets"
+  log_info "Image pull secret injection: enabled (${IMAGE_PULL_SECRET_NAME})"
+  log_info "Image pull secret key: poundcakeImage.pullSecrets"
 else
-  echo "Image pull secret injection: disabled (POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=${IMAGE_PULL_SECRET_ENABLED})"
+  log_info "Image pull secret injection: disabled (POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=${IMAGE_PULL_SECRET_ENABLED})"
 fi
 
-echo "Executing Helm command:"
-printf '%q ' "${HELM_CMD[@]}" "${EXTRA_ARGS[@]}"
+log_info "Executing Helm command:"
+printf '%q ' "${HELM_CMD[@]}"
+if (( ${#EXTRA_ARGS[@]} )); then
+  printf '%q ' "${EXTRA_ARGS[@]}"
+fi
 echo
 
-"${HELM_CMD[@]}" "${EXTRA_ARGS[@]}"
+if (( ${#EXTRA_ARGS[@]} )); then
+  "${HELM_CMD[@]}" "${EXTRA_ARGS[@]}"
+else
+  "${HELM_CMD[@]}"
+fi

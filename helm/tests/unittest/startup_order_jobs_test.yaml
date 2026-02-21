@@ -55,8 +55,16 @@ tests:
           pattern: "stackstorm_controlplane_ready"
         documentIndex: 3
       - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "GATE_LOG_ENABLED=\\\"true\\\""
+        documentIndex: 3
+      - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
-          pattern: "/api/v1/internal/stackstorm/pack.tgz"
+          pattern: "PACK_SYNC_ENDPOINT=\\\"http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz\\\""
+        documentIndex: 8
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "status=waiting"
         documentIndex: 8
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
@@ -68,7 +76,16 @@ tests:
         documentIndex: 8
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
-          pattern: "required endpoint missing"
+          pattern: "required endpoint missing: \\$\\{PACK_SYNC_ENDPOINT\\}"
+        documentIndex: 8
+
+  - it: allows overriding bootstrap wait-api pack sync endpoint
+    set:
+      stackstormPackSync.endpoint: "http://poundcake-api:8000/api/v1/cook/packs"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "PACK_SYNC_ENDPOINT=\\\"http://poundcake-api:8000/api/v1/cook/packs\\\""
         documentIndex: 8
 
   - it: applies startup hook log-streaming labels
@@ -298,3 +315,22 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: "WAIT_TIMEOUT=\"2m\""
         documentIndex: 5
+
+  - it: supports gate logging overrides for startup waits
+    set:
+      startupHooks.gateLogging.enabled: false
+      startupHooks.gateLogging.intervalSeconds: 9
+      startupHooks.gateLogging.prefix: "[custom-gate]"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "GATE_LOG_ENABLED=\\\"false\\\""
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "GATE_LOG_INTERVAL=\\\"9\\\""
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "GATE_LOG_PREFIX=\\\"\\[custom-gate\\]\\\""
+        documentIndex: 3

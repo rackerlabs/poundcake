@@ -269,6 +269,10 @@ infraSecurityContext:
         - ALL
 
 startupHooks:
+  gateLogging:
+    enabled: true
+    intervalSeconds: 30
+    prefix: "[gate]"
   parallelWait:
     enabled: true
     failFast: true

@@ -182,13 +182,19 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
               FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
               services="stackstorm-mongodb stackstorm-rabbitmq stackstorm-redis"
 
               wait_for_service_endpoint() {
                 svc="$1"
-                until [ -n "$(kubectl -n "${NS}" get endpoints "${svc}" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do sleep 2; done
+                gate_log_wait_start "stackstorm-infra-${svc}" "service endpoint ${svc}"
+                until [ -n "$(kubectl -n "${NS}" get endpoints "${svc}" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do
+                  gate_log_wait_tick "stackstorm-infra-${svc}" "service endpoint ${svc}"
+                  sleep 2
+                done
+                gate_log_wait_ready "stackstorm-infra-${svc}"
               }
 
               if [ "${PARALLEL_ENABLED}" = "true" ]; then
@@ -252,6 +258,7 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
               FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
               WAIT_TIMEOUT="{{ .Values.startupHooks.parallelWait.timeout }}"
@@ -259,7 +266,13 @@ spec:
 
               wait_for_deployment() {
                 target="$1"
-                kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"
+                gate_log_wait_start "stackstorm-controlplane-${target#deployment/}" "deployment availability ${target}"
+                if kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"; then
+                  gate_log_wait_ready "stackstorm-controlplane-${target#deployment/}"
+                else
+                  gate_log_wait_tick "stackstorm-controlplane-${target#deployment/}" "deployment availability ${target}"
+                  return 1
+                fi
               }
 
               if [ "${PARALLEL_ENABLED}" = "true" ]; then
@@ -323,6 +336,7 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
               FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
               WAIT_TIMEOUT="{{ .Values.startupHooks.parallelWait.timeout }}"
@@ -330,7 +344,13 @@ spec:
 
               wait_for_deployment() {
                 target="$1"
-                kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"
+                gate_log_wait_start "stackstorm-workers-${target#deployment/}" "deployment availability ${target}"
+                if kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"; then
+                  gate_log_wait_ready "stackstorm-workers-${target#deployment/}"
+                else
+                  gate_log_wait_tick "stackstorm-workers-${target#deployment/}" "deployment availability ${target}"
+                  return 1
+                fi
               }
 
               if [ "${PARALLEL_ENABLED}" = "true" ]; then
@@ -394,6 +414,7 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
               FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
               WAIT_TIMEOUT="{{ .Values.startupHooks.parallelWait.timeout }}"
@@ -401,7 +422,13 @@ spec:
 
               wait_for_deployment() {
                 target="$1"
-                kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"
+                gate_log_wait_start "stackstorm-edge-${target#deployment/}" "deployment availability ${target}"
+                if kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"; then
+                  gate_log_wait_ready "stackstorm-edge-${target#deployment/}"
+                else
+                  gate_log_wait_tick "stackstorm-edge-${target#deployment/}" "deployment availability ${target}"
+                  return 1
+                fi
               }
 
               if [ "${PARALLEL_ENABLED}" = "true" ]; then
@@ -465,7 +492,13 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              until [ "$(kubectl -n "${NS}" get secret stackstorm-startup-markers -o jsonpath='{.data.stackstorm_edge_ready}' 2>/dev/null | base64 -d)" = "true" ]; do sleep 2; done
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_log_wait_start "wait-stage6-edge-ready" "marker stackstorm_edge_ready"
+              until [ "$(kubectl -n "${NS}" get secret stackstorm-startup-markers -o jsonpath='{.data.stackstorm_edge_ready}' 2>/dev/null | base64 -d)" = "true" ]; do
+                gate_log_wait_tick "wait-stage6-edge-ready" "marker stackstorm_edge_ready"
+                sleep 2
+              done
+              gate_log_wait_ready "wait-stage6-edge-ready"
         - name: run-bootstrap
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
           securityContext:
@@ -571,7 +604,13 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              until [ -n "$(kubectl -n "${NS}" get endpoints poundcake-mariadb -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do sleep 2; done
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_log_wait_start "poundcake-mariadb-ready" "service endpoint poundcake-mariadb"
+              until [ -n "$(kubectl -n "${NS}" get endpoints poundcake-mariadb -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do
+                gate_log_wait_tick "poundcake-mariadb-ready" "service endpoint poundcake-mariadb"
+                sleep 2
+              done
+              gate_log_wait_ready "poundcake-mariadb-ready"
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
                 -p '{"stringData":{"poundcake_mariadb_ready":"true"}}'
 ---
@@ -612,7 +651,13 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              until [ "$(kubectl -n "${NS}" get secret stackstorm-startup-markers -o jsonpath='{.data.stackstorm_bootstrap_ready}' 2>/dev/null | base64 -d)" = "true" ]; do sleep 2; done
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_log_wait_start "poundcake-bootstrap-stackstorm-ready" "marker stackstorm_bootstrap_ready"
+              until [ "$(kubectl -n "${NS}" get secret stackstorm-startup-markers -o jsonpath='{.data.stackstorm_bootstrap_ready}' 2>/dev/null | base64 -d)" = "true" ]; do
+                gate_log_wait_tick "poundcake-bootstrap-stackstorm-ready" "marker stackstorm_bootstrap_ready"
+                sleep 2
+              done
+              gate_log_wait_ready "poundcake-bootstrap-stackstorm-ready"
         - name: wait-api
           image: {{ .Values.images.busybox }}
           securityContext:
@@ -621,23 +666,28 @@ spec:
             - sh
             - -ec
             - |
-              until nc -z poundcake-api 8000; do sleep 2; done
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              PACK_SYNC_ENDPOINT="{{ .Values.stackstormPackSync.endpoint }}"
+              gate_wait_for_tcp "poundcake-api" "8000" "poundcake-bootstrap-api-port" "tcp poundcake-api:8000"
               retries=90
+              gate_log_wait_start "poundcake-bootstrap-pack-sync-endpoint" "http endpoint ${PACK_SYNC_ENDPOINT}"
               while [ "${retries}" -gt 0 ]; do
-                resp="$(wget -S -O /dev/null http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz 2>&1 || true)"
+                resp="$(wget -S -O /dev/null "${PACK_SYNC_ENDPOINT}" 2>&1 || true)"
                 case "${resp}" in
                   *" 200 "*|*" 304 "*|*" 401 "*|*" 503 "*)
+                    gate_log_wait_ready "poundcake-bootstrap-pack-sync-endpoint"
                     exit 0
                     ;;
                   *" 404 "*)
-                    echo "required endpoint missing: /api/v1/internal/stackstorm/pack.tgz"
+                    echo "required endpoint missing: ${PACK_SYNC_ENDPOINT}"
                     exit 1
                     ;;
                 esac
+                gate_log_wait_tick "poundcake-bootstrap-pack-sync-endpoint" "http endpoint ${PACK_SYNC_ENDPOINT}"
                 retries=$((retries - 1))
                 sleep 2
               done
-              echo "timed out waiting for /api/v1/internal/stackstorm/pack.tgz"
+              echo "timed out waiting for ${PACK_SYNC_ENDPOINT}"
               echo "${resp:-no-response}"
               exit 1
         - name: run-bootstrap

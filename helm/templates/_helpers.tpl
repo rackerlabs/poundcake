@@ -166,3 +166,76 @@ poundcake.io/log-role: {{ $role | quote }}
 
 {{- include "poundcake.logLabels" (dict "group" $group "subgroup" $subgroup "role" $role) -}}
 {{- end -}}
+
+{{- define "poundcake.gateLogHelpers" -}}
+GATE_LOG_ENABLED="{{ ternary "true" "false" .Values.startupHooks.gateLogging.enabled }}"
+GATE_LOG_INTERVAL="{{ .Values.startupHooks.gateLogging.intervalSeconds }}"
+GATE_LOG_PREFIX={{ .Values.startupHooks.gateLogging.prefix | quote }}
+case "${GATE_LOG_INTERVAL}" in
+  ''|*[!0-9]*) GATE_LOG_INTERVAL=30 ;;
+esac
+if [ "${GATE_LOG_INTERVAL}" -lt 1 ]; then
+  GATE_LOG_INTERVAL=1
+fi
+
+gate_log_wait_start() {
+  gate_name="$1"
+  gate_detail="$2"
+  gate_started_at="$(date +%s)"
+  gate_last_log="${gate_started_at}"
+  echo "${GATE_LOG_PREFIX} wait=${gate_name} status=waiting elapsed=0s detail=${gate_detail}"
+}
+
+gate_log_wait_tick() {
+  gate_name="$1"
+  gate_detail="$2"
+  gate_now="$(date +%s)"
+  if [ "${GATE_LOG_ENABLED}" = "true" ] && [ $((gate_now - gate_last_log)) -ge "${GATE_LOG_INTERVAL}" ]; then
+    echo "${GATE_LOG_PREFIX} wait=${gate_name} status=waiting elapsed=$((gate_now - gate_started_at))s detail=${gate_detail}"
+    gate_last_log="${gate_now}"
+  fi
+}
+
+gate_log_wait_ready() {
+  gate_name="$1"
+  gate_now="$(date +%s)"
+  echo "${GATE_LOG_PREFIX} wait=${gate_name} status=ready elapsed=$((gate_now - gate_started_at))s"
+}
+
+gate_wait_for_true_file() {
+  gate_file="$1"
+  gate_name="$2"
+  gate_detail="$3"
+  gate_log_wait_start "${gate_name}" "${gate_detail}"
+  until [ "$(cat "${gate_file}" 2>/dev/null)" = "true" ]; do
+    gate_log_wait_tick "${gate_name}" "${gate_detail}"
+    sleep 2
+  done
+  gate_log_wait_ready "${gate_name}"
+}
+
+gate_wait_for_nonempty_file() {
+  gate_file="$1"
+  gate_name="$2"
+  gate_detail="$3"
+  gate_log_wait_start "${gate_name}" "${gate_detail}"
+  until [ -n "$(cat "${gate_file}" 2>/dev/null)" ]; do
+    gate_log_wait_tick "${gate_name}" "${gate_detail}"
+    sleep 2
+  done
+  gate_log_wait_ready "${gate_name}"
+}
+
+gate_wait_for_tcp() {
+  gate_host="$1"
+  gate_port="$2"
+  gate_name="$3"
+  gate_detail="$4"
+  gate_log_wait_start "${gate_name}" "${gate_detail}"
+  until nc -z "${gate_host}" "${gate_port}"; do
+    gate_log_wait_tick "${gate_name}" "${gate_detail}"
+    sleep 2
+  done
+  gate_log_wait_ready "${gate_name}"
+}
+{{- end -}}

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_SCRIPT="${SCRIPT_DIR}/../bin/install-poundcake.sh"
+INSTALL_SCRIPT="${SCRIPT_DIR}/../bin/install-poundcake-with-env.sh"
 WRAPPER_SCRIPT="${SCRIPT_DIR}/../../install/install-helm.sh"
 
 echo "Checking installer hardening, validation flow, and wrapper pass-through..."
@@ -65,6 +65,6 @@ rg -q '/etc/genestack/helm-chart-version.yaml' "${INSTALL_SCRIPT}"
 rg -q '/etc/genestack/helm-chart-versions.yaml' "${INSTALL_SCRIPT}"
 
 # Wrapper should invoke the installer directly (no chart no-op flags)
-rg -q 'exec "\$PROJECT_ROOT/helm/bin/install-poundcake.sh" "\$@"' "${WRAPPER_SCRIPT}"
+rg -q 'exec "\$PROJECT_ROOT/helm/bin/install-poundcake-with-env.sh" "\$@"' "${WRAPPER_SCRIPT}"
 
 echo "Installer and wrapper checks passed!"
