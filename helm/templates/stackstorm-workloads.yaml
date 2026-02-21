@@ -244,7 +244,7 @@ spec:
           readinessProbe:
             tcpSocket:
               port: 9101
-            initialDelaySeconds: 20
+            initialDelaySeconds: {{ .Values.stackstormApi.readiness.initialDelaySeconds }}
             periodSeconds: 10
           volumeMounts:
             - name: stackstorm-config

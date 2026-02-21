@@ -352,6 +352,28 @@
         }
       }
     },
+    "stackstormApi": {
+      "type": "object",
+      "properties": {
+        "readiness": {
+          "type": "object",
+          "properties": {
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "default": 5 }
+          }
+        }
+      }
+    },
+    "poundcakeApi": {
+      "type": "object",
+      "properties": {
+        "readiness": {
+          "type": "object",
+          "properties": {
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "default": 5 }
+          }
+        }
+      }
+    },
     "gateway": {
       "type": "object",
       "properties": {
@@ -573,6 +595,18 @@
       "type": "object",
       "description": "Startup hook cleanup behavior",
       "properties": {
+        "parallelWait": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "failFast": { "type": "boolean", "default": true },
+            "timeout": {
+              "type": "string",
+              "description": "kubectl wait timeout for startup gate checks",
+              "default": "15m"
+            }
+          }
+        },
         "cleanup": {
           "type": "object",
           "properties": {

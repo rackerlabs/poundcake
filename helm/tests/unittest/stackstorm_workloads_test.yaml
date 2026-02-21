@@ -147,6 +147,15 @@ tests:
           value: /tmp/st2/st2.conf
         documentIndex: 12
 
+  - it: applies configured stackstorm API readiness initial delay
+    set:
+      stackstormApi.readiness.initialDelaySeconds: 7
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 7
+        documentIndex: 1
+
   - it: applies pod, stackstorm, and utility security contexts with writable defaults
     asserts:
       - equal:

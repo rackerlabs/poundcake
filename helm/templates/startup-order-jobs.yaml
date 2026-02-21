@@ -182,9 +182,37 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              until [ -n "$(kubectl -n "${NS}" get endpoints stackstorm-mongodb -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do sleep 2; done
-              until [ -n "$(kubectl -n "${NS}" get endpoints stackstorm-rabbitmq -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do sleep 2; done
-              until [ -n "$(kubectl -n "${NS}" get endpoints stackstorm-redis -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do sleep 2; done
+              PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
+              FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
+              services="stackstorm-mongodb stackstorm-rabbitmq stackstorm-redis"
+
+              wait_for_service_endpoint() {
+                svc="$1"
+                until [ -n "$(kubectl -n "${NS}" get endpoints "${svc}" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do sleep 2; done
+              }
+
+              if [ "${PARALLEL_ENABLED}" = "true" ]; then
+                pids=""
+                status=0
+                for svc in ${services}; do
+                  wait_for_service_endpoint "${svc}" &
+                  pids="${pids} $!"
+                done
+
+                for pid in ${pids}; do
+                  if ! wait "${pid}"; then
+                    status=1
+                    if [ "${FAIL_FAST}" = "true" ]; then
+                      exit 1
+                    fi
+                  fi
+                done
+                [ "${status}" -eq 0 ] || exit 1
+              else
+                for svc in ${services}; do
+                  wait_for_service_endpoint "${svc}"
+                done
+              fi
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
                 -p '{"stringData":{"stackstorm_infra_ready":"true"}}'
 ---
@@ -224,11 +252,38 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "register")) "true" }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-register --timeout=15m
-              {{- end }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-auth --timeout=15m
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-api --timeout=15m
+              PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
+              FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
+              WAIT_TIMEOUT="{{ .Values.startupHooks.parallelWait.timeout }}"
+              deployments="deployment/stackstorm-auth deployment/stackstorm-api{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "register")) "true" }} deployment/stackstorm-register{{- end }}"
+
+              wait_for_deployment() {
+                target="$1"
+                kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"
+              }
+
+              if [ "${PARALLEL_ENABLED}" = "true" ]; then
+                pids=""
+                status=0
+                for target in ${deployments}; do
+                  wait_for_deployment "${target}" &
+                  pids="${pids} $!"
+                done
+
+                for pid in ${pids}; do
+                  if ! wait "${pid}"; then
+                    status=1
+                    if [ "${FAIL_FAST}" = "true" ]; then
+                      exit 1
+                    fi
+                  fi
+                done
+                [ "${status}" -eq 0 ] || exit 1
+              else
+                for target in ${deployments}; do
+                  wait_for_deployment "${target}"
+                done
+              fi
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
                 -p '{"stringData":{"stackstorm_controlplane_ready":"true"}}'
 ---
@@ -268,17 +323,38 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-actionrunner --timeout=15m
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-rulesengine --timeout=15m
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-workflowengine --timeout=15m
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-scheduler --timeout=15m
-              {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "notifier")) "true" }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-notifier --timeout=15m
-              {{- end }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-garbagecollector --timeout=15m
-              {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "timersengine")) "true" }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-timersengine --timeout=15m
-              {{- end }}
+              PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
+              FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
+              WAIT_TIMEOUT="{{ .Values.startupHooks.parallelWait.timeout }}"
+              deployments="deployment/stackstorm-actionrunner deployment/stackstorm-rulesengine deployment/stackstorm-workflowengine deployment/stackstorm-scheduler deployment/stackstorm-garbagecollector{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "notifier")) "true" }} deployment/stackstorm-notifier{{- end }}{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "timersengine")) "true" }} deployment/stackstorm-timersengine{{- end }}"
+
+              wait_for_deployment() {
+                target="$1"
+                kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"
+              }
+
+              if [ "${PARALLEL_ENABLED}" = "true" ]; then
+                pids=""
+                status=0
+                for target in ${deployments}; do
+                  wait_for_deployment "${target}" &
+                  pids="${pids} $!"
+                done
+
+                for pid in ${pids}; do
+                  if ! wait "${pid}"; then
+                    status=1
+                    if [ "${FAIL_FAST}" = "true" ]; then
+                      exit 1
+                    fi
+                  fi
+                done
+                [ "${status}" -eq 0 ] || exit 1
+              else
+                for target in ${deployments}; do
+                  wait_for_deployment "${target}"
+                done
+              fi
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
                 -p '{"stringData":{"stackstorm_workers_ready":"true"}}'
 ---
@@ -318,15 +394,38 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
-              {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "sensorcontainer")) "true" }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-sensorcontainer --timeout=15m
-              {{- end }}
-              {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "stream")) "true" }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-stream --timeout=15m
-              {{- end }}
-              {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "web")) "true" }}
-              kubectl -n "${NS}" wait --for=condition=Available deployment/stackstorm-web --timeout=15m
-              {{- end }}
+              PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
+              FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
+              WAIT_TIMEOUT="{{ .Values.startupHooks.parallelWait.timeout }}"
+              deployments="{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "sensorcontainer")) "true" }}deployment/stackstorm-sensorcontainer{{- end }}{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "stream")) "true" }} deployment/stackstorm-stream{{- end }}{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "web")) "true" }} deployment/stackstorm-web{{- end }}"
+
+              wait_for_deployment() {
+                target="$1"
+                kubectl -n "${NS}" wait --for=condition=Available "${target}" --timeout="${WAIT_TIMEOUT}"
+              }
+
+              if [ "${PARALLEL_ENABLED}" = "true" ]; then
+                pids=""
+                status=0
+                for target in ${deployments}; do
+                  wait_for_deployment "${target}" &
+                  pids="${pids} $!"
+                done
+
+                for pid in ${pids}; do
+                  if ! wait "${pid}"; then
+                    status=1
+                    if [ "${FAIL_FAST}" = "true" ]; then
+                      exit 1
+                    fi
+                  fi
+                done
+                [ "${status}" -eq 0 ] || exit 1
+              else
+                for target in ${deployments}; do
+                  wait_for_deployment "${target}"
+                done
+              fi
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
                 -p '{"stringData":{"stackstorm_edge_ready":"true"}}'
 ---

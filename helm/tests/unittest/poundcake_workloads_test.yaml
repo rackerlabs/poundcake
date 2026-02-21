@@ -105,6 +105,15 @@ tests:
           value: 18080
         documentIndex: 2
 
+  - it: applies configured poundcake API readiness initial delay
+    set:
+      poundcakeApi.readiness.initialDelaySeconds: 9
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 9
+        documentIndex: 0
+
   - it: defaults PoundCake workload image tag to chart appVersion when unset
     set:
       poundcakeImage.tag: ""

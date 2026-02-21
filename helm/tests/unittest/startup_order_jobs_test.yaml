@@ -40,6 +40,18 @@ tests:
         documentIndex: 3
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
+          pattern: "PARALLEL_ENABLED=\"true\""
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "wait_for_deployment.*&"
+        documentIndex: 4
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "wait \"\\$\\{pid\\}\""
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
           pattern: "stackstorm_controlplane_ready"
         documentIndex: 3
       - matchRegex:
@@ -266,4 +278,23 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: "deployment/stackstorm-web"
+        documentIndex: 5
+
+  - it: applies parallel wait controls to startup gate jobs
+    set:
+      startupHooks.parallelWait.enabled: false
+      startupHooks.parallelWait.failFast: false
+      startupHooks.parallelWait.timeout: 2m
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "PARALLEL_ENABLED=\"false\""
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "FAIL_FAST=\"false\""
+        documentIndex: 4
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "WAIT_TIMEOUT=\"2m\""
         documentIndex: 5
