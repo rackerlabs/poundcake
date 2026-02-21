@@ -38,7 +38,7 @@
         },
         "tag": {
           "type": "string",
-          "default": "latest"
+          "default": ""
         },
         "pullPolicy": {
           "type": "string",

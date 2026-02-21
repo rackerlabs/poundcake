@@ -345,7 +345,8 @@ DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
 
 # StackStorm
 POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
-POUNDCAKE_ST2_PACK_ROOT=/app/stackstorm-packs
+# StackStorm packs are served by API endpoint /api/v1/internal/stackstorm/pack.tgz
+# and synchronized into StackStorm pods by the pack-sync sidecar.
 ```
 
 `config/st2_api_key` is created by `st2client` during bootstrap.

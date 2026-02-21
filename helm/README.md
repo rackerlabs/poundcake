@@ -223,7 +223,8 @@ Readiness semantics:
 ```yaml
 poundcakeImage:
   repository: poundcake
-  tag: latest
+  # Defaults to Chart.appVersion when omitted/empty.
+  tag: ""
   pullPolicy: IfNotPresent
 
 uiImage:
@@ -254,6 +255,7 @@ persistence:
 ```
 
 Dynamic StackStorm pack propagation is RWO-safe by default. Pack content is served by PoundCake API and synchronized into each StackStorm pod via sidecar using `emptyDir`, so no shared RWX volume is required.
+Greenfield installs require `/api/v1/internal/stackstorm/pack.tgz` to be available from `poundcake-api`.
 
 ```yaml
 stackstormPackSync:
@@ -545,7 +547,7 @@ Enable debug logging:
 ```bash
 helm upgrade --install poundcake ./helm \
   --set logFormat=json \
-  --set poundcakeImage.tag=latest \
+  --set poundcakeImage.tag=1.1.0 \
   --set stackstormImage.tag=3.9.0
 ```
 

@@ -518,9 +518,16 @@ spec:
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command: ["sh", "-c", "until nc -z poundcake-api 8000; do sleep 2; done"]
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z poundcake-api 8000; do sleep 2; done
+              until [ "$(wget -S -O /dev/null http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz 2>&1 | awk '/HTTP\\// {code=$2} END {print code}')" = "401" ]; do
+                sleep 2
+              done
         - name: run-bootstrap
-          image: {{ .Values.poundcakeImage.repository }}:{{ .Values.poundcakeImage.tag }}
+          image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
           imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}

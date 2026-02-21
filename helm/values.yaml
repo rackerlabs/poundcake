@@ -6,7 +6,8 @@ imagePullSecrets: []
 
 poundcakeImage:
   repository: poundcake
-  tag: latest
+  # Defaults to Chart.appVersion when empty.
+  tag: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
   securityContext:

@@ -42,6 +42,14 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: "stackstorm_controlplane_ready"
         documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "/api/v1/internal/stackstorm/pack.tgz"
+        documentIndex: 8
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "= \"401\""
+        documentIndex: 8
 
   - it: applies startup hook log-streaming labels
     asserts:
@@ -100,6 +108,15 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[2].imagePullPolicy
           value: Always
+        documentIndex: 8
+
+  - it: defaults poundcake-bootstrap image tag to chart appVersion when unset
+    set:
+      poundcakeImage.tag: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[2].image
+          value: poundcake:1.0.0
         documentIndex: 8
 
   - it: applies pod and utility security contexts to startup jobs

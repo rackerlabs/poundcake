@@ -105,6 +105,31 @@ tests:
           value: 18080
         documentIndex: 2
 
+  - it: defaults PoundCake workload image tag to chart appVersion when unset
+    set:
+      poundcakeImage.tag: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 4
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 5
+
   - it: defaults UI container and probe ports to 8080
     asserts:
       - equal:
