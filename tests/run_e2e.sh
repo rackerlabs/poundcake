@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 RUN_ALL_SCRIPT="${SCRIPT_DIR}/run_all_e2e_workflow_generation_tests"
+api_url_explicit="false"
 
 print_usage() {
   cat <<'EOF'
@@ -89,6 +90,7 @@ while [ $# -gt 0 ]; do
       ;;
     --api-url)
       API_URL="${2:-}"
+      api_url_explicit="true"
       shift 2
       ;;
     --single)
@@ -119,6 +121,23 @@ if [ "${TEST_TARGET}" != "compose" ] && [ "${TEST_TARGET}" != "k8s" ]; then
   log_error "Invalid --target value: ${TEST_TARGET} (expected compose or k8s)"
   exit 1
 fi
+
+# lib.sh is sourced before CLI parsing, so recompute API_URL defaults after target parsing.
+if [ "${api_url_explicit}" != "true" ]; then
+  if [ "${TEST_TARGET}" = "k8s" ]; then
+    API_URL="http://localhost:${POUNDCAKE_LOCAL_PORT}/api/v1"
+  else
+    API_URL="http://localhost:8000/api/v1"
+  fi
+fi
+
+# Child runner processes source lib.sh again; export runtime settings so they inherit CLI args.
+export TEST_TARGET
+export POUNDCAKE_NAMESPACE
+export POUNDCAKE_API_SERVICE
+export POUNDCAKE_LOCAL_PORT
+export POUNDCAKE_REMOTE_PORT
+export API_URL
 
 if [ -n "${single_runner}" ]; then
   runner_script="$(resolve_runner_path "${single_runner}")"
