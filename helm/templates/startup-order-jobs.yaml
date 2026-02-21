@@ -523,9 +523,23 @@ spec:
             - -ec
             - |
               until nc -z poundcake-api 8000; do sleep 2; done
-              until [ "$(wget -S -O /dev/null http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz 2>&1 | awk '/HTTP\\// {code=$2} END {print code}')" = "401" ]; do
+              retries=90
+              while [ "${retries}" -gt 0 ]; do
+                code="$(wget -S -O /dev/null http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz 2>&1 | awk '/HTTP\\// {code=$2} END {print code}')"
+                case "${code}" in
+                  200|304|401|503)
+                    exit 0
+                    ;;
+                  404)
+                    echo "required endpoint missing: /api/v1/internal/stackstorm/pack.tgz"
+                    exit 1
+                    ;;
+                esac
+                retries=$((retries - 1))
                 sleep 2
               done
+              echo "timed out waiting for /api/v1/internal/stackstorm/pack.tgz (last_code=${code:-none})"
+              exit 1
         - name: run-bootstrap
           image: {{ .Values.poundcakeImage.repository }}:{{ default .Chart.AppVersion .Values.poundcakeImage.tag }}
           securityContext:
