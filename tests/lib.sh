@@ -6,6 +6,7 @@
 : "${POUNDCAKE_API_SERVICE:=poundcake-api}"
 : "${POUNDCAKE_LOCAL_PORT:=8000}"
 : "${POUNDCAKE_REMOTE_PORT:=8000}"
+: "${ENABLE_PORT_FORWARD:=0}"
 : "${TEST_TIMEOUT_SEC:=30}"
 : "${POLL_INTERVAL_SEC:=2}"
 : "${DEBUG:=0}"
@@ -13,7 +14,7 @@
 
 if [ -z "${API_URL:-}" ]; then
   if [ "${TEST_TARGET}" = "k8s" ]; then
-    API_URL="http://localhost:${POUNDCAKE_LOCAL_PORT}/api/v1"
+    API_URL="http://${POUNDCAKE_API_SERVICE}.${POUNDCAKE_NAMESPACE}.svc.cluster.local:${POUNDCAKE_REMOTE_PORT}/api/v1"
   else
     API_URL="http://localhost:8000/api/v1"
   fi
@@ -183,7 +184,11 @@ start_test_target() {
       log_info "Using compose target with API_URL=${API_URL}"
       ;;
     k8s)
-      start_k8s_port_forward
+      if [ "${ENABLE_PORT_FORWARD}" = "1" ]; then
+        start_k8s_port_forward
+      else
+        log_info "Using k8s target without port-forward with API_URL=${API_URL}"
+      fi
       ;;
     *)
       log_error "Invalid TEST_TARGET='${TEST_TARGET}' (expected compose or k8s)"

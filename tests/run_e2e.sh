@@ -9,6 +9,8 @@ RUN_ALL_SCRIPT="${SCRIPT_DIR}/run_all_e2e_workflow_generation_tests"
 api_url_explicit="false"
 service_explicit="false"
 namespace_explicit="false"
+local_port_explicit="false"
+enable_port_forward="false"
 
 print_usage() {
   cat <<'EOF'
@@ -22,8 +24,9 @@ Options:
   --target <compose|k8s>     Execution target (default: compose)
   --namespace <name>         Kubernetes namespace (k8s mode)
   --service <name>           Kubernetes API service name (k8s mode)
-  --local-port <port>        Local port for k8s port-forward
-  --remote-port <port>       Remote service port for k8s port-forward
+  --enable-port-forward      Enable kubectl port-forward in k8s mode
+  --local-port <port>        Local port for k8s port-forward (requires --enable-port-forward)
+  --remote-port <port>       Remote service port for k8s service URL / port-forward
   --api-url <url>            Explicit API base URL override
   --single <runner>          Run one runner script (name or path)
   --list                     List available runner scripts
@@ -31,7 +34,8 @@ Options:
 
 Examples:
   ./tests/run_e2e.sh
-  ./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api --local-port 18000
+  ./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api
+  ./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api --enable-port-forward --local-port 18000
   ./tests/run_e2e.sh --single run_single_task_non_blocking_test
 EOF
 }
@@ -82,11 +86,7 @@ resolve_api_url() {
   fi
 
   if [ "${TEST_TARGET}" = "k8s" ]; then
-    if [ "${service_explicit}" = "true" ]; then
-      echo "http://${POUNDCAKE_API_SERVICE}.${POUNDCAKE_NAMESPACE}.svc.cluster.local:${POUNDCAKE_REMOTE_PORT}/api/v1"
-    else
-      echo "http://localhost:${POUNDCAKE_LOCAL_PORT}/api/v1"
-    fi
+    echo "http://${POUNDCAKE_API_SERVICE}.${POUNDCAKE_NAMESPACE}.svc.cluster.local:${POUNDCAKE_REMOTE_PORT}/api/v1"
     return
   fi
 
@@ -118,12 +118,17 @@ while [ $# -gt 0 ]; do
     --local-port)
       require_value "$1" "${2:-}"
       POUNDCAKE_LOCAL_PORT="${2:-}"
+      local_port_explicit="true"
       shift 2
       ;;
     --remote-port)
       require_value "$1" "${2:-}"
       POUNDCAKE_REMOTE_PORT="${2:-}"
       shift 2
+      ;;
+    --enable-port-forward)
+      enable_port_forward="true"
+      shift
       ;;
     --api-url)
       require_value "$1" "${2:-}"
@@ -175,6 +180,26 @@ if [ "${service_explicit}" = "true" ] && [ -z "${POUNDCAKE_API_SERVICE}" ]; then
   exit 1
 fi
 
+if [ "${TEST_TARGET}" = "compose" ] && [ "${service_explicit}" = "true" ]; then
+  log_error "--service is only valid with --target k8s"
+  exit 1
+fi
+
+if [ "${TEST_TARGET}" = "compose" ] && [ "${enable_port_forward}" = "true" ]; then
+  log_error "--enable-port-forward is only valid with --target k8s"
+  exit 1
+fi
+
+if [ "${local_port_explicit}" = "true" ] && [ "${enable_port_forward}" != "true" ]; then
+  log_error "--local-port requires --enable-port-forward"
+  exit 1
+fi
+
+if [ "${TEST_TARGET}" = "k8s" ] && [ "${api_url_explicit}" != "true" ] && [ "${service_explicit}" != "true" ]; then
+  log_error "--target k8s requires --service unless --api-url is provided"
+  exit 1
+fi
+
 if [ -z "${POUNDCAKE_NAMESPACE}" ]; then
   if [ "${namespace_explicit}" = "true" ]; then
     log_error "--namespace requires a non-empty value"
@@ -192,9 +217,7 @@ fi
 # lib.sh is sourced before CLI parsing; compute the final API_URL after parsing.
 API_URL="$(resolve_api_url)"
 
-if [ "${DEBUG:-0}" = "1" ]; then
-  log_info "Resolved API_URL=${API_URL} (target=${TEST_TARGET} service_explicit=${service_explicit} namespace_explicit=${namespace_explicit} api_url_explicit=${api_url_explicit})"
-fi
+log_info "Resolved poundcake_api URL: ${API_URL}"
 
 # Child runner processes source lib.sh again; export runtime settings so they inherit CLI args.
 export TEST_TARGET
@@ -202,6 +225,12 @@ export POUNDCAKE_NAMESPACE
 export POUNDCAKE_API_SERVICE
 export POUNDCAKE_LOCAL_PORT
 export POUNDCAKE_REMOTE_PORT
+if [ "${enable_port_forward}" = "true" ]; then
+  ENABLE_PORT_FORWARD="1"
+else
+  ENABLE_PORT_FORWARD="0"
+fi
+export ENABLE_PORT_FORWARD
 export API_URL
 
 if [ "${list_only}" = "true" ]; then

@@ -30,7 +30,7 @@ Compose full suite:
 Kubernetes full suite:
 
 ```bash
-./tests/run_e2e.sh --target k8s --namespace rackspace
+./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api
 ```
 
 Single runner:
@@ -65,8 +65,8 @@ DEBUG=1 ./tests/run_e2e.sh --single run_single_task_manual_order_test
 ### Most Common Manual Mistakes
 
 - Wrong k8s namespace/service for `--target k8s`.
-- Local port collision in k8s mode; set `--local-port` to an unused port.
-- Proxy interference on localhost; prefer `--target k8s` wrapper handling or set `API_URL` explicitly.
+- Local port collision in k8s mode when port-forward is enabled; set `--local-port` to an unused port.
+- Proxy interference for cluster/localhost routes; set `API_URL` explicitly as needed.
 
 ## Environment Variables
 
@@ -83,18 +83,18 @@ Common optional vars:
 - `DEBUG=1` (enables helper debug logs)
 - `POUNDCAKE_NAMESPACE` (default: `rackspace`, k8s mode)
 - `POUNDCAKE_API_SERVICE` (default: `poundcake-api`, k8s mode)
-- `POUNDCAKE_LOCAL_PORT` (default: `8000`, k8s mode local port-forward)
-- `POUNDCAKE_REMOTE_PORT` (default: `8000`, k8s mode service port)
+- `POUNDCAKE_LOCAL_PORT` (default: `8000`, k8s mode local port-forward when enabled)
+- `POUNDCAKE_REMOTE_PORT` (default: `8000`, k8s mode service port and direct URL port)
+- `ENABLE_PORT_FORWARD` (`1` to enable k8s port-forward; default: `0`)
 
 ## API URL Resolution Precedence
 
 `lib.sh` sets initial defaults first, then `run_e2e.sh` finalizes runtime `API_URL` after CLI parsing with this precedence:
 
 1. `--api-url <url>` (always wins)
-2. `--target k8s` with explicit `--service <name>`:
+2. `--target k8s` with `--service <name>`:
    `http://<service>.<namespace>.svc.cluster.local:<remote-port>/api/v1`
-3. Target defaults:
-   - k8s: `http://localhost:<local-port>/api/v1`
+3. Target default:
    - compose: `http://localhost:8000/api/v1`
 
 ## Execution Targets
@@ -110,20 +110,26 @@ Example:
 ./tests/run_e2e.sh
 ```
 
-### Kubernetes mode (auto port-forward)
+### Kubernetes mode (direct URL default)
 
-- Run wrappers auto-start:
+- Run wrappers default to direct API URL access:
+  - `http://<service>.<namespace>.svc.cluster.local:<remote-port>/api/v1`
+- In `k8s` mode, provide either:
+  - `--service <name>` (required unless `--api-url` is set), or
+  - `--api-url <url>`
+- Optional port-forward can be enabled explicitly:
   - `kubectl -n <namespace> port-forward svc/<service> <local>:<remote>`
 - Defaults:
   - namespace `rackspace`
   - service `poundcake-api`
   - local:remote `8000:8000`
-- Scripts auto-clean up the port-forward process on exit.
+- `--local-port` is valid only with `--enable-port-forward`.
+- Scripts auto-clean up the port-forward process on exit when enabled.
 
 Example:
 
 ```bash
-./tests/run_e2e.sh --target k8s --namespace rackspace
+./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api
 ```
 
 Custom service/port example:
@@ -133,11 +139,20 @@ Custom service/port example:
   --target k8s \
   --namespace my-ns \
   --service poundcake-api \
-  --local-port 18000 \
   --remote-port 8000
 ```
 
-When `--service` is explicitly provided in k8s mode, `API_URL` resolves to service FQDN form (`<service>.<namespace>.svc.cluster.local`) while port-forward startup behavior remains unchanged.
+Port-forward example:
+
+```bash
+./tests/run_e2e.sh \
+  --target k8s \
+  --namespace my-ns \
+  --service poundcake-api \
+  --enable-port-forward \
+  --local-port 18000 \
+  --remote-port 8000
+```
 
 ## Quick Start
 
@@ -169,7 +184,7 @@ List available runner scripts:
   - API returned non-JSON text (often ingress/proxy error page or crash output).
   - Re-run with `DEBUG=1` and inspect printed response body.
 - Squid / `ERR_INVALID_URL` / localhost proxy interception:
-  - Use `TEST_TARGET=k8s` so wrappers set safe `NO_PROXY/no_proxy` values for localhost.
+  - Use `--enable-port-forward` in k8s mode so wrappers set safe `NO_PROXY/no_proxy` values for localhost.
   - If setting `API_URL` manually, ensure it points to a reachable endpoint and bypasses proxies as needed.
 - `API request failed ... (HTTP 4xx/5xx)`:
   - Endpoint rejected request; response body is printed by helpers.
