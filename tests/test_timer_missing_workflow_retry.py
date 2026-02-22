@@ -154,7 +154,9 @@ def test_retry_attempt_one_does_not_retry_again(
         if path.endswith("/cook/executions"):
             return _Resp(200, [])
         if "/cook/executions/" in path:
-            return _Resp(200, {"status": "failed", "result": {"error": _missing_workflow_error("x.yaml")}})
+            return _Resp(
+                200, {"status": "failed", "result": {"error": _missing_workflow_error("x.yaml")}}
+            )
         raise AssertionError(f"Unexpected request: {method} {path}")
 
     def _update(_dish: dict, _req_id: str, **kwargs) -> bool:
@@ -199,7 +201,9 @@ def test_retry_execute_failure_falls_back_to_failed_finalize(
         if path.endswith("/cook/executions"):
             return _Resp(200, [])
         if "/cook/executions/" in path:
-            return _Resp(200, {"status": "failed", "result": {"error": _missing_workflow_error("y.yaml")}})
+            return _Resp(
+                200, {"status": "failed", "result": {"error": _missing_workflow_error("y.yaml")}}
+            )
         if path.endswith("/cook/execute") and method == "POST":
             return _Resp(500, {"faultstring": "boom"}, text="boom")
         raise AssertionError(f"Unexpected request: {method} {path}")
