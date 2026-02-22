@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ____                        _  ____      _
 # |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
@@ -21,3 +22,17 @@ keywords:
 home: https://github.com/rackerlabs/poundcake
 sources:
   - https://github.com/rackerlabs/poundcake
+=======
+apiVersion: v2
+name: poundcake
+description: Standalone PoundCake + StackStorm chart generated from docker-compose
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates, including the chart's dependencies.
+version: 0.1.0
+
+# This is the version number of the application being deployed. This version number should be
+# incremented each time you make changes to the application.
+appVersion: "1.0.0"
+>>>>>>> origin/main

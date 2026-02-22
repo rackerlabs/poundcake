@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {{- if eq (default "full" .Values.deployment.mode) "bakery-only" }}
 Thank you for installing {{ .Chart.Name }} in bakery-only mode!
 
@@ -131,3 +132,20 @@ AUTHENTICATION ENABLED:
 For more information:
   https://github.com/rackerlabs/poundcake
 {{- end }}
+=======
+1. Build and push the PoundCake image, then set values:
+
+   helm upgrade --install {{ .Release.Name }} {{ .Chart.Name }} \
+     --set poundcakeImage.repository=<repo> \
+     --set poundcakeImage.tag=<tag>
+
+2. Access services inside the cluster:
+
+   - API:           http://poundcake-api:8000
+   - StackStorm API: http://stackstorm-api:9101
+   - StackStorm Auth: http://stackstorm-auth:9100
+
+3. Bootstrap jobs to check:
+
+   kubectl get jobs -l app.kubernetes.io/instance={{ .Release.Name }}
+>>>>>>> origin/main

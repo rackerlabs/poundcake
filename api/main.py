@@ -29,6 +29,7 @@ from api.api.settings import router as settings_router
 from api.api.ingredients import router as ingredients_router
 from api.api.webhook import router as webhook_router
 from api.api.suppressions import router as suppressions_router
+from api.api.internal_stackstorm import router as internal_stackstorm_router
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -56,7 +57,7 @@ app = FastAPI(
     redirect_slashes=False,  # Prevent 307 redirects for trailing slashes
 )
 
-# --- Middleware Registration ---
+# Middleware Registration
 app.add_middleware(PreHeatMiddleware)
 
 app.add_middleware(
@@ -68,7 +69,7 @@ app.add_middleware(
 )
 
 
-# --- Kubernetes / Prometheus Internal Metrics ---
+# Kubernetes / Prometheus Internal Metrics
 @app.get("/metrics")
 async def metrics():
     """Scrape endpoint for Prometheus Operator / ServiceMonitor."""
@@ -77,28 +78,29 @@ async def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-# --- Route Registration ---
+# Route Registration
 
-# 1. System & Monitoring
+# System & Monitoring
 app.include_router(health_router, prefix="/api/v1", tags=["system"])
 app.include_router(settings_router, prefix="/api/v1", tags=["system"])
 app.include_router(prometheus_router, prefix="/api/v1", tags=["prometheus"])
 
-# 2. Security / Authentication
+# Security / Authentication
 app.include_router(auth_router, prefix="/api/v1", tags=["security"])
 
-# 3. Infrastructure & Automation
+# Infrastructure & Automation
 app.include_router(cook_router, prefix="/api/v1", tags=["infrastructure"])
 
-# 4. Business Logic
+# Business Logic
 app.include_router(recipes_router, prefix="/api/v1", tags=["logic"])
 app.include_router(ingredients_router, prefix="/api/v1", tags=["logic"])
 app.include_router(dishes_router, prefix="/api/v1", tags=["executor"])
 
-# 5. Alert Ingestion (webhook)
+# Alert Ingestion (webhook)
 app.include_router(webhook_router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(orders_router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(suppressions_router, prefix="/api/v1", tags=["ingestion"])
+app.include_router(internal_stackstorm_router, prefix="/api/v1", tags=["internal"])
 
 
 @app.get("/")

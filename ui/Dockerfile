@@ -11,6 +11,9 @@ FROM nginx:alpine
 # Copy static files
 COPY ui/static /usr/share/nginx/html
 
+# Ensure nginx entrypoint and runtime paths are writable by non-root UID 1000.
+RUN chown -R 1000:0 /etc/nginx/conf.d /var/cache/nginx /var/run /run
+
 # Copy nginx configuration as template (uses ${API_URL} placeholder)
 # nginx:alpine automatically processes templates in /etc/nginx/templates/
 # and outputs to /etc/nginx/conf.d/ using a writable tmpfs
@@ -19,7 +22,7 @@ COPY ui/nginx/nginx.conf /etc/nginx/templates/default.conf.template
 # Default API URL - will be overridden by environment variable in Kubernetes
 ENV API_URL=http://poundcake:8080
 
-# Expose unprivileged port (compatible with non-root runtime)
+# Expose port
 EXPOSE 8080
 
 # Labels

@@ -128,6 +128,12 @@ POUNDCAKE_SUPPRESSION_SUMMARY_TICKETS = Counter(
 POUNDCAKE_SUPPRESSION_SUMMARY_FAILURES = Counter(
     "poundcake_suppression_summary_failures_total",
     "Total suppression summary lifecycle failures",
+
+# Endpoint deprecation telemetry
+DEPRECATED_ENDPOINT_HITS = Counter(
+    "poundcake_deprecated_endpoint_hits_total",
+    "Total calls to deprecated API endpoints",
+    ["endpoint", "replacement"],
 )
 
 
@@ -251,6 +257,16 @@ def update_mappings_total(count: int) -> None:
         count: Total number of mappings
     """
     MAPPINGS_TOTAL.set(count)
+
+
+def record_deprecated_endpoint_hit(endpoint: str, replacement: str) -> None:
+    """Record usage of a deprecated endpoint.
+
+    Args:
+        endpoint: Deprecated endpoint path.
+        replacement: Recommended replacement endpoint path.
+    """
+    DEPRECATED_ENDPOINT_HITS.labels(endpoint=endpoint, replacement=replacement).inc()
 
 
 def record_mapping_match(mapping_name: str) -> None:
