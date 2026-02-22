@@ -117,8 +117,8 @@ persistence:
 stackstormPackSync:
   enabled: true
   endpoint: "http://poundcake-api:8000/api/v1/cook/packs"
-  pollIntervalSeconds: 20
-  bootstrapPollIntervalSeconds: 5
+  pollIntervalSeconds: 5
+  bootstrapPollIntervalSeconds: 2
   timeoutSeconds: 10
 
 services:
