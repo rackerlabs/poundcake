@@ -15,8 +15,9 @@ register_cleanup_trap
 TEST_TS=${TEST_TS:-$(date +%s)}
 TEST_RECIPE=${TEST_RECIPE:-AutomatedTestRecipe-${TEST_TS}}
 REQ_ID=${REQ_ID:-AUTOMATED-${TEST_TS}}
+FINGERPRINT=${FINGERPRINT:-AutomatedTestAlert-multi-non-blocking-${TEST_TS}-$$-${RANDOM}}
 
-export API_URL TEST_RECIPE REQ_ID
+export API_URL TEST_RECIPE REQ_ID FINGERPRINT
 
 run_step "create two-step recipe" env IS_BLOCKING=false "${SCRIPT_DIR}/test_create_recipe_two_step.sh"
 run_step "post webhook" "${SCRIPT_DIR}/test_post_webhook.sh"

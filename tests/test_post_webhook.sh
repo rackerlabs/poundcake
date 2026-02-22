@@ -12,6 +12,7 @@ source "${SCRIPT_DIR}/lib.sh"
 
 TEST_RECIPE=${TEST_RECIPE:-}
 REQ_ID=${REQ_ID:-}
+FINGERPRINT=${FINGERPRINT:-}
 
 if [ -z "$TEST_RECIPE" ]; then
   echo "TEST_RECIPE is required"
@@ -38,6 +39,10 @@ if [ -z "$REQ_ID" ]; then
   REQ_ID="AUTOMATED-$(date +%s)"
 fi
 
+if [ -z "$FINGERPRINT" ]; then
+  FINGERPRINT="AutomatedTestAlert_${REQ_ID}_$(date +%s)-$$-${RANDOM}"
+fi
+
 payload=$(cat <<JSON
 {
   "receiver": "poundcake",
@@ -45,6 +50,7 @@ payload=$(cat <<JSON
   "alerts": [
     {
       "status": "firing",
+      "fingerprint": "${FINGERPRINT}",
       "labels": {
         "alertname": "AutomatedTestAlert",
         "group_name": "${TEST_RECIPE}",
@@ -77,3 +83,4 @@ JSON
 log_info "Posting webhook for recipe: ${TEST_RECIPE}"
 REQUEST_ID="${REQ_ID}" api_request_json POST "${API_URL}/webhook" "${payload}" >/dev/null
 echo "REQ_ID=${REQ_ID}"
+echo "FINGERPRINT=${FINGERPRINT}"

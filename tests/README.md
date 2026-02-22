@@ -167,10 +167,15 @@ Run targeted workflows:
 ```bash
 ./tests/run_e2e.sh --single run_single_task_non_blocking_test
 ./tests/run_e2e.sh --single run_single_task_manual_order_test
+./tests/run_e2e.sh --single run_single_task_webhook_counter_increment_test
 ./tests/run_e2e.sh --single run_multiple_tasks_non_blocking_test
 ./tests/run_e2e.sh --single run_multiple_tasks_with_blocking_test
 ./tests/run_e2e.sh --single run_reuse_recipe_two_webhooks_test
 ```
+
+Notes:
+- `run_single_task_manual_order_test` validates the direct `/orders` API path.
+- `run_single_task_webhook_counter_increment_test` validates webhook counter increment semantics for repeated fingerprints.
 
 List available runner scripts:
 

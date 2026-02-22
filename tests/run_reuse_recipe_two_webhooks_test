@@ -16,6 +16,8 @@ TEST_TS=${TEST_TS:-$(date +%s)}
 TEST_RECIPE=${TEST_RECIPE:-AutomatedReuseRecipe-${TEST_TS}}
 REQ_ID_1=${REQ_ID_1:-AUTOMATED-REUSE-${TEST_TS}-1}
 REQ_ID_2=${REQ_ID_2:-AUTOMATED-REUSE-${TEST_TS}-2}
+FINGERPRINT_1=${FINGERPRINT_1:-AutomatedReuseRecipe-${TEST_TS}-1-$$-${RANDOM}}
+FINGERPRINT_2=${FINGERPRINT_2:-AutomatedReuseRecipe-${TEST_TS}-2-$$-${RANDOM}}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-90}
 INTERVAL=${INTERVAL:-$POLL_INTERVAL_SEC}
 
@@ -89,6 +91,7 @@ fi
 
 post_webhook() {
   local req_id="$1"
+  local fingerprint="$2"
   local payload
   payload=$(cat <<JSON
 {
@@ -97,6 +100,7 @@ post_webhook() {
   "alerts": [
     {
       "status": "firing",
+      "fingerprint": "${fingerprint}",
       "labels": {
         "alertname": "AutomatedReuseRecipeTest",
         "group_name": "${TEST_RECIPE}",
@@ -184,14 +188,14 @@ wait_for_workflow_id() {
 }
 
 log_info "Posting first webhook (${REQ_ID_1})..."
-post_webhook "${REQ_ID_1}"
+post_webhook "${REQ_ID_1}" "${FINGERPRINT_1}"
 DISH1_JSON=$(wait_for_dish "${REQ_ID_1}")
 WORKFLOW_ID_1=$(wait_for_workflow_id)
 RECIPE_ID_1=$(echo "${DISH1_JSON}" | jq -r '.recipe_id')
 wait_for_order_inactive "${REQ_ID_1}"
 
 log_info "Posting second webhook (${REQ_ID_2})..."
-post_webhook "${REQ_ID_2}"
+post_webhook "${REQ_ID_2}" "${FINGERPRINT_2}"
 DISH2_JSON=$(wait_for_dish "${REQ_ID_2}")
 WORKFLOW_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe.workflow_id')
 RECIPE_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe_id')

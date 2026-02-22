@@ -44,6 +44,7 @@ list_runners() {
   cat <<'EOF'
 run_single_task_non_blocking_test
 run_single_task_manual_order_test
+run_single_task_webhook_counter_increment_test
 run_multiple_tasks_non_blocking_test
 run_multiple_tasks_with_blocking_test
 run_reuse_recipe_two_webhooks_test
