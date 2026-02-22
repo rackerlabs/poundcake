@@ -19,8 +19,12 @@ FINGERPRINT=${FINGERPRINT:-AutomatedTestAlert-multi-blocking-${TEST_TS}-$$-${RAN
 
 export API_URL TEST_RECIPE REQ_ID FINGERPRINT
 
-run_step "create two-step recipe (blocking)" env IS_BLOCKING=true "${SCRIPT_DIR}/test_create_recipe_two_step.sh"
+run_step "create two-step recipe (blocking)" \
+  env IS_BLOCKING=true STEP1_CMD='sleep 2; echo "step 1"' STEP2_CMD='echo "step 2"' \
+  "${SCRIPT_DIR}/test_create_recipe_two_step.sh"
 run_step "post webhook" "${SCRIPT_DIR}/test_post_webhook.sh"
 run_step "wait for order" "${SCRIPT_DIR}/test_wait_for_order.sh"
 run_step "wait for dishes" "${SCRIPT_DIR}/test_wait_for_dishes.sh"
 run_step "assert dish count" env EXPECTED_COUNT=1 "${SCRIPT_DIR}/test_assert_dish_count.sh"
+run_step "assert blocking sequence" \
+  env ASSERT_MODE=blocking "${SCRIPT_DIR}/test_assert_task_sequence.sh"
