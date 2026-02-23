@@ -7,11 +7,9 @@
 """Cook router to proxy StackStorm actions through the API."""
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any
 from api.core.logging import get_logger
 from api.core.config import get_settings
-from api.core.database import get_db
 from api.schemas.schemas import ExecutionResponse
 from api.services.stackstorm_service import (
     StackStormActionManager,
@@ -20,7 +18,6 @@ from api.services.stackstorm_service import (
     register_workflow_to_st2,
 )
 from api.services.dishwasher_service import sync_stackstorm
-from api.services.pack_sync_service import get_pack_sync_artifact_response
 from api.api.auth import require_auth_if_enabled
 
 router = APIRouter()
@@ -313,26 +310,12 @@ async def get_st2_action(
 
 
 @router.get("/cook/packs")
-async def get_stackstorm_pack_tgz(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    pack_sync_token: str | None = Header(default=None, alias="X-Pack-Sync-Token"),
-):
-    """Return the current generated PoundCake StackStorm pack as tar.gz."""
-    return await get_pack_sync_artifact_response(
-        request=request,
-        db=db,
-        pack_sync_token=pack_sync_token,
-    )
-
-
-@router.get("/cook/packs/catalog")
 async def list_st2_packs(
     request: Request,
     manager: StackStormActionManager = Depends(get_action_manager),
     _user: str | None = Depends(require_auth_if_enabled),
 ):
-    """List available StackStorm packs from StackStorm API."""
+    """List available StackStorm packs."""
     req_id = request.state.req_id
 
     try:

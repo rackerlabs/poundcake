@@ -1,0 +1,124 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
+{{- if .Values.dishwasher.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "poundcake.fullname" . }}-dishwasher
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dishwasher
+spec:
+  replicas: {{ .Values.dishwasher.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "poundcake.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dishwasher
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dishwasher
+        {{- include "poundcake.logGroupLabel" . | nindent 8 }}
+        {{- include "poundcake.logRoleWorker" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-api
+          image: curlimages/curl:latest
+          command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            MAX_WAIT=300
+            ELAPSED=0
+            INTERVAL=5
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              if curl -sf http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1/health >/dev/null 2>&1; then
+                exit 0
+              fi
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+            exit 1
+        - name: wait-for-stackstorm
+          image: curlimages/curl:latest
+          command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            MAX_WAIT=300
+            ELAPSED=0
+            INTERVAL=5
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" {{ include "poundcake.stackstormApiUrl" . }}/v1/actions || true)
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+                exit 0
+              fi
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+            exit 1
+      containers:
+        - name: dishwasher
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "kitchen/dishwasher.py"]
+          env:
+            - name: POUNDCAKE_API_URL
+              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: DISHWASHER_DEFAULT_DURATION
+              value: {{ .Values.dishwasher.defaultDuration | quote }}
+            - name: DISHWASHER_DEFAULT_TIMEOUT
+              value: {{ .Values.dishwasher.defaultTimeout | quote }}
+            - name: DISHWASHER_PRUNE_MISSING
+              value: {{ .Values.dishwasher.pruneMissing | quote }}
+            - name: DISHWASHER_INTERVAL
+              value: {{ .Values.dishwasher.interval | quote }}
+            - name: SERVICE_NAME
+              value: "dishwasher"
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
+          resources:
+            {{- toYaml .Values.dishwasher.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

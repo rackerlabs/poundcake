@@ -1,0 +1,141 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
+
+{{- if .Values.timer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "poundcake.fullname" . }}-timer
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: timer
+spec:
+  replicas: {{ .Values.timer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "poundcake.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: timer
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: timer
+        {{- include "poundcake.logGroupLabel" . | nindent 8 }}
+        {{- include "poundcake.logRoleWorker" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-api
+          image: curlimages/curl:latest
+          command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            echo "Waiting for PoundCake API to be ready..."
+
+            MAX_WAIT=300  # 5 minutes
+            ELAPSED=0
+            INTERVAL=5
+
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              if curl -sf http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}/api/v1/health > /dev/null 2>&1; then
+                echo "✓ PoundCake API is ready"
+                exit 0
+              fi
+
+              echo "Waiting for API... (${ELAPSED}s / ${MAX_WAIT}s)"
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            echo "✗ Timeout waiting for PoundCake API"
+            exit 1
+        - name: wait-for-stackstorm
+          image: curlimages/curl:latest
+          command:
+          - /bin/sh
+          - -c
+          - |
+            set -e
+            echo "Waiting for StackStorm API to be ready..."
+
+            MAX_WAIT=300
+            ELAPSED=0
+            INTERVAL=5
+
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" {{ include "poundcake.stackstormApiUrl" . }}/v1/actions || true)
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+                echo "✓ StackStorm API is ready (HTTP ${HTTP_CODE})"
+                exit 0
+              fi
+
+              echo "Waiting for StackStorm... (${ELAPSED}s / ${MAX_WAIT}s)"
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            echo "✗ Timeout waiting for StackStorm API"
+            exit 1
+      containers:
+        - name: timer
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "kitchen/timer.py"]
+          env:
+            - name: POUNDCAKE_API_URL
+              value: "http://{{ include "poundcake.fullname" . }}:{{ .Values.service.port }}"
+            - name: ST2_API_URL
+              value: {{ printf "%s/v1" (include "poundcake.stackstormApiUrl" .) | quote }}
+            - name: TIMER_INTERVAL
+              value: {{ .Values.timer.interval | quote }}
+            - name: SUPPRESSION_LIFECYCLE_INTERVAL
+              value: {{ .Values.suppressions.lifecycleIntervalSeconds | quote }}
+            - name: SLA_BUFFER_PERCENT
+              value: {{ .Values.timer.slaBufferPercent | default "0.2" | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: SERVICE_NAME
+              value: "timer"
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
+          resources:
+            {{- toYaml .Values.timer.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

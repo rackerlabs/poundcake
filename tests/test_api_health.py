@@ -10,7 +10,6 @@ import pytest
 from unittest.mock import patch, Mock, AsyncMock
 from fastapi.testclient import TestClient
 from api.main import app
-from api.schemas.schemas import ComponentHealth
 
 
 @pytest.fixture
@@ -36,7 +35,7 @@ def mock_database():
 @pytest.fixture(autouse=True)
 def mock_stackstorm():
     """Mock StackStorm API calls for all tests."""
-    with patch("api.api.health.get_stackstorm_client") as mock_client:
+    with patch("api.services.stackstorm_service.get_stackstorm_client") as mock_client:
         client = Mock()
         client.health_check = AsyncMock(return_value=True)
         mock_client.return_value = client
@@ -61,166 +60,6 @@ def test_health_endpoint_structure(client):
         # Each component should have status and message
         assert "status" in data["components"][component], f"{component} missing status"
         assert "message" in data["components"][component], f"{component} missing message"
-
-
-def test_live_endpoint_returns_200(client):
-    """Liveness should not depend on external services."""
-    response = client.get("/api/v1/live")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "alive"
-    assert "version" in data
-
-
-def test_ready_endpoint_200_when_bootstrap_marker_missing(client):
-    """Readiness should stay passable when only bootstrap marker is not ready."""
-    with (
-        patch(
-            "api.api.health.check_mongodb",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_rabbitmq",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_redis",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch("api.api.health._bootstrap_ready", return_value=False),
-    ):
-        response = client.get("/api/v1/ready")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "degraded"
-        assert data["components"]["poundcake_bootstrap"]["status"] == "unhealthy"
-
-
-def test_ready_endpoint_200_when_bootstrap_marker_ready(client):
-    """Readiness should pass when dependencies and bootstrap marker are healthy."""
-    with (
-        patch(
-            "api.api.health.check_mongodb",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_rabbitmq",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_redis",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch("api.api.health._bootstrap_ready", return_value=True),
-    ):
-        response = client.get("/api/v1/ready")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-        assert data["components"]["poundcake_bootstrap"]["status"] == "healthy"
-
-
-def test_ready_endpoint_200_when_rabbitmq_is_degraded_but_reachable(client):
-    """Readiness should pass when RabbitMQ management auth degrades but connectivity is available."""
-    with (
-        patch(
-            "api.api.health.check_mongodb",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_rabbitmq",
-            new=AsyncMock(
-                return_value=ComponentHealth(
-                    status="degraded",
-                    message="Management API HTTP 401; AMQP port accessible",
-                )
-            ),
-        ),
-        patch(
-            "api.api.health.check_redis",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch("api.api.health._bootstrap_ready", return_value=True),
-    ):
-        response = client.get("/api/v1/ready")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "degraded"
-        assert data["components"]["rabbitmq"]["status"] == "degraded"
-
-
-def test_ready_endpoint_503_when_rabbitmq_amqp_unreachable(client):
-    """Readiness should fail when RabbitMQ AMQP connectivity is unavailable."""
-    with (
-        patch(
-            "api.api.health.check_mongodb",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_rabbitmq",
-            new=AsyncMock(
-                return_value=ComponentHealth(status="unhealthy", message="AMQP unavailable")
-            ),
-        ),
-        patch(
-            "api.api.health.check_redis",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch("api.api.health._bootstrap_ready", return_value=True),
-    ):
-        response = client.get("/api/v1/ready")
-        assert response.status_code == 503
-
-
-def test_ready_endpoint_503_when_redis_unreachable(client):
-    """Readiness should fail when Redis connectivity is unavailable."""
-    with (
-        patch(
-            "api.api.health.check_mongodb",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_rabbitmq",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_redis",
-            new=AsyncMock(
-                return_value=ComponentHealth(status="unhealthy", message="Cannot connect")
-            ),
-        ),
-        patch("api.api.health._bootstrap_ready", return_value=True),
-    ):
-        response = client.get("/api/v1/ready")
-        assert response.status_code == 503
-
-
-def test_health_endpoint_exposes_rabbitmq_degraded_state(client):
-    """Diagnostic health should surface RabbitMQ degraded state."""
-    with (
-        patch(
-            "api.api.health.check_mongodb",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch(
-            "api.api.health.check_rabbitmq",
-            new=AsyncMock(
-                return_value=ComponentHealth(
-                    status="degraded",
-                    message="Management API HTTP 401; AMQP port accessible",
-                )
-            ),
-        ),
-        patch(
-            "api.api.health.check_redis",
-            new=AsyncMock(return_value=ComponentHealth(status="healthy", message="Connected")),
-        ),
-        patch("api.api.health._bootstrap_ready", return_value=True),
-    ):
-        response = client.get("/api/v1/health")
-        assert response.status_code == 503
-        data = response.json()
-        assert data["components"]["rabbitmq"]["status"] == "degraded"
 
 
 def test_root_endpoint(client):

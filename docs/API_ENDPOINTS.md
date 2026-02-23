@@ -13,8 +13,6 @@ This document reflects the current PoundCake API surface.
 - `POST /auth/logout`
 
 ### System & Monitoring
-- `GET /live`
-- `GET /ready`
 - `GET /health`
 - `GET /stats`
 - `GET /settings`
@@ -43,11 +41,7 @@ This document reflects the current PoundCake API surface.
 - `POST /cook/sync`
 - `GET /cook/actions`
 - `GET /cook/actions/{action_ref:path}`
-- `GET /cook/packs` (canonical pack-sync tar.gz endpoint)
-- `GET /cook/packs/catalog` (StackStorm pack catalog passthrough)
-
-### Internal Compatibility
-- `GET /internal/stackstorm/pack.tgz` (deprecated compatibility alias; use `/cook/packs`)
+- `GET /cook/packs`
 
 ### Recipes
 - `POST /recipes/`

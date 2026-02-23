@@ -29,7 +29,6 @@ from api.api.settings import router as settings_router
 from api.api.ingredients import router as ingredients_router
 from api.api.webhook import router as webhook_router
 from api.api.suppressions import router as suppressions_router
-from api.api.internal_stackstorm import router as internal_stackstorm_router
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -78,29 +77,28 @@ async def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-# Route Registration
+# --- Route Registration ---
 
-# System & Monitoring
+# 1. System & Monitoring
 app.include_router(health_router, prefix="/api/v1", tags=["system"])
 app.include_router(settings_router, prefix="/api/v1", tags=["system"])
 app.include_router(prometheus_router, prefix="/api/v1", tags=["prometheus"])
 
-# Security / Authentication
+# 2. Security / Authentication
 app.include_router(auth_router, prefix="/api/v1", tags=["security"])
 
-# Infrastructure & Automation
+# 3. Infrastructure & Automation
 app.include_router(cook_router, prefix="/api/v1", tags=["infrastructure"])
 
-# Business Logic
+# 4. Business Logic
 app.include_router(recipes_router, prefix="/api/v1", tags=["logic"])
 app.include_router(ingredients_router, prefix="/api/v1", tags=["logic"])
 app.include_router(dishes_router, prefix="/api/v1", tags=["executor"])
 
-# Alert Ingestion (webhook)
+# 5. Alert Ingestion (webhook)
 app.include_router(webhook_router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(orders_router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(suppressions_router, prefix="/api/v1", tags=["ingestion"])
-app.include_router(internal_stackstorm_router, prefix="/api/v1", tags=["internal"])
 
 
 @app.get("/")

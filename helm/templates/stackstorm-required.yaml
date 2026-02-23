@@ -1,11 +1,6 @@
 {{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
-{{- $apiURL := include "poundcake.stackstormApiUrl" . -}}
-{{- $authURL := include "poundcake.stackstormAuthUrl" . -}}
-{{- if not (regexMatch "^https?://.+" $apiURL) -}}
-{{- fail (printf "Invalid StackStorm API URL %q. Set stackstorm.url to a full http(s) URL." $apiURL) -}}
-{{- end -}}
-{{- if not (regexMatch "^https?://.+" $authURL) -}}
-{{- fail (printf "Invalid StackStorm Auth URL %q. Set stackstorm.authUrl to a full http(s) URL." $authURL) -}}
+{{- if or (not .Values.stackstorm.url) (not .Values.stackstorm.authUrl) -}}
+{{- fail "Set stackstorm.url and stackstorm.authUrl for external StackStorm." -}}
 {{- end -}}
 
 {{- if .Values.database.url -}}

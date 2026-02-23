@@ -32,7 +32,6 @@ logger = get_logger("timer")
 POLLER_RETRIES = get_settings().poller_http_retries
 SYSTEM_REQ_ID = "SYSTEM-TIMER"
 MISSING_EXECUTION_TIMEOUT_SECONDS = get_settings().chef_missing_execution_timeout_seconds
-MISSING_WORKFLOW_PATH_FRAGMENT = "/opt/stackstorm/packs/poundcake/actions/workflows/"
 API_UNAVAILABLE_SINCE: float | None = None
 LAST_SUPPRESSION_LIFECYCLE_RUN = 0.0
 
@@ -43,9 +42,6 @@ def update_dish(
     processing_status: Optional[str] = None,
     status: Optional[str] = None,
     error_msg: Optional[str] = None,
-    workflow_execution_id: Optional[str] = None,
-    retry_attempt: Optional[int] = None,
-    clear_error: bool = False,
     final_status: bool = False,
     result: Optional[Any] = None,
     started_at: Optional[str] = None,
@@ -62,14 +58,8 @@ def update_dish(
         payload["processing_status"] = processing_status
     if status:
         payload["status"] = status
-    if clear_error:
-        payload["error_message"] = None
-    elif error_msg is not None:
+    if error_msg:
         payload["error_message"] = error_msg
-    if workflow_execution_id is not None:
-        payload["workflow_execution_id"] = workflow_execution_id
-    if retry_attempt is not None:
-        payload["retry_attempt"] = retry_attempt
     if result is not None:
         payload["result"] = result
     if started_at:
@@ -111,67 +101,6 @@ def update_dish(
         extra.update({"dish_id": dish_id, "error": str(e)})
         logger.error("Failed to update dish", extra=extra)
         return False
-
-
-def _is_missing_workflow_file_error(error_message: Any) -> bool:
-    if not isinstance(error_message, str):
-        return False
-    return (
-        "No such file or directory" in error_message
-        and MISSING_WORKFLOW_PATH_FRAGMENT in error_message
-    )
-
-
-def _maybe_retry_missing_workflow_execution(
-    dish: dict[str, Any], req_id: str, error_message: Any
-) -> tuple[bool, str | None]:
-    if not _is_missing_workflow_file_error(error_message):
-        return False, None
-
-    retry_attempt = int(dish.get("retry_attempt") or 0)
-    if retry_attempt != 0:
-        return False, None
-
-    recipe = dish.get("recipe") or {}
-    workflow_id = recipe.get("workflow_id")
-    if not workflow_id:
-        return False, "retry skipped: recipe workflow_id is missing"
-
-    workflow_parameters = recipe.get("workflow_parameters") or {}
-
-    # Give pack-sync sidecars a short window to observe the workflow file.
-    time.sleep(2)
-    exec_resp = request_with_retry_sync(
-        "POST",
-        f"{API_BASE_URL}/cook/execute",
-        json={"action": workflow_id, "parameters": workflow_parameters},
-        headers={"X-Request-ID": req_id},
-        timeout=30,
-        retries=POLLER_RETRIES,
-    )
-    if exec_resp.status_code not in (200, 201):
-        return False, f"retry execute failed with HTTP {exec_resp.status_code}: {exec_resp.text}"
-
-    exec_id = (exec_resp.json() or {}).get("id")
-    if not exec_id:
-        return False, "retry execute response missing execution id"
-
-    updated = update_dish(
-        dish,
-        req_id,
-        processing_status="processing",
-        workflow_execution_id=exec_id,
-        retry_attempt=retry_attempt + 1,
-        clear_error=True,
-    )
-    if not updated:
-        return False, "failed to persist retried execution id"
-
-    logger.warning(
-        "Retried workflow execution after missing workflow file",
-        extra={"req_id": req_id, "dish_id": dish.get("id"), "execution_id": exec_id},
-    )
-    return True, None
 
 
 def cancel_execution(execution_id: str, req_id: str) -> bool:
@@ -326,7 +255,6 @@ def monitor_dishes() -> None:
                 )
                 continue
             dish = claim_resp.json()
-            execution_id = dish.get("workflow_execution_id")
 
             if check_for_timeouts(dish, req_id):
                 continue
@@ -568,13 +496,6 @@ def monitor_dishes() -> None:
                     if st2_status in ST2_FAILURE_STATUSES:
                         processing_status = "failed"
                         err = st2_action_results.get("error") or "StackStorm execution failed"
-                        retried, retry_error = _maybe_retry_missing_workflow_execution(
-                            dish, req_id, err
-                        )
-                        if retried:
-                            continue
-                        if retry_error:
-                            err = f"{err}; workflow file retry failed: {retry_error}"
 
                     update_dish(
                         dish,

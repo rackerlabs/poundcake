@@ -28,7 +28,8 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl && \
+    curl \
+    default-libmysqlclient-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
