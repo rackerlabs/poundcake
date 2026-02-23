@@ -1,0 +1,442 @@
+suite: poundcake-workloads
+templates:
+  - templates/poundcake-workloads.yaml
+tests:
+  - it: renders all poundcake workloads
+    asserts:
+      - hasDocuments:
+          count: 6
+      - equal:
+          path: metadata.name
+          value: poundcake-api
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: poundcake-dishwasher
+        documentIndex: 5
+      - equal:
+          path: metadata.name
+          value: poundcake-ui
+        documentIndex: 2
+
+  - it: applies log-streaming labels to poundcake pod templates
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: poundcake
+        documentIndex: 0
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-subgroup"]
+          value: app
+        documentIndex: 0
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: api
+        documentIndex: 0
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: worker
+        documentIndex: 4
+
+  - it: applies image and interval values to key containers
+    set:
+      poundcakeImage.repository: custom/poundcake
+      poundcakeImage.tag: "2.0.0"
+      poundcakeImage.pullPolicy: Always
+      uiImage.repository: custom/poundcake-ui
+      uiImage.tag: "2.0.0"
+      uiImage.pullPolicy: Always
+      uiImage.containerPort: 18080
+      intervals.prepInterval: "42"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: custom/poundcake:2.0.0
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+        documentIndex: 0
+      - isNotNull:
+          path: spec.template.spec.containers[0].readinessProbe
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /api/v1/ready
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 2
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 6
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /api/v1/live
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[7].value
+          value: "42"
+        documentIndex: 4
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+        documentIndex: 4
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: custom/poundcake-ui:2.0.0
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 18080
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 18080
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 18080
+        documentIndex: 2
+
+  - it: applies configured poundcake API readiness initial delay
+    set:
+      poundcakeApi.readiness.initialDelaySeconds: 9
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 9
+        documentIndex: 0
+
+  - it: defaults PoundCake workload image tag to chart appVersion when unset
+    set:
+      poundcakeImage.tag: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 4
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+        documentIndex: 5
+
+  - it: supports immutable digest image references for PoundCake workloads
+    set:
+      poundcakeImage.repository: ghcr.io/example/poundcake
+      poundcakeImage.tag: ""
+      poundcakeImage.digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        documentIndex: 0
+
+  - it: defaults UI container and probe ports to 8080
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 8080
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 8080
+        documentIndex: 2
+
+  - it: mounts writable nginx runtime paths on UI by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: ui-nginx-confd
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /etc/nginx/conf.d
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: ui-nginx-cache
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /var/cache/nginx
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].name
+          value: ui-nginx-run
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].mountPath
+          value: /var/run
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.volumes[1].name
+          value: ui-nginx-confd
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.volumes[2].name
+          value: ui-nginx-cache
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.volumes[3].name
+          value: ui-nginx-run
+        documentIndex: 2
+      - isNotNull:
+          path: spec.template.spec.volumes[1].emptyDir
+        documentIndex: 2
+      - isNotNull:
+          path: spec.template.spec.volumes[2].emptyDir
+        documentIndex: 2
+      - isNotNull:
+          path: spec.template.spec.volumes[3].emptyDir
+        documentIndex: 2
+
+  - it: allows disabling writable nginx runtime path mounts for UI
+    set:
+      uiImage.runtimeWritablePaths.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+        documentIndex: 2
+      - isNull:
+          path: spec.template.spec.volumes[1]
+        documentIndex: 2
+
+  - it: applies pod, app, and utility security contexts with writable defaults
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: false
+        documentIndex: 5
+
+  - it: gates UI startup on API reachability and bootstrap marker
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-stage10
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "gate_wait_for_tcp \\\"poundcake-api\\\" \\\"8000\\\""
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "gate_wait_for_true_file \\\"/app/config/poundcake_bootstrap_ready\\\""
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_ENABLED=\\\"true\\\""
+        documentIndex: 2
+
+  - it: supports gate logging overrides on poundcake init gates
+    set:
+      startupHooks.gateLogging.enabled: false
+      startupHooks.gateLogging.intervalSeconds: 7
+      startupHooks.gateLogging.prefix: "[pc-gate]"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_ENABLED=\\\"false\\\""
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_INTERVAL=\\\"7\\\""
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "GATE_LOG_PREFIX=\\\"\\[pc-gate\\]\\\""
+        documentIndex: 0
+
+  - it: supports hardened overrides for app and utility container profiles
+    set:
+      poundcakeImage.securityContext.readOnlyRootFilesystem: true
+      utilitySecurityContext.readOnlyRootFilesystem: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+        documentIndex: 1
+
+  - it: does not render image pull secrets by default
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 0
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 2
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 4
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 5
+
+  - it: renders poundcakeImage pull secrets on PoundCake workloads
+    set:
+      poundcakeImage.pullSecrets[0]: ghcr-pull
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull
+        documentIndex: 4
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull
+        documentIndex: 5
+
+  - it: falls back to legacy imagePullSecrets when poundcakeImage.pullSecrets is unset
+    set:
+      imagePullSecrets[0]: ghcr-pull
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull
+        documentIndex: 0
+
+  - it: mounts alembic config and migration files into poundcake-api
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].name
+          value: poundcake-alembic
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].mountPath
+          value: /app/alembic.ini
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].subPath
+          value: alembic.ini
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.volumes[2].name
+          value: poundcake-alembic
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.volumes[2].configMap.name
+          value: poundcake-alembic
+        documentIndex: 0
+
+  - it: exposes pack sync token to poundcake-api
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[22].name
+          value: POUNDCAKE_PACK_SYNC_TOKEN
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[22].valueFrom.secretKeyRef.name
+          value: poundcake-secrets
+        documentIndex: 0
+
+  - it: mounts stackstorm API key secret into poundcake-api and exposes env var/file path
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts[1].name
+          value: st2-apikey
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts[1].mountPath
+          value: /run/secrets/st2
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: st2-apikey
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /run/secrets/st2
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.volumes[1].name
+          value: st2-apikey
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.volumes[1].secret.secretName
+          value: stackstorm-apikeys
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[20].name
+          value: POUNDCAKE_STACKSTORM_API_KEY
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[20].valueFrom.secretKeyRef.name
+          value: stackstorm-apikeys
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[21].name
+          value: ST2_API_KEY_FILE
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[21].value
+          value: /run/secrets/st2/st2_api_key
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[7].name
+          value: MONGODB_HOST
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[7].value
+          value: stackstorm-mongodb
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[13].name
+          value: REDIS_PORT
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[13].value
+          value: "6379"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[14].valueFrom.secretKeyRef.name
+          value: stackstorm-secrets
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[15].valueFrom.secretKeyRef.name
+          value: stackstorm-secrets
+        documentIndex: 0
