@@ -1,6 +1,6 @@
 suite: pvcs
 templates:
-  - templates/pvcs.yaml
+  - templates/poundcake-pvcs.yaml
 tests:
   - it: renders all required PVCs
     asserts:

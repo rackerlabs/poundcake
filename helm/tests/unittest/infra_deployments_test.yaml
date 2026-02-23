@@ -1,6 +1,6 @@
 suite: infra-deployments
 templates:
-  - templates/infra-deployments.yaml
+  - templates/poundcake-infra-deployments.yaml
 tests:
   - it: renders mariadb probes and default writable infra security context
     asserts:

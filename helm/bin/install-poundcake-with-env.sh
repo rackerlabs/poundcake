@@ -44,10 +44,32 @@ POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/gene
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
 INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
+OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
+MARIADB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME:-mariadb-operator}"
+MARIADB_OPERATOR_NAMESPACE="${POUNDCAKE_MARIADB_OPERATOR_NAMESPACE:-mariadb-operator}"
+MARIADB_OPERATOR_CHART_NAME="${POUNDCAKE_MARIADB_OPERATOR_CHART_NAME:-mariadb-operator}"
+MARIADB_OPERATOR_CHART_REPO_URL="${POUNDCAKE_MARIADB_OPERATOR_CHART_REPO_URL:-https://mariadb-operator.github.io/mariadb-operator}"
+MARIADB_OPERATOR_VERSION="${POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION:-25.10.4}"
+REDIS_OPERATOR_RELEASE_NAME="${POUNDCAKE_REDIS_OPERATOR_RELEASE_NAME:-redis-operator}"
+REDIS_OPERATOR_NAMESPACE="${POUNDCAKE_REDIS_OPERATOR_NAMESPACE:-redis-operator}"
+REDIS_OPERATOR_CHART_NAME="${POUNDCAKE_REDIS_OPERATOR_CHART_NAME:-redis-operator}"
+REDIS_OPERATOR_CHART_REPO_URL="${POUNDCAKE_REDIS_OPERATOR_CHART_REPO_URL:-https://ot-container-kit.github.io/helm-charts/}"
+REDIS_OPERATOR_VERSION="${POUNDCAKE_REDIS_OPERATOR_CHART_VERSION:-0.23.0}"
+RABBITMQ_OPERATOR_RELEASE_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_RELEASE_NAME:-rabbitmq-cluster-operator}"
+RABBITMQ_OPERATOR_NAMESPACE="${POUNDCAKE_RABBITMQ_OPERATOR_NAMESPACE:-rabbitmq-system}"
+RABBITMQ_OPERATOR_CHART_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_NAME:-rabbitmq-cluster-operator}"
+RABBITMQ_OPERATOR_CHART_REPO_URL="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_REPO_URL:-https://charts.bitnami.com/bitnami}"
+RABBITMQ_OPERATOR_VERSION="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_VERSION:-4.4.34}"
+BAKERY_RACKSPACE_URL="${POUNDCAKE_BAKERY_RACKSPACE_URL:-}"
+BAKERY_RACKSPACE_USERNAME="${POUNDCAKE_BAKERY_RACKSPACE_USERNAME:-}"
+BAKERY_RACKSPACE_PASSWORD="${POUNDCAKE_BAKERY_RACKSPACE_PASSWORD:-}"
+BAKERY_RACKSPACE_SECRET_NAME="${POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME:-bakery-rackspace-core}"
 SKIP_PREFLIGHT="false"
 ROTATE_SECRETS="false"
+INTERACTIVE_BAKERY_CREDS="false"
 CURRENT_PHASE="initialization"
 EXTRA_ARGS=()
+BAKERY_SECRET_SET_ARGS=()
 
 timestamp_utc() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -90,8 +112,16 @@ Installer options:
   --debug           Enable shell tracing for installer execution
   --validate        Run helm lint + helm template --debug before install
   --mode <full|bakery-only>  Install full stack or Bakery-only resources
+  --operators-mode <install-missing|verify|skip>  Operator handling policy
+  --verify-operators  Alias for --operators-mode verify
+  --skip-operators    Alias for --operators-mode skip
   --skip-preflight  Skip dependency/cluster preflight checks
   --rotate-secrets  Delete known chart-managed secrets before install
+  --interactive-bakery-creds Prompt for Bakery Rackspace Core credentials
+  --bakery-rackspace-url <url>         Rackspace Core API URL
+  --bakery-rackspace-username <user>   Rackspace Core username
+  --bakery-rackspace-password <pass>   Rackspace Core password
+  --bakery-rackspace-secret-name <name> Secret name for Rackspace credentials
 
 Environment overrides:
   POUNDCAKE_GHCR_OWNER             (default: rackerlabs)
@@ -114,6 +144,26 @@ Environment overrides:
   POUNDCAKE_BAKERY_IMAGE_REPO      (optional; sets bakery.image.repository)
   POUNDCAKE_BAKERY_IMAGE_TAG       (optional; sets bakery.image.tag; defaults to POUNDCAKE_IMAGE_TAG)
   POUNDCAKE_INSTALL_MODE           (default: full; valid: full, bakery-only)
+  POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
+  POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME
+  POUNDCAKE_MARIADB_OPERATOR_NAMESPACE
+  POUNDCAKE_MARIADB_OPERATOR_CHART_NAME
+  POUNDCAKE_MARIADB_OPERATOR_CHART_REPO_URL
+  POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION
+  POUNDCAKE_REDIS_OPERATOR_RELEASE_NAME
+  POUNDCAKE_REDIS_OPERATOR_NAMESPACE
+  POUNDCAKE_REDIS_OPERATOR_CHART_NAME
+  POUNDCAKE_REDIS_OPERATOR_CHART_REPO_URL
+  POUNDCAKE_REDIS_OPERATOR_CHART_VERSION
+  POUNDCAKE_RABBITMQ_OPERATOR_RELEASE_NAME
+  POUNDCAKE_RABBITMQ_OPERATOR_NAMESPACE
+  POUNDCAKE_RABBITMQ_OPERATOR_CHART_NAME
+  POUNDCAKE_RABBITMQ_OPERATOR_CHART_REPO_URL
+  POUNDCAKE_RABBITMQ_OPERATOR_CHART_VERSION
+  POUNDCAKE_BAKERY_RACKSPACE_URL   (optional; used to create/set bakery secret)
+  POUNDCAKE_BAKERY_RACKSPACE_USERNAME (optional)
+  POUNDCAKE_BAKERY_RACKSPACE_PASSWORD (optional)
+  POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME (default: bakery-rackspace-core)
   HELM_REGISTRY_USERNAME           (optional; for OCI login)
   HELM_REGISTRY_PASSWORD           (optional; for OCI login)
   POUNDCAKE_IMAGE_PULL_SECRET_NAME     (default: ghcr-pull)
@@ -161,6 +211,163 @@ check_cluster_connection() {
 perform_preflight_checks() {
   check_dependencies helm kubectl grep sed awk find sort
   check_cluster_connection
+}
+
+crd_exists() {
+  local crd_name="$1"
+  kubectl get crd "${crd_name}" >/dev/null 2>&1
+}
+
+crd_exists_any() {
+  local crd_name=""
+  for crd_name in "$@"; do
+    if crd_exists "${crd_name}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_or_verify_operator() {
+  local operator_key="$1"
+  local crd_names_raw="$2"
+  local release_name="$3"
+  local chart_name="$4"
+  local chart_repo_url="$5"
+  local chart_version="$6"
+  local chart_namespace="$7"
+  local crd_names=()
+  local crd_name_display=""
+
+  IFS=',' read -r -a crd_names <<< "${crd_names_raw}"
+  crd_name_display="${crd_names[0]}"
+
+  if crd_exists_any "${crd_names[@]}"; then
+    log_info "Operator '${operator_key}' already present (CRD ${crd_name_display}); skipping install."
+    return 0
+  fi
+
+  case "${OPERATOR_MODE}" in
+    skip)
+      log_info "Operator mode is skip. Not installing '${operator_key}' (missing CRD ${crd_name_display})."
+      return 0
+      ;;
+    verify)
+      log_error "Operator '${operator_key}' is missing (CRD ${crd_name_display})."
+      log_error "Set --operators-mode install-missing to auto-install missing operators."
+      exit 1
+      ;;
+    install-missing)
+      log_info "Installing missing operator '${operator_key}' (chart ${chart_name}:${chart_version})..."
+      helm upgrade --install "${release_name}" "${chart_name}" \
+        --repo "${chart_repo_url}" \
+        --version "${chart_version}" \
+        --namespace "${chart_namespace}" \
+        --create-namespace \
+        --wait \
+        --atomic \
+        --cleanup-on-fail \
+        --timeout "${HELM_TIMEOUT}"
+      ;;
+    *)
+      log_error "Unsupported operators mode '${OPERATOR_MODE}'."
+      exit 1
+      ;;
+  esac
+
+  if ! crd_exists_any "${crd_names[@]}"; then
+    log_error "Operator '${operator_key}' install completed but CRD ${crd_name_display} is still missing."
+    exit 1
+  fi
+}
+
+ensure_required_operators() {
+  log_info "Operator mode: ${OPERATOR_MODE}"
+
+  if [[ "${OPERATOR_MODE}" == "skip" ]]; then
+    log_info "Skipping operator checks/installs."
+    return 0
+  fi
+
+  install_or_verify_operator \
+    "mariadb-operator" \
+    "mariadbs.k8s.mariadb.com" \
+    "${MARIADB_OPERATOR_RELEASE_NAME}" \
+    "${MARIADB_OPERATOR_CHART_NAME}" \
+    "${MARIADB_OPERATOR_CHART_REPO_URL}" \
+    "${MARIADB_OPERATOR_VERSION}" \
+    "${MARIADB_OPERATOR_NAMESPACE}"
+
+  if [[ "${INSTALL_MODE}" == "full" ]]; then
+    install_or_verify_operator \
+      "redis-operator" \
+      "redis.redis.redis.opstreelabs.in,redis.redis.opstreelabs.in" \
+      "${REDIS_OPERATOR_RELEASE_NAME}" \
+      "${REDIS_OPERATOR_CHART_NAME}" \
+      "${REDIS_OPERATOR_CHART_REPO_URL}" \
+      "${REDIS_OPERATOR_VERSION}" \
+      "${REDIS_OPERATOR_NAMESPACE}"
+
+    install_or_verify_operator \
+      "rabbitmq-cluster-operator" \
+      "rabbitmqclusters.rabbitmq.com" \
+      "${RABBITMQ_OPERATOR_RELEASE_NAME}" \
+      "${RABBITMQ_OPERATOR_CHART_NAME}" \
+      "${RABBITMQ_OPERATOR_CHART_REPO_URL}" \
+      "${RABBITMQ_OPERATOR_VERSION}" \
+      "${RABBITMQ_OPERATOR_NAMESPACE}"
+  fi
+}
+
+apply_bakery_rackspace_secret() {
+  local should_manage_secret="false"
+
+  if [[ "${INTERACTIVE_BAKERY_CREDS}" == "true" ]]; then
+    should_manage_secret="true"
+    local prompt_url_default="${BAKERY_RACKSPACE_URL:-https://ws.core.rackspace.com}"
+    local prompt_user_default="${BAKERY_RACKSPACE_USERNAME:-}"
+    local prompt_url=""
+    local prompt_user=""
+    local prompt_password=""
+
+    read -r -p "Bakery Rackspace Core URL [${prompt_url_default}]: " prompt_url
+    BAKERY_RACKSPACE_URL="${prompt_url:-${prompt_url_default}}"
+    read -r -p "Bakery Rackspace Core username [${prompt_user_default}]: " prompt_user
+    BAKERY_RACKSPACE_USERNAME="${prompt_user:-${prompt_user_default}}"
+    read -r -s -p "Bakery Rackspace Core password: " prompt_password
+    echo
+    BAKERY_RACKSPACE_PASSWORD="${prompt_password}"
+  fi
+
+  if [[ -n "${BAKERY_RACKSPACE_URL}${BAKERY_RACKSPACE_USERNAME}${BAKERY_RACKSPACE_PASSWORD}" ]]; then
+    should_manage_secret="true"
+  fi
+
+  if [[ "${should_manage_secret}" != "true" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${BAKERY_RACKSPACE_URL}" || -z "${BAKERY_RACKSPACE_USERNAME}" || -z "${BAKERY_RACKSPACE_PASSWORD}" ]]; then
+    log_error "Bakery Rackspace Core credentials require URL, username, and password."
+    log_error "Use --interactive-bakery-creds or provide all of:"
+    log_error "  --bakery-rackspace-url --bakery-rackspace-username --bakery-rackspace-password"
+    exit 1
+  fi
+
+  if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+    log_info "Namespace '${NAMESPACE}' does not exist; creating it for Bakery secret setup..."
+    kubectl create namespace "${NAMESPACE}" >/dev/null
+  fi
+
+  log_info "Applying Bakery Rackspace Core secret '${BAKERY_RACKSPACE_SECRET_NAME}' in namespace '${NAMESPACE}'..."
+  kubectl -n "${NAMESPACE}" create secret generic "${BAKERY_RACKSPACE_SECRET_NAME}" \
+    --from-literal=rackspace-core-url="${BAKERY_RACKSPACE_URL}" \
+    --from-literal=rackspace-core-username="${BAKERY_RACKSPACE_USERNAME}" \
+    --from-literal=rackspace-core-password="${BAKERY_RACKSPACE_PASSWORD}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  BAKERY_SECRET_SET_ARGS+=(--set-string "bakery.enabled=true")
+  BAKERY_SECRET_SET_ARGS+=(--set-string "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
 }
 
 ensure_oci_registry_auth() {
@@ -411,6 +618,18 @@ while [[ $# -gt 0 ]]; do
       INSTALL_MODE="$2"
       shift 2
       ;;
+    --operators-mode)
+      OPERATOR_MODE="$2"
+      shift 2
+      ;;
+    --skip-operators)
+      OPERATOR_MODE="skip"
+      shift
+      ;;
+    --verify-operators)
+      OPERATOR_MODE="verify"
+      shift
+      ;;
     --skip-preflight)
       SKIP_PREFLIGHT="true"
       shift
@@ -418,6 +637,26 @@ while [[ $# -gt 0 ]]; do
     --rotate-secrets)
       ROTATE_SECRETS="true"
       shift
+      ;;
+    --interactive-bakery-creds|--interactive-bakery-credentials)
+      INTERACTIVE_BAKERY_CREDS="true"
+      shift
+      ;;
+    --bakery-rackspace-url)
+      BAKERY_RACKSPACE_URL="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-username)
+      BAKERY_RACKSPACE_USERNAME="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-password)
+      BAKERY_RACKSPACE_PASSWORD="$2"
+      shift 2
+      ;;
+    --bakery-rackspace-secret-name)
+      BAKERY_RACKSPACE_SECRET_NAME="$2"
+      shift 2
       ;;
     *)
       EXTRA_ARGS+=("$1")
@@ -431,13 +670,18 @@ if [[ "${INSTALL_MODE}" != "full" && "${INSTALL_MODE}" != "bakery-only" ]]; then
   exit 1
 fi
 
+if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" && "${OPERATOR_MODE}" != "skip" ]]; then
+  log_error "Invalid operators mode '${OPERATOR_MODE}'. Valid values: install-missing, verify, skip."
+  exit 1
+fi
+
 if [[ "${INSTALL_DEBUG}" == "true" ]]; then
   log_info "Debug tracing enabled."
   PS4='+ [${BASH_SOURCE##*/}:${LINENO}${FUNCNAME[0]:+:${FUNCNAME[0]}}] '
   set -x
 fi
 
-log_info "Installer options: mode=${INSTALL_MODE}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
+log_info "Installer options: mode=${INSTALL_MODE}, operators_mode=${OPERATOR_MODE}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
@@ -462,6 +706,9 @@ else
 fi
 
 resolve_chart_version
+
+log_phase "operator verification/install"
+ensure_required_operators
 
 log_phase "oci authentication"
 ensure_oci_registry_auth "${CHART_SOURCE}"
@@ -512,6 +759,9 @@ if [[ "${CREATE_IMAGE_PULL_SECRET}" == "true" ]]; then
 else
   log_info "Skipping image pull secret creation (POUNDCAKE_CREATE_IMAGE_PULL_SECRET=${CREATE_IMAGE_PULL_SECRET})."
 fi
+
+log_phase "bakery credential secret configuration"
+apply_bakery_rackspace_secret
 
 if [[ "${ROTATE_SECRETS}" == "true" ]]; then
   log_phase "secret rotation"
@@ -580,6 +830,9 @@ if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
 fi
 if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=${BAKERY_IMAGE_TAG}")
+fi
+if (( ${#BAKERY_SECRET_SET_ARGS[@]} )); then
+  INSTALLER_SET_ARGS+=("${BAKERY_SECRET_SET_ARGS[@]}")
 fi
 
 COMMON_HELM_ARGS=(

@@ -25,6 +25,6 @@ roleRef:
   name: {{ include "poundcake.bakeryName" . }}-gateway-manager
 subjects:
 - kind: ServiceAccount
-  name: {{ include "poundcake.serviceAccountName" . }}
+  name: {{ include "poundcake.bakeryServiceAccountName" . }}
   namespace: {{ .Release.Namespace }}
 {{- end }}

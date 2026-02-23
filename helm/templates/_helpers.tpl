@@ -6,7 +6,12 @@
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- printf "%s-%s" .Release.Name (include "poundcake.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- $name := include "poundcake.name" . -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -28,6 +33,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- default (include "poundcake.fullname" .) .Values.serviceAccount.name -}}
 {{- else -}}
 {{- default "default" .Values.serviceAccount.name -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.bakeryServiceAccountName" -}}
+{{- $bakery := .Values.bakery | default dict -}}
+{{- $bakeryServiceAccount := $bakery.serviceAccount | default dict -}}
+{{- $name := $bakeryServiceAccount.name | default "" -}}
+{{- $create := .Values.serviceAccount.create -}}
+{{- if hasKey $bakeryServiceAccount "create" -}}
+{{- $create = $bakeryServiceAccount.create -}}
+{{- end -}}
+{{- if $create -}}
+{{- default (printf "%s-bakery" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-") $name -}}
+{{- else -}}
+{{- default "default" $name -}}
 {{- end -}}
 {{- end -}}
 

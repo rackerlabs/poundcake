@@ -1,6 +1,6 @@
 suite: poddisruptionbudgets
 templates:
-  - templates/poddisruptionbudgets.yaml
+  - templates/poundcake-poddisruptionbudgets.yaml
 tests:
   - it: renders PDBs by default with maxUnavailable policy
     asserts:

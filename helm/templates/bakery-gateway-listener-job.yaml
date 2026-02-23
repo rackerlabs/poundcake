@@ -18,9 +18,11 @@ spec:
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: bakery-gateway-listener
+        {{- include "poundcake.logGroupLabel" . | nindent 8 }}
+        {{- include "poundcake.logRoleWorker" . | nindent 8 }}
     spec:
       restartPolicy: OnFailure
-      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      serviceAccountName: {{ include "poundcake.bakeryServiceAccountName" . }}
       containers:
       - name: bakery-gateway-listener
         image: bitnami/kubectl:latest

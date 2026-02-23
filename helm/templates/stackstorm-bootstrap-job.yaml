@@ -21,7 +21,7 @@ spec:
         app.kubernetes.io/component: stackstorm-bootstrap
     spec:
       restartPolicy: OnFailure
-      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      serviceAccountName: stackstorm-startup
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

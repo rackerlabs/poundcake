@@ -1,6 +1,6 @@
 suite: services
 templates:
-  - templates/services.yaml
+  - templates/poundcake-services.yaml
 tests:
   - it: renders required default services only
     asserts:

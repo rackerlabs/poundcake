@@ -1,0 +1,19 @@
+suite: bakery-gateway-listener-labels
+templates:
+  - templates/bakery-gateway-listener-job.yaml
+tests:
+  - it: applies poundcake log labels to bakery gateway listener pod template when enabled
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+      bakery.gateway.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: bakery
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-subgroup"]
+          value: app
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: worker
