@@ -38,6 +38,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount:
+  # Service account for non-bakery workloads (for example startup/bootstrap hooks).
   create: true
   annotations: {}
   name: ""
@@ -734,6 +735,13 @@ bakery:
 
   # Number of Bakery replicas
   replicaCount: 1
+
+  # Service account used by Bakery API/worker/jobs.
+  # Use this account for external ticketing/workload-identity annotations.
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
 
   worker:
     enabled: true

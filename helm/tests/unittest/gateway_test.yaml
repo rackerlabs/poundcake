@@ -1,6 +1,6 @@
 suite: gateway
 templates:
-  - templates/gateway.yaml
+  - templates/poundcake-gateway.yaml
 tests:
   - it: does not render gateway resources by default
     asserts:

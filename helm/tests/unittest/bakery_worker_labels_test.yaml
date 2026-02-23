@@ -1,0 +1,23 @@
+suite: bakery-worker-labels
+templates:
+  - templates/bakery-secret.yaml
+  - templates/bakery-worker-deployment.yaml
+tests:
+  - it: applies poundcake log labels to bakery worker pod template
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+      bakery.worker.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: bakery
+        template: templates/bakery-worker-deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-subgroup"]
+          value: app
+        template: templates/bakery-worker-deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: worker
+        template: templates/bakery-worker-deployment.yaml

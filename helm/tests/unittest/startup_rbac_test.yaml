@@ -1,6 +1,6 @@
 suite: startup-rbac
 templates:
-  - templates/startup-rbac.yaml
+  - templates/stackstorm-startup-rbac.yaml
 tests:
   - it: renders service account, role, and rolebinding
     asserts:

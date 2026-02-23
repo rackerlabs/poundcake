@@ -1,0 +1,18 @@
+suite: bakery-db-init-labels
+templates:
+  - templates/bakery-init-job.yaml
+tests:
+  - it: applies poundcake log labels to bakery db-init pod template
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: bakery
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-subgroup"]
+          value: app
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: worker

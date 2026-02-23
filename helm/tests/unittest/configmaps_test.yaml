@@ -1,6 +1,6 @@
 suite: configmaps
 templates:
-  - templates/configmaps.yaml
+  - templates/poundcake-configmaps.yaml
 tests:
   - it: renders all required configmaps
     asserts:

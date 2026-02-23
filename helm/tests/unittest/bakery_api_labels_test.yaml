@@ -1,0 +1,40 @@
+suite: bakery-api-labels
+templates:
+  - templates/bakery-secret.yaml
+  - templates/bakery-deployment.yaml
+tests:
+  - it: applies poundcake log labels to bakery api pod template in full mode
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: bakery
+        template: templates/bakery-deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-subgroup"]
+          value: app
+        template: templates/bakery-deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: api
+        template: templates/bakery-deployment.yaml
+
+  - it: applies poundcake log labels to bakery api pod template in bakery-only mode
+    set:
+      deployment.mode: bakery-only
+      bakery.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: bakery
+        template: templates/bakery-deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-subgroup"]
+          value: app
+        template: templates/bakery-deployment.yaml
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: api
+        template: templates/bakery-deployment.yaml

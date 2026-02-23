@@ -1,6 +1,6 @@
 suite: startup-order-jobs
 templates:
-  - templates/startup-order-jobs.yaml
+  - templates/stackstorm-startup-order-jobs.yaml
 tests:
   - it: renders full startup job sequence
     asserts:
