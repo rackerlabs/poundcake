@@ -55,12 +55,12 @@ print_warning() {
 
 print_section "Validating chart/image source defaults"
 if grep -R --line-number "ghcr.io/aedan" \
-    "$PROJECT_ROOT/bin/install-poundcake.sh" \
+    "$PROJECT_ROOT/install/install-poundcake-helm.sh" \
     "$PROJECT_ROOT/helm/values.yaml" >/dev/null 2>&1; then
     print_error "Legacy registry source 'ghcr.io/aedan' found in install/chart defaults"
     echo "Update defaults to ghcr.io/rackerlabs before pushing."
     grep -R --line-number "ghcr.io/aedan" \
-        "$PROJECT_ROOT/bin/install-poundcake.sh" \
+        "$PROJECT_ROOT/install/install-poundcake-helm.sh" \
         "$PROJECT_ROOT/helm/values.yaml" || true
     exit 1
 fi

@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -32,3 +33,4 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: stackstorm-startup
+{{- end }}

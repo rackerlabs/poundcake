@@ -97,7 +97,7 @@ Because of that control flow, `--wait`/`--atomic` can deadlock before hook Jobs 
 Use the installer script defaults (non-waiting flow), or explicitly set:
 
 ```bash
-POUNDCAKE_HELM_WAIT=false ./install/install-helm.sh
+POUNDCAKE_HELM_WAIT=false ./install/install-poundcake-helm.sh
 ```
 
 If you intentionally need wait semantics, set `POUNDCAKE_ALLOW_HOOK_WAIT=true` in the same invocation.
@@ -160,7 +160,7 @@ If your PoundCake image is private, use the installer env vars to create and wir
 source ./install/set-env-helper.sh
 export HELM_REGISTRY_USERNAME="<gh-username>"
 export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
-./install/install-helm.sh
+./install/install-poundcake-helm.sh
 ```
 
 OCI chart authentication fallback chain:

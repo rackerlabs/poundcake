@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -204,4 +205,5 @@ spec:
     - name: http
       port: {{ .Values.services.stackstormWeb.port }}
       targetPort: 8080
+{{- end }}
 {{- end }}

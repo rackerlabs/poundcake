@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_SCRIPT="${SCRIPT_DIR}/../bin/install-poundcake-with-env.sh"
-WRAPPER_SCRIPT="${SCRIPT_DIR}/../../install/install-helm.sh"
+WRAPPER_SCRIPT="${SCRIPT_DIR}/../../install/install-poundcake-helm.sh"
 
 echo "Checking installer hardening, validation flow, and wrapper pass-through..."
 
@@ -23,6 +23,8 @@ rg -q 'perform_preflight_checks' "${INSTALL_SCRIPT}"
 # Validation mode
 rg -q '^run_helm_validation\(\)' "${INSTALL_SCRIPT}"
 rg -q -- '--validate' "${INSTALL_SCRIPT}"
+rg -q -- '--mode <full|bakery-only>' "${INSTALL_SCRIPT}"
+rg -q 'POUNDCAKE_INSTALL_MODE' "${INSTALL_SCRIPT}"
 rg -q 'POUNDCAKE_HELM_VALIDATE' "${INSTALL_SCRIPT}"
 rg -q 'helm lint' "${INSTALL_SCRIPT}"
 rg -q 'helm template .*--debug' "${INSTALL_SCRIPT}"
@@ -64,6 +66,8 @@ rg -q 'POUNDCAKE_SERVICE_CONFIG_DIR' "${INSTALL_SCRIPT}"
 rg -q '^collect_yaml_files\(\)' "${INSTALL_SCRIPT}"
 rg -q -- '--post-renderer' "${INSTALL_SCRIPT}"
 rg -q -- '--post-renderer-args' "${INSTALL_SCRIPT}"
+rg -q -- 'deployment.mode=' "${INSTALL_SCRIPT}"
+rg -q -- 'bakery.enabled=true' "${INSTALL_SCRIPT}"
 rg -q -- '--set-string "stackstormPackSync.endpoint=' "${INSTALL_SCRIPT}"
 
 # Version-file fallback sequence

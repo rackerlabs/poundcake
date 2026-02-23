@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 {{- include "poundcake.validateStackstormServiceSet" . -}}
 {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "register")) "true" }}
 apiVersion: apps/v1
@@ -1240,4 +1241,5 @@ spec:
               - secret:
                   name: stackstorm-apikeys
                   optional: true
+{{- end }}
 {{- end }}

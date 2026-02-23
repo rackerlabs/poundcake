@@ -23,6 +23,130 @@ app.kubernetes.io/name: {{ include "poundcake.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{- define "poundcake.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+{{- default (include "poundcake.fullname" .) .Values.serviceAccount.name -}}
+{{- else -}}
+{{- default "default" .Values.serviceAccount.name -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormSubchartPrefix" -}}
+{{- default "stackstorm" .Values.stackstorm.releaseName -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormApiUrl" -}}
+{{- if .Values.stackstorm.url -}}
+{{- .Values.stackstorm.url -}}
+{{- else if .Values.stackstorm.releaseName -}}
+{{- printf "http://%s-st2api:9101" (include "poundcake.stackstormSubchartPrefix" .) -}}
+{{- else -}}
+{{- printf "http://stackstorm-api:9101" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormAuthUrl" -}}
+{{- if .Values.stackstorm.authUrl -}}
+{{- .Values.stackstorm.authUrl -}}
+{{- else if .Values.stackstorm.releaseName -}}
+{{- printf "http://%s-st2auth:9100" (include "poundcake.stackstormSubchartPrefix" .) -}}
+{{- else -}}
+{{- printf "http://stackstorm-auth:9100" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormAuthSecretName" -}}
+{{- if .Values.stackstorm.adminPasswordSecret -}}
+{{- .Values.stackstorm.adminPasswordSecret -}}
+{{- else if .Values.stackstorm.releaseName -}}
+{{- printf "%s-st2-auth" (include "poundcake.stackstormSubchartPrefix" .) -}}
+{{- else -}}
+{{- printf "stackstorm-secrets" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormApiKeySecret" -}}
+{{- if .Values.stackstorm.apiKeySecretName -}}
+{{- .Values.stackstorm.apiKeySecretName -}}
+{{- else if .Values.stackstorm.releaseName -}}
+{{- printf "%s-st2-apikeys" (include "poundcake.stackstormSubchartPrefix" .) -}}
+{{- else -}}
+{{- printf "stackstorm-apikeys" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormApiKeySecretKey" -}}
+{{- if .Values.stackstorm.apiKeySecretKey -}}
+{{- .Values.stackstorm.apiKeySecretKey -}}
+{{- else if .Values.stackstorm.releaseName -}}
+{{- printf "api-key" -}}
+{{- else -}}
+{{- printf "st2_api_key" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormMongoName" -}}
+{{- if .Values.stackstorm.resourceNames.mongodb -}}
+{{- .Values.stackstorm.resourceNames.mongodb -}}
+{{- else -}}
+{{- printf "stackstorm-mongodb" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.rabbitmqSecretName" -}}
+{{- if .Values.rabbitmq.existingSecret -}}
+{{- .Values.rabbitmq.existingSecret -}}
+{{- else -}}
+{{- printf "stackstorm-rabbitmq" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.bakeryName" -}}
+{{- printf "%s-bakery" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "poundcake.bakerySecretName" -}}
+{{- printf "%s-secret" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "poundcake.bakeryDbHost" -}}
+{{- $bakery := .Values.bakery | default dict -}}
+{{- $database := $bakery.database | default dict -}}
+{{- $host := $database.host | default "" -}}
+{{- if $host -}}
+{{- $host -}}
+{{- else -}}
+{{- printf "%s-mariadb" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.bakeryDbSecretName" -}}
+{{- if .Values.bakery.database.user.passwordSecret -}}
+{{- .Values.bakery.database.user.passwordSecret -}}
+{{- else -}}
+{{- printf "%s-db-user" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.logGroupLabel" -}}
+poundcake.io/log-group: "bakery"
+{{- end -}}
+
+{{- define "poundcake.logRoleApi" -}}
+poundcake.io/log-subgroup: "app"
+poundcake.io/log-role: "api"
+{{- end -}}
+
+{{- define "poundcake.logRoleWorker" -}}
+poundcake.io/log-subgroup: "app"
+poundcake.io/log-role: "worker"
+{{- end -}}
+
+{{- define "poundcake.logRoleInfra" -}}
+poundcake.io/log-subgroup: "data"
+poundcake.io/log-role: "infra"
+{{- end -}}
+
 {{- define "poundcake.storageClass" -}}
 {{- if .Values.persistence.storageClassName }}
 storageClassName: {{ .Values.persistence.storageClassName | quote }}

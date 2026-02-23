@@ -46,6 +46,9 @@ podAnnotations: {}
 
 podSecurityContext:
   fsGroup: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   capabilities:
@@ -146,6 +149,21 @@ gateway:
   annotations:
     # application: gateway-api
     # route: poundcake
+
+  # Alternate gateway/listener schema used by some templates.
+  className: envoyproxy
+  name: poundcake-gateway
+  listeners:
+    api:
+      enabled: true
+      hostname: api.poundcake.local
+      port: 80
+      pathPrefix: /
+    ui:
+      enabled: true
+      hostname: ui.poundcake.local
+      port: 80
+      pathPrefix: /
 
   # Session persistence configuration
   sessionPersistence:
@@ -393,6 +411,28 @@ persistence:
   storageClass: ""
   accessMode: ReadWriteOnce
   size: 100Mi
+  # Legacy/infra storage options consumed by StackStorm-related templates.
+  storageClassName: ""
+  mariadb:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  mongo:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  rabbitmq:
+    size: 5Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  redis:
+    size: 2Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+  config:
+    size: 1Gi
+    accessMode: ReadWriteMany
+    storageClassName: ""
 
 # Prometheus integration
 prometheus:
@@ -866,14 +906,9 @@ bakery:
       passwordSecret: ""
       passwordSecretKey: "password"
       maxUserConnections: 20
-    # Server configuration (inherits from mariadbOperator.server)
-    # Set to false to use existing MariaDB instance
+  # Server configuration (inherits from mariadbOperator.server)
+  # Set to false to use existing MariaDB instance
     createServer: true
-nameOverride: ""
-fullnameOverride: ""
-
-# Legacy global pull secret list. Use poundcakeImage.pullSecrets for new configs.
-imagePullSecrets: []
 
 poundcakeImage:
   repository: poundcake
@@ -962,29 +997,6 @@ secrets:
   st2AuthPassword: ""
   packSyncToken: ""
 
-persistence:
-  storageClassName: ""
-  mariadb:
-    size: 10Gi
-    accessMode: ReadWriteOnce
-    storageClassName: ""
-  mongo:
-    size: 10Gi
-    accessMode: ReadWriteOnce
-    storageClassName: ""
-  rabbitmq:
-    size: 5Gi
-    accessMode: ReadWriteOnce
-    storageClassName: ""
-  redis:
-    size: 2Gi
-    accessMode: ReadWriteOnce
-    storageClassName: ""
-  config:
-    size: 1Gi
-    accessMode: ReadWriteMany
-    storageClassName: ""
-
 stackstormPackSync:
   enabled: true
   endpoint: "http://poundcake-api:8000/api/v1/cook/packs"
@@ -1012,22 +1024,6 @@ services:
   stackstormWeb:
     type: ClusterIP
     port: 8080
-
-gateway:
-  enabled: false
-  className: envoyproxy
-  name: poundcake-gateway
-  listeners:
-    api:
-      enabled: true
-      hostname: api.poundcake.local
-      port: 80
-      pathPrefix: /
-    ui:
-      enabled: true
-      hostname: ui.poundcake.local
-      port: 80
-      pathPrefix: /
 
 stackstormComponents:
   register:
@@ -1084,11 +1080,6 @@ intervals:
 
 logFormat: console
 
-resources: {}
-nodeSelector: {}
-tolerations: []
-affinity: {}
-
 # Default resource requests and limits (can be overridden per component)
 defaultResources:
   requests:
@@ -1097,13 +1088,6 @@ defaultResources:
   limits:
     cpu: 500m
     memory: 512Mi
-
-# Security context for all pods
-podSecurityContext:
-  runAsNonRoot: true
-  fsGroup: 1000
-  seccompProfile:
-    type: RuntimeDefault
 
 # Container security context for infrastructure services.
 # Stateful images may need writable root filesystem for sockets/temp files.

@@ -209,10 +209,10 @@ output:
 
 ```bash
 # Install via Docker Compose
-./install/install-docker.sh
+./install/install-poundcake-docker.sh
 
 # Install via Helm
-./install/install-helm.sh
+./install/install-poundcake-helm.sh
 ```
 
 ### Helm Install
@@ -244,7 +244,7 @@ export HELM_REGISTRY_USERNAME="<gh-username>"
 export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
 # Optional OCI chart source override; helper defaults to local chart install (./helm)
 # export POUNDCAKE_CHART_REPO="oci://ghcr.io/<owner>/charts/poundcake"
-./install/install-helm.sh
+./install/install-poundcake-helm.sh
 ```
 
 Installer env controls for private pulls:
@@ -283,7 +283,7 @@ or the installer will exit with a deadlock guard error.
 If a rollout gets stuck in `Init`, re-run without wait semantics:
 
 ```bash
-POUNDCAKE_HELM_WAIT=false ./install/install-helm.sh
+POUNDCAKE_HELM_WAIT=false ./install/install-poundcake-helm.sh
 kubectl -n rackspace get jobs
 ```
 

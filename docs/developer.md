@@ -190,13 +190,13 @@ export POUNDCAKE_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake"
 export POUNDCAKE_UI_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-ui"
 export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-bakery"
 
-./install/install-helm.sh --validate
-./install/install-helm.sh
+./install/install-poundcake-helm.sh --validate
+./install/install-poundcake-helm.sh
 ```
 
 Note:
 
-- `install/install-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
+- `install/install-poundcake-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
   - `poundcake`
   - `stackstorm`
   - `mariadb-operator`
@@ -282,7 +282,7 @@ export HELM_REGISTRY_PASSWORD="<github-token-with-read:packages>"
 # export POUNDCAKE_IMAGE_DIGEST="sha256:<64-hex>"
 # export POUNDCAKE_NAMESPACE="rackspace"
 
-./install/install-helm.sh
+./install/install-poundcake-helm.sh
 ```
 
 Verification:

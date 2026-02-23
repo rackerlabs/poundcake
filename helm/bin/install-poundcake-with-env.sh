@@ -23,6 +23,7 @@ STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
 UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-}"
 UI_IMAGE_TAG="${POUNDCAKE_UI_IMAGE_TAG:-}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-}"
+BAKERY_IMAGE_TAG="${POUNDCAKE_BAKERY_IMAGE_TAG:-${POUNDCAKE_IMAGE_TAG:-}}"
 CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
 VERSION_FILE="${POUNDCAKE_VERSION_FILE:-}"
 HELM_REGISTRY_USERNAME="${HELM_REGISTRY_USERNAME:-}"
@@ -42,6 +43,7 @@ POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/gene
 
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
+INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
 SKIP_PREFLIGHT="false"
 ROTATE_SECRETS="false"
 CURRENT_PHASE="initialization"
@@ -87,6 +89,7 @@ Usage:
 Installer options:
   --debug           Enable shell tracing for installer execution
   --validate        Run helm lint + helm template --debug before install
+  --mode <full|bakery-only>  Install full stack or Bakery-only resources
   --skip-preflight  Skip dependency/cluster preflight checks
   --rotate-secrets  Delete known chart-managed secrets before install
 
@@ -108,7 +111,9 @@ Environment overrides:
   POUNDCAKE_IMAGE_DIGEST           (optional; sha256:...; required when tag unset)
   POUNDCAKE_UI_IMAGE_REPO          (optional; sets uiImage.repository)
   POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
-  POUNDCAKE_BAKERY_IMAGE_REPO      (optional; accepted for compatibility)
+  POUNDCAKE_BAKERY_IMAGE_REPO      (optional; sets bakery.image.repository)
+  POUNDCAKE_BAKERY_IMAGE_TAG       (optional; sets bakery.image.tag; defaults to POUNDCAKE_IMAGE_TAG)
+  POUNDCAKE_INSTALL_MODE           (default: full; valid: full, bakery-only)
   HELM_REGISTRY_USERNAME           (optional; for OCI login)
   HELM_REGISTRY_PASSWORD           (optional; for OCI login)
   POUNDCAKE_IMAGE_PULL_SECRET_NAME     (default: ghcr-pull)
@@ -125,9 +130,9 @@ Environment overrides:
   POUNDCAKE_HELM_CLEANUP_ON_FAIL   (default: false)
 
 Examples:
-  ./install/install-helm.sh
-  ./install/install-helm.sh --validate
-  ./install/install-helm.sh --skip-preflight -f /path/to/values.yaml
+  ./install/install-poundcake-helm.sh
+  ./install/install-poundcake-helm.sh --validate
+  ./install/install-poundcake-helm.sh --skip-preflight -f /path/to/values.yaml
 USAGE_EOF
 }
 
@@ -260,8 +265,12 @@ run_helm_validation() {
   local i=0
   while [[ $i -lt ${#template_args[@]} ]]; do
     local arg="${template_args[$i]}"
-    if [[ "${arg}" == "--post-renderer" || "${arg}" == "--post-renderer-args" ]]; then
+    if [[ "${arg}" == "--post-renderer" || "${arg}" == "--post-renderer-args" || "${arg}" == "--namespace" || "${arg}" == "--timeout" || "${arg}" == "--version" ]]; then
       ((i+=2))
+      continue
+    fi
+    if [[ "${arg}" == "--create-namespace" || "${arg}" == "--wait" || "${arg}" == "--atomic" || "${arg}" == "--cleanup-on-fail" ]]; then
+      ((i+=1))
       continue
     fi
     lint_args+=("${arg}")
@@ -318,6 +327,18 @@ rotate_chart_secrets() {
 }
 
 validate_image_pin_input() {
+  if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
+    if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+      log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
+      exit 1
+    fi
+    if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]] && [[ ! "${POUNDCAKE_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+      log_error "POUNDCAKE_IMAGE_DIGEST must match sha256:<64-hex>."
+      exit 1
+    fi
+    return
+  fi
+
   if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
     log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
     exit 1
@@ -386,6 +407,10 @@ while [[ $# -gt 0 ]]; do
       VALIDATE="true"
       shift
       ;;
+    --mode)
+      INSTALL_MODE="$2"
+      shift 2
+      ;;
     --skip-preflight)
       SKIP_PREFLIGHT="true"
       shift
@@ -401,13 +426,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${INSTALL_MODE}" != "full" && "${INSTALL_MODE}" != "bakery-only" ]]; then
+  log_error "Invalid install mode '${INSTALL_MODE}'. Valid values: full, bakery-only."
+  exit 1
+fi
+
 if [[ "${INSTALL_DEBUG}" == "true" ]]; then
   log_info "Debug tracing enabled."
   PS4='+ [${BASH_SOURCE##*/}:${LINENO}${FUNCNAME[0]:+:${FUNCNAME[0]}}] '
   set -x
 fi
 
-log_info "Installer options: validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
+log_info "Installer options: mode=${INSTALL_MODE}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
@@ -507,7 +537,7 @@ done < <(collect_yaml_files "${SERVICE_CONFIG_DIR}")
 log_info "Resolved override file argument count: ${#OVERRIDE_ARGS[@]}"
 
 POST_RENDER_ARGS=()
-if [[ -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
+if [[ "${INSTALL_MODE}" != "bakery-only" && -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
   POST_RENDER_ARGS+=("--post-renderer" "${POST_RENDERER}")
   if [[ -n "${POST_RENDERER_ARGS}" ]]; then
     POST_RENDER_ARGS+=("--post-renderer-args" "${POST_RENDERER_ARGS}")
@@ -515,11 +545,16 @@ if [[ -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
 fi
 
 INSTALLER_SET_ARGS=(
+  --set-string "deployment.mode=${INSTALL_MODE}"
   --set-string "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
   --set-string "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
   --set-string "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
   --set-string "stackstormPackSync.endpoint=${PACK_SYNC_ENDPOINT}"
 )
+
+if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=true")
+fi
 
 if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.tag=")
@@ -531,6 +566,7 @@ fi
 
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.pullSecrets[0]=${IMAGE_PULL_SECRET_NAME}")
+  INSTALLER_SET_ARGS+=(--set-string "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
 fi
 
 if [[ -n "${UI_IMAGE_REPO}" ]]; then
@@ -541,6 +577,9 @@ if [[ -n "${UI_IMAGE_TAG}" ]]; then
 fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "bakery.image.repository=${BAKERY_IMAGE_REPO}")
+fi
+if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=${BAKERY_IMAGE_TAG}")
 fi
 
 COMMON_HELM_ARGS=(
@@ -616,44 +655,46 @@ else
   "${HELM_TEMPLATE_CMD[@]}" > "${RENDERED_MANIFEST}"
 fi
 
-verify_rendered_endpoint_contract "${RENDERED_MANIFEST}" "${PACK_SYNC_ENDPOINT}"
+if [[ "${INSTALL_MODE}" != "bakery-only" ]]; then
+  verify_rendered_endpoint_contract "${RENDERED_MANIFEST}" "${PACK_SYNC_ENDPOINT}"
 
-if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
-  if ! awk -v secret_name="${IMAGE_PULL_SECRET_NAME}" '
-    BEGIN {kind=""; name=""; want=0; seen=0; found=0}
-    /^kind:[[:space:]]+/ {kind=$2}
-    /^metadata:[[:space:]]*$/ {inmeta=1; next}
-    inmeta && /^  name:[[:space:]]+/ {
-      name=$2
-      inmeta=0
-      if ((kind == "Deployment" && name ~ /^poundcake-/) || (kind == "Job" && name == "poundcake-bootstrap")) {
-        want=1
+  if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
+    if ! awk -v secret_name="${IMAGE_PULL_SECRET_NAME}" '
+      BEGIN {kind=""; name=""; want=0; seen=0; found=0}
+      /^kind:[[:space:]]+/ {kind=$2}
+      /^metadata:[[:space:]]*$/ {inmeta=1; next}
+      inmeta && /^  name:[[:space:]]+/ {
+        name=$2
+        inmeta=0
+        if ((kind == "Deployment" && name ~ /^poundcake-/) || (kind == "Job" && name == "poundcake-bootstrap")) {
+          want=1
+        }
+        next
       }
-      next
-    }
-    want && /^[[:space:]]+imagePullSecrets:[[:space:]]*$/ {in_pull=1; next}
-    want && in_pull && /^[[:space:]]+-[[:space:]]+name:[[:space:]]+/ {
-      if ($3 == secret_name || $3 == "\"" secret_name "\"") {
-        found=1
+      want && /^[[:space:]]+imagePullSecrets:[[:space:]]*$/ {in_pull=1; next}
+      want && in_pull && /^[[:space:]]+-[[:space:]]+name:[[:space:]]+/ {
+        if ($3 == secret_name || $3 == "\"" secret_name "\"") {
+          found=1
+        }
       }
-    }
-    /^---[[:space:]]*$/ {
-      if (want && found) {
-        seen=1
+      /^---[[:space:]]*$/ {
+        if (want && found) {
+          seen=1
+        }
+        kind=""; name=""; want=0; in_pull=0; found=0; inmeta=0
       }
-      kind=""; name=""; want=0; in_pull=0; found=0; inmeta=0
-    }
-    END {
-      if (want && found) {
-        seen=1
+      END {
+        if (want && found) {
+          seen=1
+        }
+        exit(seen ? 0 : 1)
       }
-      exit(seen ? 0 : 1)
-    }
-  ' "${RENDERED_MANIFEST}"; then
-    log_error "Rendered PoundCake manifests do not include imagePullSecrets '${IMAGE_PULL_SECRET_NAME}'."
-    log_error "Refusing install to avoid anonymous private-registry pulls."
-    rm -f "${RENDERED_MANIFEST}"
-    exit 1
+    ' "${RENDERED_MANIFEST}"; then
+      log_error "Rendered PoundCake manifests do not include imagePullSecrets '${IMAGE_PULL_SECRET_NAME}'."
+      log_error "Refusing install to avoid anonymous private-registry pulls."
+      rm -f "${RENDERED_MANIFEST}"
+      exit 1
+    fi
   fi
 fi
 rm -f "${RENDERED_MANIFEST}"
@@ -661,6 +702,7 @@ rm -f "${RENDERED_MANIFEST}"
 log_phase "helm install execution"
 log_info "Installing PoundCake release: ${RELEASE_NAME}"
 log_info "Namespace: ${NAMESPACE}"
+log_info "Install mode: ${INSTALL_MODE}"
 log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
   log_info "Chart version: ${CHART_VERSION:-"(not set)"}"
@@ -679,6 +721,9 @@ if [[ -n "${UI_IMAGE_TAG}" ]]; then
 fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
   log_info "Bakery image repo override: ${BAKERY_IMAGE_REPO}"
+fi
+if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
+  log_info "Bakery image tag override: ${BAKERY_IMAGE_TAG}"
 fi
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   log_info "Image pull secret injection: enabled (${IMAGE_PULL_SECRET_NAME})"

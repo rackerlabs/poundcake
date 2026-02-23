@@ -136,6 +136,13 @@ DEPRECATED_ENDPOINT_HITS = Counter(
     ["endpoint", "replacement"],
 )
 
+# Endpoint deprecation telemetry
+DEPRECATED_ENDPOINT_HITS = Counter(
+    "poundcake_deprecated_endpoint_hits_total",
+    "Total calls to deprecated API endpoints",
+    ["endpoint", "replacement"],
+)
+
 
 def init_app_info(app_name: str, version: str) -> None:
     """Initialize application info metric.

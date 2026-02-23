@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -51,3 +52,4 @@ data:
 {{ .Files.Get "files/poundcake-alembic/versions__init__.py" | indent 4 }}
   2026_02_03_1600_initial_schema.py: |
 {{ .Files.Get "files/poundcake-alembic/2026_02_03_1600_initial_schema.py" | indent 4 }}
+{{- end }}

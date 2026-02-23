@@ -1,3 +1,4 @@
+{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -732,3 +733,4 @@ spec:
               NS="{{ .Release.Namespace }}"
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
                 -p '{"stringData":{"poundcake_bootstrap_ready":"true"}}'
+{{- end }}
