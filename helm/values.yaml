@@ -518,8 +518,8 @@ auth:
   # Get password with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.password}' | base64 -d
   # Get internal key with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d
 
-# Database configuration (MySQL/MariaDB)
-# Required for persistent storage of orders, mappings, and execution history
+# Database configuration (MySQL/MariaDB) for PoundCake API only.
+# Bakery uses a separate database contract under bakery.database.
 database:
   # Database connection URL
   # Format: mysql+pymysql://user:password@host:port/database
@@ -744,6 +744,15 @@ bakery:
     backoffBaseSec: 5
     backoffMaxSec: 300
 
+  dbInit:
+    resources:
+      limits:
+        cpu: 200m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 64Mi
+
   # Bakery image configuration
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
@@ -895,8 +904,14 @@ bakery:
       password: "rackspace-core-password"
 
   # MariaDB database configuration for Bakery
+  # Bakery owns a dedicated database and migration stream.
+  # In alongside mode, Bakery may share the MariaDB server endpoint with PoundCake,
+  # but must use a separate database + user credentials.
   # Uses MariaDB Operator to create dedicated database
   database:
+    # Optional external host override (for standalone/externally managed MariaDB).
+    # Leave empty to use "<release>-poundcake-bakery-mariadb".
+    host: ""
     # Database name
     name: bakery
     # User configuration

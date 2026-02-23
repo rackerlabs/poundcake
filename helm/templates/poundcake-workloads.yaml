@@ -119,6 +119,33 @@ spec:
                 secretKeyRef:
                   name: poundcake-secrets
                   key: PACK_SYNC_TOKEN
+            - name: POUNDCAKE_BAKERY_ENABLED
+              value: {{ .Values.bakery.client.enabled | quote }}
+            - name: POUNDCAKE_BAKERY_BASE_URL
+              value: {{ include "poundcake.bakeryBaseUrl" . | quote }}
+            - name: POUNDCAKE_BAKERY_AUTH_MODE
+              value: {{ .Values.bakery.client.auth.mode | quote }}
+            - name: POUNDCAKE_BAKERY_REQUEST_TIMEOUT_SECONDS
+              value: {{ .Values.bakery.client.requestTimeoutSeconds | quote }}
+            - name: POUNDCAKE_BAKERY_MAX_RETRIES
+              value: {{ .Values.bakery.client.maxRetries | quote }}
+            - name: POUNDCAKE_BAKERY_POLL_INTERVAL_SECONDS
+              value: {{ .Values.bakery.client.pollIntervalSeconds | quote }}
+            - name: POUNDCAKE_BAKERY_POLL_TIMEOUT_SECONDS
+              value: {{ .Values.bakery.client.pollTimeoutSeconds | quote }}
+            {{- $bakeryClientSecretName := .Values.bakery.client.auth.existingSecret | default (include "poundcake.bakerySecretName" .) }}
+            - name: POUNDCAKE_BAKERY_HMAC_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $bakeryClientSecretName }}
+                  key: {{ .Values.bakery.client.auth.secretKeys.keyId }}
+                  optional: true
+            - name: POUNDCAKE_BAKERY_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $bakeryClientSecretName }}
+                  key: {{ .Values.bakery.client.auth.secretKeys.key }}
+                  optional: true
           ports:
             - containerPort: 8000
               name: http

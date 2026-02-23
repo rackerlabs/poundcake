@@ -11,6 +11,7 @@ metadata:
     "helm.sh/hook-weight": "5"
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
+  backoffLimit: 3
   ttlSecondsAfterFinished: 300
   template:
     metadata:
@@ -22,9 +23,12 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       restartPolicy: OnFailure
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- include "poundcake.bakeryWaitForDbInitContainer" . | nindent 8 }}
       containers:
         - name: db-init
           securityContext:
@@ -54,12 +58,7 @@ spec:
                   name: {{ include "poundcake.bakeryDbSecretName" . }}
                   key: password
           resources:
-            limits:
-              cpu: 200m
-              memory: 128Mi
-            requests:
-              cpu: 100m
-              memory: 64Mi
+            {{- toYaml .Values.bakery.dbInit.resources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

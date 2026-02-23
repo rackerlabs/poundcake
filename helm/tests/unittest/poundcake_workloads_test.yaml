@@ -440,3 +440,102 @@ tests:
           path: spec.template.spec.containers[0].env[15].valueFrom.secretKeyRef.name
           value: stackstorm-secrets
         documentIndex: 0
+
+  - it: injects bakery client env vars into poundcake-api with integrated defaults
+    set:
+      bakery.client.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_BASE_URL
+            value: http://RELEASE-NAME-poundcake-bakery:8000
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_AUTH_MODE
+            value: hmac
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_REQUEST_TIMEOUT_SECONDS
+            value: "15"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MAX_RETRIES
+            value: "2"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_POLL_INTERVAL_SECONDS
+            value: "2"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_POLL_TIMEOUT_SECONDS
+            value: "60"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_HMAC_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-bakery-secret
+                key: active-key-id
+                optional: true
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_HMAC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-bakery-secret
+                key: active-key
+                optional: true
+        documentIndex: 0
+
+  - it: supports bakery baseUrl and auth secret overrides for poundcake-api
+    set:
+      bakery.client.baseUrl: https://bakery.example.com
+      bakery.client.auth.existingSecret: external-bakery-hmac
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_BASE_URL
+            value: https://bakery.example.com
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_HMAC_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: external-bakery-hmac
+                key: active-key-id
+                optional: true
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_HMAC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: external-bakery-hmac
+                key: active-key
+                optional: true
+        documentIndex: 0

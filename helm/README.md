@@ -210,7 +210,13 @@ All secret values must be provided or they will be randomly generated:
 Secret ownership model:
 - `poundcake-secrets` contains PoundCake app database credentials (`DB_*`) only.
 - `stackstorm-secrets` is authoritative for StackStorm infra auth (`MONGO_*`, `RABBITMQ_*`, `ST2_AUTH_*`).
+- Bakery database credentials are owned separately under Bakery-specific secret/config values (`bakery.database.*` and related secret refs).
 - Redis is currently unauthenticated in this chart (no Redis password secret keys). If Redis auth is added later, store it in `stackstorm-secrets`.
+
+Database ownership contract:
+- PoundCake API and Bakery must use separate database names and credentials.
+- In alongside deployments, they may share a MariaDB server endpoint but not a database schema/user.
+- API migrations are API-owned; Bakery migrations are Bakery-owned and run by the Bakery DB init hook job.
 
 Readiness semantics:
 - `/api/v1/live` is process-only.
@@ -591,6 +597,7 @@ For production, consider using external secret managers:
 
 #### Datastores
 - **MariaDB**: Database for PoundCake
+- **Bakery MariaDB/DB**: Database for Bakery (standalone or alongside mode)
 - **MongoDB**: Database for StackStorm
 - **RabbitMQ**: Message broker
 - **Redis**: Caching and session storage

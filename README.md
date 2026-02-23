@@ -377,6 +377,22 @@ POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
 
 `config/st2_api_key` is created by `st2client` during bootstrap.
 
+## API/Bakery Database Separation
+
+PoundCake API and Bakery must keep separate database ownership:
+- API uses the PoundCake migration stream in `/Users/chris.breu/code/poundcake/alembic`.
+- Bakery uses the Bakery migration stream in `/Users/chris.breu/code/poundcake/bakery/alembic`.
+
+In alongside deployments, both services may share the same MariaDB server endpoint, but must use different database names and credentials.
+
+## Container Build Targets
+
+The root Dockerfile publishes separate runtime targets:
+- `api-runtime` -> `ghcr.io/.../poundcake`
+- `bakery-runtime` -> `ghcr.io/.../poundcake-bakery`
+
+UI remains built from `/Users/chris.breu/code/poundcake/ui/Dockerfile` and published as `ghcr.io/.../poundcake-ui`.
+
 ## Alertmanager Integration (Kubernetes)
 
 When PoundCake auth is enabled, Alertmanager must send the `X-Internal-API-Key` header.

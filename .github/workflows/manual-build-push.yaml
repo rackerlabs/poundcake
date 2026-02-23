@@ -57,6 +57,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          target: api-runtime
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_tag }}
           cache-from: type=gha,scope=poundcake-api
@@ -80,7 +81,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./bakery/Dockerfile
+          target: bakery-runtime
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-bakery:${{ steps.tags.outputs.sha_tag }}
           cache-from: type=gha,scope=poundcake-bakery

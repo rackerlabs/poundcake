@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import hmac
-import json
 import time
 import uuid
 from typing import Any
@@ -14,6 +12,7 @@ from api.core.config import get_settings
 from api.core.http_client import request_with_retry
 from api.core.logging import get_logger
 from api.core.metrics import record_bakery_request_failure
+from shared.hmac import build_hmac_signing_payload, canonical_json_body, hmac_sha256_hex
 
 logger = get_logger(__name__)
 
@@ -21,20 +20,13 @@ TERMINAL_OPERATION_STATUSES = {"succeeded", "failed", "dead_letter"}
 
 
 def _canonical_body(payload: dict[str, Any] | None) -> str:
-    if not payload:
-        return ""
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return canonical_json_body(payload)
 
 
 def _sign_request(method: str, path: str, body: str, ts: str) -> str:
     settings = get_settings()
-    body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
-    signing_payload = f"{ts}\n{method.upper()}\n{path}\n{body_hash}"
-    digest = hmac.new(
-        settings.bakery_hmac_key.encode("utf-8"),
-        signing_payload.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    signing_payload = build_hmac_signing_payload(ts, method, path, body.encode("utf-8"))
+    digest = hmac_sha256_hex(settings.bakery_hmac_key, signing_payload)
     return f"HMAC {settings.bakery_hmac_key_id}:{digest}"
 
 

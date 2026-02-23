@@ -128,12 +128,6 @@ POUNDCAKE_SUPPRESSION_SUMMARY_TICKETS = Counter(
 POUNDCAKE_SUPPRESSION_SUMMARY_FAILURES = Counter(
     "poundcake_suppression_summary_failures_total",
     "Total suppression summary lifecycle failures",
-
-# Endpoint deprecation telemetry
-DEPRECATED_ENDPOINT_HITS = Counter(
-    "poundcake_deprecated_endpoint_hits_total",
-    "Total calls to deprecated API endpoints",
-    ["endpoint", "replacement"],
 )
 
 # Endpoint deprecation telemetry

@@ -105,6 +105,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-bakery" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "poundcake.bakeryBaseUrl" -}}
+{{- if .Values.bakery.client.baseUrl -}}
+{{- .Values.bakery.client.baseUrl -}}
+{{- else -}}
+{{- printf "http://%s:%v" (include "poundcake.bakeryName" .) .Values.bakery.service.port -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.bakerySecretName" -}}
 {{- printf "%s-secret" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -126,6 +134,22 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- else -}}
 {{- printf "%s-db-user" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+{{- end -}}
+
+{{- define "poundcake.bakeryWaitForDbInitContainer" -}}
+- name: wait-for-db
+  image: {{ .Values.images.busybox | quote }}
+  securityContext:
+    {{- toYaml .Values.utilitySecurityContext | nindent 4 }}
+  command:
+    - sh
+    - -c
+    - |
+      until nc -z -v -w30 {{ include "poundcake.bakeryDbHost" . }} 3306; do
+        echo "Waiting for MariaDB..."
+        sleep 5
+      done
+      echo "MariaDB is ready"
 {{- end -}}
 
 {{- define "poundcake.logGroupLabel" -}}

@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import secrets
 import time
 from typing import Optional
@@ -12,11 +10,7 @@ from typing import Optional
 from fastapi import Header, HTTPException, Request, status
 
 from bakery.config import settings
-
-
-def _build_signing_payload(timestamp: str, method: str, path: str, body: bytes) -> str:
-    body_hash = hashlib.sha256(body).hexdigest()
-    return f"{timestamp}\n{method.upper()}\n{path}\n{body_hash}"
+from shared.hmac import build_hmac_signing_payload, hmac_sha256_hex
 
 
 def _resolve_key(key_id: str) -> Optional[str]:
@@ -103,17 +97,13 @@ async def require_hmac_auth(
         )
 
     body = await request.body()
-    payload = _build_signing_payload(
+    payload = build_hmac_signing_payload(
         timestamp=x_timestamp,
         method=request.method,
         path=request.url.path,
         body=body,
     )
-    expected = hmac.new(
-        shared_secret.encode("utf-8"),
-        payload.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    expected = hmac_sha256_hex(shared_secret, payload)
     if not secrets.compare_digest(expected, signature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

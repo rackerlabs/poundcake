@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Database initialization script for Bakery."""
 
+from pathlib import Path
 import sys
 import time
 import structlog
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
 from bakery.config import settings
-from bakery.database import Base
-import bakery.models  # noqa: F401 - ensure model metadata is registered
 
 # Configure logging
 structlog.configure(
@@ -68,21 +69,30 @@ def wait_for_database(max_attempts: int = 30, delay_sec: int = 2) -> bool:
     return False
 
 
-def create_tables() -> bool:
-    """
-    Create all database tables.
-
-    Returns:
-        True if tables were created successfully, False otherwise
-    """
+def run_migrations() -> bool:
+    """Run Alembic migrations for Bakery database."""
     try:
-        logger.info("Creating database tables")
-        engine = create_engine(settings.database_url, pool_pre_ping=True)
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
+        # Prefer the in-container path used by Helm/Kubernetes.
+        alembic_ini = Path("/app/bakery/alembic.ini")
+        if not alembic_ini.exists():
+            # Fallback for local execution from repo checkout.
+            alembic_ini = Path(__file__).resolve().parent / "alembic.ini"
+
+        alembic_cfg = Config(str(alembic_ini))
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+        alembic_cfg.set_main_option("script_location", str(alembic_ini.parent / "alembic"))
+
+        logger.info(
+            "Running Bakery database migrations",
+            alembic_ini=str(alembic_ini),
+            database_host=settings.database_host,
+            database_name=settings.database_name,
+        )
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Bakery database migrations applied successfully")
         return True
     except Exception as e:
-        logger.error("Failed to create database tables", error=str(e))
+        logger.error("Failed to apply Bakery migrations", error=str(e))
         return False
 
 
@@ -104,9 +114,9 @@ def main() -> int:
         logger.error("Database initialization failed: database not available")
         return 1
 
-    # Create tables
-    if not create_tables():
-        logger.error("Database initialization failed: could not create tables")
+    # Run migrations
+    if not run_migrations():
+        logger.error("Database initialization failed: could not apply migrations")
         return 1
 
     logger.info("Bakery database initialization completed successfully")
