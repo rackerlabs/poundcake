@@ -403,7 +403,11 @@ async def upsert_dish_ingredients(
         if dish.recipe and dish.recipe.recipe_ingredients:
             for ri in dish.recipe.recipe_ingredients:
                 if ri.ingredient and ri.ingredient.task_name:
-                    task_to_recipe_ingredient[ri.ingredient.task_name] = ri.id
+                    raw_task_name = ri.ingredient.task_name
+                    workflow_task_name = f"step_{ri.step_order}_{raw_task_name.replace('.', '_')}"
+                    task_to_recipe_ingredient[workflow_task_name] = ri.id
+                    # Keep raw task name mapping for backward compatibility.
+                    task_to_recipe_ingredient[raw_task_name] = ri.id
 
         now = datetime.now(timezone.utc)
 

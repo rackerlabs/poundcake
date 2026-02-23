@@ -7,10 +7,12 @@
 """StackStorm API client and action management service."""
 
 import asyncio
+import hashlib
+import io
 import time
 import os
 import re
-from pathlib import Path
+import tarfile
 from typing import Any
 
 import yaml
@@ -737,48 +739,96 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
     return yaml.safe_dump(workflow, sort_keys=False, default_flow_style=False, width=1000, indent=2)
 
 
+def _safe_workflow_name(name: str | None) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", name or "workflow")
+
+
+def build_stackstorm_pack_files(
+    recipes: list[Recipe | dict[str, Any]],
+    pack_name: str | None = None,
+) -> dict[str, bytes]:
+    """Build an in-memory StackStorm pack file tree from recipe workflow sources."""
+    resolved_pack_name = pack_name or os.getenv("POUNDCAKE_ST2_PACK", "poundcake")
+
+    files: dict[str, bytes] = {
+        "pack.yaml": (
+            f"name: {resolved_pack_name}\n"
+            'version: "0.1.0"\n'
+            'description: "PoundCake generated pack"\n'
+            'author: "PoundCake"\n'
+        ).encode("utf-8")
+    }
+
+    for recipe in recipes:
+        workflow_payload = (
+            recipe.get("workflow_payload") if isinstance(recipe, dict) else recipe.workflow_payload
+        )
+        recipe_name = recipe.get("name") if isinstance(recipe, dict) else recipe.name
+
+        try:
+            yaml_payload = (
+                yaml.safe_dump(workflow_payload, sort_keys=False)
+                if isinstance(workflow_payload, dict)
+                else generate_orquesta_yaml(recipe)
+            )
+        except Exception as exc:
+            logger.warning(
+                "Skipping recipe while building StackStorm pack files",
+                extra={"recipe_name": recipe_name, "error": str(exc)},
+            )
+            continue
+
+        safe_name = _safe_workflow_name(recipe_name)
+        files[f"actions/workflows/{safe_name}.yaml"] = yaml_payload.encode("utf-8")
+
+    return files
+
+
+def build_stackstorm_pack_artifact(
+    recipes: list[Recipe | dict[str, Any]],
+    pack_name: str | None = None,
+) -> tuple[bytes, str]:
+    """Create a deterministic tar.gz payload and etag for StackStorm pack sync."""
+    files = build_stackstorm_pack_files(recipes=recipes, pack_name=pack_name)
+
+    digest = hashlib.sha256()
+    for path in sorted(files):
+        payload = files[path]
+        digest.update(path.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(payload)
+        digest.update(b"\x00")
+    etag = f'"{digest.hexdigest()}"'
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for path in sorted(files):
+            payload = files[path]
+            info = tarfile.TarInfo(name=path)
+            info.size = len(payload)
+            info.mtime = 0
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(payload))
+
+    return buf.getvalue(), etag
+
+
 async def register_workflow_to_st2(
     st2_url: str,
     api_key: str,
     recipe: Recipe | dict[str, Any],
 ) -> str:
     """
-    Registers an Orquesta workflow in StackStorm by writing the workflow YAML
-    into a shared pack directory and creating the action via the API.
+    Registers an Orquesta workflow action in StackStorm.
+    Workflow files are distributed to StackStorm pods through pack-sync sidecars.
     Returns the created action ref.
     """
     headers = {"St2-Api-Key": api_key, "Content-Type": "application/json"}
 
-    workflow_payload = (
-        recipe.get("workflow_payload") if isinstance(recipe, dict) else recipe.workflow_payload
-    )
-    yaml_payload = (
-        yaml.dump(workflow_payload, sort_keys=False)
-        if isinstance(workflow_payload, dict)
-        else generate_orquesta_yaml(recipe)
-    )
-
     recipe_name = recipe.get("name") if isinstance(recipe, dict) else recipe.name
-    # Safe filename for workflow
-    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", recipe_name or "workflow")
+    safe_name = _safe_workflow_name(recipe_name)
 
     pack_name = os.getenv("POUNDCAKE_ST2_PACK", "poundcake")
-    pack_root = Path(os.getenv("POUNDCAKE_ST2_PACK_ROOT", "/app/stackstorm-packs")) / pack_name
-    # StackStorm expects orquesta workflows under pack/actions/workflows
-    actions_dir = pack_root / "actions"
-    workflows_dir = actions_dir / "workflows"
-
-    pack_root.mkdir(parents=True, exist_ok=True)
-    pack_yaml = pack_root / "pack.yaml"
-    if not pack_yaml.exists():
-        pack_yaml.write_text(
-            'name: {}\nversion: "0.1.0"\ndescription: "PoundCake generated pack"\n'
-            'author: "PoundCake"\n'.format(pack_name)
-        )
-
-    workflows_dir.mkdir(parents=True, exist_ok=True)
-    workflow_file = workflows_dir / f"{safe_name}.yaml"
-    workflow_file.write_text(yaml_payload)
 
     st2_action_data = {
         "name": safe_name,
@@ -797,22 +847,45 @@ async def register_workflow_to_st2(
     }
 
     settings = get_settings()
-    response = await request_with_retry(
-        "POST",
-        f"{st2_url}/v1/actions",
-        json=st2_action_data,
-        headers=headers,
-        timeout=30,
-        retries=settings.external_http_retries,
-    )
+    retries = max(1, settings.stackstorm_pack_sync_register_retries)
+    delay_seconds = max(0.5, settings.stackstorm_pack_sync_register_delay_seconds)
+    last_response: httpx.Response | None = None
 
-    if response.status_code in [200, 201]:
-        data = response.json()
-        return data.get("ref")
-    if response.status_code == 409:
-        # Action already exists; return expected ref
-        return f"{pack_name}.{safe_name}"
-    raise StackStormError(f"Failed to register ST2 action: {response.text}")
+    for attempt in range(1, retries + 1):
+        response = await request_with_retry(
+            "POST",
+            f"{st2_url}/v1/actions",
+            json=st2_action_data,
+            headers=headers,
+            timeout=30,
+            retries=settings.external_http_retries,
+        )
+        last_response = response
+
+        if response.status_code in [200, 201]:
+            data = response.json()
+            return data.get("ref")
+        if response.status_code == 409:
+            # Action already exists; return expected ref
+            return f"{pack_name}.{safe_name}"
+
+        # StackStorm may take a short period to see newly synced pack files.
+        if "Content pack" in (response.text or "") and attempt < retries:
+            await asyncio.sleep(delay_seconds)
+            continue
+        break
+
+    if last_response is None:
+        raise StackStormError("Failed to register ST2 action: no response from StackStorm API")
+
+    if "Content pack" in (last_response.text or ""):
+        raise StackStormError(
+            "Failed to register ST2 action because StackStorm has not yet loaded the generated "
+            f"workflow in pack '{pack_name}'. Ensure pack-sync sidecars can reach the PoundCake "
+            f"pack endpoint. StackStorm response: {last_response.text}"
+        )
+
+    raise StackStormError(f"Failed to register ST2 action: {last_response.text}")
 
 
 # Global instances
