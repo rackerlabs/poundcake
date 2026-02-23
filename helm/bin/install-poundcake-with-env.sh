@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -423,7 +423,17 @@ apply_bakery_rackspace_secret() {
 }
 
 generate_alnum_secret() {
-  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32
+  local restore_pipefail=0
+  local secret=""
+  if shopt -o -q pipefail; then
+    restore_pipefail=1
+    set +o pipefail
+  fi
+  secret="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+  if (( restore_pipefail )); then
+    set -o pipefail
+  fi
+  printf '%s' "${secret}"
 }
 
 validate_integrated_bakery_args() {
