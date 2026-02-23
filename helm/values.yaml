@@ -841,6 +841,8 @@ bakery:
 
   client:
     enabled: true
+    # Enforce explicit remote base URL when operating without in-cluster Bakery.
+    enforceRemoteBaseUrl: false
     baseUrl: ""
     auth:
       mode: hmac

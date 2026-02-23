@@ -8,6 +8,9 @@
 {{- fail "bakery.database.user.passwordSecret must be set when bakery.database.createServer=false" }}
 {{- end }}
 {{- end }}
+{{- if and .Values.bakery.database.createServer (not .Values.mariadbOperator.enabled) }}
+{{- fail "bakery.database.createServer=true requires mariadbOperator.enabled=true (or set bakery.database.createServer=false and provide bakery.database.user.passwordSecret)" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -71,7 +74,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.bakeryDbSecretName" . }}
-                  key: password
+                  key: {{ include "poundcake.bakeryDbSecretKey" . }}
             - name: MESSAGE_RETENTION_HOURS
               value: {{ .Values.bakery.config.messageRetentionHours | quote }}
             - name: MAX_MESSAGES_PER_POLL

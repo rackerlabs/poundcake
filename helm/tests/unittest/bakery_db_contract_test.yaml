@@ -1,0 +1,54 @@
+suite: bakery-db-contract
+templates:
+  - templates/bakery-secret.yaml
+  - templates/bakery-deployment.yaml
+  - templates/bakery-worker-deployment.yaml
+  - templates/bakery-init-job.yaml
+tests:
+  - it: uses configured bakery database password secret key across api/worker/db-init
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+      bakery.database.createServer: false
+      bakery.database.host: shared-mariadb
+      bakery.database.user.passwordSecret: external-bakery-db-user
+      bakery.database.user.passwordSecretKey: db-pass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: external-bakery-db-user
+                key: db-pass
+        template: templates/bakery-deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: external-bakery-db-user
+                key: db-pass
+        template: templates/bakery-worker-deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: external-bakery-db-user
+                key: db-pass
+        template: templates/bakery-init-job.yaml
+
+  - it: fails fast when bakery database server creation is enabled but mariadb operator is disabled
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+      bakery.database.createServer: true
+      mariadbOperator.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "bakery.database.createServer=true requires mariadbOperator.enabled=true (or set bakery.database.createServer=false and provide bakery.database.user.passwordSecret)"
+        template: templates/bakery-worker-deployment.yaml
