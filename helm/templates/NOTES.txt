@@ -1,133 +1,15 @@
-{{- if eq (default "full" .Values.deployment.mode) "bakery-only" }}
-Thank you for installing {{ .Chart.Name }} in bakery-only mode!
+1. Build and push the PoundCake image, then set values:
 
-Your release is named {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+   helm upgrade --install {{ .Release.Name }} {{ .Chart.Name }} \
+     --set poundcakeImage.repository=<repo> \
+     --set poundcakeImage.tag=<tag>
 
-BAKERY COMPONENTS DEPLOYED:
-  - Bakery API: {{ include "poundcake.bakeryName" . }}
-  - Bakery Service: {{ include "poundcake.bakeryName" . }}:{{ .Values.bakery.service.port }}
+2. Access services inside the cluster:
 
-To access Bakery:
-{{- if contains "ClusterIP" .Values.bakery.service.type }}
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "poundcake.bakeryName" . }} 8000:{{ .Values.bakery.service.port }}
-  echo "Visit http://127.0.0.1:8000"
-{{- else }}
-  kubectl get svc {{ include "poundcake.bakeryName" . }} -n {{ .Release.Namespace }}
-{{- end }}
+   - API:           http://poundcake-api:8000
+   - StackStorm API: http://stackstorm-api:9101
+   - StackStorm Auth: http://stackstorm-auth:9100
 
-{{- if and .Values.bakery.database.createServer .Values.mariadbOperator.enabled }}
-Bakery database host:
-  {{ include "poundcake.bakeryDbHost" . }}
-{{- end }}
-{{- else }}
-Thank you for installing {{ .Chart.Name }}!
+3. Bootstrap jobs to check:
 
-Your release is named {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
-{{- if .Values.ui.enabled }}
-
-The UI is deployed as a separate container and accessible via its own service.
-{{- end }}
-
-To access the application:
-{{- if .Values.ingress.enabled }}
-{{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
-{{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "poundcake.fullname" . }})
-  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
-{{- else if contains "LoadBalancer" .Values.service.type }}
-  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "poundcake.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
-{{- else if contains "ClusterIP" .Values.service.type }}
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "poundcake.fullname" . }} 8080:{{ .Values.service.port }}
-  echo "Visit http://127.0.0.1:8080 to access the UI"
-{{- end }}
-
-Configure Alertmanager to send webhooks to:
-  http://{{ include "poundcake.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/api/v1/webhook
-{{- if .Values.auth.enabled }}
-  Next step (required): configure Alertmanager receiver with this header:
-    X-Internal-API-Key: $(kubectl get secret {{ include "poundcake.fullname" . }}-admin -n {{ .Release.Namespace }} -o jsonpath='{.data.internal-api-key}' | base64 -d)
-  Without this header, PoundCake will return HTTP 401 for webhook requests.
-{{- end }}
-
-COMPONENTS DEPLOYED:
-  - API Server: {{ include "poundcake.fullname" . }}
-{{- if .Values.ui.enabled }}
-  - UI: {{ include "poundcake.fullname" . }}-ui
-{{- end }}
-{{- if .Values.chef.enabled }}
-  - Chef Worker: {{ include "poundcake.fullname" . }}-chef ({{ .Values.chef.replicaCount }} replica(s))
-{{- end }}
-{{- if .Values.prepChef.enabled }}
-  - Prep Chef Worker: {{ include "poundcake.fullname" . }}-prep-chef ({{ .Values.prepChef.replicaCount }} replica(s))
-{{- end }}
-{{- if .Values.timer.enabled }}
-  - Timer Monitor: {{ include "poundcake.fullname" . }}-timer ({{ .Values.timer.replicaCount }} replica(s))
-{{- end }}
-{{- if .Values.dishwasher.enabled }}
-  - Dishwasher Worker: {{ include "poundcake.fullname" . }}-dishwasher ({{ .Values.dishwasher.replicaCount }} replica(s))
-{{- end }}
-{{- if and .Values.redis.enabled .Values.redis.deploy }}
-  - Redis: {{ include "poundcake.fullname" . }}-redis
-{{- end }}
-
-STACKSTORM CONFIGURATION:
-  Using external StackStorm instance at:
-    API: {{ include "poundcake.stackstormApiUrl" . }}
-    Auth: {{ include "poundcake.stackstormAuthUrl" . }}
-
-  Ensure StackStorm is accessible from this namespace.
-
-{{- if not (or .Values.database.url .Values.database.existingSecret .Values.mariadbOperator.enabled) }}
-
-WARNING: No database configured!
-  PoundCake requires MySQL/MariaDB for persistent storage.
-  Set database.url or database.existingSecret in your values.
-  Alternatively, enable mariadbOperator.enabled to auto-provision MariaDB.
-
-{{- end }}
-
-{{- if .Values.mariadbOperator.enabled }}
-
-MARIADB OPERATOR INTEGRATION:
-  MariaDB will be provisioned automatically using the mariadb-operator.
-
-  MariaDB Instance: {{ include "poundcake.mariadbName" . }}
-  Namespace: {{ include "poundcake.mariadbNamespace" . }}
-  Database: {{ include "poundcake.mariadbDatabaseName" . }}
-  Username: {{ include "poundcake.mariadbUsername" . }}
-
-  To check MariaDB status:
-    kubectl get mariadb {{ include "poundcake.mariadbName" . }} -n {{ include "poundcake.mariadbNamespace" . }}
-
-  To retrieve the user password:
-    kubectl get secret {{ include "poundcake.mariadbUserSecretName" . }} -n {{ include "poundcake.mariadbNamespace" . }} -o jsonpath='{.data.password}' | base64 -d && echo
-
-  To connect to MariaDB:
-    kubectl run mysql-client --rm -it --image=mariadb:11 --restart=Never -n {{ include "poundcake.mariadbNamespace" . }} -- \
-      mysql -h {{ include "poundcake.mariadbName" . }} -u {{ include "poundcake.mariadbUsername" . }} -p{{ include "poundcake.mariadbDatabaseName" . }}
-
-{{- end }}
-
-{{- if .Values.auth.enabled }}
-
-AUTHENTICATION ENABLED:
-  Username: admin
-
-  To retrieve the admin password, run:
-    kubectl get secret {{ include "poundcake.fullname" . }}-admin -n {{ .Release.Namespace }} -o jsonpath='{.data.password}' | base64 -d && echo
-
-  To retrieve the internal service API key, run:
-    kubectl get secret {{ include "poundcake.fullname" . }}-admin -n {{ .Release.Namespace }} -o jsonpath='{.data.internal-api-key}' | base64 -d && echo
-
-{{- end }}
-
-For more information:
-  https://github.com/rackerlabs/poundcake
-{{- end }}
+   kubectl get jobs -l app.kubernetes.io/instance={{ .Release.Name }}

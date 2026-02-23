@@ -2,79 +2,49 @@
 
 ## Helm (Kubernetes)
 
-Preferred installer:
+Canonical installer:
 
 ```bash
-./bin/install-poundcake.sh
+./helm/bin/install-poundcake-with-env.sh
 ```
 
-Legacy env installer (explicit opt-in, full feature parity path):
+Install helper wrapper:
 
 ```bash
-# Load environment defaults for fork/private registry/local chart workflows
+./install/install-poundcake-helm.sh
+```
+
+Optional environment defaults for fork/private registry/local chart workflows:
+
+```bash
 source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
-
-# Run legacy env-compatible installer (full 3-phase PoundCake+StackStorm flow)
-./helm/bin/install-poundcake-legacy-env.sh
-
-# Or bakery-only mode
-./helm/bin/install-poundcake-legacy-env.sh --mode bakery-only
 ```
 
-Operator behavior (default):
-- `--operators-mode install-missing`
-- Installs missing `mariadb-operator` in all modes
-- Installs missing `redis-operator` and `rabbitmq-cluster-operator` in `full` mode
-
-Optional operator modes:
+Install modes:
 
 ```bash
-# Verify only (fail if required operators are missing)
-./bin/install-poundcake.sh --operators-mode verify
-
-# Skip operator checks/installs
-./bin/install-poundcake.sh --operators-mode skip
+./helm/bin/install-poundcake-with-env.sh --mode full
+./helm/bin/install-poundcake-with-env.sh --mode bakery-only
 ```
 
-Wrapper script (equivalent):
+Validation mode:
 
 ```bash
-./install/install-helm.sh
+./helm/bin/install-poundcake-with-env.sh --validate
 ```
 
-Bakery-only mode:
+Bakery image override (optional):
 
 ```bash
-./bin/install-poundcake.sh --mode bakery-only
-```
-
-Interactive Bakery Rackspace Core credential setup (works in full or bakery-only mode):
-
-```bash
-./bin/install-poundcake.sh --interactive-bakery-creds
-```
-
-Non-interactive Bakery Rackspace Core credential setup:
-
-```bash
-./bin/install-poundcake.sh \
-  --bakery-rackspace-url "https://10.12.223.241" \
-  --bakery-rackspace-username "poundcake" \
-  --bakery-rackspace-password "<password>"
+export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/<owner>/poundcake-bakery"
+export POUNDCAKE_BAKERY_IMAGE_TAG="<tag>"
+./helm/bin/install-poundcake-with-env.sh --mode bakery-only
 ```
 
 Notes:
-- The installer creates/updates secret `bakery-rackspace-core` in the target namespace.
-- The secret name can be overridden with `--bakery-rackspace-secret-name`.
-- When Bakery credentials are provided, installer sets:
-  - `bakery.enabled=true`
-  - `bakery.rackspaceCore.existingSecret=<secret-name>`
-- Chart versions are sourced from `/etc/genestack/helm-chart-versions.yaml`:
-  - `poundcake`
-  - `stackstorm`
-  - `mariadb-operator`
-  - `redis-operator`
-  - `rabbitmq-cluster-operator`
+- `install-poundcake-with-env.sh` is the canonical implementation.
+- `--mode bakery-only` sets `deployment.mode=bakery-only` and `bakery.enabled=true`.
+- Chart versions are sourced from `/etc/genestack/helm-chart-version.yaml` and `/etc/genestack/helm-chart-versions.yaml`.
 
 Bakery Gateway API exposure (optional):
 

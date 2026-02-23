@@ -14,7 +14,7 @@ sudo cp helm/overrides/ha-overrides.yaml /etc/genestack/helm-configs/poundcake/p
 2. Run the Helm installer:
 
 ```bash
-./install/install-helm.sh
+./install/install-poundcake-helm.sh
 ```
 
 The installer will automatically include:
@@ -53,5 +53,5 @@ sudo cp helm/overrides/gateway-kronos-overrides.yaml /etc/genestack/helm-configs
 3. Install/upgrade:
 
 ```bash
-./install/install-helm.sh
+./install/install-poundcake-helm.sh
 ```
