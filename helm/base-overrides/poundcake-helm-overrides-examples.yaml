@@ -1,0 +1,18 @@
+# Example Helm overrides for PoundCake.
+# Start by setting real FQDNs for Envoy Gateway listeners/routes.
+
+gateway:
+  enabled: true
+  className: envoyproxy
+  name: poundcake-gateway
+  listeners:
+    api:
+      enabled: true
+      hostname: api.example.yourdomain.com
+      port: 80
+      pathPrefix: /
+    ui:
+      enabled: true
+      hostname: ui.example.yourdomain.com
+      port: 80
+      pathPrefix: /

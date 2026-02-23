@@ -7,35 +7,40 @@
 # Test: Post a webhook to create an order for a given recipe and request ID
 set -euo pipefail
 
-API_URL=${API_URL:-http://localhost:8000/api/v1}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib.sh"
+
 TEST_RECIPE=${TEST_RECIPE:-}
 REQ_ID=${REQ_ID:-}
+FINGERPRINT=${FINGERPRINT:-}
 
 if [ -z "$TEST_RECIPE" ]; then
   echo "TEST_RECIPE is required"
   exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq is required"
-  exit 1
-fi
+require_cmd curl
+require_cmd jq
 
 # Verify the recipe exists before posting webhook
-echo "Checking if recipe exists: ${TEST_RECIPE}"
-RECIPE_EXISTS=$(curl -sS -X GET "${API_URL}/recipes/?name=${TEST_RECIPE}" | jq -r 'length')
+log_info "Checking if recipe exists: ${TEST_RECIPE}"
+RECIPE_EXISTS=$(api_request_json GET "${API_URL}/recipes/?name=${TEST_RECIPE}" | jq -r 'length')
 
 if [ "$RECIPE_EXISTS" -eq 0 ]; then
-  echo "Error: Recipe '${TEST_RECIPE}' does not exist!"
-  echo "Available recipes:"
-  curl -sS -X GET "${API_URL}/recipes/" | jq -r '.[].name'
+  log_error "Recipe '${TEST_RECIPE}' does not exist"
+  log_info "Available recipes:"
+  api_request_json GET "${API_URL}/recipes/" | jq -r '.[].name'
   exit 1
 fi
 
-echo "Recipe found: ${TEST_RECIPE}"
+log_info "Recipe found: ${TEST_RECIPE}"
 
 if [ -z "$REQ_ID" ]; then
   REQ_ID="AUTOMATED-$(date +%s)"
+fi
+
+if [ -z "$FINGERPRINT" ]; then
+  FINGERPRINT="AutomatedTestAlert_${REQ_ID}_$(date +%s)-$$-${RANDOM}"
 fi
 
 payload=$(cat <<JSON
@@ -45,6 +50,7 @@ payload=$(cat <<JSON
   "alerts": [
     {
       "status": "firing",
+      "fingerprint": "${FINGERPRINT}",
       "labels": {
         "alertname": "AutomatedTestAlert",
         "group_name": "${TEST_RECIPE}",
@@ -74,12 +80,7 @@ payload=$(cat <<JSON
 JSON
 )
 
-echo "Posting webhook for recipe: ${TEST_RECIPE}"
-
-curl -sS -X POST "${API_URL}/webhook" \
-  -H "Content-Type: application/json" \
-  -H "X-Request-ID: ${REQ_ID}" \
-  -d "${payload}"
-
-echo
+log_info "Posting webhook for recipe: ${TEST_RECIPE}"
+REQUEST_ID="${REQ_ID}" api_request_json POST "${API_URL}/webhook" "${payload}" >/dev/null
 echo "REQ_ID=${REQ_ID}"
+echo "FINGERPRINT=${FINGERPRINT}"
