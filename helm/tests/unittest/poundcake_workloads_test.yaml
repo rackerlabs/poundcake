@@ -443,6 +443,7 @@ tests:
 
   - it: injects bakery client env vars into poundcake-api with integrated defaults
     set:
+      bakery.enabled: true
       bakery.client.enabled: true
     asserts:
       - contains:
@@ -510,6 +511,9 @@ tests:
 
   - it: supports bakery baseUrl and auth secret overrides for poundcake-api
     set:
+      bakery.enabled: false
+      bakery.client.enabled: true
+      bakery.client.enforceRemoteBaseUrl: true
       bakery.client.baseUrl: https://bakery.example.com
       bakery.client.auth.existingSecret: external-bakery-hmac
     asserts:
@@ -539,3 +543,13 @@ tests:
                 key: active-key
                 optional: true
         documentIndex: 0
+
+  - it: fails fast when remote bakery client is enabled without baseUrl and local bakery is disabled
+    set:
+      bakery.enabled: false
+      bakery.client.enabled: true
+      bakery.client.enforceRemoteBaseUrl: true
+      bakery.client.baseUrl: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "bakery.client.baseUrl must be set when bakery.client.enforceRemoteBaseUrl=true (remote Bakery mode)"

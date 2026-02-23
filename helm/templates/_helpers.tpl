@@ -156,6 +156,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "poundcake.bakeryDbSecretKey" -}}
+{{- .Values.bakery.database.user.passwordSecretKey | default "password" -}}
+{{- end -}}
+
 {{- define "poundcake.bakeryWaitForDbInitContainer" -}}
 - name: wait-for-db
   image: {{ .Values.images.busybox | quote }}

@@ -1,0 +1,17 @@
+suite: bakery-disabled-rendering
+templates:
+  - templates/bakery-serviceaccount.yaml
+  - templates/bakery-secret.yaml
+  - templates/bakery-deployment.yaml
+  - templates/bakery-worker-deployment.yaml
+  - templates/bakery-init-job.yaml
+  - templates/bakery-service.yaml
+  - templates/bakery-mariadb.yaml
+tests:
+  - it: does not render in-cluster bakery resources in full mode when bakery.enabled=false
+    set:
+      deployment.mode: full
+      bakery.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -24,6 +24,11 @@ UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-}"
 UI_IMAGE_TAG="${POUNDCAKE_UI_IMAGE_TAG:-}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-}"
 BAKERY_IMAGE_TAG="${POUNDCAKE_BAKERY_IMAGE_TAG:-${POUNDCAKE_IMAGE_TAG:-}}"
+NO_LOCAL_BAKERY="${POUNDCAKE_NO_LOCAL_BAKERY:-false}"
+REMOTE_BAKERY_ENABLED="${POUNDCAKE_REMOTE_BAKERY_ENABLED:-true}"
+REMOTE_BAKERY_URL="${POUNDCAKE_REMOTE_BAKERY_URL:-}"
+REMOTE_BAKERY_AUTH_MODE="${POUNDCAKE_REMOTE_BAKERY_AUTH_MODE:-hmac}"
+REMOTE_BAKERY_AUTH_SECRET="${POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET:-}"
 CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
 VERSION_FILE="${POUNDCAKE_VERSION_FILE:-}"
 HELM_REGISTRY_USERNAME="${HELM_REGISTRY_USERNAME:-}"
@@ -82,6 +87,11 @@ CURRENT_PHASE="initialization"
 EXTRA_ARGS=()
 BAKERY_SECRET_SET_ARGS=()
 BAKERY_DB_SET_ARGS=()
+OVERRIDE_ARGS=()
+BAKERY_DB_INTEGRATED_EXPLICIT="false"
+if [[ "${BAKERY_DB_INTEGRATED}" == "true" ]]; then
+  BAKERY_DB_INTEGRATED_EXPLICIT="true"
+fi
 
 timestamp_utc() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -130,11 +140,16 @@ Installer options:
   --skip-preflight  Skip dependency/cluster preflight checks
   --rotate-secrets  Delete known chart-managed secrets before install
   --interactive-bakery-creds Prompt for Bakery Rackspace Core credentials
+  --no-local-bakery                  Disable in-cluster Bakery components and use remote Bakery client settings
+  --remote-bakery-enabled <bool>     Enable/disable PoundCake remote Bakery client (default: true)
+  --remote-bakery-url <url>          Remote Bakery base URL for PoundCake comms
+  --remote-bakery-auth-mode <mode>   Remote Bakery client auth mode (default: hmac)
+  --remote-bakery-auth-secret <name> Existing secret name for remote Bakery client auth keys
   --bakery-rackspace-url <url>         Rackspace Core API URL
   --bakery-rackspace-username <user>   Rackspace Core username
   --bakery-rackspace-password <pass>   Rackspace Core password
   --bakery-rackspace-secret-name <name> Secret name for Rackspace credentials
-  --bakery-db-integrated              Use shared MariaDB for Bakery (createServer=false)
+  --bakery-db-integrated              Force shared MariaDB mode for Bakery (createServer=false)
   --bakery-db-host <host>             Shared MariaDB host/service
   --bakery-db-name <name>             Bakery database name
   --bakery-db-user <user>             Bakery database username
@@ -165,6 +180,11 @@ Environment overrides:
   POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
   POUNDCAKE_BAKERY_IMAGE_REPO      (optional; sets bakery.image.repository)
   POUNDCAKE_BAKERY_IMAGE_TAG       (optional; sets bakery.image.tag; defaults to POUNDCAKE_IMAGE_TAG)
+  POUNDCAKE_NO_LOCAL_BAKERY        (default: false; disables local Bakery resources/bootstrap)
+  POUNDCAKE_REMOTE_BAKERY_ENABLED  (default: true when no-local-bakery mode is used)
+  POUNDCAKE_REMOTE_BAKERY_URL      (required when no-local-bakery and remote bakery enabled)
+  POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
+  POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (optional existing secret for remote Bakery HMAC keys)
   POUNDCAKE_INSTALL_MODE           (default: full; valid: full, bakery-only)
   POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
   POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME
@@ -186,7 +206,7 @@ Environment overrides:
   POUNDCAKE_BAKERY_RACKSPACE_USERNAME (optional)
   POUNDCAKE_BAKERY_RACKSPACE_PASSWORD (optional)
   POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME (default: bakery-rackspace-core)
-  POUNDCAKE_BAKERY_DB_INTEGRATED      (default: false)
+  POUNDCAKE_BAKERY_DB_INTEGRATED      (default: false; auto-enabled when createServer=false is detected from Helm inputs)
   POUNDCAKE_BAKERY_DB_HOST            (default: poundcake-mariadb)
   POUNDCAKE_BAKERY_DB_NAME            (default: bakery)
   POUNDCAKE_BAKERY_DB_USER            (default: bakery)
@@ -575,6 +595,261 @@ collect_yaml_files() {
   return 0
 }
 
+discover_override_args() {
+  OVERRIDE_ARGS=()
+  if [[ -n "${BASE_OVERRIDES}" && -f "${BASE_OVERRIDES}" ]]; then
+    OVERRIDE_ARGS+=("-f" "${BASE_OVERRIDES}")
+  fi
+
+  while IFS= read -r yaml_file; do
+    [[ -n "${yaml_file}" ]] || continue
+    OVERRIDE_ARGS+=("-f" "${yaml_file}")
+  done < <(collect_yaml_files "${GLOBAL_OVERRIDES_DIR}")
+
+  while IFS= read -r yaml_file; do
+    [[ -n "${yaml_file}" ]] || continue
+    OVERRIDE_ARGS+=("-f" "${yaml_file}")
+  done < <(collect_yaml_files "${SERVICE_CONFIG_DIR}")
+}
+
+normalize_bool_or_empty() {
+  local raw="$1"
+  local trimmed="${raw#"${raw%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  trimmed="${trimmed%\"}"
+  trimmed="${trimmed#\"}"
+  trimmed="${trimmed%\'}"
+  trimmed="${trimmed#\'}"
+  case "${trimmed}" in
+    true|TRUE|True)
+      echo "true"
+      ;;
+    false|FALSE|False)
+      echo "false"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+collect_bakery_create_server_from_set_args() {
+  local observed=()
+  local i=0
+  local arg=""
+  local payload=""
+  local tuple=""
+  local key=""
+  local value=""
+  local normalized=""
+
+  for ((i = 0; i < ${#EXTRA_ARGS[@]}; i++)); do
+    arg="${EXTRA_ARGS[$i]}"
+    payload=""
+
+    case "${arg}" in
+      --set|--set-string)
+        if (( i + 1 < ${#EXTRA_ARGS[@]} )); then
+          payload="${EXTRA_ARGS[$((i + 1))]}"
+          ((i+=1))
+        fi
+        ;;
+      --set=*|--set-string=*)
+        payload="${arg#*=}"
+        ;;
+      *)
+        ;;
+    esac
+
+    [[ -n "${payload}" ]] || continue
+    IFS=',' read -r -a tuples <<< "${payload}"
+    for tuple in "${tuples[@]}"; do
+      [[ "${tuple}" == *"="* ]] || continue
+      key="${tuple%%=*}"
+      value="${tuple#*=}"
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      if [[ "${key}" == "bakery.database.createServer" ]]; then
+        normalized="$(normalize_bool_or_empty "${value}")"
+        if [[ -z "${normalized}" ]]; then
+          log_error "Unable to parse bakery.database.createServer value from Helm set arg: '${tuple}'"
+          log_error "Use true/false, or set --bakery-db-integrated explicitly."
+          exit 1
+        fi
+        observed+=("${normalized}")
+      fi
+    done
+  done
+
+  if (( ${#observed[@]} )); then
+    printf '%s\n' "${observed[@]}"
+  fi
+}
+
+collect_values_files_from_extra_args() {
+  local files=()
+  local i=0
+  local arg=""
+  local value=""
+  for ((i = 0; i < ${#EXTRA_ARGS[@]}; i++)); do
+    arg="${EXTRA_ARGS[$i]}"
+    case "${arg}" in
+      -f|--values)
+        if (( i + 1 < ${#EXTRA_ARGS[@]} )); then
+          value="${EXTRA_ARGS[$((i + 1))]}"
+          files+=("${value}")
+          ((i+=1))
+        fi
+        ;;
+      -f=*|--values=*)
+        value="${arg#*=}"
+        files+=("${value}")
+        ;;
+    esac
+  done
+
+  if (( ${#files[@]} )); then
+    printf '%s\n' "${files[@]}"
+  fi
+}
+
+extract_bakery_create_server_from_yaml() {
+  local yaml_file="$1"
+  awk '
+    function ltrim(s){ sub(/^[ \t\r\n]+/, "", s); return s }
+    function rtrim(s){ sub(/[ \t\r\n]+$/, "", s); return s }
+    function trim(s){ return rtrim(ltrim(s)) }
+    function unquote(s) {
+      if ((s ~ /^".*"$/) || (s ~ /^'\''.*'\''$/)) {
+        return substr(s, 2, length(s)-2)
+      }
+      return s
+    }
+    BEGIN {
+      seen = 0
+      ambiguous = 0
+    }
+    {
+      line = $0
+      sub(/[[:space:]]+#.*/, "", line)
+      if (line ~ /^[[:space:]]*$/) next
+
+      if (match(line, /^([[:space:]]*)([^:#]+):[[:space:]]*(.*)$/, m)) {
+        indent = length(m[1])
+        key = trim(m[2])
+        value = trim(m[3])
+
+        for (i in depth_indent) {
+          if (depth_indent[i] >= indent) {
+            delete path[i]
+            delete depth_indent[i]
+          }
+        }
+
+        depth += 1
+        path[depth] = key
+        depth_indent[depth] = indent
+
+        full = ""
+        for (j = 1; j <= depth; j++) {
+          if (!(j in path)) continue
+          if (full == "") full = path[j]
+          else full = full "." path[j]
+        }
+
+        if (full == "bakery.database.createServer" || key == "bakery.database.createServer") {
+          seen = 1
+          if (value == "" || value ~ /^(\||>)/ || value ~ /{{.*}}/) {
+            ambiguous = 1
+          } else {
+            norm = tolower(unquote(value))
+            if (norm == "true" || norm == "false") {
+              print norm
+            } else {
+              ambiguous = 1
+            }
+          }
+        }
+      }
+    }
+    END {
+      if (seen && ambiguous) {
+        print "AMBIGUOUS"
+      }
+    }
+  ' "${yaml_file}"
+}
+
+resolve_integrated_mode() {
+  if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
+    BAKERY_DB_INTEGRATED="false"
+    return
+  fi
+
+  local saw_true="false"
+  local saw_false="false"
+  local v=""
+  local yaml_file=""
+  local yaml_values=()
+  local i=0
+
+  while IFS= read -r v; do
+    [[ -n "${v}" ]] || continue
+    if [[ "${v}" == "true" ]]; then
+      saw_true="true"
+    elif [[ "${v}" == "false" ]]; then
+      saw_false="true"
+    fi
+  done < <(collect_bakery_create_server_from_set_args)
+
+  for ((i = 0; i < ${#OVERRIDE_ARGS[@]}; i++)); do
+    if [[ "${OVERRIDE_ARGS[$i]}" == "-f" ]] && (( i + 1 < ${#OVERRIDE_ARGS[@]} )); then
+      yaml_values+=("${OVERRIDE_ARGS[$((i + 1))]}")
+      ((i+=1))
+    fi
+  done
+  while IFS= read -r yaml_file; do
+    [[ -n "${yaml_file}" ]] || continue
+    yaml_values+=("${yaml_file}")
+  done < <(collect_values_files_from_extra_args)
+
+  for yaml_file in "${yaml_values[@]}"; do
+    [[ -f "${yaml_file}" ]] || continue
+    while IFS= read -r v; do
+      [[ -n "${v}" ]] || continue
+      if [[ "${v}" == "AMBIGUOUS" ]]; then
+        log_error "Ambiguous bakery.database.createServer value in values file: ${yaml_file}"
+        log_error "Use true/false in values or set --bakery-db-integrated explicitly."
+        exit 1
+      elif [[ "${v}" == "true" ]]; then
+        saw_true="true"
+      elif [[ "${v}" == "false" ]]; then
+        saw_false="true"
+      fi
+    done < <(extract_bakery_create_server_from_yaml "${yaml_file}")
+  done
+
+  if [[ "${saw_true}" == "true" && "${saw_false}" == "true" ]]; then
+    log_error "Conflicting bakery.database.createServer values detected (both true and false)."
+    log_error "Resolve the conflict in --set/--set-string/values files, or use explicit --bakery-db-integrated with consistent createServer=false."
+    exit 1
+  fi
+
+  if [[ "${BAKERY_DB_INTEGRATED_EXPLICIT}" == "true" ]]; then
+    if [[ "${saw_true}" == "true" ]]; then
+      log_error "Conflicting configuration: --bakery-db-integrated requires bakery.database.createServer=false, but createServer=true was detected."
+      exit 1
+    fi
+    BAKERY_DB_INTEGRATED="true"
+    return
+  fi
+
+  if [[ "${saw_false}" == "true" ]]; then
+    BAKERY_DB_INTEGRATED="true"
+    log_info "Detected bakery.database.createServer=false from Helm inputs; enabling integrated Bakery DB bootstrap."
+  fi
+}
+
 get_chart_version_from_file() {
   local version_file="$1"
   local chart_name="$2"
@@ -818,6 +1093,26 @@ while [[ $# -gt 0 ]]; do
       INTERACTIVE_BAKERY_CREDS="true"
       shift
       ;;
+    --no-local-bakery)
+      NO_LOCAL_BAKERY="true"
+      shift
+      ;;
+    --remote-bakery-url)
+      REMOTE_BAKERY_URL="$2"
+      shift 2
+      ;;
+    --remote-bakery-enabled)
+      REMOTE_BAKERY_ENABLED="$2"
+      shift 2
+      ;;
+    --remote-bakery-auth-mode)
+      REMOTE_BAKERY_AUTH_MODE="$2"
+      shift 2
+      ;;
+    --remote-bakery-auth-secret)
+      REMOTE_BAKERY_AUTH_SECRET="$2"
+      shift 2
+      ;;
     --bakery-rackspace-url)
       BAKERY_RACKSPACE_URL="$2"
       shift 2
@@ -836,6 +1131,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --bakery-db-integrated)
       BAKERY_DB_INTEGRATED="true"
+      BAKERY_DB_INTEGRATED_EXPLICIT="true"
       shift
       ;;
     --bakery-db-host)
@@ -891,13 +1187,33 @@ if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" 
   exit 1
 fi
 
+if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
+  REMOTE_BAKERY_ENABLED="$(normalize_bool_or_empty "${REMOTE_BAKERY_ENABLED}")"
+  if [[ -z "${REMOTE_BAKERY_ENABLED}" ]]; then
+    log_error "--remote-bakery-enabled (or POUNDCAKE_REMOTE_BAKERY_ENABLED) must be true or false."
+    exit 1
+  fi
+  if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
+    log_error "--no-local-bakery is incompatible with --mode bakery-only."
+    exit 1
+  fi
+  if [[ "${BAKERY_DB_INTEGRATED_EXPLICIT}" == "true" ]]; then
+    log_error "--no-local-bakery cannot be combined with --bakery-db-integrated."
+    exit 1
+  fi
+  if [[ "${REMOTE_BAKERY_ENABLED}" == "true" && -z "${REMOTE_BAKERY_URL}" ]]; then
+    log_error "--no-local-bakery requires --remote-bakery-url (or POUNDCAKE_REMOTE_BAKERY_URL) when remote bakery client is enabled."
+    exit 1
+  fi
+fi
+
 if [[ "${INSTALL_DEBUG}" == "true" ]]; then
   log_info "Debug tracing enabled."
   PS4='+ [${BASH_SOURCE##*/}:${LINENO}${FUNCNAME[0]:+:${FUNCNAME[0]}}] '
   set -x
 fi
 
-log_info "Installer options: mode=${INSTALL_MODE}, operators_mode=${OPERATOR_MODE}, bakery_db_integrated=${BAKERY_DB_INTEGRATED}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
+log_info "Installer options: mode=${INSTALL_MODE}, operators_mode=${OPERATOR_MODE}, bakery_db_integrated=${BAKERY_DB_INTEGRATED}, no_local_bakery=${NO_LOCAL_BAKERY}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
@@ -976,35 +1292,33 @@ else
   log_info "Skipping image pull secret creation (POUNDCAKE_CREATE_IMAGE_PULL_SECRET=${CREATE_IMAGE_PULL_SECRET})."
 fi
 
+log_phase "values file discovery"
+discover_override_args
+log_info "Resolved override file argument count: ${#OVERRIDE_ARGS[@]}"
+
+log_phase "integrated bakery db mode resolution"
+resolve_integrated_mode
+log_info "Resolved integrated bakery DB mode: ${BAKERY_DB_INTEGRATED}"
+
 log_phase "integrated bakery db configuration"
-apply_bakery_db_secret_integrated
-sync_bakery_db_user_integrated
+if [[ "${NO_LOCAL_BAKERY}" != "true" ]]; then
+  apply_bakery_db_secret_integrated
+  sync_bakery_db_user_integrated
+else
+  log_info "Skipping integrated Bakery DB bootstrap because no-local-bakery mode is enabled."
+fi
 
 log_phase "bakery credential secret configuration"
-apply_bakery_rackspace_secret
+if [[ "${NO_LOCAL_BAKERY}" != "true" ]]; then
+  apply_bakery_rackspace_secret
+else
+  log_info "Skipping local Bakery credential secret management because no-local-bakery mode is enabled."
+fi
 
 if [[ "${ROTATE_SECRETS}" == "true" ]]; then
   log_phase "secret rotation"
   rotate_chart_secrets "${NAMESPACE}" "${RELEASE_NAME}"
 fi
-
-log_phase "values file discovery"
-OVERRIDE_ARGS=()
-if [[ -n "${BASE_OVERRIDES}" && -f "${BASE_OVERRIDES}" ]]; then
-  OVERRIDE_ARGS+=("-f" "${BASE_OVERRIDES}")
-fi
-
-while IFS= read -r yaml_file; do
-  [[ -n "${yaml_file}" ]] || continue
-  OVERRIDE_ARGS+=("-f" "${yaml_file}")
-done < <(collect_yaml_files "${GLOBAL_OVERRIDES_DIR}")
-
-while IFS= read -r yaml_file; do
-  [[ -n "${yaml_file}" ]] || continue
-  OVERRIDE_ARGS+=("-f" "${yaml_file}")
-done < <(collect_yaml_files "${SERVICE_CONFIG_DIR}")
-
-log_info "Resolved override file argument count: ${#OVERRIDE_ARGS[@]}"
 
 POST_RENDER_ARGS=()
 if [[ "${INSTALL_MODE}" != "bakery-only" && -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
@@ -1024,6 +1338,19 @@ INSTALLER_SET_ARGS=(
 
 if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=true")
+fi
+if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=false")
+  INSTALLER_SET_ARGS+=(--set-string "bakery.worker.enabled=false")
+  INSTALLER_SET_ARGS+=(--set-string "bakery.client.enforceRemoteBaseUrl=true")
+  INSTALLER_SET_ARGS+=(--set-string "bakery.client.enabled=${REMOTE_BAKERY_ENABLED}")
+  INSTALLER_SET_ARGS+=(--set-string "bakery.client.auth.mode=${REMOTE_BAKERY_AUTH_MODE}")
+  if [[ -n "${REMOTE_BAKERY_URL}" ]]; then
+    INSTALLER_SET_ARGS+=(--set-string "bakery.client.baseUrl=${REMOTE_BAKERY_URL}")
+  fi
+  if [[ -n "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
+    INSTALLER_SET_ARGS+=(--set-string "bakery.client.auth.existingSecret=${REMOTE_BAKERY_AUTH_SECRET}")
+  fi
 fi
 
 if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
@@ -1200,6 +1527,16 @@ if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
 fi
 if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
   log_info "Bakery image tag override: ${BAKERY_IMAGE_TAG}"
+fi
+if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
+  log_info "Local Bakery deployment: disabled (no-local-bakery mode)"
+  log_info "Remote Bakery client enabled: ${REMOTE_BAKERY_ENABLED}"
+  if [[ -n "${REMOTE_BAKERY_URL}" ]]; then
+    log_info "Remote Bakery URL: ${REMOTE_BAKERY_URL}"
+  fi
+  if [[ -n "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
+    log_info "Remote Bakery auth secret override: ${REMOTE_BAKERY_AUTH_SECRET}"
+  fi
 fi
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   log_info "Image pull secret injection: enabled (${IMAGE_PULL_SECRET_NAME})"

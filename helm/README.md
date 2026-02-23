@@ -218,6 +218,42 @@ Database ownership contract:
 - In alongside deployments, they may share a MariaDB server endpoint but not a database schema/user.
 - API migrations are API-owned; Bakery migrations are Bakery-owned and run by the Bakery DB init hook job.
 
+Integrated Bakery DB contract (shared MariaDB):
+- Integrated mode is active when either:
+  - `--bakery-db-integrated` (or `POUNDCAKE_BAKERY_DB_INTEGRATED=true`) is set, or
+  - Helm inputs resolve `bakery.database.createServer=false` from `--set`/`--set-string` or values files (`-f/--values`, base overrides, global overrides, service overrides).
+- When integrated mode is active, the installer always:
+  - creates/updates the Bakery DB password secret (default: `poundcake-bakery-db-user`, key `password`) in the release namespace, and
+  - runs a SQL bootstrap job to create/alter the Bakery DB user and grant access on the shared MariaDB server.
+- Conflict safety:
+  - conflicting `bakery.database.createServer` signals (`true` and `false`) fail fast.
+  - ambiguous non-boolean `bakery.database.createServer` values in YAML fail fast.
+  - explicit integrated mode plus detected `bakery.database.createServer=true` fails fast.
+- Integrated mode requires an admin secret for shared MariaDB bootstrap:
+  - secret name: `POUNDCAKE_BAKERY_DB_ADMIN_SECRET_NAME` (default: `poundcake-secrets`)
+  - secret key: `POUNDCAKE_BAKERY_DB_ADMIN_PASSWORD_KEY` (default: `DB_ROOT_PASSWORD`)
+
+Remote Bakery mode (no in-cluster Bakery):
+- Use installer flag `--no-local-bakery` (or `POUNDCAKE_NO_LOCAL_BAKERY=true`) to disable all in-cluster Bakery resources and Bakery bootstrap jobs.
+- In this mode, PoundCake comms client targets an external Bakery endpoint via:
+  - `POUNDCAKE_REMOTE_BAKERY_ENABLED` / `--remote-bakery-enabled` (default: `true`),
+  - `--remote-bakery-url` / `POUNDCAKE_REMOTE_BAKERY_URL` (required when remote client is enabled),
+  - `--remote-bakery-auth-mode` / `POUNDCAKE_REMOTE_BAKERY_AUTH_MODE` (default: `hmac`),
+  - `--remote-bakery-auth-secret` / `POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET` (optional).
+- Safety rules:
+  - `--no-local-bakery` cannot be combined with `--bakery-db-integrated`.
+  - `--mode bakery-only` cannot be combined with `--no-local-bakery`.
+  - chart rendering fails fast if `bakery.client.enforceRemoteBaseUrl=true`, `bakery.client.enabled=true`, and `bakery.client.baseUrl` is empty.
+
+Example:
+```bash
+./install/install-poundcake-helm.sh \
+  --no-local-bakery \
+  --remote-bakery-url https://bakery.example.com \
+  --remote-bakery-auth-mode hmac \
+  --remote-bakery-auth-secret external-bakery-hmac
+```
+
 Readiness semantics:
 - `/api/v1/live` is process-only.
 - `/api/v1/ready` fails on blocking dependency outages.
