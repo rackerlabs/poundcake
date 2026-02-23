@@ -1,4 +1,13 @@
-{{- if and (or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only")) .Values.bakery.worker.enabled }}
+{{- $bakeryEnabled := or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only") -}}
+{{- if and $bakeryEnabled .Values.bakery.worker.enabled }}
+{{- if not .Values.bakery.database.createServer }}
+{{- if not .Values.bakery.database.host }}
+{{- fail "bakery.database.host must be set when bakery.database.createServer=false" }}
+{{- end }}
+{{- if not .Values.bakery.database.user.passwordSecret }}
+{{- fail "bakery.database.user.passwordSecret must be set when bakery.database.createServer=false" }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
