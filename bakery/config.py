@@ -4,12 +4,7 @@
 import os
 from typing import Optional
 
-
-def _env_to_bool(value: Optional[str], default: bool = False) -> bool:
-    """Parse a boolean-like environment variable string."""
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+from shared.env import env_to_bool
 
 
 class Settings:
@@ -36,7 +31,7 @@ class Settings:
         # Mixer settings
         self.mixer_timeout_sec: int = int(os.getenv("MIXER_TIMEOUT_SEC", "30"))
         self.mixer_max_retries: int = int(os.getenv("MIXER_MAX_RETRIES", "3"))
-        self.ticketing_dry_run: bool = _env_to_bool(os.getenv("TICKETING_DRY_RUN"), default=False)
+        self.ticketing_dry_run: bool = env_to_bool(os.getenv("TICKETING_DRY_RUN"), default=False)
         self.active_provider: str = os.getenv("BAKERY_ACTIVE_PROVIDER", "rackspace_core")
 
         # Worker settings
@@ -47,9 +42,7 @@ class Settings:
         self.worker_backoff_max_sec: int = int(os.getenv("BAKERY_WORKER_BACKOFF_MAX_SEC", "300"))
 
         # Auth settings
-        self.bakery_auth_enabled: bool = _env_to_bool(
-            os.getenv("BAKERY_AUTH_ENABLED"), default=True
-        )
+        self.bakery_auth_enabled: bool = env_to_bool(os.getenv("BAKERY_AUTH_ENABLED"), default=True)
         self.bakery_auth_mode: str = os.getenv("BAKERY_AUTH_MODE", "hmac")
         self.bakery_hmac_active_key_id: str = os.getenv("BAKERY_HMAC_ACTIVE_KEY_ID", "")
         self.bakery_hmac_active_key: str = os.getenv("BAKERY_HMAC_ACTIVE_KEY", "")
@@ -81,7 +74,7 @@ class Settings:
         )
         self.rackspace_core_username: Optional[str] = os.getenv("RACKSPACE_CORE_USERNAME")
         self.rackspace_core_password: Optional[str] = os.getenv("RACKSPACE_CORE_PASSWORD")
-        self.rackspace_core_verify_ssl: bool = _env_to_bool(
+        self.rackspace_core_verify_ssl: bool = env_to_bool(
             os.getenv("RACKSPACE_CORE_VERIFY_SSL"), default=True
         )
         self.rackspace_core_default_queue: str = os.getenv(

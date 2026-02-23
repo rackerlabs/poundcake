@@ -49,7 +49,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["api*"]
+include = ["api*", "bakery*", "shared*"]
 
 [tool.ruff]
 line-length = 100

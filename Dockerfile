@@ -6,66 +6,87 @@
 #
 
 # ============================================================================
-# Stage 1: Builder - Install dependencies in a virtual environment
+# Stage 1: Shared Python builder base
 # ============================================================================
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim AS python-builder-base
 
 WORKDIR /build
 
-# Install build dependencies (needed for compiling Python packages)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     default-libmysqlclient-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
 RUN python -m venv /opt/venv
-
-# Activate venv and upgrade pip
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install Python dependencies into the venv
-COPY requirements-prod.txt .
-RUN pip install --no-cache-dir -r requirements-prod.txt
+# API dependency set
+FROM python-builder-base AS api-deps
+COPY requirements-prod.txt /build/requirements-prod.txt
+RUN pip install --no-cache-dir -r /build/requirements-prod.txt
+
+# Bakery dependency set
+FROM python-builder-base AS bakery-deps
+COPY bakery/requirements.txt /build/requirements-bakery.txt
+RUN pip install --no-cache-dir -r /build/requirements-bakery.txt
 
 # ============================================================================
-# Stage 2: Runtime - Minimal production image
+# Stage 2: Shared runtime base
 # ============================================================================
-FROM python:3.11-slim
+FROM python:3.11-slim AS python-runtime-base
 
 WORKDIR /app
 
-# Install only runtime dependencies (no build tools)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
 RUN useradd -m -u 1000 appuser
 
-# Copy the virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# Copy only the Python application code (not tests, helm, docs, ui, etc.)
+# ============================================================================
+# Stage 3A: API runtime image
+# ============================================================================
+FROM python-runtime-base AS api-runtime
+
+COPY --from=api-deps /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY --chown=appuser:appuser api/ /app/api/
+COPY --chown=appuser:appuser shared/ /app/shared/
 COPY --chown=appuser:appuser kitchen/ /app/kitchen/
 COPY --chown=appuser:appuser docker/scripts/ /app/scripts/
 COPY --chown=appuser:appuser alembic/ /app/alembic/
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 
-# Make scripts executable
 RUN chmod +x /app/api/scripts/entrypoint-auto-migrate.sh \
     && chmod +x /app/scripts/automated-setup.sh
 
-# Switch to non-root user
 USER appuser
 
-# Use the venv
-ENV PATH="/opt/venv/bin:$PATH"
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-
-# Default command (Uvicorn fallback)
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# ============================================================================
+# Stage 3B: Bakery runtime image
+# ============================================================================
+FROM python-runtime-base AS bakery-runtime
+
+COPY --from=bakery-deps /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY --chown=appuser:appuser bakery/ /app/bakery/
+COPY --chown=appuser:appuser shared/ /app/shared/
+
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+
+CMD ["uvicorn", "bakery.main:app", "--host", "0.0.0.0", "--port", "8000"]

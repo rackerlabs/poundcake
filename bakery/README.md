@@ -51,6 +51,7 @@ class BaseMixer(ABC):
 ```
 
 Mixers are registered in `bakery/mixer/factory.py` via the `MIXER_REGISTRY` dict. Adding a new ticketing system means creating a new mixer class and adding it to the registry.
+Bakery uses mixers as the single provider abstraction layer.
 
 ### Database Tables
 
@@ -451,9 +452,10 @@ The image is built via GitHub Actions and pushed to:
 ghcr.io/rackerlabs/poundcake-bakery
 ```
 
-The Dockerfile uses a multi-stage build:
-1. **Builder stage** -- installs Python dependencies from `bakery/requirements.txt`
-2. **Runtime stage** -- copies only the virtual environment and `bakery/` application code
+Bakery is built from the root multi-target Dockerfile:
+1. **`python-builder-base`** -- shared Python build dependencies and venv creation
+2. **`bakery-deps`** -- Bakery runtime dependencies from `bakery/requirements.txt`
+3. **`bakery-runtime`** -- Bakery-only runtime image contents
 
 The final image contains no git history, tests, documentation, or development dependencies.
 
@@ -483,13 +485,12 @@ The application starts on `http://localhost:8000` with auto-reload enabled when 
 
 ```
 bakery/
-├── Dockerfile              # Multi-stage container build
 ├── requirements.txt        # Runtime Python dependencies
 ├── __init__.py             # Version (1.0.0)
 ├── main.py                 # FastAPI application entry point
 ├── config.py               # Environment variable configuration
 ├── database.py             # SQLAlchemy engine and session management
-├── db_init.py              # Database initialization script (K8s Job)
+├── db_init.py              # Database initialization + Alembic upgrade runner (K8s Job)
 ├── models.py               # SQLAlchemy models (Message, TicketRequest, MixerConfig)
 ├── schemas.py              # Pydantic request/response schemas
 ├── alembic.ini             # Alembic migration configuration
@@ -513,3 +514,13 @@ bakery/
     ├── pagerduty.py        # PagerDutyMixer
     └── rackspace_core.py   # RackspaceCoreMixer (CTKAPI)
 ```
+
+## Database Ownership and Migrations
+
+Bakery always owns its own database schema and migration history:
+- Bakery migrations live under `bakery/alembic/` and are applied by the Bakery init job.
+- API migrations live under `alembic/` and must not be used for Bakery tables.
+
+When deployed alongside PoundCake:
+- You may point both services at the same MariaDB server endpoint.
+- You must keep separate DB names and users/credentials (`poundcake` vs `bakery`).

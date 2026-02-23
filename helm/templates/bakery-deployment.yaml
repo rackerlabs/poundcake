@@ -30,17 +30,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
-        - name: wait-for-db
-          image: busybox:latest
-          command:
-            - sh
-            - -c
-            - |
-              until nc -z -v -w30 {{ include "poundcake.bakeryDbHost" . }} 3306; do
-                echo "Waiting for MariaDB..."
-                sleep 5
-              done
-              echo "MariaDB is ready"
+        {{- include "poundcake.bakeryWaitForDbInitContainer" . | nindent 8 }}
       containers:
         - name: bakery
           securityContext:
