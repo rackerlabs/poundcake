@@ -317,8 +317,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      ["/opt/stackstorm/st2/bin/st2api", "--config-file", "/etc/st2/st2.conf"]
+    command: ["/opt/stackstorm/st2/bin/st2api", "--config-file", "/etc/st2/st2.conf"]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "st2api"]
       interval: 10s
@@ -346,8 +345,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      ["/opt/stackstorm/st2/bin/st2auth", "--config-file", "/etc/st2/st2.conf"]
+    command: ["/opt/stackstorm/st2/bin/st2auth", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-actionrunner:
@@ -366,12 +364,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      [
-        "/opt/stackstorm/st2/bin/st2actionrunner",
-        "--config-file",
-        "/etc/st2/st2.conf",
-      ]
+    command: ["/opt/stackstorm/st2/bin/st2actionrunner", "--config-file", "/etc/st2/st2.conf"]
     restart: unless-stopped
 
   stackstorm-stream:
@@ -392,12 +385,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      [
-        "/opt/stackstorm/st2/bin/st2stream",
-        "--config-file",
-        "/etc/st2/st2.conf",
-      ]
+    command: ["/opt/stackstorm/st2/bin/st2stream", "--config-file", "/etc/st2/st2.conf"]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "st2stream"]
       interval: 10s
@@ -423,12 +411,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      [
-        "/opt/stackstorm/st2/bin/st2workflowengine",
-        "--config-file",
-        "/etc/st2/st2.conf",
-      ]
+    command: ["/opt/stackstorm/st2/bin/st2workflowengine", "--config-file", "/etc/st2/st2.conf"]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "st2workflowengine"]
       interval: 10s
@@ -453,12 +436,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      [
-        "/opt/stackstorm/st2/bin/st2notifier",
-        "--config-file",
-        "/etc/st2/st2.conf",
-      ]
+    command: ["/opt/stackstorm/st2/bin/st2notifier", "--config-file", "/etc/st2/st2.conf"]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "st2notifier"]
       interval: 10s
@@ -483,12 +461,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      [
-        "/opt/stackstorm/st2/bin/st2garbagecollector",
-        "--config-file",
-        "/etc/st2/st2.conf",
-      ]
+    command: ["/opt/stackstorm/st2/bin/st2garbagecollector", "--config-file", "/etc/st2/st2.conf"]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "st2garbagecollector"]
       interval: 10s
@@ -513,12 +486,7 @@ services:
     networks:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
-    command:
-      [
-        "/opt/stackstorm/st2/bin/st2scheduler",
-        "--config-file",
-        "/etc/st2/st2.conf",
-      ]
+    command: ["/opt/stackstorm/st2/bin/st2scheduler", "--config-file", "/etc/st2/st2.conf"]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "st2scheduler"]
       interval: 10s
@@ -580,12 +548,7 @@ services:
       - poundcake
     entrypoint: ["/bin/bash", "/st2-entrypoint.sh"]
     # Client stays alive for interactive troubleshooting and debugging
-    command:
-      [
-        "sh",
-        "-c",
-        "echo 'ST2 Client ready for troubleshooting' && tail -f /dev/null",
-      ]
+    command: ["sh", "-c", "echo 'ST2 Client ready for troubleshooting' && tail -f /dev/null"]
     restart: unless-stopped
 
 networks:

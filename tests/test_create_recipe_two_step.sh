@@ -7,71 +7,66 @@
 # Test: Create a two-step recipe with ingredients and tasks, without creating an order
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-
+API_URL=${API_URL:-http://localhost:8000/api/v1}
 TEST_RECIPE=${TEST_RECIPE:-}
 IS_BLOCKING=${IS_BLOCKING:-false}
-STEP1_CMD=${STEP1_CMD:-'echo "step 1"'}
-STEP2_CMD=${STEP2_CMD:-'echo "step 2"'}
 
 if [ -z "$TEST_RECIPE" ]; then
   echo "TEST_RECIPE is required"
   exit 1
 fi
 
-require_cmd curl
-require_cmd jq
-
-log_info "Creating two-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
-
-# Use a unique ingredient per run to avoid cross-test state leakage on is_blocking.
-INGREDIENT_SUFFIX=$(printf "%s" "${TEST_RECIPE}-$$-${RANDOM}" \
-  | tr '[:upper:]' '[:lower:]' \
-  | tr -cs 'a-z0-9' '_' \
-  | sed -e 's/^_//' -e 's/_$//' \
-  | cut -c1-48)
-ING_TASK_ID="core.local.${INGREDIENT_SUFFIX}"
-ING_TASK_NAME="echo_${INGREDIENT_SUFFIX}"
-
-ING1_PAYLOAD=$(jq -n \
-  --arg task_id "${ING_TASK_ID}" \
-  --arg task_name "${ING_TASK_NAME}" \
-  --argjson is_blocking "$IS_BLOCKING" \
-  '{
-    task_id: $task_id,
-    task_name: $task_name,
-    action_parameters: {
-      cmd: {
-        type: "string",
-        description: "Command to execute",
-        required: true
-      }
-    },
-    source_type: "stackstorm",
-    is_blocking: $is_blocking,
-    expected_duration_sec: 30,
-    timeout_duration_sec: 300,
-    retry_count: 0,
-    retry_delay: 5,
-    on_failure: "stop"
-  }')
-
-ING1_ID=$(api_request_json POST "${API_URL}/ingredients/" "${ING1_PAYLOAD}" | jq -r '.id')
-
-if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
-  log_error "Failed to create ingredient ${ING_TASK_ID}"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required"
   exit 1
 fi
 
-# Reuse the same unique ingredient for both recipe steps.
+echo "Creating two-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
+
+# Check if core.local ingredient already exists
+ING1_ID=$(curl -sS -X GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
+
+if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
+  echo "Ingredient core.local not found, creating it..."
+  ING1_PAYLOAD=$(jq -n \
+    --argjson is_blocking "$IS_BLOCKING" \
+    '{
+      task_id: "core.local",
+      task_name: "step_1_echo",
+      action_parameters: {
+        cmd: {
+          type: "string",
+          description: "Command to execute",
+          required: true
+        }
+      },
+      source_type: "stackstorm",
+      is_blocking: $is_blocking,
+      expected_duration_sec: 30,
+      timeout_duration_sec: 300,
+      retry_count: 0,
+      retry_delay: 5,
+      on_failure: "stop"
+    }')
+
+  ING1_ID=$(curl -sS -X POST "${API_URL}/ingredients/" \
+    -H "Content-Type: application/json" \
+    -d "${ING1_PAYLOAD}" | jq -r '.id')
+
+  if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
+    echo "Failed to create first ingredient"
+    exit 1
+  fi
+else
+  echo "Using existing ingredient core.local (ID: $ING1_ID)"
+fi
+
+# For the second step, we'll use the same ingredient (core.local can be reused in different steps)
 ING2_ID="$ING1_ID"
 
 RECIPE_PAYLOAD=$(jq -n \
   --arg name "$TEST_RECIPE" \
   --arg desc "Automated two-step test recipe" \
-  --arg step1_cmd "$STEP1_CMD" \
-  --arg step2_cmd "$STEP2_CMD" \
   --argjson ing1_id "$ING1_ID" \
   --argjson ing2_id "$ING2_ID" \
   '{
@@ -88,7 +83,7 @@ RECIPE_PAYLOAD=$(jq -n \
         parallel_group: 0,
         depth: 0,
         input_parameters: {
-          cmd: $step1_cmd
+          cmd: "echo \"step 1\""
         }
       },
       {
@@ -98,10 +93,12 @@ RECIPE_PAYLOAD=$(jq -n \
         parallel_group: 0,
         depth: 0,
         input_parameters: {
-          cmd: $step2_cmd
+          cmd: "echo \"step 2\""
         }
       }
     ]
   }')
 
-api_request_json POST "${API_URL}/recipes/" "${RECIPE_PAYLOAD}" | jq -r '.id'
+curl -sS -X POST "${API_URL}/recipes/" \
+  -H "Content-Type: application/json" \
+  -d "${RECIPE_PAYLOAD}" | jq -r '.id'

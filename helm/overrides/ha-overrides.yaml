@@ -1,6 +1,6 @@
 # High Availability overrides for PoundCake
 # Copy to /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
-# before running install/install-poundcake-helm.sh.
+# before running install/install-helm.sh.
 
 # Main API deployment (service load balances across pods)
 replicaCount: 2

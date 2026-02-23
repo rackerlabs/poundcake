@@ -19,7 +19,6 @@ from . import (
     webhook,
     settings,
     suppressions,
-    internal_stackstorm,
 )
 
 __all__ = [
@@ -34,5 +33,4 @@ __all__ = [
     "webhook",
     "settings",
     "suppressions",
-    "internal_stackstorm",
 ]

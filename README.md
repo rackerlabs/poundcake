@@ -114,7 +114,6 @@ flowchart TD
 ### Mixed blocking/non-blocking scenario
 
 Example scenario:
-
 - Task 1 is blocking
 - Tasks 2-4 are non-blocking (parallel fork)
 - Task 5 is blocking (fan-in)
@@ -209,96 +208,124 @@ output:
 
 ```bash
 # Install via Docker Compose
-./install/install-poundcake-docker.sh
+./install/install-docker.sh
 
-# Install via Helm
-./install/install-poundcake-helm.sh
+# Install via Helm (wrapper around bin/install-poundcake.sh)
+./install/install-helm.sh
 ```
 
 ### Helm Install
 
 ```bash
-# Helm-based install script
-./helm/bin/install-poundcake-with-env.sh
+# Helm-based install script (3-phase full install)
+./bin/install-poundcake.sh
 
 # Optional: pass extra Helm args through
-./helm/bin/install-poundcake-with-env.sh -f /path/to/values.yaml
-
-# Validate chart rendering before install
-./helm/bin/install-poundcake-with-env.sh --validate
+./bin/install-poundcake.sh -f /path/to/values.yaml
 ```
 
-Installer flags:
-
-- `--validate` runs `helm lint` + `helm template --debug` before install
-- `--skip-preflight` skips dependency and cluster connectivity checks
-- `--rotate-secrets` deletes known chart-managed secrets before install
-
-Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
-
-### Helm Install With Private GHCR Images
+Legacy env-based installer (opt-in, full/bakery-only compatibility workflow):
 
 ```bash
-source ./install/set-env-helper.sh
-export HELM_REGISTRY_USERNAME="<gh-username>"
-export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
-# Optional OCI chart source override; helper defaults to local chart install (./helm)
-# export POUNDCAKE_CHART_REPO="oci://ghcr.io/<owner>/charts/poundcake"
-./install/install-poundcake-helm.sh
+# Load fork/private-registry/local-chart defaults
+source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
+
+# Run the legacy env installer explicitly (supports full 3-phase flow)
+./helm/bin/install-poundcake-legacy-env.sh
+
+# Bakery-only mode is also supported
+./helm/bin/install-poundcake-legacy-env.sh --mode bakery-only
 ```
 
-Installer env controls for private pulls:
+By default, the installer uses `--operators-mode install-missing` and will auto-install missing required operators:
+- `mariadb-operator`
+- `redis-operator` (full mode)
+- `rabbitmq-cluster-operator` (full mode)
 
-- `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-pull`)
-- `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` (default: `true`)
-- `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` (default: `noreply@local`)
-- `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)
+Operator modes:
 
-Chart value controls:
+```bash
+# Verify operators exist but do not install
+./bin/install-poundcake.sh --operators-mode verify
 
-- Canonical (PoundCake-only): `poundcakeImage.pullSecrets`
-- Legacy fallback (temporary): `imagePullSecrets`
+# Skip operator checks/installs
+./bin/install-poundcake.sh --operators-mode skip
+```
 
-Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
+Bakery-only deployment (no PoundCake or StackStorm resources):
 
-- Ensure image pin is explicit via either:
-  - `POUNDCAKE_IMAGE_REPO:POUNDCAKE_IMAGE_TAG`, or
-  - `POUNDCAKE_IMAGE_REPO@POUNDCAKE_IMAGE_DIGEST`
-- Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
-- Ensure PAT has `read:packages` and package visibility grants access
-- Verify pull secret is on a PoundCake pod:
-  `kubectl -n <namespace> get pod <poundcake-pod> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
+```bash
+./bin/install-poundcake.sh --mode bakery-only -f /path/to/values.yaml
+```
 
-OCI chart auth fallback chain used by the installer:
+Provide Bakery Rackspace Core credentials interactively (full or bakery-only):
 
-- Username: `HELM_REGISTRY_USERNAME` -> `GHCR_USERNAME` -> `GITHUB_ACTOR`
-- Password: `HELM_REGISTRY_PASSWORD` -> `GHCR_TOKEN` -> `CR_PAT` -> `GITHUB_TOKEN`
+```bash
+./bin/install-poundcake.sh --interactive-bakery-creds
+```
+
+Or non-interactively:
+
+```bash
+./bin/install-poundcake.sh \
+  --bakery-rackspace-url "https://10.12.223.241" \
+  --bakery-rackspace-username "poundcake" \
+  --bakery-rackspace-password "<password>"
+```
+
+Bakery Gateway API exposure (optional):
+
+```yaml
+bakery:
+  gateway:
+    enabled: true
+    gatewayName: flex-gateway
+    gatewayNamespace: envoy-gateway
+    listener:
+      name: bakery-https
+      hostname: bakery.api.ord.cloudmunchers.net
+      port: 443
+      protocol: HTTPS
+      tlsSecretName: bakery-gw-tls-secret
+      allowedNamespaces: All
+      updateIfExists: true
+    hostnames:
+      - bakery.api.ord.cloudmunchers.net
+```
+
+Bakery HMAC auth for PoundCake-to-Bakery calls (recommended):
+
+```yaml
+bakery:
+  auth:
+    enabled: true
+    mode: hmac
+    existingSecret: bakery-hmac
+  client:
+    enabled: true
+    baseUrl: "https://bakery.api.ord.cloudmunchers.net"
+    auth:
+      mode: hmac
+      existingSecret: bakery-hmac
+```
+
+See `/docs/DEPLOY.md` for full secret key mapping and header format.
 
 Default Helm namespace is `rackspace` (override with `POUNDCAKE_NAMESPACE`).
-Startup jobs are hook-driven (`post-install,post-upgrade`), so the installer defaults to
-`POUNDCAKE_HELM_WAIT=false` to avoid deadlocks with marker-gated init containers.
-If you force wait semantics (`--wait`/`--atomic`), set `POUNDCAKE_ALLOW_HOOK_WAIT=true`
-or the installer will exit with a deadlock guard error.
 
-If a rollout gets stuck in `Init`, re-run without wait semantics:
+In full mode, StackStorm is installed as a separate Helm release by `bin/install-poundcake.sh`.
 
-```bash
-POUNDCAKE_HELM_WAIT=false ./install/install-poundcake-helm.sh
-kubectl -n rackspace get jobs
-```
+Installer chart versions are read from `/etc/genestack/helm-chart-versions.yaml`:
+- `poundcake`
+- `stackstorm`
+- `mariadb-operator`
+- `redis-operator`
+- `rabbitmq-cluster-operator`
 
-StackStorm service startup now renders runtime config at `/tmp/st2/st2.conf` to avoid non-root writes to `/etc`.
-Successful startup hook jobs are auto-cleaned by default; failed ones are retained for debugging.
-
-One-time cleanup for existing completed startup jobs:
-
-```bash
-kubectl -n rackspace get jobs \
-  -o jsonpath='{range .items[?(@.status.succeeded==1)]}{.metadata.name}{"\n"}{end}' \
-  | grep -E '^(stackstorm-.*ready|stackstorm-mongodb-user-sync|stackstorm-startup-markers-reset|stackstorm-bootstrap|poundcake-.*)$' \
-  | xargs -r -I{} kubectl -n rackspace delete job {}
-kubectl -n rackspace get jobs,pods
-```
+StackStorm default profile (via `/Users/chris.breu/code/poundcake/helm/stackstorm/values-external-services.yaml`):
+- Enabled by default (1 pod each unless overridden): `st2api`, `st2auth`, `st2actionrunner`, `st2rulesengine`, `st2workflowengine`, `st2scheduler`, `st2notifier`, plus StackStorm-owned `mongodb`, `rabbitmq`, `redis`.
+- Disabled by default: `st2stream`, `st2web`, `st2chatops`, `st2garbagecollector`, `st2timersengine`, `st2sensorcontainer`.
+- Override behavior: add values files under `/etc/genestack/helm-configs/stackstorm/*.yaml` to re-enable components or scale replicas above 1.
 
 ### Docker Compose Install
 
@@ -320,41 +347,9 @@ curl http://localhost:8000/api/v1/health
 # Logs
 
 docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
-docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
-```
-
-#### Docker Compose Dependency Gates
-
-```mermaid
-flowchart LR
-  mongodb["stackstorm-mongodb"] -->|service_healthy| st2api["stackstorm-api"]
-  rabbitmq["stackstorm-rabbitmq"] -->|service_healthy| st2api
-  redis["stackstorm-redis"] -->|service_healthy| st2api
-
-  st2api -->|service_healthy| st2auth["stackstorm-auth"]
-  st2api -->|service_healthy| st2bootstrap["stackstorm-bootstrap"]
-  st2auth -->|service_healthy| st2bootstrap
-
-  packinit["poundcake-pack-init"] -->|service_completed_successfully| api["api"]
-  mariadb["mariadb"] -->|service_healthy| api
-  st2api -->|service_healthy| api
-
-  api -->|service_started| pcbootstrap["poundcake-bootstrap"]
-  packinit -->|service_completed_successfully| pcbootstrap
-  st2api -->|service_healthy| pcbootstrap
-
-  api -->|service_healthy| chef["chef"]
-  api -->|service_healthy| prepchef["prep-chef"]
-  api -->|service_healthy| timer["timer"]
-  api -->|service_healthy| dishwasher["dishwasher"]
-  pcbootstrap -->|service_completed_successfully| chef
-  pcbootstrap -->|service_completed_successfully| prepchef
-  pcbootstrap -->|service_completed_successfully| timer
-  pcbootstrap -->|service_completed_successfully| dishwasher
 ```
 
 Services:
-
 - PoundCake API: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs` (debug only)
 - StackStorm API: `http://localhost:9101`
@@ -368,11 +363,13 @@ Important environment variables:
 DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
 
 # StackStorm
-POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
-# StackStorm packs are served by API endpoint /api/v1/cook/packs
-# and synchronized into StackStorm pods by the pack-sync sidecar.
-# Legacy compatibility endpoint /api/v1/internal/stackstorm/pack.tgz remains
-# temporarily available and will be removed after a migration window.
+POUNDCAKE_STACKSTORM_URL=http://poundcake-st2api:9101
+POUNDCAKE_ST2_PACK_ROOT=/app/stackstorm-packs
+
+# Auth (required when auth is enabled)
+POUNDCAKE_AUTH_DEV_USERNAME=admin
+POUNDCAKE_AUTH_DEV_PASSWORD=change-me
+POUNDCAKE_AUTH_INTERNAL_API_KEY=shared-internal-key
 ```
 
 `config/st2_api_key` is created by `st2client` during bootstrap.

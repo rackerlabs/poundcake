@@ -4,6 +4,13 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
+# ╔════════════════════════════════════════════════════════════════╗
+# ____                        _  ____      _
+# |  _ \ ___  _   _ _ __   __| |/ ___|__ _| | _____
+# | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
+# |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
+# |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
+# ╚════════════════════════════════════════════════════════════════╝
 
 name: Build and Push Docker Image
 
@@ -22,9 +29,9 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  PACKAGE_OWNER: ${{ vars.GHCR_OWNER || github.repository_owner }}
-  REPO_NAME: ${{ vars.GHCR_REPO_NAME || github.event.repository.name }}
-  IMAGE_NAME: ${{ format('{0}/{1}', vars.GHCR_OWNER || github.repository_owner, vars.GHCR_REPO_NAME || github.event.repository.name) }}
+  PACKAGE_OWNER: ${{ github.repository_owner }}
+  REPO_NAME: ${{ github.event.repository.name }}
+  IMAGE_NAME: ${{ format('{0}/{1}', github.repository_owner, github.event.repository.name) }}
 
 jobs:
   build-and-push:
@@ -65,8 +72,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=poundcake-api
-          cache-to: type=gha,mode=max,scope=poundcake-api
+          no-cache: true
           platforms: linux/amd64
 
       - name: Extract metadata for UI Docker
@@ -90,8 +96,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-ui.outputs.tags }}
           labels: ${{ steps.meta-ui.outputs.labels }}
-          cache-from: type=gha,scope=poundcake-ui
-          cache-to: type=gha,mode=max,scope=poundcake-ui
+          no-cache: true
           platforms: linux/amd64
 
       - name: Make UI Docker image public
@@ -135,8 +140,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-bakery.outputs.tags }}
           labels: ${{ steps.meta-bakery.outputs.labels }}
-          cache-from: type=gha,scope=poundcake-bakery
-          cache-to: type=gha,mode=max,scope=poundcake-bakery
+          no-cache: true
           platforms: linux/amd64
 
       - name: Make Bakery Docker image public
