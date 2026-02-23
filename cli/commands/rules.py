@@ -7,13 +7,69 @@
 """Prometheus rule management commands."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 import yaml
 
-from poundcake_cli.client import PoundCakeClient  # type: ignore[import-not-found]
-from poundcake_cli.utils import print_error, print_info, print_output, print_success  # type: ignore[import-not-found]
+from cli.client import PoundCakeClient
+from cli.utils import print_error, print_info, print_output, print_success
+
+
+def _print_git_result(result: dict[str, Any]) -> None:
+    pr = result.get("git", {}).get("pull_request", {})
+    if isinstance(pr, dict) and pr.get("url"):
+        print_info(f"Pull request created: {pr['url']}")
+
+
+def _build_rule_data(
+    *,
+    rule_name: str,
+    file: Optional[Path],
+    expr: Optional[str],
+    duration: Optional[str],
+    severity: Optional[str],
+    summary: Optional[str],
+    description: Optional[str],
+    base_rule: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    if file:
+        with file.open() as handle:
+            loaded = yaml.safe_load(handle)
+        if not isinstance(loaded, dict):
+            raise ValueError("Rule file must contain a single rule object")
+        return loaded
+
+    if not expr:
+        raise ValueError("Either --file or --expr must be provided")
+
+    payload: dict[str, Any] = {
+        "alert": rule_name,
+        "expr": expr,
+    }
+
+    effective_duration = (
+        duration or (base_rule or {}).get("duration") or (base_rule or {}).get("for")
+    )
+    if effective_duration:
+        payload["for"] = effective_duration
+
+    labels = dict((base_rule or {}).get("labels") or {})
+    annotations = dict((base_rule or {}).get("annotations") or {})
+
+    if severity:
+        labels["severity"] = severity
+    if summary:
+        annotations["summary"] = summary
+    if description:
+        annotations["description"] = description
+
+    if labels:
+        payload["labels"] = labels
+    if annotations:
+        payload["annotations"] = annotations
+
+    return payload
 
 
 @click.group()
@@ -30,30 +86,30 @@ def list(ctx: click.Context) -> None:
     format: str = ctx.obj["format"]
 
     try:
-        rules = client.list_rules()
-        print_output(rules, format)
+        all_rules = client.list_rules()
+        print_output(all_rules, format)
     except Exception as e:
         print_error(f"Failed to list rules: {e}")
         raise click.Abort()
 
 
 @rules.command()
-@click.argument("crd_name")
+@click.argument("source_name")
 @click.argument("group_name")
 @click.argument("rule_name")
 @click.pass_context
 def get(
     ctx: click.Context,
-    crd_name: str,
+    source_name: str,
     group_name: str,
     rule_name: str,
 ) -> None:
-    """Get a specific Prometheus rule."""
+    """Get a specific rule by source (CRD/file), group, and name."""
     client: PoundCakeClient = ctx.obj["client"]
     format: str = ctx.obj["format"]
 
     try:
-        rule = client.get_rule(crd_name, group_name, rule_name)
+        rule = client.get_rule(source_name, group_name, rule_name)
         print_output(rule, format)
     except Exception as e:
         print_error(f"Failed to get rule: {e}")
@@ -61,7 +117,7 @@ def get(
 
 
 @rules.command()
-@click.argument("crd_name")
+@click.argument("source_name")
 @click.argument("group_name")
 @click.argument("rule_name")
 @click.option(
@@ -94,7 +150,7 @@ def get(
 @click.pass_context
 def create(
     ctx: click.Context,
-    crd_name: str,
+    source_name: str,
     group_name: str,
     rule_name: str,
     file: Optional[Path],
@@ -108,35 +164,19 @@ def create(
     client: PoundCakeClient = ctx.obj["client"]
 
     try:
-        if file:
-            with open(file) as f:
-                rule_data = yaml.safe_load(f)
-        elif expr:
-            rule_data = {
-                "alert": rule_name,
-                "expr": expr,
-            }
-            if duration:
-                rule_data["for"] = duration
-            if severity or summary or description:
-                rule_data["labels"] = {}
-                rule_data["annotations"] = {}
-                if severity:
-                    rule_data["labels"]["severity"] = severity
-                if summary:
-                    rule_data["annotations"]["summary"] = summary
-                if description:
-                    rule_data["annotations"]["description"] = description
-        else:
-            print_error("Either --file or --expr must be provided")
-            raise click.Abort()
+        rule_data = _build_rule_data(
+            rule_name=rule_name,
+            file=file,
+            expr=expr,
+            duration=duration,
+            severity=severity,
+            summary=summary,
+            description=description,
+        )
 
-        result = client.create_rule(crd_name, group_name, rule_name, rule_data)
+        result = client.create_rule(source_name, group_name, rule_name, rule_data)
         print_success(f"Created rule: {rule_name}")
-
-        if result.get("git", {}).get("pull_request"):
-            pr = result["git"]["pull_request"]
-            print_info(f"Pull request created: {pr.get('url')}")
+        _print_git_result(result)
 
     except Exception as e:
         print_error(f"Failed to create rule: {e}")
@@ -144,7 +184,7 @@ def create(
 
 
 @rules.command()
-@click.argument("crd_name")
+@click.argument("source_name")
 @click.argument("group_name")
 @click.argument("rule_name")
 @click.option(
@@ -177,7 +217,7 @@ def create(
 @click.pass_context
 def update(
     ctx: click.Context,
-    crd_name: str,
+    source_name: str,
     group_name: str,
     rule_name: str,
     file: Optional[Path],
@@ -191,36 +231,21 @@ def update(
     client: PoundCakeClient = ctx.obj["client"]
 
     try:
-        if file:
-            with open(file) as f:
-                rule_data = yaml.safe_load(f)
-        elif expr:
-            current = client.get_rule(crd_name, group_name, rule_name)
-            rule_data = current.copy()
-            rule_data["expr"] = expr
+        current_rule = client.get_rule(source_name, group_name, rule_name)
+        rule_data = _build_rule_data(
+            rule_name=rule_name,
+            file=file,
+            expr=expr,
+            duration=duration,
+            severity=severity,
+            summary=summary,
+            description=description,
+            base_rule=current_rule,
+        )
 
-            if duration:
-                rule_data["for"] = duration
-            if "labels" not in rule_data:
-                rule_data["labels"] = {}
-            if "annotations" not in rule_data:
-                rule_data["annotations"] = {}
-            if severity:
-                rule_data["labels"]["severity"] = severity
-            if summary:
-                rule_data["annotations"]["summary"] = summary
-            if description:
-                rule_data["annotations"]["description"] = description
-        else:
-            print_error("Either --file or --expr must be provided")
-            raise click.Abort()
-
-        result = client.update_rule(crd_name, group_name, rule_name, rule_data)
+        result = client.update_rule(source_name, group_name, rule_name, rule_data)
         print_success(f"Updated rule: {rule_name}")
-
-        if result.get("git", {}).get("pull_request"):
-            pr = result["git"]["pull_request"]
-            print_info(f"Pull request created: {pr.get('url')}")
+        _print_git_result(result)
 
     except Exception as e:
         print_error(f"Failed to update rule: {e}")
@@ -228,7 +253,7 @@ def update(
 
 
 @rules.command()
-@click.argument("crd_name")
+@click.argument("source_name")
 @click.argument("group_name")
 @click.argument("rule_name")
 @click.option(
@@ -240,7 +265,7 @@ def update(
 @click.pass_context
 def delete(
     ctx: click.Context,
-    crd_name: str,
+    source_name: str,
     group_name: str,
     rule_name: str,
     yes: bool,
@@ -255,12 +280,9 @@ def delete(
         )
 
     try:
-        result = client.delete_rule(crd_name, group_name, rule_name)
+        result = client.delete_rule(source_name, group_name, rule_name)
         print_success(f"Deleted rule: {rule_name}")
-
-        if result.get("git", {}).get("pull_request"):
-            pr = result["git"]["pull_request"]
-            print_info(f"Pull request created: {pr.get('url')}")
+        _print_git_result(result)
 
     except Exception as e:
         print_error(f"Failed to delete rule: {e}")
@@ -273,34 +295,32 @@ def delete(
     type=click.Path(exists=True, path_type=Path),
 )
 @click.option(
-    "--crd-name",
-    help="CRD name (defaults to filename without extension)",
+    "--source-name",
+    help="CRD or file name (defaults to input filename without extension)",
 )
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what would be created without actually creating",
+    help="Show what would be created/updated without applying changes",
 )
 @click.pass_context
 def apply(
     ctx: click.Context,
     file: Path,
-    crd_name: Optional[str],
+    source_name: Optional[str],
     dry_run: bool,
 ) -> None:
-    """Apply rules from a YAML file."""
+    """Apply rules from a Prometheus rule-group YAML file."""
     client: PoundCakeClient = ctx.obj["client"]
 
     try:
-        with open(file) as f:
-            data = yaml.safe_load(f)
+        with file.open() as handle:
+            data = yaml.safe_load(handle)
 
-        if not crd_name:
-            crd_name = file.stem
+        if not isinstance(data, dict) or "groups" not in data:
+            raise ValueError("Invalid rule file: top-level 'groups' is required")
 
-        if "groups" not in data:
-            print_error("Invalid rule file: no 'groups' found")
-            raise click.Abort()
+        effective_source = source_name or file.stem
 
         for group in data["groups"]:
             group_name = group["name"]
@@ -310,20 +330,18 @@ def apply(
                     continue
 
                 if dry_run:
-                    print_info(f"Would create/update: {crd_name}/{group_name}/{rule_name}")
+                    print_info(f"Would create/update: {effective_source}/{group_name}/{rule_name}")
                     continue
 
                 try:
-                    client.get_rule(crd_name, group_name, rule_name)
-                    result = client.update_rule(crd_name, group_name, rule_name, rule)
+                    client.get_rule(effective_source, group_name, rule_name)
+                    result = client.update_rule(effective_source, group_name, rule_name, rule)
                     print_success(f"Updated rule: {rule_name}")
-                except Exception:
-                    result = client.create_rule(crd_name, group_name, rule_name, rule)
+                except ValueError:
+                    result = client.create_rule(effective_source, group_name, rule_name, rule)
                     print_success(f"Created rule: {rule_name}")
 
-                if result.get("git", {}).get("pull_request"):
-                    pr = result["git"]["pull_request"]
-                    print_info(f"Pull request: {pr.get('url')}")
+                _print_git_result(result)
 
     except Exception as e:
         print_error(f"Failed to apply rules: {e}")

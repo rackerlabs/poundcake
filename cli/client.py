@@ -15,16 +15,9 @@ class PoundCakeClient:
     """Client for interacting with PoundCake API."""
 
     def __init__(self, base_url: str, api_key: Optional[str] = None) -> None:
-        """
-        Initialize the PoundCake API client.
-
-        Args:
-            base_url: Base URL of the PoundCake API
-            api_key: Optional API key for authentication
-        """
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        self.headers = {}
+        self.headers: dict[str, str] = {}
         if api_key:
             self.headers["Authorization"] = f"Bearer {api_key}"
 
@@ -34,22 +27,8 @@ class PoundCakeClient:
         path: str,
         json: Optional[dict[str, Any]] = None,
         params: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """
-        Make an HTTP request to the API.
-
-        Args:
-            method: HTTP method (GET, POST, PUT, DELETE)
-            path: API path
-            json: JSON body for POST/PUT requests
-            params: Query parameters
-
-        Returns:
-            Response JSON
-
-        Raises:
-            httpx.HTTPError: If request fails
-        """
+    ) -> Any:
+        """Make an HTTP request to the API and decode JSON when available."""
         url = f"{self.base_url}{path}"
         response = request_with_retry_sync(
             method=method,
@@ -60,118 +39,166 @@ class PoundCakeClient:
             timeout=30.0,
         )
         response.raise_for_status()
-        return response.json()  # type: ignore[no-any-return]
+
+        if not response.content:
+            return {}
+        if "application/json" in (response.headers.get("content-type") or ""):
+            return response.json()
+        return response.text
 
     # Order management
-
     def list_orders(
         self,
         processing_status: Optional[str] = None,
         alert_status: Optional[str] = None,
-        severity: Optional[str] = None,
+        alert_group_name: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """List orders with optional filters."""
-        params = {}
+        params: dict[str, Any] = {}
         if processing_status:
             params["processing_status"] = processing_status
         if alert_status:
             params["alert_status"] = alert_status
-        if severity:
-            params["severity"] = severity
-        return cast(list[dict[str, Any]], self._request("GET", "/api/v1/orders", params=params))
+        if alert_group_name:
+            params["alert_group_name"] = alert_group_name
+        payload = self._request("GET", "/api/v1/orders", params=params)
+        if isinstance(payload, list):
+            return cast(list[dict[str, Any]], payload)
+        raise ValueError("Unexpected orders response format")
 
     def get_order(self, order_id: int) -> dict[str, Any]:
         """Get a specific order by ID."""
-        return self._request("GET", f"/api/v1/orders/{order_id}")
+        payload = self._request("GET", f"/api/v1/orders/{order_id}")
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected order response format")
 
     # Prometheus rule management
-
     def list_rules(self) -> list[dict[str, Any]]:
         """List all Prometheus rules."""
-        return cast(list[dict[str, Any]], self._request("GET", "/api/v1/prometheus/rules"))
+        payload = self._request("GET", "/api/v1/prometheus/rules")
+        if isinstance(payload, dict) and isinstance(payload.get("rules"), list):
+            return cast(list[dict[str, Any]], payload["rules"])
+        if isinstance(payload, list):
+            return cast(list[dict[str, Any]], payload)
+        raise ValueError("Unexpected rule list response format")
 
-    def get_rule(self, crd_name: str, group_name: str, rule_name: str) -> dict[str, Any]:
-        """Get a specific Prometheus rule."""
-        return self._request(
-            "GET",
-            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+    def get_rule(self, source_name: str, group_name: str, rule_name: str) -> dict[str, Any]:
+        """Resolve a specific rule from the current rule list."""
+        for rule in self.list_rules():
+            source = str(rule.get("crd") or rule.get("file") or "")
+            if source != source_name:
+                continue
+            if str(rule.get("group") or "") != group_name:
+                continue
+            if str(rule.get("name") or "") != rule_name:
+                continue
+            return rule
+        raise ValueError(
+            f"Rule not found: source={source_name!r}, group={group_name!r}, rule={rule_name!r}"
         )
 
     def create_rule(
         self,
-        crd_name: str,
+        source_name: str,
         group_name: str,
         rule_name: str,
         rule_data: dict[str, Any],
     ) -> dict[str, Any]:
         """Create a new Prometheus rule."""
-        return self._request(
+        payload = self._request(
             "POST",
-            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+            "/api/v1/prometheus/rules",
             json=rule_data,
+            params={
+                "rule_name": rule_name,
+                "group_name": group_name,
+                "file_name": source_name,
+            },
         )
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected create rule response format")
 
     def update_rule(
         self,
-        crd_name: str,
+        source_name: str,
         group_name: str,
         rule_name: str,
         rule_data: dict[str, Any],
     ) -> dict[str, Any]:
         """Update an existing Prometheus rule."""
-        return self._request(
+        payload = self._request(
             "PUT",
-            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+            f"/api/v1/prometheus/rules/{rule_name}",
             json=rule_data,
+            params={
+                "group_name": group_name,
+                "file_name": source_name,
+            },
         )
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected update rule response format")
 
     def delete_rule(
         self,
-        crd_name: str,
+        source_name: str,
         group_name: str,
         rule_name: str,
     ) -> dict[str, Any]:
         """Delete a Prometheus rule."""
-        return self._request(
+        payload = self._request(
             "DELETE",
-            f"/api/v1/prometheus/rules/{crd_name}/{group_name}/{rule_name}",
+            f"/api/v1/prometheus/rules/{rule_name}",
+            params={
+                "group_name": group_name,
+                "file_name": source_name,
+            },
         )
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected delete rule response format")
 
-    # Mapping management
-
+    # Legacy API compatibility stubs
     def list_mappings(self) -> dict[str, Any]:
-        """List all order-to-action mappings."""
-        return self._request("GET", "/api/v1/mappings")
+        raise NotImplementedError("Mappings endpoints are not available in the current API")
 
     def get_mapping(self, alert_name: str) -> dict[str, Any]:
-        """Get a specific mapping by alert name."""
-        return self._request("GET", f"/api/v1/mappings/{alert_name}")
+        raise NotImplementedError("Mappings endpoints are not available in the current API")
 
     # StackStorm action management
-
     def list_st2_actions(
         self,
         pack: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        """List StackStorm actions."""
+        """List StackStorm actions via /api/v1/cook/actions."""
         params: dict[str, Any] = {"limit": limit}
         if pack:
             params["pack"] = pack
-        return cast(
-            list[dict[str, Any]], self._request("GET", "/api/v1/stackstorm/actions", params=params)
-        )
+        payload = self._request("GET", "/api/v1/cook/actions", params=params)
+        if isinstance(payload, dict) and isinstance(payload.get("actions"), list):
+            return cast(list[dict[str, Any]], payload["actions"])
+        if isinstance(payload, list):
+            return cast(list[dict[str, Any]], payload)
+        raise ValueError("Unexpected actions response format")
 
     def get_st2_action(self, action_ref: str) -> dict[str, Any]:
         """Get a specific StackStorm action."""
-        return self._request("GET", f"/api/v1/stackstorm/actions/{action_ref}")
+        payload = self._request("GET", f"/api/v1/cook/actions/{action_ref}")
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected action response format")
 
     # Health checks
-
     def health(self) -> dict[str, Any]:
         """Check API health."""
-        return self._request("GET", "/api/v1/health")
+        payload = self._request("GET", "/api/v1/health")
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected health response format")
 
     def ready(self) -> dict[str, Any]:
-        """Check if API is ready."""
-        return self._request("GET", "/api/v1/ready")
+        """Alias for health check (legacy compatibility)."""
+        return self.health()

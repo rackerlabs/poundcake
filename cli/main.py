@@ -8,11 +8,16 @@
 
 import sys
 from typing import Optional
+from pathlib import Path
 
 import click
 
-from poundcake_cli.client import PoundCakeClient  # type: ignore[import-not-found]
-from poundcake_cli.commands import orders, rules  # type: ignore[import-not-found]
+# Support both `python -m cli.main` and `python cli/main.py`.
+if __package__ is None or __package__ == "":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from cli.client import PoundCakeClient
+from cli.commands import orders, rules
 
 
 @click.group()

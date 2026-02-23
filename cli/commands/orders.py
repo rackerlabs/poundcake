@@ -10,8 +10,8 @@ from typing import Optional
 
 import click
 
-from poundcake_cli.client import PoundCakeClient  # type: ignore[import-not-found]
-from poundcake_cli.utils import print_error, print_output, print_success  # type: ignore[import-not-found]
+from cli.client import PoundCakeClient
+from cli.utils import print_error, print_output, print_success
 
 
 @click.group()
@@ -24,9 +24,7 @@ def orders() -> None:
 @click.option(
     "--processing-status",
     "-s",
-    type=click.Choice(
-        ["new", "pending", "processing", "complete", "failed", "canceled", "timeout", "abandoned"]
-    ),
+    type=click.Choice(["new", "processing", "complete", "failed", "canceled"]),
     help="Filter by processing status",
 )
 @click.option(
@@ -36,16 +34,15 @@ def orders() -> None:
     help="Filter by alert status",
 )
 @click.option(
-    "--severity",
-    type=click.Choice(["critical", "warning", "info"]),
-    help="Filter by severity",
+    "--alert-group-name",
+    help="Filter by alert group name",
 )
 @click.pass_context
 def list(
     ctx: click.Context,
     processing_status: Optional[str],
     alert_status: Optional[str],
-    severity: Optional[str],
+    alert_group_name: Optional[str],
 ) -> None:
     """List all orders."""
     client: PoundCakeClient = ctx.obj["client"]
@@ -55,7 +52,7 @@ def list(
         orders = client.list_orders(
             processing_status=processing_status,
             alert_status=alert_status,
-            severity=severity,
+            alert_group_name=alert_group_name,
         )
         print_output(orders, format)
     except Exception as e:
@@ -83,9 +80,7 @@ def get(ctx: click.Context, order_id: int) -> None:
 @click.option(
     "--processing-status",
     "-s",
-    type=click.Choice(
-        ["new", "pending", "processing", "complete", "failed", "canceled", "timeout", "abandoned"]
-    ),
+    type=click.Choice(["new", "processing", "complete", "failed", "canceled"]),
     help="Filter by processing status",
 )
 @click.option(
@@ -95,9 +90,8 @@ def get(ctx: click.Context, order_id: int) -> None:
     help="Filter by alert status",
 )
 @click.option(
-    "--severity",
-    type=click.Choice(["critical", "warning", "info"]),
-    help="Filter by severity",
+    "--alert-group-name",
+    help="Filter by alert group name",
 )
 @click.option(
     "--watch",
@@ -110,7 +104,7 @@ def watch(
     ctx: click.Context,
     processing_status: Optional[str],
     alert_status: Optional[str],
-    severity: Optional[str],
+    alert_group_name: Optional[str],
     watch: bool,
 ) -> None:
     """Watch orders in real-time."""
@@ -125,7 +119,7 @@ def watch(
             orders = client.list_orders(
                 processing_status=processing_status,
                 alert_status=alert_status,
-                severity=severity,
+                alert_group_name=alert_group_name,
             )
             click.echo(f"Orders (refreshed at {time.strftime('%H:%M:%S')})")
             click.echo("=" * 80)
