@@ -219,13 +219,13 @@ output:
 
 ```bash
 # Helm-based install script
-./helm/bin/install-poundcake-with-env.sh
+./helm/bin/install-poundcake.sh
 
 # Optional: pass extra Helm args through
-./helm/bin/install-poundcake-with-env.sh -f /path/to/values.yaml
+./helm/bin/install-poundcake.sh -f /path/to/values.yaml
 
 # Validate chart rendering before install
-./helm/bin/install-poundcake-with-env.sh --validate
+./helm/bin/install-poundcake.sh --validate
 ```
 
 Installer flags:

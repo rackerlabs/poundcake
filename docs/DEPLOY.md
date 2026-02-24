@@ -5,7 +5,7 @@
 Canonical installer:
 
 ```bash
-./helm/bin/install-poundcake-with-env.sh
+./helm/bin/install-poundcake.sh
 ```
 
 Install helper wrapper:
@@ -20,17 +20,18 @@ Optional environment defaults for fork/private registry/local chart workflows:
 source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
 ```
 
-Install modes:
+Install targets:
 
 ```bash
-./helm/bin/install-poundcake-with-env.sh --mode full
-./helm/bin/install-poundcake-with-env.sh --mode bakery-only
+./install/install-poundcake-helm.sh --target poundcake
+./install/install-poundcake-helm.sh --target bakery
+./install/install-poundcake-helm.sh --target both
 ```
 
 Validation mode:
 
 ```bash
-./helm/bin/install-poundcake-with-env.sh --validate
+./helm/bin/install-poundcake.sh --validate
 ```
 
 Bakery image override (optional):
@@ -38,12 +39,13 @@ Bakery image override (optional):
 ```bash
 export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/<owner>/poundcake-bakery"
 export POUNDCAKE_BAKERY_IMAGE_TAG="<tag>"
-./helm/bin/install-poundcake-with-env.sh --mode bakery-only
+./install/install-poundcake-helm.sh --target bakery
 ```
 
 Notes:
-- `install-poundcake-with-env.sh` is the canonical implementation.
-- `--mode bakery-only` sets `deployment.mode=bakery-only` and `bakery.enabled=true`.
+- `install-poundcake.sh` is the canonical PoundCake installer.
+- `install-bakery.sh` is the canonical Bakery-only installer.
+- `install-poundcake-helm.sh --target both` installs both services in the same Helm release.
 - Chart versions are sourced from `/etc/genestack/helm-chart-version.yaml` and `/etc/genestack/helm-chart-versions.yaml`.
 
 Bakery Gateway API exposure (optional):

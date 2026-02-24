@@ -1,5 +1,5 @@
 # Default StackStorm overrides for external-services mode.
-# This file is consumed by helm/bin/install-poundcake-with-env.sh
+# This file is consumed by helm/bin/install-poundcake.sh
 # when installing stackstorm-ha.
 #
 # Default profile goals:
