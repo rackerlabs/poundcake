@@ -73,6 +73,18 @@ tests:
         template: templates/stackstorm-startup-order-jobs.yaml
         documentIndex: 3
 
+  - it: does not render unsupported MariaDB podTemplate field
+    set:
+      poundcake.enabled: true
+      bakery.enabled: true
+      bakery.database.createServer: true
+      mariadbOperator.enabled: true
+    asserts:
+      - isNull:
+          path: spec.podTemplate
+        template: templates/bakery-mariadb.yaml
+        documentIndex: 0
+
   - it: renders standalone bakery-init job only in bakery-only mode
     set:
       poundcake.enabled: false
