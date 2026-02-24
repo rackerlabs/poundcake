@@ -1,12 +1,10 @@
 {{- $bakeryEnabled := .Values.bakery.enabled -}}
 {{- if and $bakeryEnabled .Values.bakery.worker.enabled }}
 {{- if not .Values.bakery.database.createServer }}
-{{- if not .Values.bakery.database.host }}
-{{- fail "bakery.database.host must be set when bakery.database.createServer=false" }}
-{{- end }}
+{{- fail "bakery.database.createServer=false is not supported. Bakery requires a dedicated MariaDB server." }}
 {{- end }}
 {{- if and .Values.bakery.database.createServer (not .Values.mariadbOperator.enabled) }}
-{{- fail "bakery.database.createServer=true requires mariadbOperator.enabled=true (or set bakery.database.createServer=false and provide bakery.database.user.passwordSecret)" }}
+{{- fail "bakery.database.createServer=true requires mariadbOperator.enabled=true" }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment

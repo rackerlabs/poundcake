@@ -197,6 +197,14 @@ if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_L
   "${BAKERY_INSTALLER}" --skip-preflight --bakery-db-integrated >/dev/null 2>&1; then
   fail "expected --bakery-db-integrated to fail for bakery installer"
 fi
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  env POUNDCAKE_BAKERY_DB_HOST=shared-db "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
+  fail "expected POUNDCAKE_BAKERY_DB_HOST to fail for poundcake installer"
+fi
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  "${POUNDCAKE_INSTALLER}" --skip-preflight --bakery-db-host shared-db >/dev/null 2>&1; then
+  fail "expected --bakery-db-host to fail for poundcake installer"
+fi
 
 echo "Validating legacy mode removal guardrails..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \

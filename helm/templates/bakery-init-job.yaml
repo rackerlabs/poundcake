@@ -2,131 +2,12 @@
 {{- if $bakeryEnabled }}
 {{- $poundcakeEnabled := .Values.poundcake.enabled -}}
 {{- $startupServiceAccount := ternary "stackstorm-startup" (include "poundcake.bakeryServiceAccountName" .) $poundcakeEnabled -}}
-{{- $bootstrapCfg := .Values.bakery.database.bootstrap | default dict -}}
-{{- $bootstrapEnabled := not .Values.bakery.database.createServer -}}
-{{- if and (hasKey $bootstrapCfg "enabled") (ne (toString $bootstrapCfg.enabled) "<nil>") -}}
-{{- $bootstrapEnabled = $bootstrapCfg.enabled -}}
-{{- end -}}
 {{- if not .Values.bakery.database.createServer }}
-{{- if not .Values.bakery.database.host }}
-{{- fail "bakery.database.host must be set when bakery.database.createServer=false" }}
+{{- fail "bakery.database.createServer=false is not supported. Bakery requires a dedicated MariaDB server." }}
 {{- end }}
+{{- if not .Values.mariadbOperator.enabled }}
+{{- fail "bakery.database.createServer=true requires mariadbOperator.enabled=true" }}
 {{- end }}
-{{- if and .Values.bakery.database.createServer (not .Values.mariadbOperator.enabled) }}
-{{- fail "bakery.database.createServer=true requires mariadbOperator.enabled=true (or set bakery.database.createServer=false and provide bakery.database.user.passwordSecret)" }}
-{{- end }}
-{{- if $bootstrapEnabled }}
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ include "poundcake.bakeryName" . }}-db-bootstrap
-  labels:
-    {{- include "poundcake.labels" . | nindent 4 }}
-    app.kubernetes.io/component: bakery-db-bootstrap
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": {{ ternary "25" "5" $poundcakeEnabled | quote }}
-    "helm.sh/hook-delete-policy": before-hook-creation
-spec:
-  backoffLimit: 3
-  ttlSecondsAfterFinished: 300
-  template:
-    metadata:
-      labels:
-        {{- include "poundcake.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: bakery-db-bootstrap
-        {{- include "poundcake.logGroupLabel" . | nindent 8 }}
-        {{- include "poundcake.logRoleWorker" . | nindent 8 }}
-    spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      serviceAccountName: {{ $startupServiceAccount }}
-      restartPolicy: OnFailure
-      securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers:
-        - name: wait-prerequisites
-          image: {{ .Values.images.kubectl | quote }}
-          securityContext:
-            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command:
-            - /bin/sh
-            - -ec
-            - |
-              NS="{{ .Release.Namespace }}"
-              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
-              {{- if $poundcakeEnabled }}
-              gate_log_wait_start "bakery-db-bootstrap-prereq" "marker poundcake_mariadb_ready"
-              until [ "$(kubectl -n "${NS}" get secret stackstorm-startup-markers -o jsonpath='{.data.poundcake_mariadb_ready}' 2>/dev/null | base64 -d)" = "true" ]; do
-                gate_log_wait_tick "bakery-db-bootstrap-prereq" "marker poundcake_mariadb_ready"
-                sleep 2
-              done
-              gate_log_wait_ready "bakery-db-bootstrap-prereq"
-              {{- else }}
-              gate_log_wait_start "bakery-db-bootstrap-prereq" "tcp {{ include "poundcake.bakeryDbHost" . }}:3306"
-              until nc -z "{{ include "poundcake.bakeryDbHost" . }}" 3306; do
-                gate_log_wait_tick "bakery-db-bootstrap-prereq" "tcp {{ include "poundcake.bakeryDbHost" . }}:3306"
-                sleep 2
-              done
-              gate_log_wait_ready "bakery-db-bootstrap-prereq"
-              {{- end }}
-        - name: bootstrap-db
-          image: {{ .Values.bakery.database.bootstrap.image | default "mariadb:11.6" | quote }}
-          securityContext:
-            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command:
-            - /bin/sh
-            - -ec
-            - |
-              set -euo pipefail
-              export MYSQL_PWD="${DB_ADMIN_PASSWORD}"
-              for i in $(seq 1 60); do
-                if mariadb -h "${DB_HOST}" -uroot -e "SELECT 1" >/dev/null 2>&1; then
-                  break
-                fi
-                sleep 2
-              done
-
-              mariadb -h "${DB_HOST}" -uroot <<SQL
-              CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-              CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_USER_PASSWORD}';
-              ALTER USER '${DB_USER}'@'%' IDENTIFIED BY '${DB_USER_PASSWORD}';
-              GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
-              FLUSH PRIVILEGES;
-              SQL
-          env:
-            - name: DB_HOST
-              value: {{ include "poundcake.bakeryDbHost" . | quote }}
-            - name: DB_NAME
-              value: {{ .Values.bakery.database.name | quote }}
-            - name: DB_USER
-              value: {{ .Values.bakery.database.user.name | quote }}
-            - name: DB_USER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakeryDbSecretName" . }}
-                  key: {{ include "poundcake.bakeryDbSecretKey" . }}
-            - name: DB_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.bakery.database.admin.existingSecret | default "poundcake-secrets" }}
-                  key: {{ .Values.bakery.database.admin.passwordKey | default "DB_ROOT_PASSWORD" }}
-      containers:
-        - name: mark-ready
-          image: {{ .Values.images.kubectl }}
-          securityContext:
-            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command:
-            - /bin/sh
-            - -ec
-            - |
-              NS="{{ .Release.Namespace }}"
-              kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
-                -p '{"stringData":{"bakery_db_ready":"true"}}'
----
-{{ end }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -171,24 +52,6 @@ spec:
                 sleep 5
               done
               echo "MariaDB is ready"
-        {{- if $bootstrapEnabled }}
-        - name: wait-for-bootstrap
-          image: {{ .Values.images.kubectl | quote }}
-          securityContext:
-            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
-          command:
-            - /bin/sh
-            - -ec
-            - |
-              NS="{{ .Release.Namespace }}"
-              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
-              gate_log_wait_start "bakery-db-init-bootstrap-ready" "marker bakery_db_ready"
-              until [ "$(kubectl -n "${NS}" get secret stackstorm-startup-markers -o jsonpath='{.data.bakery_db_ready}' 2>/dev/null | base64 -d)" = "true" ]; do
-                gate_log_wait_tick "bakery-db-init-bootstrap-ready" "marker bakery_db_ready"
-                sleep 2
-              done
-              gate_log_wait_ready "bakery-db-init-bootstrap-ready"
-        {{- end }}
       containers:
         - name: db-init
           securityContext:

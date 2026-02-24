@@ -1,7 +1,21 @@
-# Example Helm overrides for PoundCake.
+# Example Helm overrides for PoundCake/Bakery.
 # Start by setting real FQDNs for Envoy Gateway listeners/routes.
 # Copy this file to /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
-# and adjust values for your environment.
+# (or another location consumed via -f/--values), then adjust values for your environment.
+#
+# Service selection profiles (install target mapping):
+# - PoundCake-only (default below): poundcake.enabled=true, bakery.enabled=false
+# - Bakery-only: poundcake.enabled=false, bakery.enabled=true
+# - Both: poundcake.enabled=true, bakery.enabled=true
+#
+# Wrapper mapping:
+# - ./install/install-poundcake-helm.sh --target poundcake => true/false
+# - ./install/install-poundcake-helm.sh --target bakery    => false/true
+# - ./install/install-poundcake-helm.sh --target both      => true/true
+
+# Canonical service-selection defaults for this example:
+poundcake:
+  enabled: true
 
 # Canonical image overrides.
 # Keep tags at latest by default, or pin explicit tags/digests per environment policy.
@@ -14,6 +28,7 @@ uiImage:
   tag: latest
 
 bakery:
+  enabled: false
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     tag: latest
@@ -34,22 +49,15 @@ gateway:
       port: 80
       pathPrefix: /
 
-# Integrated Bakery example (shared MariaDB server, separate DB/user):
+# Alternate service-selection snippets:
+# Bakery-only:
+# poundcake:
+#   enabled: false
 # bakery:
-#   database:
-#     createServer: false
-#     host: poundcake-mariadb
-#     name: bakery
-#     user:
-#       name: bakery
-#       # Optional external secret. If omitted, chart manages one.
-#       # passwordSecret: external-bakery-db-user
-#       passwordSecretKey: password
-#     admin:
-#       existingSecret: poundcake-secrets
-#       passwordKey: DB_ROOT_PASSWORD
-#     bootstrap:
-#       # null -> auto-enabled when createServer=false
-#       enabled: null
-#       image: mariadb:11.6
-#       timeoutSeconds: 300
+#   enabled: true
+#
+# Both services:
+# poundcake:
+#   enabled: true
+# bakery:
+#   enabled: true

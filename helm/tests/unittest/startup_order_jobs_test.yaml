@@ -56,10 +56,6 @@ tests:
         documentIndex: 3
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "bakery_db_ready"
-        documentIndex: 0
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
           pattern: "GATE_LOG_ENABLED=\\\"true\\\""
         documentIndex: 3
       - matchRegex:
