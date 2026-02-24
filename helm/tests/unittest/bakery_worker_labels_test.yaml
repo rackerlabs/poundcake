@@ -5,7 +5,7 @@ templates:
 tests:
   - it: applies poundcake log labels to bakery worker pod template
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
       bakery.worker.enabled: true
     asserts:

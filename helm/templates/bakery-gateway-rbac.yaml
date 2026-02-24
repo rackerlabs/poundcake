@@ -1,4 +1,4 @@
-{{- if and (or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only")) .Values.bakery.gateway.enabled }}
+{{- if and (.Values.bakery.enabled) .Values.bakery.gateway.enabled }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

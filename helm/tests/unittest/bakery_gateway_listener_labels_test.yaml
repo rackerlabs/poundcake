@@ -4,7 +4,7 @@ templates:
 tests:
   - it: applies poundcake log labels to bakery gateway listener pod template when enabled
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
       bakery.gateway.enabled: true
     asserts:

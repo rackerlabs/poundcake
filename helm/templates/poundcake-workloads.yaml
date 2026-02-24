@@ -1,7 +1,7 @@
-{{- if and (ne (default "full" .Values.deployment.mode) "bakery-only") .Values.bakery.client.enforceRemoteBaseUrl .Values.bakery.client.enabled (not .Values.bakery.client.baseUrl) }}
+{{- if and .Values.poundcake.enabled .Values.bakery.client.enforceRemoteBaseUrl .Values.bakery.client.enabled (not .Values.bakery.client.baseUrl) }}
 {{- fail "bakery.client.baseUrl must be set when bakery.client.enforceRemoteBaseUrl=true (remote Bakery mode)" }}
 {{- end }}
-{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
+{{- if .Values.poundcake.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

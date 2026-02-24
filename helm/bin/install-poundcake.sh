@@ -48,7 +48,7 @@ POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/gene
 
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
-INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
+POUNDCAKE_ENABLED="${POUNDCAKE_ENABLED:-true}"
 ENABLE_BAKERY="${POUNDCAKE_ENABLE_BAKERY:-false}"
 OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
 MARIADB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME:-mariadb-operator}"
@@ -128,7 +128,6 @@ Installer options:
   --debug           Enable shell tracing for installer execution
   --validate        Run helm lint + helm template --debug before install
   --enable-bakery   Install Bakery resources alongside PoundCake in the same Helm release
-  --mode <full|bakery-only>  Install full stack or Bakery-only resources
   --operators-mode <install-missing|verify|skip>  Operator handling policy
   --verify-operators  Alias for --operators-mode verify
   --skip-operators    Alias for --operators-mode skip
@@ -174,7 +173,7 @@ Environment overrides:
   POUNDCAKE_REMOTE_BAKERY_URL      (required when no-local-bakery and remote bakery enabled)
   POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
   POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (optional existing secret for remote Bakery HMAC keys)
-  POUNDCAKE_INSTALL_MODE           (default: full; valid: full, bakery-only)
+  POUNDCAKE_ENABLED                (default: true; controls PoundCake/StackStorm resources)
   POUNDCAKE_ENABLE_BAKERY          (default: false; enables Bakery resources in full mode)
   POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
   POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME
@@ -335,7 +334,7 @@ ensure_required_operators() {
     "${MARIADB_OPERATOR_VERSION}" \
     "${MARIADB_OPERATOR_NAMESPACE}"
 
-  if [[ "${INSTALL_MODE}" == "full" ]]; then
+  if [[ "${POUNDCAKE_ENABLED}" == "true" ]]; then
     install_or_verify_operator \
       "redis-operator" \
       "redis.redis.redis.opstreelabs.in,redis.redis.opstreelabs.in" \
@@ -667,7 +666,7 @@ resolve_integrated_mode() {
   local saw_false="false"
   local v=""
   local yaml_file=""
-  local yaml_values=()
+  local -a yaml_values=()
   local i=0
 
   while IFS= read -r v; do
@@ -862,7 +861,7 @@ rotate_chart_secrets() {
 }
 
 validate_image_pin_input() {
-  if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
+  if [[ "${POUNDCAKE_ENABLED}" != "true" ]]; then
     if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
       log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
       exit 1
@@ -931,6 +930,12 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
+if [[ -n "${POUNDCAKE_INSTALL_MODE:-}" ]]; then
+  log_error "POUNDCAKE_INSTALL_MODE is no longer supported."
+  log_error "Use install/install-poundcake-helm.sh --target <poundcake|bakery|both>."
+  exit 1
+fi
+
 log_phase "argument parsing"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -946,9 +951,11 @@ while [[ $# -gt 0 ]]; do
       ENABLE_BAKERY="true"
       shift
       ;;
-    --mode)
-      INSTALL_MODE="$2"
-      shift 2
+    --mode|--mode=*)
+      log_error "Option '$1' was removed."
+      log_error "Use install/install-poundcake-helm.sh --target <poundcake|bakery|both>."
+      log_error "Or pass --set-string poundcake.enabled=<true|false> and --set-string bakery.enabled=<true|false>."
+      exit 1
       ;;
     --operators-mode)
       OPERATOR_MODE="$2"
@@ -1038,13 +1045,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${INSTALL_MODE}" != "full" && "${INSTALL_MODE}" != "bakery-only" ]]; then
-  log_error "Invalid install mode '${INSTALL_MODE}'. Valid values: full, bakery-only."
+if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" && "${OPERATOR_MODE}" != "skip" ]]; then
+  log_error "Invalid operators mode '${OPERATOR_MODE}'. Valid values: install-missing, verify, skip."
   exit 1
 fi
 
-if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" && "${OPERATOR_MODE}" != "skip" ]]; then
-  log_error "Invalid operators mode '${OPERATOR_MODE}'. Valid values: install-missing, verify, skip."
+POUNDCAKE_ENABLED="$(normalize_bool_or_empty "${POUNDCAKE_ENABLED}")"
+if [[ -z "${POUNDCAKE_ENABLED}" ]]; then
+  log_error "POUNDCAKE_ENABLED must be true or false."
   exit 1
 fi
 
@@ -1058,10 +1066,6 @@ if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
   REMOTE_BAKERY_ENABLED="$(normalize_bool_or_empty "${REMOTE_BAKERY_ENABLED}")"
   if [[ -z "${REMOTE_BAKERY_ENABLED}" ]]; then
     log_error "--remote-bakery-enabled (or POUNDCAKE_REMOTE_BAKERY_ENABLED) must be true or false."
-    exit 1
-  fi
-  if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
-    log_error "--no-local-bakery is incompatible with --mode bakery-only."
     exit 1
   fi
   if [[ "${BAKERY_DB_INTEGRATED_EXPLICIT}" == "true" ]]; then
@@ -1080,7 +1084,7 @@ if [[ "${INSTALL_DEBUG}" == "true" ]]; then
   set -x
 fi
 
-log_info "Installer options: mode=${INSTALL_MODE}, enable_bakery=${ENABLE_BAKERY}, operators_mode=${OPERATOR_MODE}, bakery_db_integrated=${BAKERY_DB_INTEGRATED}, no_local_bakery=${NO_LOCAL_BAKERY}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
+log_info "Installer options: poundcake_enabled=${POUNDCAKE_ENABLED}, enable_bakery=${ENABLE_BAKERY}, operators_mode=${OPERATOR_MODE}, bakery_db_integrated=${BAKERY_DB_INTEGRATED}, no_local_bakery=${NO_LOCAL_BAKERY}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
@@ -1187,7 +1191,7 @@ if [[ "${ROTATE_SECRETS}" == "true" ]]; then
 fi
 
 POST_RENDER_ARGS=()
-if [[ "${INSTALL_MODE}" != "bakery-only" && -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
+if [[ "${POUNDCAKE_ENABLED}" == "true" && -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
   POST_RENDER_ARGS+=("--post-renderer" "${POST_RENDERER}")
   if [[ -n "${POST_RENDERER_ARGS}" ]]; then
     POST_RENDER_ARGS+=("--post-renderer-args" "${POST_RENDERER_ARGS}")
@@ -1195,16 +1199,14 @@ if [[ "${INSTALL_MODE}" != "bakery-only" && -f "${POST_RENDERER}" && -d "${POST_
 fi
 
 INSTALLER_SET_ARGS=(
-  --set-string "deployment.mode=${INSTALL_MODE}"
+  --set-string "poundcake.enabled=${POUNDCAKE_ENABLED}"
   --set-string "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
   --set-string "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
   --set-string "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
   --set-string "stackstormPackSync.endpoint=${PACK_SYNC_ENDPOINT}"
 )
 
-if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=true")
-elif [[ "${ENABLE_BAKERY}" == "true" ]]; then
+if [[ "${ENABLE_BAKERY}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=true")
 fi
 if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
@@ -1326,7 +1328,7 @@ else
   "${HELM_TEMPLATE_CMD[@]}" > "${RENDERED_MANIFEST}"
 fi
 
-if [[ "${INSTALL_MODE}" != "bakery-only" ]]; then
+if [[ "${POUNDCAKE_ENABLED}" == "true" ]]; then
   verify_rendered_endpoint_contract "${RENDERED_MANIFEST}" "${PACK_SYNC_ENDPOINT}"
 
   if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
@@ -1373,7 +1375,7 @@ rm -f "${RENDERED_MANIFEST}"
 log_phase "helm install execution"
 log_info "Installing PoundCake release: ${RELEASE_NAME}"
 log_info "Namespace: ${NAMESPACE}"
-log_info "Install mode: ${INSTALL_MODE}"
+log_info "PoundCake enabled: ${POUNDCAKE_ENABLED}"
 log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
   log_info "Chart version: ${CHART_VERSION:-"(not set)"}"

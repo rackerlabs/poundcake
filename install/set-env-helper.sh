@@ -65,7 +65,6 @@ export POUNDCAKE_ALLOW_HOOK_WAIT="${POUNDCAKE_ALLOW_HOOK_WAIT:-false}"
 export POUNDCAKE_HELM_ATOMIC="${POUNDCAKE_HELM_ATOMIC:-false}"
 export POUNDCAKE_HELM_CLEANUP_ON_FAIL="${POUNDCAKE_HELM_CLEANUP_ON_FAIL:-false}"
 export POUNDCAKE_HELM_VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
-export POUNDCAKE_INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
 
 # Values/overlay inputs consumed by installer defaults.
 export POUNDCAKE_BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml}"

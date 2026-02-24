@@ -8,7 +8,7 @@ templates:
 tests:
   - it: uses configured bakery database password secret key across api/worker/db-init
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
       bakery.database.createServer: false
       bakery.database.host: shared-mariadb
@@ -46,7 +46,7 @@ tests:
 
   - it: renders managed bakery DB user secret when integrated and external secret is not provided
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
       bakery.database.createServer: false
       bakery.database.host: shared-mariadb
@@ -65,7 +65,7 @@ tests:
 
   - it: does not render managed bakery DB user secret when external password secret is configured
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
       bakery.database.createServer: false
       bakery.database.host: shared-mariadb
@@ -77,7 +77,7 @@ tests:
 
   - it: renders integrated bootstrap and db-init marker gating in full mode
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
       bakery.database.createServer: false
       bakery.database.host: shared-mariadb
@@ -106,7 +106,7 @@ tests:
 
   - it: renders integrated bootstrap and marker secret in bakery-only mode
     set:
-      deployment.mode: bakery-only
+      poundcake.enabled: false
       bakery.enabled: true
       bakery.database.createServer: false
       bakery.database.host: shared-mariadb
@@ -127,7 +127,7 @@ tests:
 
   - it: fails fast when bakery database server creation is enabled but mariadb operator is disabled
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
       bakery.database.createServer: true
       mariadbOperator.enabled: false

@@ -1,4 +1,4 @@
-{{- if and (ne (default "full" .Values.deployment.mode) "bakery-only") (.Values.bootstrap.stackstormBootstrap.enabled) }}
+{{- if and .Values.poundcake.enabled (.Values.bootstrap.stackstormBootstrap.enabled) }}
 {{- $startupOrder := (default dict .Values.stackstorm.startupOrder) }}
 {{- $startupReplicas := (default dict $startupOrder.replicas) }}
 apiVersion: batch/v1

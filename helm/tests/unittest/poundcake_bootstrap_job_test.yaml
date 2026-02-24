@@ -4,7 +4,7 @@ templates:
 tests:
   - it: does not render in bakery-only mode
     set:
-      deployment.mode: bakery-only
+      poundcake.enabled: false
     asserts:
       - hasDocuments:
           count: 0
