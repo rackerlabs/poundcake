@@ -7,6 +7,8 @@ templates:
   - templates/bakery-init-job.yaml
   - templates/bakery-service.yaml
   - templates/bakery-mariadb.yaml
+  - templates/bakery-startup-markers.yaml
+  - templates/bakery-startup-rbac.yaml
 tests:
   - it: does not render in-cluster bakery resources in full mode when bakery.enabled=false
     set:

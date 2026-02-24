@@ -931,6 +931,16 @@ bakery:
       passwordSecret: ""
       passwordSecretKey: "password"
       maxUserConnections: 20
+    # Admin credentials used when bootstrapping Bakery database/user on a shared MariaDB server.
+    admin:
+      existingSecret: "poundcake-secrets"
+      passwordKey: "DB_ROOT_PASSWORD"
+    # Bootstrap options for integrated mode (createServer=false).
+    bootstrap:
+      # Leave null to auto-enable when createServer=false.
+      enabled: null
+      image: "mariadb:11.6"
+      timeoutSeconds: 300
   # Server configuration (inherits from mariadbOperator.server)
   # Set to false to use existing MariaDB instance
     createServer: true

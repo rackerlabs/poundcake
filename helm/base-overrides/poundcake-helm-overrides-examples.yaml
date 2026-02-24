@@ -16,3 +16,23 @@ gateway:
       hostname: ui.example.yourdomain.com
       port: 80
       pathPrefix: /
+
+# Integrated Bakery example (shared MariaDB server, separate DB/user):
+# bakery:
+#   database:
+#     createServer: false
+#     host: poundcake-mariadb
+#     name: bakery
+#     user:
+#       name: bakery
+#       # Optional external secret. If omitted, chart manages one.
+#       # passwordSecret: external-bakery-db-user
+#       passwordSecretKey: password
+#     admin:
+#       existingSecret: poundcake-secrets
+#       passwordKey: DB_ROOT_PASSWORD
+#     bootstrap:
+#       # null -> auto-enabled when createServer=false
+#       enabled: null
+#       image: mariadb:11.6
+#       timeoutSeconds: 300

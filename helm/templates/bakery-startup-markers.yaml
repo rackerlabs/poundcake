@@ -1,0 +1,11 @@
+{{- if and (or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only")) (eq (default "full" .Values.deployment.mode) "bakery-only") }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: stackstorm-startup-markers
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  bakery_db_ready: "false"
+{{- end }}

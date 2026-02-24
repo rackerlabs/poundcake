@@ -4,6 +4,7 @@ templates:
   - templates/bakery-deployment.yaml
   - templates/bakery-worker-deployment.yaml
   - templates/bakery-init-job.yaml
+  - templates/bakery-startup-markers.yaml
 tests:
   - it: uses configured bakery database password secret key across api/worker/db-init
     set:
@@ -41,6 +42,88 @@ tests:
                 name: external-bakery-db-user
                 key: db-pass
         template: templates/bakery-init-job.yaml
+        documentIndex: 1
+
+  - it: renders managed bakery DB user secret when integrated and external secret is not provided
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+      bakery.database.createServer: false
+      bakery.database.host: shared-mariadb
+      bakery.database.user.passwordSecret: ""
+      bakery.database.user.passwordSecretKey: db-pass
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-poundcake-bakery-db-user
+        template: templates/bakery-secret.yaml
+        documentIndex: 0
+      - exists:
+          path: stringData.db-pass
+        template: templates/bakery-secret.yaml
+        documentIndex: 0
+
+  - it: does not render managed bakery DB user secret when external password secret is configured
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+      bakery.database.createServer: false
+      bakery.database.host: shared-mariadb
+      bakery.database.user.passwordSecret: external-bakery-db-user
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/bakery-secret.yaml
+
+  - it: renders integrated bootstrap and db-init marker gating in full mode
+    set:
+      deployment.mode: full
+      bakery.enabled: true
+      bakery.database.createServer: false
+      bakery.database.host: shared-mariadb
+      bakery.database.user.passwordSecret: external-bakery-db-user
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-poundcake-bakery-db-bootstrap
+        template: templates/bakery-init-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "marker poundcake_mariadb_ready"
+        template: templates/bakery-init-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "bakery_db_ready\":\"true"
+        template: templates/bakery-init-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "marker bakery_db_ready"
+        template: templates/bakery-init-job.yaml
+        documentIndex: 1
+
+  - it: renders integrated bootstrap and marker secret in bakery-only mode
+    set:
+      deployment.mode: bakery-only
+      bakery.enabled: true
+      bakery.database.createServer: false
+      bakery.database.host: shared-mariadb
+      bakery.database.user.passwordSecret: external-bakery-db-user
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/bakery-startup-markers.yaml
+      - equal:
+          path: metadata.name
+          value: stackstorm-startup-markers
+        template: templates/bakery-startup-markers.yaml
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-poundcake-bakery
+        template: templates/bakery-init-job.yaml
+        documentIndex: 0
 
   - it: fails fast when bakery database server creation is enabled but mariadb operator is disabled
     set:
