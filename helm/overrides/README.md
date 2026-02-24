@@ -20,6 +20,10 @@ Wrapper target mapping:
 - `./install/install-poundcake-helm.sh --target bakery` => `poundcake.enabled=false`, `bakery.enabled=true`
 - `./install/install-poundcake-helm.sh --target both` => both enabled
 
+Precedence note:
+- installer-emitted `--set` booleans are appended after auto-discovered `-f` files (`POUNDCAKE_BASE_OVERRIDES`, global/service override dirs), so installer target/env toggles can override `poundcake.enabled` and `bakery.enabled` from those files.
+- user-supplied CLI flags passed after the installer command (for example `-f`, `--set`, `--set-string`) are appended last and can override installer defaults.
+
 ## Enable HA
 
 1. Copy the HA example to the Genestack PoundCake overrides path:

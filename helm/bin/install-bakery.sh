@@ -68,7 +68,7 @@ fi
 reject_integrated_flags "$@"
 
 exec env POUNDCAKE_ENABLED=false "${POUNDCAKE_INSTALLER}" \
-  --set-string poundcake.enabled=false \
-  --set-string bakery.enabled=true \
-  --set-string bakery.database.createServer=true \
+  --set poundcake.enabled=false \
+  --set bakery.enabled=true \
+  --set bakery.database.createServer=true \
   "$@"

@@ -385,7 +385,7 @@ apply_bakery_rackspace_secret() {
     --from-literal=rackspace-core-password="${BAKERY_RACKSPACE_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-  BAKERY_SECRET_SET_ARGS+=(--set-string "bakery.enabled=true")
+  BAKERY_SECRET_SET_ARGS+=(--set "bakery.enabled=true")
   BAKERY_SECRET_SET_ARGS+=(--set-string "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
 }
 
@@ -911,7 +911,7 @@ if [[ "${POUNDCAKE_ENABLED}" == "true" && -f "${POST_RENDERER}" && -d "${POST_RE
 fi
 
 INSTALLER_SET_ARGS=(
-  --set-string "poundcake.enabled=${POUNDCAKE_ENABLED}"
+  --set "poundcake.enabled=${POUNDCAKE_ENABLED}"
   --set-string "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
   --set-string "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
   --set-string "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
@@ -919,14 +919,14 @@ INSTALLER_SET_ARGS=(
 )
 
 if [[ "${ENABLE_BAKERY}" == "true" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=true")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.database.createServer=true")
+  INSTALLER_SET_ARGS+=(--set "bakery.enabled=true")
+  INSTALLER_SET_ARGS+=(--set "bakery.database.createServer=true")
 fi
 if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=false")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.worker.enabled=false")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.client.enforceRemoteBaseUrl=true")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.client.enabled=${REMOTE_BAKERY_ENABLED}")
+  INSTALLER_SET_ARGS+=(--set "bakery.enabled=false")
+  INSTALLER_SET_ARGS+=(--set "bakery.worker.enabled=false")
+  INSTALLER_SET_ARGS+=(--set "bakery.client.enforceRemoteBaseUrl=true")
+  INSTALLER_SET_ARGS+=(--set "bakery.client.enabled=${REMOTE_BAKERY_ENABLED}")
   INSTALLER_SET_ARGS+=(--set-string "bakery.client.auth.mode=${REMOTE_BAKERY_AUTH_MODE}")
   if [[ -n "${REMOTE_BAKERY_URL}" ]]; then
     INSTALLER_SET_ARGS+=(--set-string "bakery.client.baseUrl=${REMOTE_BAKERY_URL}")
