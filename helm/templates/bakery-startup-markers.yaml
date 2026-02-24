@@ -1,11 +1,4 @@
-{{- if and .Values.bakery.enabled (not .Values.poundcake.enabled) }}
-apiVersion: v1
-kind: Secret
-metadata:
-  name: stackstorm-startup-markers
-  labels:
-    {{- include "poundcake.labels" . | nindent 4 }}
-type: Opaque
-stringData:
-  bakery_db_ready: "false"
-{{- end }}
+{{/*
+Integrated/shared Bakery startup marker secret removed.
+Bakery now uses dedicated MariaDB operator resources only.
+*/}}

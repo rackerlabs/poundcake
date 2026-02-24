@@ -11,6 +11,15 @@ Base example source in-repo:
 - `helm/base-overrides/poundcake-helm-overrides-examples.yaml`
   (copy/merge into `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`)
 
+Service selection in overrides now uses explicit booleans:
+- `poundcake.enabled` (PoundCake + StackStorm resources)
+- `bakery.enabled` (Bakery resources)
+
+Wrapper target mapping:
+- `./install/install-poundcake-helm.sh --target poundcake` => `poundcake.enabled=true`, `bakery.enabled=false`
+- `./install/install-poundcake-helm.sh --target bakery` => `poundcake.enabled=false`, `bakery.enabled=true`
+- `./install/install-poundcake-helm.sh --target both` => both enabled
+
 ## Enable HA
 
 1. Copy the HA example to the Genestack PoundCake overrides path:

@@ -1,33 +1,4 @@
-{{- $bakeryEnabled := .Values.bakery.enabled -}}
-{{- $poundcakeEnabled := .Values.poundcake.enabled -}}
-{{- $bootstrapCfg := .Values.bakery.database.bootstrap | default dict -}}
-{{- $bootstrapEnabled := not .Values.bakery.database.createServer -}}
-{{- if and (hasKey $bootstrapCfg "enabled") (ne (toString $bootstrapCfg.enabled) "<nil>") -}}
-{{- $bootstrapEnabled = $bootstrapCfg.enabled -}}
-{{- end -}}
-{{- if and $bakeryEnabled (not $poundcakeEnabled) $bootstrapEnabled }}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "poundcake.bakeryName" . }}-startup
-  labels:
-    {{- include "poundcake.labels" . | nindent 4 }}
-rules:
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "patch", "update"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ include "poundcake.bakeryName" . }}-startup
-  labels:
-    {{- include "poundcake.labels" . | nindent 4 }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ include "poundcake.bakeryServiceAccountName" . }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "poundcake.bakeryName" . }}-startup
-{{- end }}
+{{/*
+Integrated/shared Bakery DB bootstrap RBAC removed.
+Bakery now uses dedicated MariaDB operator resources only.
+*/}}

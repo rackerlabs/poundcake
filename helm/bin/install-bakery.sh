@@ -47,10 +47,18 @@ reject_integrated_flags() {
   done
 }
 
-if [[ "${POUNDCAKE_BAKERY_DB_INTEGRATED:-false}" == "true" ]]; then
-  echo "[ERROR] POUNDCAKE_BAKERY_DB_INTEGRATED=true is not supported by install-bakery.sh." >&2
-  exit 1
-fi
+for deprecated_env in \
+  POUNDCAKE_BAKERY_DB_INTEGRATED \
+  POUNDCAKE_BAKERY_DB_HOST \
+  POUNDCAKE_BAKERY_DB_NAME \
+  POUNDCAKE_BAKERY_DB_USER
+do
+  if [[ -n "${!deprecated_env:-}" ]]; then
+    echo "[ERROR] ${deprecated_env} is not supported by install-bakery.sh." >&2
+    echo "[ERROR] Bakery installer enforces dedicated DB server provisioning." >&2
+    exit 1
+  fi
+done
 
 if [[ "${POUNDCAKE_NO_LOCAL_BAKERY:-false}" == "true" ]]; then
   echo "[ERROR] POUNDCAKE_NO_LOCAL_BAKERY=true is not supported by install-bakery.sh." >&2

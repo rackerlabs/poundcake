@@ -215,40 +215,17 @@ Secret ownership model:
 
 Database ownership contract:
 - PoundCake API and Bakery must use separate database names and credentials.
-- In alongside deployments, they may share a MariaDB server endpoint but not a database schema/user.
+- PoundCake and Bakery run separate MariaDB servers.
 - API migrations are API-owned; Bakery migrations are Bakery-owned and run by the Bakery DB init hook job.
 
-Integrated Bakery DB contract (shared MariaDB):
-- Integrated mode is active when either:
-  - `--bakery-db-integrated` (or `POUNDCAKE_BAKERY_DB_INTEGRATED=true`) is set, or
-  - Helm inputs resolve `bakery.database.createServer=false` from `--set`/`--set-string` or values files (`-f/--values`, base overrides, global overrides, service overrides).
-- When integrated mode is active, the chart performs DB bootstrap with gated hook jobs:
-  - `*-db-bootstrap` waits for DB readiness, creates/updates Bakery DB + user + grants, and sets marker `bakery_db_ready=true`.
-  - `*-db-init` waits for `bakery_db_ready=true` before running `python -m bakery.db_init`.
-- Bakery DB password secret behavior:
-  - If `bakery.database.user.passwordSecret` is provided, that secret is used as-is.
-  - Otherwise the chart manages `<release>-poundcake-bakery-db-user` (or configured key) with lookup+preserve semantics (no rotation on upgrade).
-- Conflict safety:
-  - conflicting `bakery.database.createServer` signals (`true` and `false`) fail fast.
-  - ambiguous non-boolean `bakery.database.createServer` values in YAML fail fast.
-  - explicit integrated mode plus detected `bakery.database.createServer=true` fails fast.
-- Integrated mode uses admin credentials from chart values:
-  - `bakery.database.admin.existingSecret` (default: `poundcake-secrets`)
-  - `bakery.database.admin.passwordKey` (default: `DB_ROOT_PASSWORD`)
-- Bootstrap execution controls:
-  - `bakery.database.bootstrap.enabled`: defaults to `true` when `createServer=false`
-  - `bakery.database.bootstrap.image`: default `mariadb:11.6`
-  - `bakery.database.bootstrap.timeoutSeconds`: default `300`
-
 Remote Bakery mode (no in-cluster Bakery):
-- Use installer flag `--no-local-bakery` (or `POUNDCAKE_NO_LOCAL_BAKERY=true`) to disable all in-cluster Bakery resources and Bakery bootstrap jobs.
+- Use installer flag `--no-local-bakery` (or `POUNDCAKE_NO_LOCAL_BAKERY=true`) to disable all in-cluster Bakery resources.
 - In this mode, PoundCake comms client targets an external Bakery endpoint via:
   - `POUNDCAKE_REMOTE_BAKERY_ENABLED` / `--remote-bakery-enabled` (default: `true`),
   - `--remote-bakery-url` / `POUNDCAKE_REMOTE_BAKERY_URL` (required when remote client is enabled),
   - `--remote-bakery-auth-mode` / `POUNDCAKE_REMOTE_BAKERY_AUTH_MODE` (default: `hmac`),
   - `--remote-bakery-auth-secret` / `POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET` (optional).
 - Safety rules:
-  - `--no-local-bakery` cannot be combined with `--bakery-db-integrated`.
   - Bakery-only installs (`./install/install-poundcake-helm.sh --target bakery`) cannot be combined with `--no-local-bakery`.
   - chart rendering fails fast if `bakery.client.enforceRemoteBaseUrl=true`, `bakery.client.enabled=true`, and `bakery.client.baseUrl` is empty.
 
