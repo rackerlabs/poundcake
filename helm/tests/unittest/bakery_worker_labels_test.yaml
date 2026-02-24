@@ -21,3 +21,11 @@ tests:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: worker
         template: templates/bakery-worker-deployment.yaml
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "bakery-worker-api-ready"
+        template: templates/bakery-worker-deployment.yaml
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "http://RELEASE-NAME-poundcake-bakery:8000/api/v1/health"
+        template: templates/bakery-worker-deployment.yaml
