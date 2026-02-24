@@ -205,7 +205,7 @@ Note:
 
 ### 5.1) Installer Environment Variables
 
-Defaults below are installer defaults from `helm/bin/install-poundcake-with-env.sh` unless noted.
+Defaults below are installer defaults from `helm/bin/install-poundcake.sh` unless noted.
 If you source `install/set-env-helper.sh`, those helper exports may override these defaults.
 
 | Variable | Default | Required? | Purpose | When to set |

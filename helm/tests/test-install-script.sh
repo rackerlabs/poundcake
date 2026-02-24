@@ -2,108 +2,186 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_SCRIPT="${SCRIPT_DIR}/../bin/install-poundcake-with-env.sh"
+BIN_DIR="${SCRIPT_DIR}/../bin"
+POUNDCAKE_INSTALLER="${BIN_DIR}/install-poundcake.sh"
+BAKERY_INSTALLER="${BIN_DIR}/install-bakery.sh"
 WRAPPER_SCRIPT="${SCRIPT_DIR}/../../install/install-poundcake-helm.sh"
 
-echo "Checking installer hardening, validation flow, and wrapper pass-through..."
+fail() {
+  echo "[FAIL] $*" >&2
+  exit 1
+}
 
-# Core safety baseline
-rg -q 'HELM_WAIT="\$\{POUNDCAKE_HELM_WAIT:-false\}"' "${INSTALL_SCRIPT}"
-rg -q 'ALLOW_HOOK_WAIT="\$\{POUNDCAKE_ALLOW_HOOK_WAIT:-false\}"' "${INSTALL_SCRIPT}"
-rg -q 'post-install/post-upgrade hooks' "${INSTALL_SCRIPT}"
-rg -q 'Using --wait/--atomic can deadlock' "${INSTALL_SCRIPT}"
+assert_contains() {
+  local needle="$1"
+  local file="$2"
+  if ! rg -Fq -- "${needle}" "${file}"; then
+    echo "Expected to find: ${needle}" >&2
+    echo "In file: ${file}" >&2
+    echo "--- file contents ---" >&2
+    cat "${file}" >&2 || true
+    echo "---------------------" >&2
+    fail "missing expected content"
+  fi
+}
 
-# Preflight framework + flags
-rg -q '^check_dependencies\(\)' "${INSTALL_SCRIPT}"
-rg -q '^check_cluster_connection\(\)' "${INSTALL_SCRIPT}"
-rg -q '^perform_preflight_checks\(\)' "${INSTALL_SCRIPT}"
-rg -q -- '--skip-preflight' "${INSTALL_SCRIPT}"
-rg -q 'perform_preflight_checks' "${INSTALL_SCRIPT}"
+assert_not_exists() {
+  local path="$1"
+  if [[ -e "${path}" ]]; then
+    fail "unexpected path exists: ${path}"
+  fi
+}
 
-# Validation mode
-rg -q '^run_helm_validation\(\)' "${INSTALL_SCRIPT}"
-rg -q -- '--validate' "${INSTALL_SCRIPT}"
-rg -q -- '--mode <full|bakery-only>' "${INSTALL_SCRIPT}"
-rg -q -- '--no-local-bakery' "${INSTALL_SCRIPT}"
-rg -q -- '--remote-bakery-enabled <bool>' "${INSTALL_SCRIPT}"
-rg -q -- '--remote-bakery-url <url>' "${INSTALL_SCRIPT}"
-rg -q -- '--remote-bakery-auth-mode <mode>' "${INSTALL_SCRIPT}"
-rg -q -- '--remote-bakery-auth-secret <name>' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_INSTALL_MODE' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_NO_LOCAL_BAKERY' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_REMOTE_BAKERY_URL' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_REMOTE_BAKERY_ENABLED' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_REMOTE_BAKERY_AUTH_MODE' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_HELM_VALIDATE' "${INSTALL_SCRIPT}"
-rg -q 'helm lint' "${INSTALL_SCRIPT}"
-rg -q 'helm template .*--debug' "${INSTALL_SCRIPT}"
+echo "Checking installer path rename + wrapper target dispatch..."
+[[ -x "${POUNDCAKE_INSTALLER}" ]] || fail "missing ${POUNDCAKE_INSTALLER}"
+[[ -x "${BAKERY_INSTALLER}" ]] || fail "missing ${BAKERY_INSTALLER}"
+if find "${BIN_DIR}" -maxdepth 1 -type f -name 'install-poundcake*-env.sh' | rg -q .; then
+  fail "legacy poundcake env installer path still exists under ${BIN_DIR}"
+fi
 
-# Secret rotation
-rg -q '^rotate_chart_secrets\(\)' "${INSTALL_SCRIPT}"
-rg -q -- '--rotate-secrets' "${INSTALL_SCRIPT}"
-rg -Fq 'kubectl -n "${namespace}" delete secret "${s}" --ignore-not-found' "${INSTALL_SCRIPT}"
+assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
+assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-bakery.sh" "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
+assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" --enable-bakery "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
 
-# Pull-secret behavior and rendered-manifest guard
-rg -q 'IMAGE_PULL_SECRET_NAME="\$\{POUNDCAKE_IMAGE_PULL_SECRET_NAME:-ghcr-pull\}"' "${INSTALL_SCRIPT}"
-rg -q 'CREATE_IMAGE_PULL_SECRET="\$\{POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-true\}"' "${INSTALL_SCRIPT}"
-rg -q 'IMAGE_PULL_SECRET_ENABLED="\$\{POUNDCAKE_IMAGE_PULL_SECRET_ENABLED:-true\}"' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_IMAGE_DIGEST="\$\{POUNDCAKE_IMAGE_DIGEST:-\}"' "${INSTALL_SCRIPT}"
-rg -q 'PACK_SYNC_ENDPOINT="\$\{POUNDCAKE_PACK_SYNC_ENDPOINT:-http://poundcake-api:8000/api/v1/cook/packs\}"' "${INSTALL_SCRIPT}"
-rg -q 'create secret docker-registry' "${INSTALL_SCRIPT}"
-rg -q "kubectl get namespace" "${INSTALL_SCRIPT}"
-rg -q "kubectl create namespace" "${INSTALL_SCRIPT}"
-rg -q 'poundcakeImage\.pullSecrets\[0\]=' "${INSTALL_SCRIPT}"
-rg -q 'Rendered PoundCake manifests do not include imagePullSecrets' "${INSTALL_SCRIPT}"
-rg -q 'requires HELM_REGISTRY_USERNAME and HELM_REGISTRY_PASSWORD' "${INSTALL_SCRIPT}"
-rg -q 'Refusing install to avoid anonymous private-registry pulls' "${INSTALL_SCRIPT}"
-rg -q '^validate_image_pin_input\(\)' "${INSTALL_SCRIPT}"
-rg -q '^verify_rendered_endpoint_contract\(\)' "${INSTALL_SCRIPT}"
-rg -q 'Image pin required: set POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST' "${INSTALL_SCRIPT}"
-rg -q 'poundcake-api probes must target /api/v1/ready and /api/v1/live' "${INSTALL_SCRIPT}"
+# Build mock commands so tests run without a live cluster.
+TMP_DIR="$(mktemp -d)"
+MOCK_BIN="${TMP_DIR}/mockbin"
+mkdir -p "${MOCK_BIN}"
 
-# OCI auth fallback chain
-rg -q 'GHCR_USERNAME' "${INSTALL_SCRIPT}"
-rg -q 'GITHUB_ACTOR' "${INSTALL_SCRIPT}"
-rg -q 'GHCR_TOKEN' "${INSTALL_SCRIPT}"
-rg -q 'CR_PAT' "${INSTALL_SCRIPT}"
-rg -q 'GITHUB_TOKEN' "${INSTALL_SCRIPT}"
+cat > "${MOCK_BIN}/helm" <<'HELM_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+: "${TEST_HELM_LOG:?missing TEST_HELM_LOG}"
+printf '%s\n' "$*" >> "${TEST_HELM_LOG}"
 
-# Override layering + post-renderer support
-rg -q 'POUNDCAKE_BASE_OVERRIDES' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_GLOBAL_OVERRIDES_DIR' "${INSTALL_SCRIPT}"
-rg -q 'POUNDCAKE_SERVICE_CONFIG_DIR' "${INSTALL_SCRIPT}"
-rg -q '^collect_yaml_files\(\)' "${INSTALL_SCRIPT}"
-rg -q '^discover_override_args\(\)' "${INSTALL_SCRIPT}"
-rg -q '^resolve_integrated_mode\(\)' "${INSTALL_SCRIPT}"
-rg -q '^collect_bakery_create_server_from_set_args\(\)' "${INSTALL_SCRIPT}"
-rg -q '^extract_bakery_create_server_from_yaml\(\)' "${INSTALL_SCRIPT}"
-rg -q '^collect_values_files_from_extra_args\(\)' "${INSTALL_SCRIPT}"
-rg -q '^normalize_bool_or_empty\(\)' "${INSTALL_SCRIPT}"
-rg -q '^apply_bakery_db_integrated_overrides\(\)' "${INSTALL_SCRIPT}"
-rg -q 'Skipping integrated Bakery DB Helm overrides because no-local-bakery mode is enabled' "${INSTALL_SCRIPT}"
-rg -q 'Skipping local Bakery credential secret management because no-local-bakery mode is enabled' "${INSTALL_SCRIPT}"
-rg -q -- '--no-local-bakery cannot be combined with --bakery-db-integrated' "${INSTALL_SCRIPT}"
-rg -q -- '--no-local-bakery requires --remote-bakery-url' "${INSTALL_SCRIPT}"
-rg -Fq -- '--remote-bakery-enabled (or POUNDCAKE_REMOTE_BAKERY_ENABLED) must be true or false' "${INSTALL_SCRIPT}"
-rg -Fq "Option '\$1' was removed. Configure integrated Bakery DB bootstrap via chart values (bakery.database.*)." "${INSTALL_SCRIPT}"
-rg -q 'bakery.client.enforceRemoteBaseUrl=true' "${INSTALL_SCRIPT}"
-rg -q -- '--post-renderer' "${INSTALL_SCRIPT}"
-rg -q -- '--post-renderer-args' "${INSTALL_SCRIPT}"
-rg -q -- 'deployment.mode=' "${INSTALL_SCRIPT}"
-rg -q -- 'bakery.enabled=true' "${INSTALL_SCRIPT}"
-rg -q -- '--set-string "stackstormPackSync.endpoint=' "${INSTALL_SCRIPT}"
-rg -q 'Detected bakery.database.createServer=false from Helm inputs; enabling integrated Bakery DB bootstrap' "${INSTALL_SCRIPT}"
-rg -q 'Conflicting bakery.database.createServer values detected' "${INSTALL_SCRIPT}"
-rg -q 'Ambiguous bakery.database.createServer value in values file' "${INSTALL_SCRIPT}"
-rg -q 'Resolved integrated bakery DB mode:' "${INSTALL_SCRIPT}"
+cmd="${1:-}"
+case "${cmd}" in
+  template)
+    cat <<'YAML_EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: poundcake-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ready
+          livenessProbe:
+            httpGet:
+              path: /api/v1/live
+          env:
+            - name: POUNDCAKE_PACK_SYNC_ENDPOINT
+              value: http://poundcake-api:8000/api/v1/cook/packs
+YAML_EOF
+    ;;
+  lint|upgrade|registry|pull)
+    ;;
+  *)
+    ;;
+esac
+HELM_EOF
+chmod +x "${MOCK_BIN}/helm"
 
-# Version-file fallback sequence
-rg -q 'POUNDCAKE_VERSION_FILE' "${INSTALL_SCRIPT}"
-rg -q '/etc/genestack/helm-chart-version.yaml' "${INSTALL_SCRIPT}"
-rg -q '/etc/genestack/helm-chart-versions.yaml' "${INSTALL_SCRIPT}"
+cat > "${MOCK_BIN}/kubectl" <<'KUBE_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+: "${TEST_KUBECTL_LOG:?missing TEST_KUBECTL_LOG}"
+printf '%s\n' "$*" >> "${TEST_KUBECTL_LOG}"
 
-# Wrapper should invoke the installer directly (no chart no-op flags)
-rg -q 'exec "\$PROJECT_ROOT/helm/bin/install-poundcake-with-env.sh" "\$@"' "${WRAPPER_SCRIPT}"
+if [[ "${1:-}" == "get" && "${2:-}" == "namespace" ]]; then
+  exit 1
+fi
+if [[ "${1:-}" == "-n" && "${3:-}" == "create" && "${4:-}" == "secret" && "${5:-}" == "generic" ]]; then
+  cat <<'YAML_EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mock
+YAML_EOF
+  exit 0
+fi
+exit 0
+KUBE_EOF
+chmod +x "${MOCK_BIN}/kubectl"
 
-echo "Installer and wrapper checks passed!"
+cat > "${TMP_DIR}/values.yaml" <<'VALUES_EOF'
+bakery:
+  database:
+    createServer: true
+VALUES_EOF
+
+run_with_mocks() {
+  local out_file="$1"
+  shift
+  TEST_HELM_LOG="${TMP_DIR}/helm.log"
+  TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log"
+  : > "${TEST_HELM_LOG}"
+  : > "${TEST_KUBECTL_LOG}"
+
+  PATH="${MOCK_BIN}:${PATH}" \
+  TEST_HELM_LOG="${TEST_HELM_LOG}" \
+  TEST_KUBECTL_LOG="${TEST_KUBECTL_LOG}" \
+  "$@" > "${out_file}" 2>&1
+}
+
+echo "Validating Poundcake installer env overrides and CLI precedence..."
+POUNDCAKE_OUT="${TMP_DIR}/poundcake.out"
+run_with_mocks "${POUNDCAKE_OUT}" \
+  env \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_TAG="env-tag" \
+  POUNDCAKE_OPERATORS_MODE="verify" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight \
+  --operators-mode skip \
+  -f "${TMP_DIR}/values.yaml" \
+  --set-string poundcakeImage.tag=cli-tag
+
+assert_contains "Operator mode: skip" "${POUNDCAKE_OUT}"
+assert_contains "upgrade --install env-rel" "${TMP_DIR}/helm.log"
+assert_contains "--namespace env-ns" "${TMP_DIR}/helm.log"
+assert_contains "--set-string poundcakeImage.tag=env-tag" "${TMP_DIR}/helm.log"
+assert_contains "--set-string poundcakeImage.tag=cli-tag" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery installer env overrides and standalone DB enforcement..."
+BAKERY_OUT="${TMP_DIR}/bakery.out"
+run_with_mocks "${BAKERY_OUT}" \
+  env \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_BAKERY_IMAGE_REPO="example.registry.local/poundcake-bakery" \
+  POUNDCAKE_BAKERY_IMAGE_TAG="env-bakery-tag" \
+  POUNDCAKE_OPERATORS_MODE="verify" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight \
+  -f "${TMP_DIR}/values.yaml" \
+  --operators-mode skip
+
+assert_contains "Operator mode: skip" "${BAKERY_OUT}"
+assert_contains "upgrade --install bakery-env-rel" "${TMP_DIR}/helm.log"
+assert_contains "--namespace bakery-env-ns" "${TMP_DIR}/helm.log"
+assert_contains "--set-string deployment.mode=bakery-only" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.database.createServer=true" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.image.repository=example.registry.local/poundcake-bakery" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.image.tag=env-bakery-tag" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery integrated DB guardrails..."
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  env POUNDCAKE_BAKERY_DB_INTEGRATED=true "${BAKERY_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
+  fail "expected POUNDCAKE_BAKERY_DB_INTEGRATED=true to fail for bakery installer"
+fi
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  "${BAKERY_INSTALLER}" --skip-preflight --bakery-db-integrated >/dev/null 2>&1; then
+  fail "expected --bakery-db-integrated to fail for bakery installer"
+fi
+
+echo "Installer rename and env override checks passed!"

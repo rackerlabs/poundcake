@@ -49,6 +49,7 @@ POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/gene
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
 INSTALL_MODE="${POUNDCAKE_INSTALL_MODE:-full}"
+ENABLE_BAKERY="${POUNDCAKE_ENABLE_BAKERY:-false}"
 OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
 MARIADB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME:-mariadb-operator}"
 MARIADB_OPERATOR_NAMESPACE="${POUNDCAKE_MARIADB_OPERATOR_NAMESPACE:-mariadb-operator}"
@@ -121,11 +122,12 @@ trap 'on_error "$LINENO" "$BASH_COMMAND" "$?"' ERR
 usage() {
   cat <<'USAGE_EOF'
 Usage:
-  install-poundcake-with-env.sh [installer options] [helm upgrade/install args]
+  install-poundcake.sh [installer options] [helm upgrade/install args]
 
 Installer options:
   --debug           Enable shell tracing for installer execution
   --validate        Run helm lint + helm template --debug before install
+  --enable-bakery   Install Bakery resources alongside PoundCake in the same Helm release
   --mode <full|bakery-only>  Install full stack or Bakery-only resources
   --operators-mode <install-missing|verify|skip>  Operator handling policy
   --verify-operators  Alias for --operators-mode verify
@@ -173,6 +175,7 @@ Environment overrides:
   POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
   POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (optional existing secret for remote Bakery HMAC keys)
   POUNDCAKE_INSTALL_MODE           (default: full; valid: full, bakery-only)
+  POUNDCAKE_ENABLE_BAKERY          (default: false; enables Bakery resources in full mode)
   POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
   POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME
   POUNDCAKE_MARIADB_OPERATOR_NAMESPACE
@@ -215,6 +218,7 @@ Environment overrides:
 Examples:
   ./install/install-poundcake-helm.sh
   ./install/install-poundcake-helm.sh --validate
+  ./install/install-poundcake-helm.sh --target both
   ./install/install-poundcake-helm.sh --skip-preflight -f /path/to/values.yaml
 USAGE_EOF
 }
@@ -938,6 +942,10 @@ while [[ $# -gt 0 ]]; do
       VALIDATE="true"
       shift
       ;;
+    --enable-bakery)
+      ENABLE_BAKERY="true"
+      shift
+      ;;
     --mode)
       INSTALL_MODE="$2"
       shift 2
@@ -1040,6 +1048,12 @@ if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" 
   exit 1
 fi
 
+ENABLE_BAKERY="$(normalize_bool_or_empty "${ENABLE_BAKERY}")"
+if [[ -z "${ENABLE_BAKERY}" ]]; then
+  log_error "POUNDCAKE_ENABLE_BAKERY must be true or false."
+  exit 1
+fi
+
 if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
   REMOTE_BAKERY_ENABLED="$(normalize_bool_or_empty "${REMOTE_BAKERY_ENABLED}")"
   if [[ -z "${REMOTE_BAKERY_ENABLED}" ]]; then
@@ -1066,7 +1080,7 @@ if [[ "${INSTALL_DEBUG}" == "true" ]]; then
   set -x
 fi
 
-log_info "Installer options: mode=${INSTALL_MODE}, operators_mode=${OPERATOR_MODE}, bakery_db_integrated=${BAKERY_DB_INTEGRATED}, no_local_bakery=${NO_LOCAL_BAKERY}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
+log_info "Installer options: mode=${INSTALL_MODE}, enable_bakery=${ENABLE_BAKERY}, operators_mode=${OPERATOR_MODE}, bakery_db_integrated=${BAKERY_DB_INTEGRATED}, no_local_bakery=${NO_LOCAL_BAKERY}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
@@ -1189,6 +1203,8 @@ INSTALLER_SET_ARGS=(
 )
 
 if [[ "${INSTALL_MODE}" == "bakery-only" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=true")
+elif [[ "${ENABLE_BAKERY}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "bakery.enabled=true")
 fi
 if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then

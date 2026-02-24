@@ -117,7 +117,7 @@ Tune cadence and format with `startupHooks.gateLogging.enabled`, `startupHooks.g
 
 ### Installer Validation and Preflight
 
-`/Users/chris.breu/code/poundcake/helm/bin/install-poundcake-with-env.sh` supports installer-specific flags:
+`/Users/chris.breu/code/poundcake/helm/bin/install-poundcake.sh` supports installer-specific flags:
 
 - `--validate`: run `helm lint` and `helm template --debug` before install
 - `--skip-preflight`: skip dependency/cluster connectivity checks
@@ -249,7 +249,7 @@ Remote Bakery mode (no in-cluster Bakery):
   - `--remote-bakery-auth-secret` / `POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET` (optional).
 - Safety rules:
   - `--no-local-bakery` cannot be combined with `--bakery-db-integrated`.
-  - `--mode bakery-only` cannot be combined with `--no-local-bakery`.
+  - Bakery-only installs (`./install/install-poundcake-helm.sh --target bakery`) cannot be combined with `--no-local-bakery`.
   - chart rendering fails fast if `bakery.client.enforceRemoteBaseUrl=true`, `bakery.client.enabled=true`, and `bakery.client.baseUrl` is empty.
 
 Example:
