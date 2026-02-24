@@ -5,8 +5,9 @@ templates:
   - templates/bakery-deployment.yaml
   - templates/bakery-worker-deployment.yaml
   - templates/bakery-init-job.yaml
+  - templates/stackstorm-startup-order-jobs.yaml
 tests:
-  - it: uses configured bakery database password secret key across api/worker/db-init and User resource
+  - it: uses configured bakery database password secret key across api/worker and startup-gated bakery db-init in full mode
     set:
       poundcake.enabled: true
       bakery.enabled: true
@@ -33,14 +34,15 @@ tests:
                 key: db-pass
         template: templates/bakery-worker-deployment.yaml
       - contains:
-          path: spec.template.spec.containers[0].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: DATABASE_PASSWORD
             valueFrom:
               secretKeyRef:
                 name: external-bakery-db-user
                 key: db-pass
-        template: templates/bakery-init-job.yaml
+        template: templates/stackstorm-startup-order-jobs.yaml
+        documentIndex: 3
       - equal:
           path: spec.passwordSecretKeyRef.name
           value: external-bakery-db-user
@@ -52,7 +54,7 @@ tests:
         template: templates/bakery-mariadb.yaml
         documentIndex: 3
 
-  - it: renders dedicated bakery mariadb resources and db-init only
+  - it: renders dedicated bakery mariadb resources and startup-gated bakery db-init in full mode
     set:
       poundcake.enabled: true
       bakery.enabled: true
@@ -63,16 +65,35 @@ tests:
           count: 6
         template: templates/bakery-mariadb.yaml
       - hasDocuments:
+          count: 0
+        template: templates/bakery-init-job.yaml
+      - equal:
+          path: metadata.name
+          value: poundcake-bakery-db-init
+        template: templates/stackstorm-startup-order-jobs.yaml
+        documentIndex: 3
+
+  - it: renders standalone bakery-init job only in bakery-only mode
+    set:
+      poundcake.enabled: false
+      bakery.enabled: true
+      bakery.database.createServer: true
+      mariadbOperator.enabled: true
+    asserts:
+      - hasDocuments:
           count: 1
         template: templates/bakery-init-job.yaml
       - equal:
           path: metadata.name
           value: RELEASE-NAME-poundcake-bakery-db-init
         template: templates/bakery-init-job.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/stackstorm-startup-order-jobs.yaml
 
-  - it: fails fast when bakery database createServer is disabled
+  - it: fails fast when bakery-only database createServer is disabled
     set:
-      poundcake.enabled: true
+      poundcake.enabled: false
       bakery.enabled: true
       bakery.worker.enabled: false
       bakery.database.createServer: false

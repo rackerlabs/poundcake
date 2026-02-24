@@ -4,7 +4,7 @@ templates:
 tests:
   - it: applies poundcake log labels to bakery db-init pod template
     set:
-      poundcake.enabled: true
+      poundcake.enabled: false
       bakery.enabled: true
     asserts:
       - equal:

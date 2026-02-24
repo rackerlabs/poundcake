@@ -697,7 +697,7 @@ while [[ $# -gt 0 ]]; do
     --mode|--mode=*)
       log_error "Option '$1' was removed."
       log_error "Use install/install-poundcake-helm.sh --target <poundcake|bakery|both>."
-      log_error "Or pass --set-string poundcake.enabled=<true|false> and --set-string bakery.enabled=<true|false>."
+      log_error "Or pass --set poundcake.enabled=<true|false> and --set bakery.enabled=<true|false>."
       exit 1
       ;;
     --operators-mode)
