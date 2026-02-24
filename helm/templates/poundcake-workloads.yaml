@@ -17,6 +17,8 @@ spec:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/poundcake-secrets: {{ include (print \1Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/component: api
         {{- include "poundcake.logLabelsForComponent" (dict "component" "api") | nindent 8 }}
@@ -221,6 +223,8 @@ spec:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/poundcake-secrets: {{ include (print \1Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/component: chef
         {{- include "poundcake.logLabelsForComponent" (dict "component" "chef") | nindent 8 }}
@@ -293,6 +297,8 @@ spec:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/poundcake-secrets: {{ include (print \1Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/component: ui
         {{- include "poundcake.logLabelsForComponent" (dict "component" "ui") | nindent 8 }}
@@ -386,6 +392,8 @@ spec:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/poundcake-secrets: {{ include (print \1Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/component: prep-chef
         {{- include "poundcake.logLabelsForComponent" (dict "component" "prep-chef") | nindent 8 }}
@@ -458,6 +466,8 @@ spec:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/poundcake-secrets: {{ include (print \1Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/component: timer
         {{- include "poundcake.logLabelsForComponent" (dict "component" "timer") | nindent 8 }}
@@ -537,6 +547,8 @@ spec:
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/poundcake-secrets: {{ include (print \1Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/component: dishwasher
         {{- include "poundcake.logLabelsForComponent" (dict "component" "dishwasher") | nindent 8 }}
