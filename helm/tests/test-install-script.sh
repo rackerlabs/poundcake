@@ -148,20 +148,21 @@ run_with_mocks "${POUNDCAKE_OUT}" \
   POUNDCAKE_RELEASE_NAME="env-rel" \
   POUNDCAKE_IMAGE_TAG="env-tag" \
   POUNDCAKE_OPERATORS_MODE="verify" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
   POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${POUNDCAKE_INSTALLER}" \
   --skip-preflight \
   --operators-mode skip \
-  -f "${TMP_DIR}/values.yaml" \
   --set-string poundcakeImage.tag=cli-tag
 
 assert_contains "Operator mode: skip" "${POUNDCAKE_OUT}"
 assert_contains "upgrade --install env-rel" "${TMP_DIR}/helm.log"
 assert_contains "--namespace env-ns" "${TMP_DIR}/helm.log"
-assert_contains "--set-string poundcake.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set poundcake.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set-string poundcakeImage.tag=env-tag" "${TMP_DIR}/helm.log"
 assert_contains "--set-string poundcakeImage.tag=cli-tag" "${TMP_DIR}/helm.log"
+assert_contains "-f ${TMP_DIR}/values.yaml --set poundcake.enabled=true" "${TMP_DIR}/helm.log"
 
 echo "Validating Bakery installer env overrides and standalone DB enforcement..."
 BAKERY_OUT="${TMP_DIR}/bakery.out"
@@ -172,19 +173,19 @@ run_with_mocks "${BAKERY_OUT}" \
   POUNDCAKE_BAKERY_IMAGE_REPO="example.registry.local/poundcake-bakery" \
   POUNDCAKE_BAKERY_IMAGE_TAG="env-bakery-tag" \
   POUNDCAKE_OPERATORS_MODE="verify" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
   POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${BAKERY_INSTALLER}" \
   --skip-preflight \
-  -f "${TMP_DIR}/values.yaml" \
   --operators-mode skip
 
 assert_contains "Operator mode: skip" "${BAKERY_OUT}"
 assert_contains "upgrade --install bakery-env-rel" "${TMP_DIR}/helm.log"
 assert_contains "--namespace bakery-env-ns" "${TMP_DIR}/helm.log"
-assert_contains "--set-string poundcake.enabled=false" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.enabled=true" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.database.createServer=true" "${TMP_DIR}/helm.log"
+assert_contains "--set poundcake.enabled=false" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.database.createServer=true" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.image.repository=example.registry.local/poundcake-bakery" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.image.tag=env-bakery-tag" "${TMP_DIR}/helm.log"
 
