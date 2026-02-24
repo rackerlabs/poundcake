@@ -38,7 +38,7 @@
         },
         "tag": {
           "type": "string",
-          "default": ""
+          "default": "latest"
         },
         "digest": {
           "type": "string",

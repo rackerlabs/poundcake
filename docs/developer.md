@@ -220,8 +220,8 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `POUNDCAKE_IMAGE_REPO` | `ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake` | Optional | PoundCake image repository | Set for fork/private image repo |
 | `POUNDCAKE_IMAGE_TAG` | `""` | Conditionally required | PoundCake image tag | Set when not using digest pin |
 | `POUNDCAKE_IMAGE_DIGEST` | `""` | Conditionally required | PoundCake image digest (`sha256:...`) | Set when not using tag pin; preferred for immutable deploys |
-| `POUNDCAKE_UI_IMAGE_REPO` | `""` (helper sets fork path) | Optional | Compatibility override passed through Helm args | Set only if your workflow consumes it |
-| `POUNDCAKE_BAKERY_IMAGE_REPO` | `""` (helper sets fork path) | Optional | Compatibility override passed through Helm args | Set only if your workflow consumes it |
+| `POUNDCAKE_UI_IMAGE_REPO` | `""` (helper sets fork path) | Optional | UI image repository override (`uiImage.repository`) | Set for fork/private UI image repo |
+| `POUNDCAKE_BAKERY_IMAGE_REPO` | `""` (helper sets fork path) | Optional | Bakery image repository override (`bakery.image.repository`) | Set for fork/private Bakery image repo |
 | `POUNDCAKE_STACKSTORM_IMAGE_REPO` | `stackstorm/st2` | Optional | StackStorm image repository | Set when using custom/private StackStorm image |
 | `POUNDCAKE_STACKSTORM_IMAGE_TAG` | `3.9.0` | Optional | StackStorm image tag | Pin custom StackStorm version |
 | `POUNDCAKE_RELEASE_NAME` | `poundcake` | Optional | Helm release name | Change for parallel installs |

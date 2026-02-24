@@ -28,11 +28,6 @@ replicaCount: 1
 deployment:
   mode: full
 
-image:
-  repository: ghcr.io/rackerlabs/poundcake
-  pullPolicy: IfNotPresent
-  tag: "2.0.96"  # Release tag
-
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -68,10 +63,6 @@ service:
 # It connects to the API service in the same namespace.
 ui:
   enabled: true
-  image:
-    repository: ghcr.io/rackerlabs/poundcake-ui
-    pullPolicy: IfNotPresent
-    tag: "2.0.96"  # Release tag
   service:
     type: ClusterIP
     port: 80
@@ -765,7 +756,7 @@ bakery:
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: IfNotPresent
-    tag: "2.0.96"
+    tag: "latest"
 
   # Service configuration
   service:
@@ -947,8 +938,7 @@ bakery:
 
 poundcakeImage:
   repository: poundcake
-  # Defaults to Chart.appVersion when empty.
-  tag: ""
+  tag: latest
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
   pullPolicy: Always

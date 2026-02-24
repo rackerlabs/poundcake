@@ -2,6 +2,15 @@
 
 This directory stores example override files for Helm installs.
 
+Canonical image keys for overrides:
+- `poundcakeImage.repository` / `poundcakeImage.tag`
+- `uiImage.repository` / `uiImage.tag`
+- `bakery.image.repository` / `bakery.image.tag`
+
+Base example source in-repo:
+- `helm/base-overrides/poundcake-helm-overrides-examples.yaml`
+  (copy/merge into `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`)
+
 ## Enable HA
 
 1. Copy the HA example to the Genestack PoundCake overrides path:
