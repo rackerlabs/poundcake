@@ -222,16 +222,23 @@ Integrated Bakery DB contract (shared MariaDB):
 - Integrated mode is active when either:
   - `--bakery-db-integrated` (or `POUNDCAKE_BAKERY_DB_INTEGRATED=true`) is set, or
   - Helm inputs resolve `bakery.database.createServer=false` from `--set`/`--set-string` or values files (`-f/--values`, base overrides, global overrides, service overrides).
-- When integrated mode is active, the installer always:
-  - creates/updates the Bakery DB password secret (default: `poundcake-bakery-db-user`, key `password`) in the release namespace, and
-  - runs a SQL bootstrap job to create/alter the Bakery DB user and grant access on the shared MariaDB server.
+- When integrated mode is active, the chart performs DB bootstrap with gated hook jobs:
+  - `*-db-bootstrap` waits for DB readiness, creates/updates Bakery DB + user + grants, and sets marker `bakery_db_ready=true`.
+  - `*-db-init` waits for `bakery_db_ready=true` before running `python -m bakery.db_init`.
+- Bakery DB password secret behavior:
+  - If `bakery.database.user.passwordSecret` is provided, that secret is used as-is.
+  - Otherwise the chart manages `<release>-poundcake-bakery-db-user` (or configured key) with lookup+preserve semantics (no rotation on upgrade).
 - Conflict safety:
   - conflicting `bakery.database.createServer` signals (`true` and `false`) fail fast.
   - ambiguous non-boolean `bakery.database.createServer` values in YAML fail fast.
   - explicit integrated mode plus detected `bakery.database.createServer=true` fails fast.
-- Integrated mode requires an admin secret for shared MariaDB bootstrap:
-  - secret name: `POUNDCAKE_BAKERY_DB_ADMIN_SECRET_NAME` (default: `poundcake-secrets`)
-  - secret key: `POUNDCAKE_BAKERY_DB_ADMIN_PASSWORD_KEY` (default: `DB_ROOT_PASSWORD`)
+- Integrated mode uses admin credentials from chart values:
+  - `bakery.database.admin.existingSecret` (default: `poundcake-secrets`)
+  - `bakery.database.admin.passwordKey` (default: `DB_ROOT_PASSWORD`)
+- Bootstrap execution controls:
+  - `bakery.database.bootstrap.enabled`: defaults to `true` when `createServer=false`
+  - `bakery.database.bootstrap.image`: default `mariadb:11.6`
+  - `bakery.database.bootstrap.timeoutSeconds`: default `300`
 
 Remote Bakery mode (no in-cluster Bakery):
 - Use installer flag `--no-local-bakery` (or `POUNDCAKE_NO_LOCAL_BAKERY=true`) to disable all in-cluster Bakery resources and Bakery bootstrap jobs.

@@ -73,13 +73,6 @@ BAKERY_DB_INTEGRATED="${POUNDCAKE_BAKERY_DB_INTEGRATED:-false}"
 BAKERY_DB_HOST="${POUNDCAKE_BAKERY_DB_HOST:-poundcake-mariadb}"
 BAKERY_DB_NAME="${POUNDCAKE_BAKERY_DB_NAME:-bakery}"
 BAKERY_DB_USER="${POUNDCAKE_BAKERY_DB_USER:-bakery}"
-BAKERY_DB_PASSWORD="${POUNDCAKE_BAKERY_DB_PASSWORD:-}"
-BAKERY_DB_PASSWORD_SECRET_NAME="${POUNDCAKE_BAKERY_DB_PASSWORD_SECRET_NAME:-poundcake-bakery-db-user}"
-BAKERY_DB_PASSWORD_SECRET_KEY="${POUNDCAKE_BAKERY_DB_PASSWORD_SECRET_KEY:-password}"
-BAKERY_DB_ADMIN_SECRET_NAME="${POUNDCAKE_BAKERY_DB_ADMIN_SECRET_NAME:-poundcake-secrets}"
-BAKERY_DB_ADMIN_PASSWORD_KEY="${POUNDCAKE_BAKERY_DB_ADMIN_PASSWORD_KEY:-DB_ROOT_PASSWORD}"
-BAKERY_DB_SQL_IMAGE="${POUNDCAKE_BAKERY_DB_SQL_IMAGE:-mariadb:11.6}"
-BAKERY_DB_BOOTSTRAP_TIMEOUT_SECONDS="${POUNDCAKE_BAKERY_DB_BOOTSTRAP_TIMEOUT_SECONDS:-300}"
 SKIP_PREFLIGHT="false"
 ROTATE_SECRETS="false"
 INTERACTIVE_BAKERY_CREDS="false"
@@ -153,12 +146,6 @@ Installer options:
   --bakery-db-host <host>             Shared MariaDB host/service
   --bakery-db-name <name>             Bakery database name
   --bakery-db-user <user>             Bakery database username
-  --bakery-db-password <password>     Bakery database password (auto-generated if omitted)
-  --bakery-db-password-secret-name <name> Secret name for Bakery DB password
-  --bakery-db-password-secret-key <key> Secret key for Bakery DB password
-  --bakery-db-admin-secret-name <name> Secret containing shared DB admin password
-  --bakery-db-admin-password-key <key> Key containing shared DB admin password
-  --bakery-db-sql-image <image>       Image used for DB bootstrap SQL job
 
 Environment overrides:
   POUNDCAKE_GHCR_OWNER             (default: rackerlabs)
@@ -210,12 +197,6 @@ Environment overrides:
   POUNDCAKE_BAKERY_DB_HOST            (default: poundcake-mariadb)
   POUNDCAKE_BAKERY_DB_NAME            (default: bakery)
   POUNDCAKE_BAKERY_DB_USER            (default: bakery)
-  POUNDCAKE_BAKERY_DB_PASSWORD        (optional; generated when integrated and unset)
-  POUNDCAKE_BAKERY_DB_PASSWORD_SECRET_NAME (default: poundcake-bakery-db-user)
-  POUNDCAKE_BAKERY_DB_PASSWORD_SECRET_KEY  (default: password)
-  POUNDCAKE_BAKERY_DB_ADMIN_SECRET_NAME    (default: poundcake-secrets)
-  POUNDCAKE_BAKERY_DB_ADMIN_PASSWORD_KEY   (default: DB_ROOT_PASSWORD)
-  POUNDCAKE_BAKERY_DB_SQL_IMAGE       (default: mariadb:11.6)
   HELM_REGISTRY_USERNAME           (optional; for OCI login)
   HELM_REGISTRY_PASSWORD           (optional; for OCI login)
   POUNDCAKE_IMAGE_PULL_SECRET_NAME     (default: ghcr-pull)
@@ -422,20 +403,6 @@ apply_bakery_rackspace_secret() {
   BAKERY_SECRET_SET_ARGS+=(--set-string "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
 }
 
-generate_alnum_secret() {
-  local restore_pipefail=0
-  local secret=""
-  if shopt -o -q pipefail; then
-    restore_pipefail=1
-    set +o pipefail
-  fi
-  secret="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
-  if (( restore_pipefail )); then
-    set -o pipefail
-  fi
-  printf '%s' "${secret}"
-}
-
 validate_integrated_bakery_args() {
   local i=0
   local arg=""
@@ -453,127 +420,23 @@ validate_integrated_bakery_args() {
   done
 }
 
-apply_bakery_db_secret_integrated() {
+apply_bakery_db_integrated_overrides() {
   if [[ "${BAKERY_DB_INTEGRATED}" != "true" ]]; then
     return 0
   fi
 
   validate_integrated_bakery_args
 
-  if [[ -z "${BAKERY_DB_HOST}" || -z "${BAKERY_DB_NAME}" || -z "${BAKERY_DB_USER}" || -z "${BAKERY_DB_PASSWORD_SECRET_NAME}" || -z "${BAKERY_DB_PASSWORD_SECRET_KEY}" ]]; then
-    log_error "Integrated Bakery DB mode requires non-empty host, name, user, password secret name, and password secret key."
+  if [[ -z "${BAKERY_DB_HOST}" || -z "${BAKERY_DB_NAME}" || -z "${BAKERY_DB_USER}" ]]; then
+    log_error "Integrated Bakery DB mode requires non-empty host, name, and user."
     exit 1
   fi
-
-  if [[ -z "${BAKERY_DB_PASSWORD}" ]]; then
-    BAKERY_DB_PASSWORD="$(generate_alnum_secret)"
-    log_info "Generated Bakery DB password for integrated mode."
-  fi
-
-  if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-    log_info "Namespace '${NAMESPACE}' does not exist; creating it for Bakery DB secret setup..."
-    kubectl create namespace "${NAMESPACE}" >/dev/null
-  fi
-
-  log_info "Applying Bakery DB password secret '${BAKERY_DB_PASSWORD_SECRET_NAME}' in namespace '${NAMESPACE}'..."
-  kubectl -n "${NAMESPACE}" create secret generic "${BAKERY_DB_PASSWORD_SECRET_NAME}" \
-    --from-literal="${BAKERY_DB_PASSWORD_SECRET_KEY}=${BAKERY_DB_PASSWORD}" \
-    --dry-run=client -o yaml | kubectl apply -f -
 
   BAKERY_DB_SET_ARGS+=(--set-string "bakery.enabled=true")
   BAKERY_DB_SET_ARGS+=(--set-string "bakery.database.createServer=false")
   BAKERY_DB_SET_ARGS+=(--set-string "bakery.database.host=${BAKERY_DB_HOST}")
   BAKERY_DB_SET_ARGS+=(--set-string "bakery.database.name=${BAKERY_DB_NAME}")
   BAKERY_DB_SET_ARGS+=(--set-string "bakery.database.user.name=${BAKERY_DB_USER}")
-  BAKERY_DB_SET_ARGS+=(--set-string "bakery.database.user.passwordSecret=${BAKERY_DB_PASSWORD_SECRET_NAME}")
-  BAKERY_DB_SET_ARGS+=(--set-string "bakery.database.user.passwordSecretKey=${BAKERY_DB_PASSWORD_SECRET_KEY}")
-}
-
-ensure_integrated_admin_secret() {
-  if [[ "${BAKERY_DB_INTEGRATED}" != "true" ]]; then
-    return 0
-  fi
-
-  if ! kubectl -n "${NAMESPACE}" get secret "${BAKERY_DB_ADMIN_SECRET_NAME}" >/dev/null 2>&1; then
-    log_error "Integrated Bakery DB mode requires admin secret '${BAKERY_DB_ADMIN_SECRET_NAME}' in namespace '${NAMESPACE}'."
-    exit 1
-  fi
-
-  if [[ -z "$(kubectl -n "${NAMESPACE}" get secret "${BAKERY_DB_ADMIN_SECRET_NAME}" -o "jsonpath={.data.${BAKERY_DB_ADMIN_PASSWORD_KEY}}" 2>/dev/null)" ]]; then
-    log_error "Integrated Bakery DB mode requires key '${BAKERY_DB_ADMIN_PASSWORD_KEY}' in secret '${BAKERY_DB_ADMIN_SECRET_NAME}'."
-    exit 1
-  fi
-}
-
-sync_bakery_db_user_integrated() {
-  if [[ "${BAKERY_DB_INTEGRATED}" != "true" ]]; then
-    return 0
-  fi
-
-  ensure_integrated_admin_secret
-
-  local ts
-  ts="$(date +%s)"
-  local job_name="bakery-db-bootstrap-${ts}"
-  local escaped_user
-  local escaped_password
-  escaped_user="$(printf "%s" "${BAKERY_DB_USER}" | sed "s/'/''/g")"
-  escaped_password="$(printf "%s" "${BAKERY_DB_PASSWORD}" | sed "s/'/''/g")"
-
-  log_info "Running integrated Bakery DB bootstrap job '${job_name}'..."
-  cat <<EOF | kubectl -n "${NAMESPACE}" apply -f -
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: ${job_name}
-spec:
-  backoffLimit: 1
-  ttlSecondsAfterFinished: 300
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: bootstrap
-          image: ${BAKERY_DB_SQL_IMAGE}
-          command:
-            - /bin/sh
-            - -ec
-            - |
-              set -euo pipefail
-              export MYSQL_PWD="\${DB_ADMIN_PASSWORD}"
-              for i in \$(seq 1 60); do
-                if mariadb -h "\${DB_HOST}" -uroot -e "SELECT 1" >/dev/null 2>&1; then
-                  break
-                fi
-                sleep 2
-              done
-
-              mariadb -h "\${DB_HOST}" -uroot <<SQL
-              CREATE DATABASE IF NOT EXISTS \\\`\${DB_NAME}\\\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-              CREATE USER IF NOT EXISTS '${escaped_user}'@'%' IDENTIFIED BY '${escaped_password}';
-              ALTER USER '${escaped_user}'@'%' IDENTIFIED BY '${escaped_password}';
-              GRANT ALL PRIVILEGES ON \\\`\${DB_NAME}\\\`.* TO '${escaped_user}'@'%';
-              FLUSH PRIVILEGES;
-SQL
-          env:
-            - name: DB_HOST
-              value: ${BAKERY_DB_HOST}
-            - name: DB_NAME
-              value: ${BAKERY_DB_NAME}
-            - name: DB_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: ${BAKERY_DB_ADMIN_SECRET_NAME}
-                  key: ${BAKERY_DB_ADMIN_PASSWORD_KEY}
-EOF
-
-  if ! kubectl -n "${NAMESPACE}" wait --for=condition=complete --timeout="${BAKERY_DB_BOOTSTRAP_TIMEOUT_SECONDS}s" "job/${job_name}" >/dev/null 2>&1; then
-    log_error "Integrated Bakery DB bootstrap job '${job_name}' failed."
-    kubectl -n "${NAMESPACE}" logs "job/${job_name}" --all-containers=true || true
-    exit 1
-  fi
-
-  kubectl -n "${NAMESPACE}" delete job "${job_name}" --ignore-not-found >/dev/null 2>&1 || true
 }
 
 ensure_oci_registry_auth() {
@@ -1156,29 +1019,9 @@ while [[ $# -gt 0 ]]; do
       BAKERY_DB_USER="$2"
       shift 2
       ;;
-    --bakery-db-password)
-      BAKERY_DB_PASSWORD="$2"
-      shift 2
-      ;;
-    --bakery-db-password-secret-name)
-      BAKERY_DB_PASSWORD_SECRET_NAME="$2"
-      shift 2
-      ;;
-    --bakery-db-password-secret-key)
-      BAKERY_DB_PASSWORD_SECRET_KEY="$2"
-      shift 2
-      ;;
-    --bakery-db-admin-secret-name)
-      BAKERY_DB_ADMIN_SECRET_NAME="$2"
-      shift 2
-      ;;
-    --bakery-db-admin-password-key)
-      BAKERY_DB_ADMIN_PASSWORD_KEY="$2"
-      shift 2
-      ;;
-    --bakery-db-sql-image)
-      BAKERY_DB_SQL_IMAGE="$2"
-      shift 2
+    --bakery-db-password|--bakery-db-password-secret-name|--bakery-db-password-secret-key|--bakery-db-admin-secret-name|--bakery-db-admin-password-key|--bakery-db-sql-image)
+      log_error "Option '$1' was removed. Configure integrated Bakery DB bootstrap via chart values (bakery.database.*)."
+      exit 1
       ;;
     *)
       EXTRA_ARGS+=("$1")
@@ -1312,10 +1155,9 @@ log_info "Resolved integrated bakery DB mode: ${BAKERY_DB_INTEGRATED}"
 
 log_phase "integrated bakery db configuration"
 if [[ "${NO_LOCAL_BAKERY}" != "true" ]]; then
-  apply_bakery_db_secret_integrated
-  sync_bakery_db_user_integrated
+  apply_bakery_db_integrated_overrides
 else
-  log_info "Skipping integrated Bakery DB bootstrap because no-local-bakery mode is enabled."
+  log_info "Skipping integrated Bakery DB Helm overrides because no-local-bakery mode is enabled."
 fi
 
 log_phase "bakery credential secret configuration"

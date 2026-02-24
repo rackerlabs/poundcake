@@ -36,7 +36,7 @@ spec:
             - |
               NS="{{ .Release.Namespace }}"
               kubectl -n "${NS}" patch secret stackstorm-startup-markers --type merge \
-                -p '{"stringData":{"stackstorm_mongodb_user_ready":"false","stackstorm_infra_ready":"false","stackstorm_controlplane_ready":"false","stackstorm_workers_ready":"false","stackstorm_edge_ready":"false","stackstorm_bootstrap_ready":"false","poundcake_mariadb_ready":"false","poundcake_bootstrap_ready":"false"}}'
+                -p '{"stringData":{"stackstorm_mongodb_user_ready":"false","stackstorm_infra_ready":"false","stackstorm_controlplane_ready":"false","stackstorm_workers_ready":"false","stackstorm_edge_ready":"false","stackstorm_bootstrap_ready":"false","poundcake_mariadb_ready":"false","bakery_db_ready":"false","poundcake_bootstrap_ready":"false"}}'
 ---
 apiVersion: batch/v1
 kind: Job
