@@ -40,6 +40,21 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         {{- include "poundcake.bakeryWaitForDbInitContainer" . | nindent 8 }}
+        - name: wait-for-bakery-api
+          image: {{ .Values.images.busybox | quote }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_log_wait_start "bakery-worker-api-ready" "http endpoint http://{{ include "poundcake.bakeryName" . }}:{{ .Values.bakery.service.port }}/api/v1/health"
+              until wget -q -T 2 -O /dev/null "http://{{ include "poundcake.bakeryName" . }}:{{ .Values.bakery.service.port }}/api/v1/health"; do
+                gate_log_wait_tick "bakery-worker-api-ready" "http endpoint http://{{ include "poundcake.bakeryName" . }}:{{ .Values.bakery.service.port }}/api/v1/health"
+                sleep 2
+              done
+              gate_log_wait_ready "bakery-worker-api-ready"
       containers:
         - name: bakery-worker
           securityContext:
