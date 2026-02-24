@@ -1,5 +1,22 @@
 # Example Helm overrides for PoundCake.
 # Start by setting real FQDNs for Envoy Gateway listeners/routes.
+# Copy this file to /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+# and adjust values for your environment.
+
+# Canonical image overrides.
+# Keep tags at latest by default, or pin explicit tags/digests per environment policy.
+poundcakeImage:
+  repository: ghcr.io/rackerlabs/poundcake
+  tag: latest
+
+uiImage:
+  repository: ghcr.io/rackerlabs/poundcake-ui
+  tag: latest
+
+bakery:
+  image:
+    repository: ghcr.io/rackerlabs/poundcake-bakery
+    tag: latest
 
 gateway:
   enabled: true

@@ -1,0 +1,45 @@
+suite: poundcake-bootstrap-job
+templates:
+  - templates/poundcake-bootstrap-job.yaml
+tests:
+  - it: does not render in bakery-only mode
+    set:
+      deployment.mode: bakery-only
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders canonical PoundCake image defaults
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:latest
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: supports explicit tag and digest image references
+    set:
+      poundcakeImage.repository: ghcr.io/example/poundcake
+      poundcakeImage.tag: ""
+      poundcakeImage.digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+  - it: falls back to chart appVersion when tag is explicitly empty
+    set:
+      poundcakeImage.tag: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: poundcake:1.0.0
+
+  - it: renders pull secret from canonical poundcakeImage.pullSecrets
+    set:
+      poundcakeImage.pullSecrets[0]: ghcr-pull
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-pull

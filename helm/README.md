@@ -274,8 +274,7 @@ Readiness semantics:
 ```yaml
 poundcakeImage:
   repository: poundcake
-  # Defaults to Chart.appVersion when omitted/empty.
-  tag: ""
+  tag: latest
   pullPolicy: Always
 
 uiImage:

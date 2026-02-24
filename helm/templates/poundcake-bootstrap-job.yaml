@@ -21,14 +21,15 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: stackstorm-startup
+      {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: poundcake-bootstrap
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ include "poundcake.poundcakeImageRef" . }}
+          imagePullPolicy: {{ .Values.poundcakeImage.pullPolicy }}
           command:
             - /bin/bash
             - -c
