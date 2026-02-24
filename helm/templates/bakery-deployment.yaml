@@ -38,6 +38,21 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         {{- include "poundcake.bakeryWaitForDbInitContainer" . | nindent 8 }}
+        {{- if .Values.poundcake.enabled }}
+        - name: wait-for-bakery-db-init-marker
+          image: {{ .Values.images.busybox | quote }}
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -ec
+            - |
+              {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
+              gate_wait_for_true_file "/app/config/bakery_db_init_ready" "bakery-api-db-init-ready" "marker bakery_db_init_ready"
+          volumeMounts:
+            - name: app-config
+              mountPath: /app/config
+        {{- end }}
       containers:
         - name: bakery
           securityContext:
@@ -250,6 +265,14 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        {{- if .Values.poundcake.enabled }}
+        - name: app-config
+          projected:
+            sources:
+              - secret:
+                  name: stackstorm-startup-markers
+                  optional: true
+        {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}

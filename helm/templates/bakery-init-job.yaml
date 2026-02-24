@@ -1,7 +1,4 @@
-{{- $bakeryEnabled := .Values.bakery.enabled -}}
-{{- if $bakeryEnabled }}
-{{- $poundcakeEnabled := .Values.poundcake.enabled -}}
-{{- $startupServiceAccount := ternary "stackstorm-startup" (include "poundcake.bakeryServiceAccountName" .) $poundcakeEnabled -}}
+{{- if and .Values.bakery.enabled (not .Values.poundcake.enabled) }}
 {{- if not .Values.bakery.database.createServer }}
 {{- fail "bakery.database.createServer=false is not supported. Bakery requires a dedicated MariaDB server." }}
 {{- end }}
@@ -15,10 +12,6 @@ metadata:
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
     app.kubernetes.io/component: bakery-db-init
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": {{ ternary "26" "6" $poundcakeEnabled | quote }}
-    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -34,7 +27,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ $startupServiceAccount }}
+      serviceAccountName: {{ include "poundcake.bakeryServiceAccountName" . }}
       restartPolicy: OnFailure
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}

@@ -20,6 +20,14 @@ tests:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: api
         template: templates/bakery-deployment.yaml
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "bakery_db_init_ready"
+        template: templates/bakery-deployment.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: app-config
+        template: templates/bakery-deployment.yaml
 
   - it: applies poundcake log labels to bakery api pod template in bakery-only mode
     set:
@@ -37,4 +45,11 @@ tests:
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: api
+        template: templates/bakery-deployment.yaml
+      - isNull:
+          path: spec.template.spec.initContainers[1]
+        template: templates/bakery-deployment.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: tmp
         template: templates/bakery-deployment.yaml
