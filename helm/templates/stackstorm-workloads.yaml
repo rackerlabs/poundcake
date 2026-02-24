@@ -1,4 +1,4 @@
-{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
+{{- if .Values.poundcake.enabled }}
 {{- include "poundcake.validateStackstormServiceSet" . -}}
 {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "register")) "true" }}
 apiVersion: apps/v1

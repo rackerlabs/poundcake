@@ -22,11 +22,11 @@
 
 replicaCount: 1
 
-# Deployment mode:
-# - full: PoundCake + StackStorm workflow (and Bakery if bakery.enabled=true)
-# - bakery-only: only Bakery and its dependencies
-deployment:
-  mode: full
+# Service selection:
+# - poundcake.enabled=true renders PoundCake + StackStorm resources
+# - bakery.enabled=true renders Bakery resources
+poundcake:
+  enabled: true
 
 imagePullSecrets: []
 nameOverride: ""
@@ -720,8 +720,7 @@ bootstrap:
 # Bakery service configuration
 # API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)
 bakery:
-  # Enable Bakery deployment in full mode.
-  # In deployment.mode=bakery-only, Bakery is always rendered regardless of this flag.
+  # Enable Bakery deployment.
   enabled: false
 
   # Number of Bakery replicas

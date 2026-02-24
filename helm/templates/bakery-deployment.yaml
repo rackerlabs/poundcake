@@ -1,4 +1,4 @@
-{{- $bakeryEnabled := or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only") -}}
+{{- $bakeryEnabled := .Values.bakery.enabled -}}
 {{- if $bakeryEnabled }}
 {{- if not .Values.bakery.database.createServer }}
 {{- if not .Values.bakery.database.host }}

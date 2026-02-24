@@ -5,7 +5,7 @@ templates:
 tests:
   - it: applies poundcake log labels to bakery api pod template in full mode
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: true
     asserts:
       - equal:
@@ -23,8 +23,8 @@ tests:
 
   - it: applies poundcake log labels to bakery api pod template in bakery-only mode
     set:
-      deployment.mode: bakery-only
-      bakery.enabled: false
+      poundcake.enabled: false
+      bakery.enabled: true
     asserts:
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-group"]

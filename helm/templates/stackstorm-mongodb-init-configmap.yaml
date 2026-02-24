@@ -1,4 +1,4 @@
-{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
+{{- if .Values.poundcake.enabled }}
 {{- if and .Values.mongodb.enabled (not .Values.mongodb.external) }}
 apiVersion: v1
 kind: ConfigMap

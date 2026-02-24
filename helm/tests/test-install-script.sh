@@ -25,6 +25,16 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local needle="$1"
+  local file="$2"
+  if rg -Fq -- "${needle}" "${file}"; then
+    echo "Did not expect to find: ${needle}" >&2
+    echo "In file: ${file}" >&2
+    fail "unexpected content present"
+  fi
+}
+
 assert_not_exists() {
   local path="$1"
   if [[ -e "${path}" ]]; then
@@ -42,6 +52,8 @@ fi
 assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
 assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-bakery.sh" "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
 assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" --enable-bakery "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
+assert_not_contains "--mode <full|bakery-only>" "${POUNDCAKE_INSTALLER}"
+assert_not_contains "POUNDCAKE_INSTALL_MODE           (default: full; valid: full, bakery-only)" "${POUNDCAKE_INSTALLER}"
 
 # Build mock commands so tests run without a live cluster.
 TMP_DIR="$(mktemp -d)"
@@ -147,6 +159,7 @@ run_with_mocks "${POUNDCAKE_OUT}" \
 assert_contains "Operator mode: skip" "${POUNDCAKE_OUT}"
 assert_contains "upgrade --install env-rel" "${TMP_DIR}/helm.log"
 assert_contains "--namespace env-ns" "${TMP_DIR}/helm.log"
+assert_contains "--set-string poundcake.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set-string poundcakeImage.tag=env-tag" "${TMP_DIR}/helm.log"
 assert_contains "--set-string poundcakeImage.tag=cli-tag" "${TMP_DIR}/helm.log"
 
@@ -169,7 +182,8 @@ run_with_mocks "${BAKERY_OUT}" \
 assert_contains "Operator mode: skip" "${BAKERY_OUT}"
 assert_contains "upgrade --install bakery-env-rel" "${TMP_DIR}/helm.log"
 assert_contains "--namespace bakery-env-ns" "${TMP_DIR}/helm.log"
-assert_contains "--set-string deployment.mode=bakery-only" "${TMP_DIR}/helm.log"
+assert_contains "--set-string poundcake.enabled=false" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.database.createServer=true" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.image.repository=example.registry.local/poundcake-bakery" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.image.tag=env-bakery-tag" "${TMP_DIR}/helm.log"
@@ -182,6 +196,16 @@ fi
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
   "${BAKERY_INSTALLER}" --skip-preflight --bakery-db-integrated >/dev/null 2>&1; then
   fail "expected --bakery-db-integrated to fail for bakery installer"
+fi
+
+echo "Validating legacy mode removal guardrails..."
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  "${POUNDCAKE_INSTALLER}" --mode full --skip-preflight >/dev/null 2>&1; then
+  fail "expected --mode to fail for poundcake installer"
+fi
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  env POUNDCAKE_INSTALL_MODE=full "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
+  fail "expected POUNDCAKE_INSTALL_MODE to fail for poundcake installer"
 fi
 
 echo "Installer rename and env override checks passed!"

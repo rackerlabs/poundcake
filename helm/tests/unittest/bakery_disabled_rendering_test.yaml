@@ -12,7 +12,7 @@ templates:
 tests:
   - it: does not render in-cluster bakery resources in full mode when bakery.enabled=false
     set:
-      deployment.mode: full
+      poundcake.enabled: true
       bakery.enabled: false
     asserts:
       - hasDocuments:

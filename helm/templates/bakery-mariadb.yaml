@@ -1,4 +1,4 @@
-{{- if and (or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only")) .Values.bakery.database.createServer .Values.mariadbOperator.enabled }}
+{{- if and (.Values.bakery.enabled) .Values.bakery.database.createServer .Values.mariadbOperator.enabled }}
 {{- $mariaDbNamespace := .Values.mariadbOperator.namespace | default .Release.Namespace -}}
 ---
 apiVersion: k8s.mariadb.com/v1alpha1

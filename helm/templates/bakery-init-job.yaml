@@ -1,7 +1,7 @@
-{{- $bakeryEnabled := or .Values.bakery.enabled (eq (default "full" .Values.deployment.mode) "bakery-only") -}}
+{{- $bakeryEnabled := .Values.bakery.enabled -}}
 {{- if $bakeryEnabled }}
-{{- $fullMode := ne (default "full" .Values.deployment.mode) "bakery-only" -}}
-{{- $startupServiceAccount := ternary "stackstorm-startup" (include "poundcake.bakeryServiceAccountName" .) $fullMode -}}
+{{- $poundcakeEnabled := .Values.poundcake.enabled -}}
+{{- $startupServiceAccount := ternary "stackstorm-startup" (include "poundcake.bakeryServiceAccountName" .) $poundcakeEnabled -}}
 {{- $bootstrapCfg := .Values.bakery.database.bootstrap | default dict -}}
 {{- $bootstrapEnabled := not .Values.bakery.database.createServer -}}
 {{- if and (hasKey $bootstrapCfg "enabled") (ne (toString $bootstrapCfg.enabled) "<nil>") -}}
@@ -25,7 +25,7 @@ metadata:
     app.kubernetes.io/component: bakery-db-bootstrap
   annotations:
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": {{ ternary "25" "5" $fullMode | quote }}
+    "helm.sh/hook-weight": {{ ternary "25" "5" $poundcakeEnabled | quote }}
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   backoffLimit: 3
@@ -57,7 +57,7 @@ spec:
             - |
               NS="{{ .Release.Namespace }}"
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
-              {{- if $fullMode }}
+              {{- if $poundcakeEnabled }}
               gate_log_wait_start "bakery-db-bootstrap-prereq" "marker poundcake_mariadb_ready"
               until [ "$(kubectl -n "${NS}" get secret stackstorm-startup-markers -o jsonpath='{.data.poundcake_mariadb_ready}' 2>/dev/null | base64 -d)" = "true" ]; do
                 gate_log_wait_tick "bakery-db-bootstrap-prereq" "marker poundcake_mariadb_ready"
@@ -136,7 +136,7 @@ metadata:
     app.kubernetes.io/component: bakery-db-init
   annotations:
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": {{ ternary "26" "6" $fullMode | quote }}
+    "helm.sh/hook-weight": {{ ternary "26" "6" $poundcakeEnabled | quote }}
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   backoffLimit: 3

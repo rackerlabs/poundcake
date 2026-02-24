@@ -1,4 +1,4 @@
-{{- if ne (default "full" .Values.deployment.mode) "bakery-only" }}
+{{- if .Values.poundcake.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
