@@ -65,7 +65,7 @@ class IngredientBase(BaseModel):
     action_payload: Optional[str] = None
     action_parameters: Optional[Dict[str, Any]] = None
 
-    source_type: str = Field(default="stackstorm", max_length=50)
+    source_type: str = Field(default="undefined", max_length=50)
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
@@ -146,7 +146,7 @@ class RecipeBase(BaseModel):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     enabled: bool = True
-    source_type: str = Field(default="stackstorm", max_length=50)
+    source_type: str = Field(default="undefined", max_length=50)
     workflow_id: Optional[str] = Field(None, max_length=255)
     workflow_payload: Optional[Dict[str, Any]] = None
     workflow_parameters: Optional[Dict[str, Any]] = None
@@ -258,6 +258,8 @@ class OrderBase(BaseModel):
     starts_at: datetime
     bakery_ticket_id: Optional[str] = Field(None, max_length=36)
     bakery_operation_id: Optional[str] = Field(None, max_length=36)
+    bakery_comms_id: Optional[str] = Field(None, max_length=36)
+    fingerprint_when_active: Optional[str] = Field(None, max_length=255)
 
 
 class OrderCreate(OrderBase):
@@ -280,6 +282,8 @@ class OrderUpdate(BaseModel):
     processing_status: Optional[OrderProcessingStatus] = None
     is_active: Optional[bool] = None
     ends_at: Optional[datetime] = None
+    bakery_comms_id: Optional[str] = Field(None, max_length=36)
+    fingerprint_when_active: Optional[str] = Field(None, max_length=255)
 
 
 class OrderResponse(OrderBase):
