@@ -112,6 +112,13 @@ spec:
               value: {{ .Chart.AppVersion | quote }}
             - name: SERVICE_NAME
               value: api
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_AUTH_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
             - name: POUNDCAKE_STACKSTORM_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -271,6 +278,13 @@ spec:
               value: {{ .Values.logFormat | quote }}
             - name: SERVICE_NAME
               value: chef
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
       volumes:
         - name: app-config
           projected:
@@ -440,6 +454,13 @@ spec:
               value: {{ .Values.logFormat | quote }}
             - name: SERVICE_NAME
               value: prep-chef
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
       volumes:
         - name: app-config
           projected:
@@ -518,6 +539,13 @@ spec:
               value: timer
             - name: PREP_INTERVAL
               value: {{ .Values.intervals.prepInterval | quote }}
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -601,6 +629,13 @@ spec:
               value: {{ .Values.intervals.dishwasher | quote }}
             - name: SERVICE_NAME
               value: dishwasher
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
           volumeMounts:
             - name: app-config
               mountPath: /app/config

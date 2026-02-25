@@ -39,8 +39,10 @@ def test_missing_workflow_failure_retries_once_and_rebinds_execution(
     }
     updated: list[dict] = []
     called_urls: list[str] = []
+    execute_headers: dict | None = None
 
     def _request(method: str, url: str, **kwargs):
+        nonlocal execute_headers
         called_urls.append(str(url))
         path = str(url)
         if path.endswith("/dishes"):
@@ -55,6 +57,7 @@ def test_missing_workflow_failure_retries_once_and_rebinds_execution(
         if "/cook/executions/" in path:
             return _Resp(200, {"status": "failed", "result": {"error": _missing_workflow_error()}})
         if path.endswith("/cook/execute") and method == "POST":
+            execute_headers = kwargs.get("headers")
             return _Resp(201, {"id": "exec-new"})
         raise AssertionError(f"Unexpected request: {method} {path}")
 
@@ -67,6 +70,7 @@ def test_missing_workflow_failure_retries_once_and_rebinds_execution(
     monkeypatch.setattr(timer, "check_for_timeouts", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(timer.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(timer, "API_UNAVAILABLE_SINCE", None)
+    monkeypatch.setenv("POUNDCAKE_INTERNAL_API_KEY", "worker-key")
 
     timer.monitor_dishes()
 
@@ -77,6 +81,9 @@ def test_missing_workflow_failure_retries_once_and_rebinds_execution(
     assert updated[0]["retry_attempt"] == 1
     assert updated[0]["clear_error"] is True
     assert "final_status" not in updated[0]
+    assert execute_headers is not None
+    assert execute_headers.get("X-Request-ID") == "REQ-31"
+    assert execute_headers.get("X-Internal-API-Key") == "worker-key"
 
 
 def test_non_matching_failure_does_not_retry(

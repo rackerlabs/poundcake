@@ -11,12 +11,15 @@ FROM nginx:alpine
 # Copy static files
 COPY ui/static /usr/share/nginx/html
 
+# Copy managed UI entrypoint.
+COPY ui/docker-entrypoint.sh /app/ui/docker-entrypoint.sh
+RUN chmod +x /app/ui/docker-entrypoint.sh
+
 # Ensure nginx entrypoint and runtime paths are writable by non-root UID 1000.
 RUN chown -R 1000:0 /etc/nginx/conf.d /var/cache/nginx /var/run /run
 
-# Copy nginx configuration as template (uses ${API_URL} placeholder)
-# nginx:alpine automatically processes templates in /etc/nginx/templates/
-# and outputs to /etc/nginx/conf.d/ using a writable tmpfs
+# Copy nginx configuration template (uses ${API_URL} placeholder).
+# The repo-managed entrypoint renders this into /etc/nginx/conf.d/default.conf.
 COPY ui/nginx/nginx.conf /etc/nginx/templates/default.conf.template
 
 # Default API URL - will be overridden by environment variable in Kubernetes
@@ -35,5 +38,6 @@ LABEL org.opencontainers.image.title="PoundCake UI" \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:8080/ || exit 1
 
-# Use nginx's default entrypoint which handles templates automatically
-# No custom entrypoint needed - nginx will process templates and start normally
+# Use repo-managed wrapper entrypoint to guarantee non-root-safe rendering.
+ENTRYPOINT ["/app/ui/docker-entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
