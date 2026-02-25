@@ -144,6 +144,42 @@ def test_get_order_not_found(client, mock_db_session):
     assert response.status_code == 404
 
 
+def test_create_order_ignores_fingerprint_when_active_and_persists_bakery_comms(
+    client, mock_db_session
+):
+    mock_db_session.add = Mock()
+
+    async def _refresh(order):
+        now = datetime.now(timezone.utc)
+        order.id = 42
+        order.created_at = now
+        order.updated_at = now
+
+    mock_db_session.refresh = AsyncMock(side_effect=_refresh)
+
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "req_id": "REQ-NEW",
+        "fingerprint": "fp-new",
+        "alert_status": "firing",
+        "alert_group_name": "group-new",
+        "labels": {"alertname": "Test"},
+        "starts_at": now,
+        "bakery_comms_id": "comms-123",
+        "fingerprint_when_active": "client-supplied-ignored",
+    }
+
+    response = client.post("/api/v1/orders", json=payload)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["bakery_comms_id"] == "comms-123"
+    assert body["fingerprint_when_active"] is None
+
+    created_order = mock_db_session.add.call_args.args[0]
+    assert created_order.bakery_comms_id == "comms-123"
+    assert created_order.fingerprint_when_active is None
+
+
 def test_update_order_sets_is_active_false_on_terminal_status(client, mock_db_session):
     order = _make_order(status="processing")
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
@@ -155,6 +191,27 @@ def test_update_order_sets_is_active_false_on_terminal_status(client, mock_db_se
     body = response.json()
     assert body["processing_status"] == "complete"
     assert body["is_active"] is False
+
+
+def test_update_order_ignores_fingerprint_when_active_but_updates_bakery_comms(
+    client, mock_db_session
+):
+    order = _make_order(status="processing")
+    order.fingerprint_when_active = "db-generated"
+    mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
+
+    payload = {
+        "bakery_comms_id": "comms-456",
+        "fingerprint_when_active": "client-supplied-ignored",
+    }
+    response = client.put("/api/v1/orders/1", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bakery_comms_id"] == "comms-456"
+    assert body["fingerprint_when_active"] == "db-generated"
+    assert order.bakery_comms_id == "comms-456"
+    assert order.fingerprint_when_active == "db-generated"
 
 
 def test_update_order_rejects_terminal_to_terminal_transition(client, mock_db_session):

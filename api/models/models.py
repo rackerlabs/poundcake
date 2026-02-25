@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,6 +45,8 @@ class RecipeIngredient(Base):
     parallel_group: Mapped[int] = mapped_column(default=0, nullable=False)
     # Depth in the task graph (for parallel/linear ordering)
     depth: Mapped[int] = mapped_column(default=0, nullable=False)
+    # Optional per-step overrides injected into Orquesta task input
+    input_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
 
     recipe: Mapped["Recipe"] = relationship(back_populates="recipe_ingredients")
     ingredient: Mapped["Ingredient"] = relationship()
@@ -76,7 +78,7 @@ class Recipe(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
     )
-    deleted: Mapped[bool | None] = mapped_column(Boolean, default=False)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Relationships
@@ -107,10 +109,10 @@ class Ingredient(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     task_id: Mapped[str] = mapped_column(
-        String(100), nullable=False, index=True
+        String(100), nullable=False, unique=True, index=True
     )  # ST2 action.ref (e.g. 'core.local')
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    source_type: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), default="undefined", nullable=False)
 
     action_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # ST2 UUID for reuse
     action_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -127,7 +129,7 @@ class Ingredient(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
     )
-    deleted: Mapped[bool | None] = mapped_column(Boolean, default=False)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
@@ -243,6 +245,12 @@ class Order(Base):
     counter: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     bakery_ticket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     bakery_operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    bakery_comms_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    fingerprint_when_active: Mapped[str | None] = mapped_column(
+        String(255),
+        Computed("IF(is_active = 1, fingerprint, NULL)", persisted=True),
+        nullable=True,
+    )
 
     labels: Mapped[dict[str, Any]] = mapped_column(MYSQL_JSON, nullable=False)
     annotations: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
