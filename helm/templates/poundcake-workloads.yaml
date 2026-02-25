@@ -112,6 +112,8 @@ spec:
               value: {{ .Chart.AppVersion | quote }}
             - name: SERVICE_NAME
               value: api
+            - name: POUNDCAKE_AUTH_ENABLED
+              value: {{ .Values.auth.enabled | quote }}
             {{- if .Values.auth.enabled }}
             - name: POUNDCAKE_AUTH_INTERNAL_API_KEY
               valueFrom:

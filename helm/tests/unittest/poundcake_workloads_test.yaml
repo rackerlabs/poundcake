@@ -448,6 +448,12 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: POUNDCAKE_AUTH_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: POUNDCAKE_AUTH_INTERNAL_API_KEY
             valueFrom:
               secretKeyRef:
@@ -495,6 +501,12 @@ tests:
     set:
       auth.enabled: false
     asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_ENABLED
+            value: "false"
+        documentIndex: 0
       - notContains:
           path: spec.template.spec.containers[0].env
           content:

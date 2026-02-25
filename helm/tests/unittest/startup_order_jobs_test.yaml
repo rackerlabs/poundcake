@@ -190,6 +190,28 @@ tests:
           value: ghcr.io/example/poundcake@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         documentIndex: 8
 
+  - it: wires runtime auth flag for startup bootstrap when auth is enabled
+    set:
+      auth.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_AUTH_ENABLED
+            value: "true"
+        documentIndex: 8
+
+  - it: wires runtime auth flag for startup bootstrap when auth is disabled
+    set:
+      auth.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_AUTH_ENABLED
+            value: "false"
+        documentIndex: 8
+
   - it: applies pod and utility security contexts to startup jobs
     asserts:
       - equal:

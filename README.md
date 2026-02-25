@@ -367,6 +367,10 @@ Important environment variables:
 # Database
 DATABASE_URL=mysql+pymysql://user:pass@poundcake-mariadb:3306/poundcake
 
+# Authentication
+# Helm auth.enabled maps to runtime POUNDCAKE_AUTH_ENABLED on API/bootstrap workloads.
+POUNDCAKE_AUTH_ENABLED=true
+
 # StackStorm
 POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
 # StackStorm packs are served by API endpoint /api/v1/cook/packs

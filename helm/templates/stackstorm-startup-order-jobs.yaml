@@ -829,6 +829,8 @@ spec:
               value: "0"
             - name: POUNDCAKE_BOOTSTRAP_MARK
               value: "true"
+            - name: POUNDCAKE_AUTH_ENABLED
+              value: {{ .Values.auth.enabled | quote }}
       containers:
         - name: mark-ready
           image: {{ .Values.images.kubectl }}

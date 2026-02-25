@@ -53,6 +53,8 @@ spec:
               value: "true"
             - name: SERVICE_NAME
               value: "dishwasher-bootstrap"
+            - name: POUNDCAKE_AUTH_ENABLED
+              value: {{ .Values.auth.enabled | quote }}
             {{- if .Values.auth.enabled }}
             - name: POUNDCAKE_INTERNAL_API_KEY
               valueFrom:
