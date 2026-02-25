@@ -43,3 +43,23 @@ tests:
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
           value: ghcr-pull
+
+  - it: wires runtime auth flag for bootstrap job when auth is enabled
+    set:
+      auth.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_ENABLED
+            value: "true"
+
+  - it: wires runtime auth flag for bootstrap job when auth is disabled
+    set:
+      auth.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_ENABLED
+            value: "false"

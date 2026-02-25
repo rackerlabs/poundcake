@@ -127,12 +127,15 @@ kubectl get secret <release>-poundcake-admin -n <namespace> -o jsonpath='{.data.
 Verify environment wiring:
 
 ```bash
+kubectl get deploy <release>-poundcake-api -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_ENABLED")]}'
 kubectl get deploy <release>-poundcake-api -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_INTERNAL_API_KEY")]}'
 kubectl get deploy <release>-poundcake-chef -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
 kubectl get deploy <release>-poundcake-prep-chef -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
 kubectl get deploy <release>-poundcake-timer -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
 kubectl get deploy <release>-poundcake-dishwasher -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
 ```
+
+If Helm has `auth.enabled: false`, ensure API shows `POUNDCAKE_AUTH_ENABLED=false`.
 
 After rollout, confirm 401 loops stop in worker logs.
 
