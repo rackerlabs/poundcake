@@ -145,7 +145,7 @@ def _maybe_retry_missing_workflow_execution(
         "POST",
         f"{API_BASE_URL}/cook/execute",
         json={"action": workflow_id, "parameters": workflow_parameters},
-        headers={"X-Request-ID": req_id},
+        headers=get_service_headers(req_id),
         timeout=30,
         retries=POLLER_RETRIES,
     )

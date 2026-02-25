@@ -154,6 +154,8 @@ def require_auth_if_enabled(
         "/api/v1/ready",
         "/api/v1/health",
         "/api/v1/auth/login",
+        "/api/v1/cook/packs",
+        "/api/v1/internal/stackstorm/pack.tgz",
     ]
 
     if request.url.path in public_paths or request.url.path.startswith("/static/"):

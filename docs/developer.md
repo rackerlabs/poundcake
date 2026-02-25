@@ -351,6 +351,33 @@ kubectl -n rackspace get jobs
 helm -n rackspace list
 ```
 
+### 7.1) UI Non-root Entrypoint Verification
+
+When `uiImage.tag` remains `latest`, verify the running pod is using the expected image and rendered config:
+
+```bash
+# 1) Confirm current image reference and immutable imageID (digest)
+kubectl -n rackspace get pod -l app.kubernetes.io/component=ui \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}'
+
+# 2) Check restart timestamps for rollout freshness
+kubectl -n rackspace get pod -l app.kubernetes.io/component=ui \
+  -o custom-columns=POD:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount,STARTED:.status.startTime
+
+# 3) Verify rendered nginx config listens on 8080
+kubectl -n rackspace exec deploy/poundcake-ui -- grep -n "listen" /etc/nginx/conf.d/default.conf
+
+# 4) Verify nginx runs as non-root and is bound to :8080
+kubectl -n rackspace exec deploy/poundcake-ui -- id -u
+kubectl -n rackspace exec deploy/poundcake-ui -- sh -c 'ss -lntp 2>/dev/null || netstat -lnt 2>/dev/null'
+```
+
+Expected:
+- `id -u` is not `0` (default is `1000`).
+- Rendered config includes `listen 8080;` and does not include `listen 80;`.
+- Listener output shows `:8080`.
+- Service/ingress may still expose external port `80` while targeting container `8080`.
+
 ## 8) CI/CD Behavior
 
 Workflow triggers:

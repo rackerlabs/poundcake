@@ -20,7 +20,7 @@ class _Resp:
 def test_run_chef_marks_dish_failed_for_unsupported_recipe_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, str, dict | None]] = []
+    calls: list[tuple[str, str, dict | None, dict | None]] = []
     steps = iter(
         [
             _Resp(200, [{"id": 1, "req_id": "REQ-1"}]),
@@ -37,12 +37,13 @@ def test_run_chef_marks_dish_failed_for_unsupported_recipe_source(
     )
 
     def _request(method: str, url: str, **kwargs):
-        calls.append((method, url, kwargs.get("json")))
+        calls.append((method, url, kwargs.get("json"), kwargs.get("headers")))
         return next(steps)
 
     monkeypatch.setattr(chef, "wait_for_api", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(chef, "request_with_retry_sync", _request)
     monkeypatch.setattr(chef.time, "sleep", lambda _seconds: (_ for _ in ()).throw(SystemExit))
+    monkeypatch.setenv("POUNDCAKE_INTERNAL_API_KEY", "worker-key")
 
     with pytest.raises(SystemExit):
         chef.run_chef()
@@ -53,7 +54,9 @@ def test_run_chef_marks_dish_failed_for_unsupported_recipe_source(
         and body
         and body.get("processing_status") == "failed"
         and "Unsupported recipe source_type" in body.get("error_message", "")
-        for method, url, body in calls
+        and headers
+        and headers.get("X-Internal-API-Key") == "worker-key"
+        for method, url, body, headers in calls
     )
 
 

@@ -365,13 +365,14 @@ tests:
 
   - it: exposes pack sync token to poundcake-api
     asserts:
-      - equal:
-          path: spec.template.spec.containers[0].env[22].name
-          value: POUNDCAKE_PACK_SYNC_TOKEN
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].env[22].valueFrom.secretKeyRef.name
-          value: poundcake-secrets
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_PACK_SYNC_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-secrets
+                key: PACK_SYNC_TOKEN
         documentIndex: 0
 
   - it: mounts stackstorm API key secret into poundcake-api and exposes env var/file path
@@ -400,21 +401,20 @@ tests:
           path: spec.template.spec.volumes[1].secret.secretName
           value: stackstorm-apikeys
         documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].env[20].name
-          value: POUNDCAKE_STACKSTORM_API_KEY
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_STACKSTORM_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: stackstorm-apikeys
+                key: st2_api_key
         documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].env[20].valueFrom.secretKeyRef.name
-          value: stackstorm-apikeys
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].env[21].name
-          value: ST2_API_KEY_FILE
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].env[21].value
-          value: /run/secrets/st2/st2_api_key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ST2_API_KEY_FILE
+            value: /run/secrets/st2/st2_api_key
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].env[7].name
@@ -440,6 +440,86 @@ tests:
           path: spec.template.spec.containers[0].env[15].valueFrom.secretKeyRef.name
           value: stackstorm-secrets
         documentIndex: 0
+
+  - it: injects internal API keys into api and worker workloads when auth is enabled
+    set:
+      auth.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_INTERNAL_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-admin
+                key: internal-api-key
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-admin
+                key: internal-api-key
+        documentIndex: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-admin
+                key: internal-api-key
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-admin
+                key: internal-api-key
+        documentIndex: 4
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-admin
+                key: internal-api-key
+        documentIndex: 5
+
+  - it: omits internal API key env vars when auth is disabled
+    set:
+      auth.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_INTERNAL_API_KEY
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+        documentIndex: 1
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+        documentIndex: 3
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+        documentIndex: 4
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_INTERNAL_API_KEY
+        documentIndex: 5
 
   - it: injects bakery client env vars into poundcake-api with integrated defaults
     set:

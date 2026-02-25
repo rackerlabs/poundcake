@@ -123,7 +123,7 @@ def run_chef() -> None:
                     "PATCH",
                     f"{API_BASE_URL}/dishes/{dish_id}",
                     json={"processing_status": "failed", "error_message": err},
-                    headers={"X-Request-ID": req_id},
+                    headers=get_service_headers(req_id),
                     timeout=10,
                     retries=POLLER_RETRIES,
                 )

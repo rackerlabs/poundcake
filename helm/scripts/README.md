@@ -9,3 +9,4 @@ Example use cases:
 
 Current scripts:
 - `common-functions.sh`: shared install helpers (preflight, overrides, validation, rotation).
+- `startup-gate-runbook.sh`: collects startup gate evidence for `poundcake-api` init delays and outputs a timeline/classification summary.
