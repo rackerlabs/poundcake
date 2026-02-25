@@ -110,6 +110,8 @@ def upgrade() -> None:
             severity VARCHAR(50),
             instance VARCHAR(255),
             counter INTEGER NOT NULL,
+            bakery_ticket_id VARCHAR(36),
+            bakery_operation_id VARCHAR(36),
             labels JSON NOT NULL,
             annotations JSON,
             raw_data JSON,
@@ -144,6 +146,10 @@ def upgrade() -> None:
     op.create_index(op.f("ix_orders_severity"), "orders", ["severity"], unique=False)
     op.create_index(op.f("ix_orders_instance"), "orders", ["instance"], unique=False)
     op.create_index(op.f("ix_orders_created_at"), "orders", ["created_at"], unique=False)
+    op.create_index(op.f("ix_orders_bakery_ticket_id"), "orders", ["bakery_ticket_id"], unique=False)
+    op.create_index(
+        op.f("ix_orders_bakery_operation_id"), "orders", ["bakery_operation_id"], unique=False
+    )
 
     # Dishes
     op.create_table(
@@ -227,8 +233,237 @@ def upgrade() -> None:
         unique=True,
     )
 
+    # Alert suppressions
+    op.create_table(
+        "alert_suppressions",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("reason", sa.Text(), nullable=True),
+        sa.Column("scope", sa.String(length=32), nullable=False),
+        sa.Column("enabled", sa.Boolean(), nullable=False),
+        sa.Column("starts_at", sa.DateTime(), nullable=False),
+        sa.Column("ends_at", sa.DateTime(), nullable=False),
+        sa.Column("canceled_at", sa.DateTime(), nullable=True),
+        sa.Column("created_by", sa.String(length=255), nullable=True),
+        sa.Column("summary_ticket_enabled", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_alert_suppressions_id", "alert_suppressions", ["id"], unique=False)
+    op.create_index("ix_alert_suppressions_name", "alert_suppressions", ["name"], unique=False)
+    op.create_index(
+        "ix_alert_suppressions_starts_at",
+        "alert_suppressions",
+        ["starts_at"],
+        unique=False,
+    )
+    op.create_index("ix_alert_suppressions_ends_at", "alert_suppressions", ["ends_at"], unique=False)
+    op.create_index(
+        "ix_alert_suppressions_canceled_at",
+        "alert_suppressions",
+        ["canceled_at"],
+        unique=False,
+    )
+    op.create_index(
+        "idx_alert_suppressions_active_lookup",
+        "alert_suppressions",
+        ["enabled", "starts_at", "ends_at", "canceled_at"],
+        unique=False,
+    )
+
+    op.create_table(
+        "alert_suppression_matchers",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("suppression_id", sa.Integer(), nullable=False),
+        sa.Column("label_key", sa.String(length=255), nullable=False),
+        sa.Column("operator", sa.String(length=32), nullable=False),
+        sa.Column("value", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["suppression_id"], ["alert_suppressions.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "ix_alert_suppression_matchers_id",
+        "alert_suppression_matchers",
+        ["id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_alert_suppression_matchers_suppression_id",
+        "alert_suppression_matchers",
+        ["suppression_id"],
+        unique=False,
+    )
+
+    op.create_table(
+        "suppressed_events",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("suppression_id", sa.Integer(), nullable=False),
+        sa.Column("received_at", sa.DateTime(), nullable=False),
+        sa.Column("fingerprint", sa.String(length=255), nullable=True),
+        sa.Column("alertname", sa.String(length=255), nullable=True),
+        sa.Column("severity", sa.String(length=64), nullable=True),
+        sa.Column("labels_json", mysql.JSON(), nullable=False),
+        sa.Column("annotations_json", mysql.JSON(), nullable=True),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("payload_hash", sa.String(length=64), nullable=True),
+        sa.Column("req_id", sa.String(length=100), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["suppression_id"], ["alert_suppressions.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_suppressed_events_id", "suppressed_events", ["id"], unique=False)
+    op.create_index(
+        "ix_suppressed_events_suppression_id",
+        "suppressed_events",
+        ["suppression_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppressed_events_received_at",
+        "suppressed_events",
+        ["received_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppressed_events_fingerprint",
+        "suppressed_events",
+        ["fingerprint"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppressed_events_alertname",
+        "suppressed_events",
+        ["alertname"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppressed_events_severity",
+        "suppressed_events",
+        ["severity"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppressed_events_payload_hash",
+        "suppressed_events",
+        ["payload_hash"],
+        unique=False,
+    )
+    op.create_index("ix_suppressed_events_req_id", "suppressed_events", ["req_id"], unique=False)
+    op.create_index(
+        "idx_suppressed_events_suppression_received_at",
+        "suppressed_events",
+        ["suppression_id", "received_at"],
+        unique=False,
+    )
+    op.create_index(
+        "idx_suppressed_events_fingerprint",
+        "suppressed_events",
+        ["fingerprint"],
+        unique=False,
+    )
+
+    op.create_table(
+        "suppression_summaries",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("suppression_id", sa.Integer(), nullable=False),
+        sa.Column("total_suppressed", sa.Integer(), nullable=False),
+        sa.Column("by_alertname_json", mysql.JSON(), nullable=True),
+        sa.Column("by_severity_json", mysql.JSON(), nullable=True),
+        sa.Column("first_seen_at", sa.DateTime(), nullable=True),
+        sa.Column("last_seen_at", sa.DateTime(), nullable=True),
+        sa.Column("summary_created_at", sa.DateTime(), nullable=True),
+        sa.Column("bakery_ticket_id", sa.String(length=36), nullable=True),
+        sa.Column("bakery_create_operation_id", sa.String(length=36), nullable=True),
+        sa.Column("bakery_close_operation_id", sa.String(length=36), nullable=True),
+        sa.Column("summary_close_at", sa.DateTime(), nullable=True),
+        sa.Column("state", sa.String(length=32), nullable=False),
+        sa.Column("last_error", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["suppression_id"], ["alert_suppressions.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("suppression_id"),
+    )
+    op.create_index("ix_suppression_summaries_id", "suppression_summaries", ["id"], unique=False)
+    op.create_index(
+        "ix_suppression_summaries_suppression_id",
+        "suppression_summaries",
+        ["suppression_id"],
+        unique=True,
+    )
+    op.create_index(
+        "ix_suppression_summaries_bakery_ticket_id",
+        "suppression_summaries",
+        ["bakery_ticket_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppression_summaries_bakery_create_operation_id",
+        "suppression_summaries",
+        ["bakery_create_operation_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppression_summaries_bakery_close_operation_id",
+        "suppression_summaries",
+        ["bakery_close_operation_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_suppression_summaries_state",
+        "suppression_summaries",
+        ["state"],
+        unique=False,
+    )
+
 
 def downgrade() -> None:
+    op.drop_index("ix_suppression_summaries_state", table_name="suppression_summaries")
+    op.drop_index(
+        "ix_suppression_summaries_bakery_close_operation_id",
+        table_name="suppression_summaries",
+    )
+    op.drop_index(
+        "ix_suppression_summaries_bakery_create_operation_id",
+        table_name="suppression_summaries",
+    )
+    op.drop_index("ix_suppression_summaries_bakery_ticket_id", table_name="suppression_summaries")
+    op.drop_index("ix_suppression_summaries_suppression_id", table_name="suppression_summaries")
+    op.drop_index("ix_suppression_summaries_id", table_name="suppression_summaries")
+    op.drop_table("suppression_summaries")
+
+    op.drop_index("idx_suppressed_events_fingerprint", table_name="suppressed_events")
+    op.drop_index(
+        "idx_suppressed_events_suppression_received_at",
+        table_name="suppressed_events",
+    )
+    op.drop_index("ix_suppressed_events_req_id", table_name="suppressed_events")
+    op.drop_index("ix_suppressed_events_payload_hash", table_name="suppressed_events")
+    op.drop_index("ix_suppressed_events_severity", table_name="suppressed_events")
+    op.drop_index("ix_suppressed_events_alertname", table_name="suppressed_events")
+    op.drop_index("ix_suppressed_events_fingerprint", table_name="suppressed_events")
+    op.drop_index("ix_suppressed_events_received_at", table_name="suppressed_events")
+    op.drop_index("ix_suppressed_events_suppression_id", table_name="suppressed_events")
+    op.drop_index("ix_suppressed_events_id", table_name="suppressed_events")
+    op.drop_table("suppressed_events")
+
+    op.drop_index(
+        "ix_alert_suppression_matchers_suppression_id",
+        table_name="alert_suppression_matchers",
+    )
+    op.drop_index("ix_alert_suppression_matchers_id", table_name="alert_suppression_matchers")
+    op.drop_table("alert_suppression_matchers")
+
+    op.drop_index("idx_alert_suppressions_active_lookup", table_name="alert_suppressions")
+    op.drop_index("ix_alert_suppressions_canceled_at", table_name="alert_suppressions")
+    op.drop_index("ix_alert_suppressions_ends_at", table_name="alert_suppressions")
+    op.drop_index("ix_alert_suppressions_starts_at", table_name="alert_suppressions")
+    op.drop_index("ix_alert_suppressions_name", table_name="alert_suppressions")
+    op.drop_index("ix_alert_suppressions_id", table_name="alert_suppressions")
+    op.drop_table("alert_suppressions")
+
     op.drop_index("ux_dish_ingredients_dish_task_exec", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_st2_execution_id", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_task_id", table_name="dish_ingredients")
@@ -240,6 +475,11 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_dishes_req_id"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_id"), table_name="dishes")
     op.drop_table("dishes")
+
+    op.drop_index(op.f("ix_orders_bakery_operation_id"), table_name="orders")
+    op.drop_index(op.f("ix_orders_bakery_ticket_id"), table_name="orders")
+    op.drop_column("orders", "bakery_operation_id")
+    op.drop_column("orders", "bakery_ticket_id")
 
     op.drop_index(op.f("ix_orders_created_at"), table_name="orders")
     op.drop_index(op.f("ix_orders_instance"), table_name="orders")
