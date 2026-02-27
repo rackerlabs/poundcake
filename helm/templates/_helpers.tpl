@@ -160,6 +160,47 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- .Values.bakery.database.user.passwordSecretKey | default "password" -}}
 {{- end -}}
 
+{{- define "poundcake.databaseMode" -}}
+{{- $database := .Values.database | default dict -}}
+{{- $mode := $database.mode | default "embedded" -}}
+{{- if eq $mode "shared_operator" -}}
+shared_operator
+{{- else -}}
+embedded
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.databaseServerName" -}}
+{{- if eq (include "poundcake.databaseMode" .) "shared_operator" -}}
+{{- .Values.database.sharedOperator.serverName | default "" -}}
+{{- else -}}
+poundcake-mariadb
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.databaseServiceNamespace" -}}
+{{- if eq (include "poundcake.databaseMode" .) "shared_operator" -}}
+{{- .Values.database.sharedOperator.namespace | default .Release.Namespace -}}
+{{- else -}}
+{{- .Release.Namespace -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.databaseHost" -}}
+{{- $mode := include "poundcake.databaseMode" . -}}
+{{- $serverName := include "poundcake.databaseServerName" . -}}
+{{- $namespace := include "poundcake.databaseServiceNamespace" . -}}
+{{- if eq $mode "shared_operator" -}}
+  {{- if and $serverName (ne $namespace .Release.Namespace) -}}
+{{ printf "%s.%s.svc.cluster.local" $serverName $namespace }}
+  {{- else -}}
+{{ $serverName }}
+  {{- end -}}
+{{- else -}}
+poundcake-mariadb
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.bakeryWaitForDbInitContainer" -}}
 - name: wait-for-db
   image: {{ .Values.images.busybox | quote }}
@@ -418,5 +459,26 @@ gate_wait_for_tcp() {
     sleep 2
   done
   gate_log_wait_ready "${gate_name}"
+}
+
+gate_wait_for_http_status() {
+  gate_url="$1"
+  gate_name="$2"
+  gate_detail="$3"
+  shift 3
+  gate_log_wait_start "${gate_name}" "${gate_detail}"
+  while true; do
+    gate_resp="$(wget -S -O /dev/null "${gate_url}" 2>&1 || true)"
+    for gate_code in "$@"; do
+      case "${gate_resp}" in
+        *" ${gate_code} "*)
+          gate_log_wait_ready "${gate_name}"
+          return 0
+          ;;
+      esac
+    done
+    gate_log_wait_tick "${gate_name}" "${gate_detail}"
+    sleep 2
+  done
 }
 {{- end -}}

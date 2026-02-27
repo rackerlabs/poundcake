@@ -5,7 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="${SCRIPT_DIR}/../bin"
 POUNDCAKE_INSTALLER="${BIN_DIR}/install-poundcake.sh"
 BAKERY_INSTALLER="${BIN_DIR}/install-bakery.sh"
-WRAPPER_SCRIPT="${SCRIPT_DIR}/../../install/install-poundcake-helm.sh"
+POUNDCAKE_WRAPPER="${SCRIPT_DIR}/../../install/install-poundcake-helm.sh"
+BAKERY_WRAPPER="${SCRIPT_DIR}/../../install/install-bakery-helm.sh"
 
 fail() {
   echo "[FAIL] $*" >&2
@@ -35,25 +36,22 @@ assert_not_contains() {
   fi
 }
 
-assert_not_exists() {
-  local path="$1"
-  if [[ -e "${path}" ]]; then
-    fail "unexpected path exists: ${path}"
-  fi
-}
-
-echo "Checking installer path rename + wrapper target dispatch..."
+echo "Checking installer wrappers and operator source defaults..."
 [[ -x "${POUNDCAKE_INSTALLER}" ]] || fail "missing ${POUNDCAKE_INSTALLER}"
 [[ -x "${BAKERY_INSTALLER}" ]] || fail "missing ${BAKERY_INSTALLER}"
-if find "${BIN_DIR}" -maxdepth 1 -type f -name 'install-poundcake*-env.sh' | rg -q .; then
-  fail "legacy poundcake env installer path still exists under ${BIN_DIR}"
-fi
+[[ -x "${POUNDCAKE_WRAPPER}" ]] || fail "missing ${POUNDCAKE_WRAPPER}"
+[[ -x "${BAKERY_WRAPPER}" ]] || fail "missing ${BAKERY_WRAPPER}"
 
-assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
-assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-bakery.sh" "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
-assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" --enable-bakery "${ARGS[@]}"' "${WRAPPER_SCRIPT}"
-assert_not_contains "--mode <full|bakery-only>" "${POUNDCAKE_INSTALLER}"
-assert_not_contains "POUNDCAKE_INSTALL_MODE           (default: full; valid: full, bakery-only)" "${POUNDCAKE_INSTALLER}"
+assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "$@"' "${POUNDCAKE_WRAPPER}"
+assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-bakery.sh" "$@"' "${BAKERY_WRAPPER}"
+assert_not_contains "both" "${POUNDCAKE_WRAPPER}"
+assert_not_contains "case \"\${TARGET}\"" "${POUNDCAKE_WRAPPER}"
+
+assert_contains "https://helm.mariadb.com/mariadb-operator" "${POUNDCAKE_INSTALLER}"
+assert_contains "https://ot-container-kit.github.io/helm-charts" "${POUNDCAKE_INSTALLER}"
+assert_contains "https://github.com/rabbitmq/cluster-operator/releases/download/v2.12.0/cluster-operator.yml" "${POUNDCAKE_INSTALLER}"
+assert_contains "https://github.com/rabbitmq/messaging-topology-operator/releases/download/v1.15.0/messaging-topology-operator-with-certmanager.yaml" "${POUNDCAKE_INSTALLER}"
+assert_contains "https://mongodb.github.io/helm-charts" "${POUNDCAKE_INSTALLER}"
 
 # Build mock commands so tests run without a live cluster.
 TMP_DIR="$(mktemp -d)"
@@ -81,10 +79,10 @@ spec:
         - name: api
           readinessProbe:
             httpGet:
-              path: /api/v1/ready
+              path: /api/v1/health
           livenessProbe:
             httpGet:
-              path: /api/v1/live
+              path: /api/v1/health
           env:
             - name: POUNDCAKE_PACK_SYNC_ENDPOINT
               value: http://poundcake-api:8000/api/v1/cook/packs
@@ -104,10 +102,26 @@ set -euo pipefail
 : "${TEST_KUBECTL_LOG:?missing TEST_KUBECTL_LOG}"
 printf '%s\n' "$*" >> "${TEST_KUBECTL_LOG}"
 
+if [[ "${1:-}" == "cluster-info" ]]; then
+  exit 0
+fi
 if [[ "${1:-}" == "get" && "${2:-}" == "namespace" ]]; then
   exit 1
 fi
-if [[ "${1:-}" == "-n" && "${3:-}" == "create" && "${4:-}" == "secret" && "${5:-}" == "generic" ]]; then
+if [[ "${1:-}" == "create" && "${2:-}" == "namespace" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "secret" ]]; then
+  if [[ "${MOCK_BAKERY_SECRET_EXISTS:-1}" == "1" ]]; then
+    exit 0
+  fi
+  exit 1
+fi
+if [[ "${1:-}" == "get" && "${2:-}" == "crd" ]]; then
+  # Default to present so operator checks can pass in verify/skip tests.
+  exit 0
+fi
+if [[ "${1:-}" == "-n" && "${3:-}" == "create" && "${4:-}" == "secret" ]]; then
   cat <<'YAML_EOF'
 apiVersion: v1
 kind: Secret
@@ -116,6 +130,59 @@ metadata:
 YAML_EOF
   exit 0
 fi
+if [[ "${1:-}" == "-n" && "${3:-}" == "apply" && "${4:-}" == "-f" && "${5:-}" == "-" ]]; then
+  cat >/dev/null
+  exit 0
+fi
+if [[ "${1:-}" == "apply" && "${2:-}" == "-f" && "${3:-}" == "-" ]]; then
+  cat >/dev/null
+  exit 0
+fi
+
+# Bakery service discovery list call
+if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "service" && "${5:-}" == "-l" ]]; then
+  case "${MOCK_BAKERY_DISCOVERY:-none}" in
+    single)
+      echo "bakery"
+      ;;
+    ambiguous)
+      echo "bakery-a"
+      echo "bakery-b"
+      ;;
+    *)
+      ;;
+  esac
+  exit 0
+fi
+
+# Bakery deployment discovery list call
+if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "deployment" && "${5:-}" == "-l" ]]; then
+  case "${MOCK_BAKERY_DISCOVERY:-none}" in
+    single)
+      echo "bakery"
+      ;;
+    ambiguous)
+      echo "bakery-a"
+      echo "bakery-b"
+      ;;
+    *)
+      ;;
+  esac
+  exit 0
+fi
+
+# Individual bakery service port lookup
+if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "service" && "${5:-}" != "-l" ]]; then
+  echo "${MOCK_BAKERY_PORT:-8000}"
+  exit 0
+fi
+
+# Individual bakery deployment env lookup
+if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "deployment" && "${5:-}" != "-l" ]]; then
+  echo "DATABASE_HOST=${MOCK_BAKERY_DB_HOST:-bakery-mariadb}"
+  exit 0
+fi
+
 exit 0
 KUBE_EOF
 chmod +x "${MOCK_BIN}/kubectl"
@@ -140,7 +207,7 @@ run_with_mocks() {
   "$@" > "${out_file}" 2>&1
 }
 
-echo "Validating Poundcake installer env overrides and CLI precedence..."
+echo "Validating PoundCake installer fixed deployment toggles..."
 POUNDCAKE_OUT="${TMP_DIR}/poundcake.out"
 run_with_mocks "${POUNDCAKE_OUT}" \
   env \
@@ -160,11 +227,55 @@ assert_contains "Operator mode: skip" "${POUNDCAKE_OUT}"
 assert_contains "upgrade --install env-rel" "${TMP_DIR}/helm.log"
 assert_contains "--namespace env-ns" "${TMP_DIR}/helm.log"
 assert_contains "--set poundcake.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.enabled=false" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.client.enabled=false" "${TMP_DIR}/helm.log"
+assert_contains "--set database.mode=embedded" "${TMP_DIR}/helm.log"
 assert_contains "--set-string poundcakeImage.tag=env-tag" "${TMP_DIR}/helm.log"
 assert_contains "--set-string poundcakeImage.tag=cli-tag" "${TMP_DIR}/helm.log"
-assert_contains "-f ${TMP_DIR}/values.yaml --set poundcake.enabled=true" "${TMP_DIR}/helm.log"
 
-echo "Validating Bakery installer env overrides and standalone DB enforcement..."
+echo "Validating PoundCake Bakery/DB auto-discovery..."
+DISCOVERY_OUT="${TMP_DIR}/poundcake-discovery.out"
+run_with_mocks "${DISCOVERY_OUT}" \
+  env \
+  MOCK_BAKERY_DISCOVERY="single" \
+  MOCK_BAKERY_DB_HOST="bakery-shared-mariadb" \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_TAG="env-tag" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight
+
+assert_contains "--set bakery.client.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.client.baseUrl=http://bakery.env-ns.svc.cluster.local:8000" "${TMP_DIR}/helm.log"
+assert_contains "--set database.mode=shared_operator" "${TMP_DIR}/helm.log"
+assert_contains "--set-string database.sharedOperator.serverName=bakery-shared-mariadb" "${TMP_DIR}/helm.log"
+
+echo "Validating explicit remote Bakery URL precedence over auto-discovery..."
+EXPLICIT_REMOTE_OUT="${TMP_DIR}/poundcake-remote.out"
+run_with_mocks "${EXPLICIT_REMOTE_OUT}" \
+  env \
+  MOCK_BAKERY_DISCOVERY="single" \
+  MOCK_BAKERY_DB_HOST="bakery-shared-mariadb" \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_TAG="env-tag" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight \
+  --remote-bakery-url https://bakery.external.example
+
+assert_contains "--set-string bakery.client.baseUrl=https://bakery.external.example" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.client.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set database.mode=embedded" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery installer fixed toggles and profile..."
 BAKERY_OUT="${TMP_DIR}/bakery.out"
 run_with_mocks "${BAKERY_OUT}" \
   env \
@@ -172,49 +283,93 @@ run_with_mocks "${BAKERY_OUT}" \
   POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
   POUNDCAKE_BAKERY_IMAGE_REPO="example.registry.local/poundcake-bakery" \
   POUNDCAKE_BAKERY_IMAGE_TAG="env-bakery-tag" \
-  POUNDCAKE_OPERATORS_MODE="verify" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight
+
+assert_contains "Installer profile: bakery" "${BAKERY_OUT}"
+assert_contains "upgrade --install bakery-env-rel" "${TMP_DIR}/helm.log"
+assert_contains "--set poundcake.enabled=false" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.worker.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.database.createServer=true" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.image.repository=example.registry.local/poundcake-bakery" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.image.tag=env-bakery-tag" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery installer with no forwarded args..."
+BAKERY_NOARGS_OUT="${TMP_DIR}/bakery-noargs.out"
+run_with_mocks "${BAKERY_NOARGS_OUT}" \
+  env \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}"
+
+assert_contains "Installer profile: bakery" "${BAKERY_NOARGS_OUT}"
+assert_contains "--set poundcake.enabled=false" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.worker.enabled=true" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.database.createServer=true" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery installer secret creation when missing..."
+BAKERY_SECRET_CREATE_OUT="${TMP_DIR}/bakery-secret-create.out"
+run_with_mocks "${BAKERY_SECRET_CREATE_OUT}" \
+  env \
+  MOCK_BAKERY_SECRET_EXISTS=0 \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_BAKERY_IMAGE_REPO="example.registry.local/poundcake-bakery" \
+  POUNDCAKE_BAKERY_IMAGE_TAG="env-bakery-tag" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
   POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${BAKERY_INSTALLER}" \
   --skip-preflight \
-  --operators-mode skip
+  --bakery-rackspace-url https://example.core.local \
+  --bakery-rackspace-username bakery-user \
+  --bakery-rackspace-password bakery-pass
 
-assert_contains "Operator mode: skip" "${BAKERY_OUT}"
-assert_contains "upgrade --install bakery-env-rel" "${TMP_DIR}/helm.log"
-assert_contains "--namespace bakery-env-ns" "${TMP_DIR}/helm.log"
-assert_contains "--set poundcake.enabled=false" "${TMP_DIR}/helm.log"
-assert_contains "--set bakery.enabled=true" "${TMP_DIR}/helm.log"
-assert_contains "--set bakery.database.createServer=true" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.image.repository=example.registry.local/poundcake-bakery" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.image.tag=env-bakery-tag" "${TMP_DIR}/helm.log"
+assert_contains "create secret generic bakery-rackspace-core" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
 
-echo "Validating Bakery integrated DB guardrails..."
+echo "Validating Bakery installer requires --update-bakery-secret for credential changes..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  env POUNDCAKE_BAKERY_DB_INTEGRATED=true "${BAKERY_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
-  fail "expected POUNDCAKE_BAKERY_DB_INTEGRATED=true to fail for bakery installer"
-fi
-if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  "${BAKERY_INSTALLER}" --skip-preflight --bakery-db-integrated >/dev/null 2>&1; then
-  fail "expected --bakery-db-integrated to fail for bakery installer"
-fi
-if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  env POUNDCAKE_BAKERY_DB_HOST=shared-db "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
-  fail "expected POUNDCAKE_BAKERY_DB_HOST to fail for poundcake installer"
-fi
-if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  "${POUNDCAKE_INSTALLER}" --skip-preflight --bakery-db-host shared-db >/dev/null 2>&1; then
-  fail "expected --bakery-db-host to fail for poundcake installer"
+  env MOCK_BAKERY_SECRET_EXISTS=1 POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  "${BAKERY_INSTALLER}" --skip-preflight --bakery-rackspace-password rotate-me >/dev/null 2>&1; then
+  fail "expected bakery secret update without --update-bakery-secret to fail"
 fi
 
-echo "Validating legacy mode removal guardrails..."
+echo "Validating ambiguous discovery guardrail..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  "${POUNDCAKE_INSTALLER}" --mode full --skip-preflight >/dev/null 2>&1; then
+  env MOCK_BAKERY_DISCOVERY=ambiguous POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
+  fail "expected ambiguous Bakery discovery to fail"
+fi
+
+echo "Validating removed mixed-mode guardrails..."
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  env POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  "${POUNDCAKE_INSTALLER}" --skip-preflight --enable-bakery >/dev/null 2>&1; then
+  fail "expected --enable-bakery to fail for poundcake installer"
+fi
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  env POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  "${POUNDCAKE_INSTALLER}" --skip-preflight --mode full >/dev/null 2>&1; then
   fail "expected --mode to fail for poundcake installer"
 fi
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  env POUNDCAKE_INSTALL_MODE=full "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
+  env POUNDCAKE_INSTALL_MODE=full POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
   fail "expected POUNDCAKE_INSTALL_MODE to fail for poundcake installer"
 fi
 
-echo "Installer rename and env override checks passed!"
+echo "Installer checks passed."

@@ -1,4 +1,5 @@
 {{- if .Values.poundcake.enabled }}
+{{- if eq (include "poundcake.databaseMode" .) "embedded" }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -12,6 +13,7 @@ spec:
       storage: {{ .Values.persistence.mariadb.size }}
   {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.mariadb.storageClassName) | nindent 2 }}
 ---
+{{- end }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

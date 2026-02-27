@@ -1,0 +1,59 @@
+{{- if and .Values.poundcake.enabled (eq (include "poundcake.databaseMode" .) "shared_operator") .Values.database.sharedOperator.provisionResources }}
+{{- if not .Values.mariadbOperator.enabled }}
+{{- fail "database.sharedOperator.provisionResources=true requires mariadbOperator.enabled=true." }}
+{{- end }}
+{{- $mariaDbNamespace := include "poundcake.databaseServiceNamespace" . -}}
+{{- $serverName := include "poundcake.databaseServerName" . -}}
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: Database
+metadata:
+  name: {{ include "poundcake.fullname" . }}-database
+  namespace: {{ $mariaDbNamespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: poundcake-database
+spec:
+  mariaDbRef:
+    name: {{ $serverName }}
+  name: {{ .Values.secrets.dbName }}
+  characterSet: utf8mb4
+  collate: utf8mb4_unicode_ci
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: User
+metadata:
+  name: {{ include "poundcake.fullname" . }}-db-user
+  namespace: {{ $mariaDbNamespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: poundcake-database
+spec:
+  mariaDbRef:
+    name: {{ $serverName }}
+  name: {{ .Values.secrets.dbUser }}
+  passwordSecretKeyRef:
+    name: poundcake-secrets
+    key: DB_PASSWORD
+  maxUserConnections: {{ .Values.mariadbOperator.user.maxUserConnections }}
+  host: "%"
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: Grant
+metadata:
+  name: {{ include "poundcake.fullname" . }}-db-grant
+  namespace: {{ $mariaDbNamespace }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: poundcake-database
+spec:
+  mariaDbRef:
+    name: {{ $serverName }}
+  privileges:
+    {{- toYaml .Values.mariadbOperator.grants.privileges | nindent 4 }}
+  database: {{ .Values.secrets.dbName }}
+  table: "*"
+  username: {{ .Values.secrets.dbUser }}
+  host: "%"
+  grantOption: false
+{{- end }}

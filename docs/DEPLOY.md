@@ -2,16 +2,59 @@
 
 ## Helm (Kubernetes)
 
-Canonical installer:
+Two install commands are supported:
 
 ```bash
+./install/install-bakery-helm.sh
+./install/install-poundcake-helm.sh
+```
+
+Canonical binaries:
+
+```bash
+./helm/bin/install-bakery.sh
 ./helm/bin/install-poundcake.sh
 ```
 
-Install helper wrapper:
+Bakery secret behavior:
+- The Bakery installer verifies `bakery-rackspace-core` in the target namespace.
+- If missing, it prompts for Rackspace Core URL/username/password and creates the secret.
+- Existing secret updates require `--update-bakery-secret`.
+- Rackspace Core credential values in chart overrides are disabled; use `bakery.rackspaceCore.existingSecret`.
+- Bakery-only installs deploy Bakery API, Bakery worker, and Bakery DB init job by default.
+
+Clean Bakery deploy prerequisites:
+- Use a pinned Bakery image tag (do not rely on mutable `latest` in production).
+- Ensure GHCR image pulls can authenticate.
+  - Option A: let installer create pull secret (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true`) and provide `HELM_REGISTRY_USERNAME` + `HELM_REGISTRY_PASSWORD`.
+  - Option B: reuse an existing pull secret in target namespace with `POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false`, `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true`, `POUNDCAKE_IMAGE_PULL_SECRET_NAME=<secret>`.
+
+Non-interactive Bakery secret create/update:
 
 ```bash
-./install/install-poundcake-helm.sh
+./helm/bin/install-bakery.sh \
+  --bakery-rackspace-secret-name bakery-rackspace-core \
+  --bakery-rackspace-url https://ws.core.rackspace.com \
+  --bakery-rackspace-username poundcake \
+  --bakery-rackspace-password '<password>'
+```
+
+```bash
+./helm/bin/install-bakery.sh \
+  --update-bakery-secret \
+  --bakery-rackspace-url https://ws.core.rackspace.com \
+  --bakery-rackspace-username poundcake \
+  --bakery-rackspace-password '<new-password>'
+```
+
+Bakery install with explicit image pin and existing pull secret:
+
+```bash
+POUNDCAKE_BAKERY_IMAGE_TAG=2.0.96 \
+POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
+POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true \
+POUNDCAKE_IMAGE_PULL_SECRET_NAME=ghcr-creds \
+./helm/bin/install-bakery.sh
 ```
 
 Optional environment defaults for fork/private registry/local chart workflows:
@@ -20,32 +63,39 @@ Optional environment defaults for fork/private registry/local chart workflows:
 source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
 ```
 
-Install targets:
-
-```bash
-./install/install-poundcake-helm.sh --target poundcake
-./install/install-poundcake-helm.sh --target bakery
-./install/install-poundcake-helm.sh --target both
-```
-
 Validation mode:
 
 ```bash
 ./helm/bin/install-poundcake.sh --validate
 ```
 
-Bakery image override (optional):
+Same-namespace co-location order:
 
 ```bash
-export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/<owner>/poundcake-bakery"
-export POUNDCAKE_BAKERY_IMAGE_TAG="<tag>"
-./install/install-poundcake-helm.sh --target bakery
+# 1) Install Bakery first (creates operator-backed MariaDB server for Bakery)
+./install/install-bakery-helm.sh
+
+# 2) Install PoundCake second (auto-discovers Bakery URL + shared DB server in that namespace)
+./install/install-poundcake-helm.sh
+```
+
+Shared DB behavior:
+- One MariaDB server can be shared when Bakery and PoundCake are co-located.
+- Bakery and PoundCake use separate database/schema ownership and separate user credentials.
+- PoundCake shared mode uses `database.mode=shared_operator` with `database.sharedOperator.serverName=<bakery-db-server>`.
+
+External Bakery (not co-located) path:
+
+```bash
+./install/install-poundcake-helm.sh \
+  --remote-bakery-url https://bakery.example.com \
+  --remote-bakery-auth-mode hmac \
+  --remote-bakery-auth-secret external-bakery-hmac
 ```
 
 Notes:
-- `install-poundcake.sh` is the canonical PoundCake installer.
-- `install-bakery.sh` is the canonical Bakery-only installer.
-- `install-poundcake-helm.sh --target both` installs both services in the same Helm release.
+- `install-poundcake-helm.sh` does not support `--target`.
+- `install-bakery-helm.sh` is Bakery-only.
 - Chart versions are sourced from `/etc/genestack/helm-chart-version.yaml` and `/etc/genestack/helm-chart-versions.yaml`.
 
 Bakery Gateway API exposure (optional):
@@ -150,7 +200,7 @@ By default, install scripts source chart versions from:
 And overrides from:
 - `/etc/genestack/helm-configs/global_overrides/*.yaml`
 - `/etc/genestack/helm-configs/poundcake/*.yaml`
-- `/etc/genestack/helm-configs/stackstorm/*.yaml` (full mode)
+- `/etc/genestack/helm-configs/stackstorm/*.yaml`
 
 StackStorm default profile (via `/Users/chris.breu/code/poundcake/helm/stackstorm/values-external-services.yaml`):
 - Enabled by default (1 pod each unless overridden): `st2api`, `st2auth`, `st2actionrunner`, `st2rulesengine`, `st2workflowengine`, `st2scheduler`, `st2notifier`, and StackStorm-owned `mongodb`, `rabbitmq`, `redis`.

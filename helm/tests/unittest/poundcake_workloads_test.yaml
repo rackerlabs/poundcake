@@ -62,7 +62,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: /api/v1/ready
+          value: /api/v1/health
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
@@ -74,7 +74,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
-          value: /api/v1/live
+          value: /api/v1/health
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].env[7].value
@@ -120,23 +120,23 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: poundcake:1.0.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.96
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].image
-          value: poundcake:1.0.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.96
         documentIndex: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: poundcake:1.0.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.96
         documentIndex: 3
       - equal:
           path: spec.template.spec.containers[0].image
-          value: poundcake:1.0.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.96
         documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].image
-          value: poundcake:1.0.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.96
         documentIndex: 5
 
   - it: supports immutable digest image references for PoundCake workloads

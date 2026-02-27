@@ -713,10 +713,13 @@ spec:
             - -ec
             - |
               NS="{{ .Release.Namespace }}"
+              DB_NS="{{ include "poundcake.databaseServiceNamespace" . }}"
+              DB_SVC="{{ include "poundcake.databaseServerName" . }}"
+              DB_HOST="{{ include "poundcake.databaseHost" . }}"
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
-              gate_log_wait_start "poundcake-mariadb-ready" "service endpoint poundcake-mariadb"
-              until [ -n "$(kubectl -n "${NS}" get endpoints poundcake-mariadb -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do
-                gate_log_wait_tick "poundcake-mariadb-ready" "service endpoint poundcake-mariadb"
+              gate_log_wait_start "poundcake-mariadb-ready" "service endpoint ${DB_SVC} (${DB_HOST})"
+              until [ -n "$(kubectl -n "${DB_NS}" get endpoints "${DB_SVC}" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)" ]; do
+                gate_log_wait_tick "poundcake-mariadb-ready" "service endpoint ${DB_SVC} (${DB_HOST})"
                 sleep 2
               done
               gate_log_wait_ready "poundcake-mariadb-ready"
@@ -816,21 +819,30 @@ spec:
             - name: POUNDCAKE_API_URL
               value: http://poundcake-api:8000
             - name: LOG_LEVEL
-              value: INFO
+              value: {{ .Values.config.logLevel | quote }}
             - name: POUNDCAKE_LOG_FORMAT
               value: {{ .Values.logFormat | quote }}
             - name: DISHWASHER_DEFAULT_DURATION
-              value: "60"
+              value: {{ default 60 .Values.bootstrap.poundcakeBootstrap.defaultDuration | quote }}
             - name: DISHWASHER_DEFAULT_TIMEOUT
-              value: "300"
+              value: {{ default 300 .Values.bootstrap.poundcakeBootstrap.defaultTimeout | quote }}
             - name: DISHWASHER_PRUNE_MISSING
-              value: "false"
+              value: {{ default false .Values.bootstrap.poundcakeBootstrap.pruneMissing | quote }}
             - name: DISHWASHER_INTERVAL
               value: "0"
             - name: POUNDCAKE_BOOTSTRAP_MARK
               value: "true"
+            - name: SERVICE_NAME
+              value: "dishwasher-bootstrap"
             - name: POUNDCAKE_AUTH_ENABLED
               value: {{ .Values.auth.enabled | quote }}
+            {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: internal-api-key
+            {{- end }}
       containers:
         - name: mark-ready
           image: {{ .Values.images.kubectl }}

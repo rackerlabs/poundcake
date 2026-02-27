@@ -211,21 +211,33 @@ output:
 # Install via Docker Compose
 ./install/install-poundcake-docker.sh
 
-# Install via Helm
+# Install PoundCake via Helm
 ./install/install-poundcake-helm.sh
+
+# Install Bakery via Helm
+./install/install-bakery-helm.sh
 ```
 
 ### Helm Install
 
 ```bash
-# Helm-based install script
+# PoundCake installer (PoundCake-only)
 ./helm/bin/install-poundcake.sh
+
+# Bakery installer (Bakery-only)
+./helm/bin/install-bakery.sh
 
 # Optional: pass extra Helm args through
 ./helm/bin/install-poundcake.sh -f /path/to/values.yaml
 
 # Validate chart rendering before install
 ./helm/bin/install-poundcake.sh --validate
+
+# Bakery secret bootstrap from CLI credentials (non-interactive)
+./helm/bin/install-bakery.sh \
+  --bakery-rackspace-url https://ws.core.rackspace.com \
+  --bakery-rackspace-username poundcake \
+  --bakery-rackspace-password '<password>'
 ```
 
 Installer flags:
@@ -233,6 +245,13 @@ Installer flags:
 - `--validate` runs `helm lint` + `helm template --debug` before install
 - `--skip-preflight` skips dependency and cluster connectivity checks
 - `--rotate-secrets` deletes known chart-managed secrets before install
+- `--remote-bakery-url` configures PoundCake to use an external/co-located Bakery endpoint
+- `--shared-db-mode <auto|on|off>` and `--shared-db-server-name` control shared MariaDB mode for PoundCake
+- Bakery installer verifies `bakery-rackspace-core` by default and prompts for Rackspace Core credentials only when secret creation/update is required
+- Use `--update-bakery-secret` to rotate/update an existing Bakery Rackspace Core secret
+- Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
+- Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
+- For repeatable Bakery deploys, pin `POUNDCAKE_BAKERY_IMAGE_TAG` and ensure image pull auth is configured (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET` or existing pull secret via `POUNDCAKE_IMAGE_PULL_SECRET_NAME`)
 
 Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
 
@@ -387,7 +406,17 @@ PoundCake API and Bakery must keep separate database ownership:
 - API uses the PoundCake migration stream in `/Users/chris.breu/code/poundcake/alembic`.
 - Bakery uses the Bakery migration stream in `/Users/chris.breu/code/poundcake/bakery/alembic`.
 
-In alongside deployments, both services may share the same MariaDB server endpoint, but must use different database names and credentials.
+For same-namespace co-location, deploy in this order:
+1. `./install/install-bakery-helm.sh`
+2. `./install/install-poundcake-helm.sh`
+
+In co-located deployments, both services may share the same MariaDB server endpoint, but they must use separate database/schema ownership and separate credentials.
+
+If Bakery is not co-located, configure PoundCake with an explicit external Bakery URL:
+
+```bash
+./install/install-poundcake-helm.sh --remote-bakery-url https://bakery.example.com
+```
 
 ## Container Build Targets
 

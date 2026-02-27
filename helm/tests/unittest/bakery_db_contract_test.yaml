@@ -111,7 +111,7 @@ tests:
       bakery.database.createServer: false
     asserts:
       - failedTemplate:
-          errorMessage: "bakery.database.createServer=false is not supported. Bakery requires a dedicated MariaDB server."
+          errorMessage: "bakery.database.createServer=false is not supported. Bakery requires an operator-managed MariaDB server."
         template: templates/bakery-init-job.yaml
 
   - it: fails fast when mariadb operator is disabled

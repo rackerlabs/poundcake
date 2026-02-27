@@ -513,6 +513,19 @@ auth:
 # Database configuration (MySQL/MariaDB) for PoundCake API only.
 # Bakery uses a separate database contract under bakery.database.
 database:
+  # Database deployment mode for PoundCake:
+  # - embedded: deploy in-chart poundcake-mariadb Deployment/Service/PVC
+  # - shared_operator: use an existing MariaDB operator server and create PoundCake DB/User/Grant CRs
+  mode: embedded
+
+  sharedOperator:
+    # MariaDB server/service name used when mode=shared_operator.
+    serverName: ""
+    # Namespace where the MariaDB server CR/service lives. Empty defaults to release namespace.
+    namespace: ""
+    # Create PoundCake Database/User/Grant CR resources against shared server.
+    provisionResources: true
+
   # Database connection URL
   # Format: mysql+pymysql://user:password@host:port/database
   url: ""
@@ -698,24 +711,14 @@ dishwasher:
       cpu: 50m
       memory: 64Mi
 
-# Bootstrap jobs configuration
-# Includes compatibility jobs that mirror docker-compose startup flow.
+# Bootstrap runtime configuration
+# Startup orchestration jobs are defined in stackstorm-startup-order-jobs.yaml.
 bootstrap:
-  # One-shot job that mirrors poundcake-pack-init.
-  packInit:
-    enabled: true
-    image: alpine:3.19
-
   # One-shot job that mirrors poundcake-bootstrap (dishwasher in bootstrap mode).
   poundcakeBootstrap:
-    enabled: true
     defaultDuration: 60
     defaultTimeout: 300
     pruneMissing: false
-
-  # One-shot job that prepares StackStorm API key and startup ordering.
-  stackstormBootstrap:
-    enabled: true
 
 # Bakery service configuration
 # API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)
@@ -755,7 +758,7 @@ bakery:
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "2.0.96"
 
   # Service configuration
   service:
@@ -889,14 +892,14 @@ bakery:
 
   # Rackspace Core configuration
   rackspaceCore:
-    url: "https://ws.core.rackspace.com"
+    # Credentials and endpoint must come from existingSecret keys
+    # (rackspace-core-url, rackspace-core-username, rackspace-core-password by default).
     verifySsl: true
-    username: ""
-    password: ""
     # Default CTK queue/subcategory for ticket creation if not provided in context
     defaultQueue: "CloudBuilders Support"
     defaultSubcategory: "Monitoring"
-    # Reference to existing secret
+    # Reference to existing secret (required when activeProvider=rackspace_core)
+    # Installer default secret name: bakery-rackspace-core
     existingSecret: ""
     secretKeys:
       url: "rackspace-core-url"
@@ -904,8 +907,8 @@ bakery:
       password: "rackspace-core-password"
 
   # MariaDB database configuration for Bakery
-  # Bakery owns a dedicated MariaDB server, database, and migration stream.
-  # Integrated/shared DB mode is not supported.
+  # Bakery creates and owns an operator-managed MariaDB server, database, and migration stream.
+  # PoundCake can later share this server when co-located, but must use separate DB/user ownership.
   database:
     # Optional host override. Leave empty to use "<release>-poundcake-bakery-mariadb".
     host: ""
@@ -923,8 +926,8 @@ bakery:
     createServer: true
 
 poundcakeImage:
-  repository: poundcake
-  tag: latest
+  repository: ghcr.io/rackerlabs/poundcake
+  tag: "2.0.96"
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
   pullPolicy: Always
@@ -939,8 +942,8 @@ poundcakeImage:
         - ALL
 
 uiImage:
-  repository: poundcake-ui
-  tag: latest
+  repository: ghcr.io/rackerlabs/poundcake-ui
+  tag: "2.0.96"
   pullPolicy: IfNotPresent
   containerPort: 8080
   runtimeWritablePaths:

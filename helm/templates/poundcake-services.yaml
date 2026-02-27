@@ -1,4 +1,5 @@
 {{- if .Values.poundcake.enabled }}
+{{- if eq (include "poundcake.databaseMode" .) "embedded" }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -19,6 +20,7 @@ spec:
       port: 3306
       targetPort: 3306
 ---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:

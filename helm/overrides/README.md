@@ -15,13 +15,13 @@ Service selection in overrides now uses explicit booleans:
 - `poundcake.enabled` (PoundCake + StackStorm resources)
 - `bakery.enabled` (Bakery resources)
 
-Wrapper target mapping:
-- `./install/install-poundcake-helm.sh --target poundcake` => `poundcake.enabled=true`, `bakery.enabled=false`
-- `./install/install-poundcake-helm.sh --target bakery` => `poundcake.enabled=false`, `bakery.enabled=true`
-- `./install/install-poundcake-helm.sh --target both` => both enabled
+Installer mapping:
+- `./install/install-poundcake-helm.sh` => `poundcake.enabled=true`, `bakery.enabled=false`
+- `./install/install-bakery-helm.sh` => `poundcake.enabled=false`, `bakery.enabled=true`
+- For co-located deployments in one namespace: install Bakery first, then PoundCake.
 
 Precedence note:
-- installer-emitted `--set` booleans are appended after auto-discovered `-f` files (`POUNDCAKE_BASE_OVERRIDES`, global/service override dirs), so installer target/env toggles can override `poundcake.enabled` and `bakery.enabled` from those files.
+- installer-emitted `--set` booleans are appended after auto-discovered `-f` files (`POUNDCAKE_BASE_OVERRIDES`, global/service override dirs), so installer defaults can override `poundcake.enabled` and `bakery.enabled` from those files.
 - user-supplied CLI flags passed after the installer command (for example `-f`, `--set`, `--set-string`) are appended last and can override installer defaults.
 
 ## Enable HA

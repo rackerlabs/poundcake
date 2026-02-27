@@ -5,41 +5,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-TARGET="${POUNDCAKE_INSTALL_TARGET:-poundcake}"
-ARGS=()
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --target)
-      TARGET="${2:-}"
-      shift 2
-      ;;
-    --target=*)
-      TARGET="${1#*=}"
-      shift
-      ;;
-    *)
-      ARGS+=("$1")
-      shift
+for arg in "$@"; do
+  case "${arg}" in
+    --target|--target=*)
+      echo "install-poundcake-helm.sh no longer supports --target." >&2
+      echo "Use install/install-poundcake-helm.sh for PoundCake or install/install-bakery-helm.sh for Bakery." >&2
+      exit 1
       ;;
   esac
 done
 
-case "${TARGET}" in
-  poundcake)
-    exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "${ARGS[@]}"
-    ;;
-  bakery)
-    exec "$PROJECT_ROOT/helm/bin/install-bakery.sh" "${ARGS[@]}"
-    ;;
-  both)
-    exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" --enable-bakery "${ARGS[@]}"
-    ;;
-  *)
-    cat >&2 <<EOF
-Invalid target '${TARGET}'. Valid values: poundcake, bakery, both.
-Usage: ./install/install-poundcake-helm.sh [--target <poundcake|bakery|both>] [installer options] [helm args]
-EOF
-    exit 1
-    ;;
-esac
+exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "$@"

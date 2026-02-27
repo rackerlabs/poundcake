@@ -43,11 +43,11 @@
       "properties": {
         "repository": {
           "type": "string",
-          "default": "poundcake"
+          "default": "ghcr.io/rackerlabs/poundcake"
         },
         "tag": {
           "type": "string",
-          "default": "latest"
+          "default": "2.0.96"
         },
         "digest": {
           "type": "string",
@@ -131,11 +131,11 @@
       "properties": {
         "repository": {
           "type": "string",
-          "default": "poundcake-ui"
+          "default": "ghcr.io/rackerlabs/poundcake-ui"
         },
         "tag": {
           "type": "string",
-          "default": "latest"
+          "default": "2.0.96"
         },
         "pullPolicy": {
           "type": "string",

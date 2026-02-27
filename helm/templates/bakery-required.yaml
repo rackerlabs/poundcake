@@ -1,0 +1,9 @@
+{{- if .Values.bakery.enabled }}
+{{- if or .Values.bakery.rackspaceCore.url .Values.bakery.rackspaceCore.username .Values.bakery.rackspaceCore.password }}
+{{- fail "Rackspace Core credentials and URL via values are disabled. Use bakery.rackspaceCore.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- $activeProvider := (.Values.bakery.config.activeProvider | default "rackspace_core") -}}
+{{- if and (eq $activeProvider "rackspace_core") (not .Values.bakery.rackspaceCore.existingSecret) }}
+{{- fail "bakery.rackspaceCore.existingSecret is required when bakery.config.activeProvider=rackspace_core. Use install-bakery.sh to verify/create the secret." -}}
+{{- end }}
+{{- end }}

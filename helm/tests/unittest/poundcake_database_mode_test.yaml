@@ -1,0 +1,110 @@
+suite: poundcake-database-mode
+templates:
+  - templates/poundcake-infra-deployments.yaml
+  - templates/poundcake-services.yaml
+  - templates/poundcake-pvcs.yaml
+  - templates/poundcake-shared-mariadb.yaml
+  - templates/poundcake-workloads.yaml
+  - templates/stackstorm-startup-order-jobs.yaml
+tests:
+  - it: renders embedded poundcake mariadb resources in embedded mode
+    set:
+      poundcake.enabled: true
+      database.mode: embedded
+    asserts:
+      - equal:
+          path: metadata.name
+          value: poundcake-mariadb
+        template: templates/poundcake-infra-deployments.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: poundcake-mariadb
+        template: templates/poundcake-services.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: poundcake-mariadb
+        template: templates/poundcake-pvcs.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 0
+        template: templates/poundcake-shared-mariadb.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_DATABASE_URL
+            value: mysql+pymysql://$(DB_USER):$(DB_PASSWORD)@poundcake-mariadb:3306/$(DB_NAME)
+        template: templates/poundcake-workloads.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'DB_SVC="poundcake-mariadb"'
+        template: templates/stackstorm-startup-order-jobs.yaml
+        documentIndex: 7
+
+  - it: renders shared operator DB resources and suppresses embedded poundcake mariadb resources
+    set:
+      poundcake.enabled: true
+      database.mode: shared_operator
+      database.sharedOperator.serverName: bakery-pc-bakery-mariadb
+    asserts:
+      - equal:
+          path: metadata.name
+          value: stackstorm-mongodb
+        template: templates/poundcake-infra-deployments.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: stackstorm-mongodb
+        template: templates/poundcake-services.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: stackstorm-mongo
+        template: templates/poundcake-pvcs.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 3
+        template: templates/poundcake-shared-mariadb.yaml
+      - equal:
+          path: kind
+          value: Database
+        template: templates/poundcake-shared-mariadb.yaml
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: Grant
+        template: templates/poundcake-shared-mariadb.yaml
+        documentIndex: 1
+      - equal:
+          path: kind
+          value: User
+        template: templates/poundcake-shared-mariadb.yaml
+        documentIndex: 2
+      - equal:
+          path: spec.mariaDbRef.name
+          value: bakery-pc-bakery-mariadb
+        template: templates/poundcake-shared-mariadb.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_DATABASE_URL
+            value: mysql+pymysql://$(DB_USER):$(DB_PASSWORD)@bakery-pc-bakery-mariadb:3306/$(DB_NAME)
+        template: templates/poundcake-workloads.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'DB_SVC="bakery-pc-bakery-mariadb"'
+        template: templates/stackstorm-startup-order-jobs.yaml
+        documentIndex: 7
+
+  - it: skips shared operator provisioning CRs when provisionResources is false
+    set:
+      poundcake.enabled: true
+      database.mode: shared_operator
+      database.sharedOperator.serverName: bakery-pc-bakery-mariadb
+      database.sharedOperator.provisionResources: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/poundcake-shared-mariadb.yaml

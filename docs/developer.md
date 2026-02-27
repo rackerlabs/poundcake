@@ -190,18 +190,25 @@ export POUNDCAKE_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake"
 export POUNDCAKE_UI_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-ui"
 export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-bakery"
 
+./install/install-bakery-helm.sh
 ./install/install-poundcake-helm.sh --validate
 ./install/install-poundcake-helm.sh
 ```
 
 Note:
 
+- Installers:
+  - `install/install-bakery-helm.sh` installs Bakery only.
+  - `install/install-poundcake-helm.sh` installs PoundCake only.
+  - Co-located flow in one namespace is Bakery first, then PoundCake.
+  - For non-co-located Bakery, use `./install/install-poundcake-helm.sh --remote-bakery-url <url>`.
 - `install/install-poundcake-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
   - `poundcake`
   - `stackstorm`
   - `mariadb-operator`
   - `redis-operator`
   - `rabbitmq-cluster-operator`
+  - `mongodb-operator` (optional; falls back to installer default when absent)
 
 ### 5.1) Installer Environment Variables
 

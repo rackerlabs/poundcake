@@ -20,15 +20,16 @@ POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-}"
 POUNDCAKE_IMAGE_DIGEST="${POUNDCAKE_IMAGE_DIGEST:-}"
 STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
 STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
-UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-}"
+UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 UI_IMAGE_TAG="${POUNDCAKE_UI_IMAGE_TAG:-}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-}"
 BAKERY_IMAGE_TAG="${POUNDCAKE_BAKERY_IMAGE_TAG:-${POUNDCAKE_IMAGE_TAG:-}}"
-NO_LOCAL_BAKERY="${POUNDCAKE_NO_LOCAL_BAKERY:-false}"
-REMOTE_BAKERY_ENABLED="${POUNDCAKE_REMOTE_BAKERY_ENABLED:-true}"
+REMOTE_BAKERY_ENABLED="${POUNDCAKE_REMOTE_BAKERY_ENABLED:-}"
 REMOTE_BAKERY_URL="${POUNDCAKE_REMOTE_BAKERY_URL:-}"
 REMOTE_BAKERY_AUTH_MODE="${POUNDCAKE_REMOTE_BAKERY_AUTH_MODE:-hmac}"
 REMOTE_BAKERY_AUTH_SECRET="${POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET:-}"
+SHARED_DB_MODE="${POUNDCAKE_SHARED_DB_MODE:-auto}"
+SHARED_DB_SERVER_NAME="${POUNDCAKE_SHARED_DB_SERVER_NAME:-}"
 CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
 VERSION_FILE="${POUNDCAKE_VERSION_FILE:-}"
 HELM_REGISTRY_USERNAME="${HELM_REGISTRY_USERNAME:-}"
@@ -48,35 +49,39 @@ POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/gene
 
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
-POUNDCAKE_ENABLED="${POUNDCAKE_ENABLED:-true}"
-ENABLE_BAKERY="${POUNDCAKE_ENABLE_BAKERY:-false}"
+INSTALL_PROFILE="${POUNDCAKE_INSTALL_PROFILE:-poundcake}"
 OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
 MARIADB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME:-mariadb-operator}"
-MARIADB_OPERATOR_NAMESPACE="${POUNDCAKE_MARIADB_OPERATOR_NAMESPACE:-mariadb-operator}"
+MARIADB_OPERATOR_CRDS_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_CRDS_RELEASE_NAME:-mariadb-operator-crds}"
+MARIADB_OPERATOR_NAMESPACE="${POUNDCAKE_MARIADB_OPERATOR_NAMESPACE:-mariadb-system}"
+MARIADB_OPERATOR_CRDS_CHART_NAME="${POUNDCAKE_MARIADB_OPERATOR_CRDS_CHART_NAME:-mariadb-operator-crds}"
 MARIADB_OPERATOR_CHART_NAME="${POUNDCAKE_MARIADB_OPERATOR_CHART_NAME:-mariadb-operator}"
-MARIADB_OPERATOR_CHART_REPO_URL="${POUNDCAKE_MARIADB_OPERATOR_CHART_REPO_URL:-https://mariadb-operator.github.io/mariadb-operator}"
-MARIADB_OPERATOR_VERSION="${POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION:-25.10.4}"
+MARIADB_OPERATOR_CHART_REPO_URL="${POUNDCAKE_MARIADB_OPERATOR_CHART_REPO_URL:-https://helm.mariadb.com/mariadb-operator}"
+MARIADB_OPERATOR_VERSION="${POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION:-0.38.1}"
 REDIS_OPERATOR_RELEASE_NAME="${POUNDCAKE_REDIS_OPERATOR_RELEASE_NAME:-redis-operator}"
-REDIS_OPERATOR_NAMESPACE="${POUNDCAKE_REDIS_OPERATOR_NAMESPACE:-redis-operator}"
+REDIS_OPERATOR_NAMESPACE="${POUNDCAKE_REDIS_OPERATOR_NAMESPACE:-redis-systems}"
 REDIS_OPERATOR_CHART_NAME="${POUNDCAKE_REDIS_OPERATOR_CHART_NAME:-redis-operator}"
-REDIS_OPERATOR_CHART_REPO_URL="${POUNDCAKE_REDIS_OPERATOR_CHART_REPO_URL:-https://ot-container-kit.github.io/helm-charts/}"
-REDIS_OPERATOR_VERSION="${POUNDCAKE_REDIS_OPERATOR_CHART_VERSION:-0.23.0}"
-RABBITMQ_OPERATOR_RELEASE_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_RELEASE_NAME:-rabbitmq-cluster-operator}"
+REDIS_OPERATOR_CHART_REPO_URL="${POUNDCAKE_REDIS_OPERATOR_CHART_REPO_URL:-https://ot-container-kit.github.io/helm-charts}"
+REDIS_OPERATOR_VERSION="${POUNDCAKE_REDIS_OPERATOR_CHART_VERSION:-0.22.1}"
 RABBITMQ_OPERATOR_NAMESPACE="${POUNDCAKE_RABBITMQ_OPERATOR_NAMESPACE:-rabbitmq-system}"
-RABBITMQ_OPERATOR_CHART_NAME="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_NAME:-rabbitmq-cluster-operator}"
-RABBITMQ_OPERATOR_CHART_REPO_URL="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_REPO_URL:-https://charts.bitnami.com/bitnami}"
-RABBITMQ_OPERATOR_VERSION="${POUNDCAKE_RABBITMQ_OPERATOR_CHART_VERSION:-4.4.34}"
-BAKERY_RACKSPACE_URL="${POUNDCAKE_BAKERY_RACKSPACE_URL:-}"
-BAKERY_RACKSPACE_USERNAME="${POUNDCAKE_BAKERY_RACKSPACE_USERNAME:-}"
-BAKERY_RACKSPACE_PASSWORD="${POUNDCAKE_BAKERY_RACKSPACE_PASSWORD:-}"
-BAKERY_RACKSPACE_SECRET_NAME="${POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME:-bakery-rackspace-core}"
+RABBITMQ_CLUSTER_OPERATOR_MANIFEST_URL="${POUNDCAKE_RABBITMQ_CLUSTER_OPERATOR_MANIFEST_URL:-https://github.com/rabbitmq/cluster-operator/releases/download/v2.12.0/cluster-operator.yml}"
+RABBITMQ_TOPOLOGY_OPERATOR_MANIFEST_URL="${POUNDCAKE_RABBITMQ_TOPOLOGY_OPERATOR_MANIFEST_URL:-https://github.com/rabbitmq/messaging-topology-operator/releases/download/v1.15.0/messaging-topology-operator-with-certmanager.yaml}"
+MONGODB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MONGODB_OPERATOR_RELEASE_NAME:-mongodb-community-operator}"
+MONGODB_OPERATOR_NAMESPACE="${POUNDCAKE_MONGODB_OPERATOR_NAMESPACE:-mongodb-system}"
+MONGODB_OPERATOR_CHART_NAME="${POUNDCAKE_MONGODB_OPERATOR_CHART_NAME:-community-operator}"
+MONGODB_OPERATOR_CHART_REPO_URL="${POUNDCAKE_MONGODB_OPERATOR_CHART_REPO_URL:-https://mongodb.github.io/helm-charts}"
+MONGODB_OPERATOR_VERSION="${POUNDCAKE_MONGODB_OPERATOR_CHART_VERSION:-0.13.0}"
 SKIP_PREFLIGHT="false"
 ROTATE_SECRETS="false"
-INTERACTIVE_BAKERY_CREDS="false"
 CURRENT_PHASE="initialization"
 EXTRA_ARGS=()
-BAKERY_SECRET_SET_ARGS=()
 OVERRIDE_ARGS=()
+DISCOVERED_BAKERY_URL=""
+DISCOVERED_SHARED_DB_HOST=""
+RESOLVED_BAKERY_URL=""
+RESOLVED_BAKERY_CLIENT_ENABLED="false"
+RESOLVED_DATABASE_MODE="embedded"
+RESOLVED_SHARED_DB_SERVER_NAME=""
 
 timestamp_utc() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -118,22 +123,17 @@ Usage:
 Installer options:
   --debug           Enable shell tracing for installer execution
   --validate        Run helm lint + helm template --debug before install
-  --enable-bakery   Install Bakery resources alongside PoundCake in the same Helm release
   --operators-mode <install-missing|verify|skip>  Operator handling policy
   --verify-operators  Alias for --operators-mode verify
   --skip-operators    Alias for --operators-mode skip
   --skip-preflight  Skip dependency/cluster preflight checks
   --rotate-secrets  Delete known chart-managed secrets before install
-  --interactive-bakery-creds Prompt for Bakery Rackspace Core credentials
-  --no-local-bakery                  Disable in-cluster Bakery components and use remote Bakery client settings
-  --remote-bakery-enabled <bool>     Enable/disable PoundCake remote Bakery client (default: true)
+  --remote-bakery-enabled <bool>     Enable/disable PoundCake Bakery client
   --remote-bakery-url <url>          Remote Bakery base URL for PoundCake comms
   --remote-bakery-auth-mode <mode>   Remote Bakery client auth mode (default: hmac)
   --remote-bakery-auth-secret <name> Existing secret name for remote Bakery client auth keys
-  --bakery-rackspace-url <url>         Rackspace Core API URL
-  --bakery-rackspace-username <user>   Rackspace Core username
-  --bakery-rackspace-password <pass>   Rackspace Core password
-  --bakery-rackspace-secret-name <name> Secret name for Rackspace credentials
+  --shared-db-mode <auto|on|off>     Shared MariaDB mode selection (default: auto)
+  --shared-db-server-name <name>     Shared MariaDB server/service name for PoundCake DB resources
 
 Environment overrides:
   POUNDCAKE_GHCR_OWNER             (default: rackerlabs)
@@ -151,20 +151,19 @@ Environment overrides:
   POUNDCAKE_IMAGE_REPO             (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake)
   POUNDCAKE_IMAGE_TAG              (optional; required when digest unset)
   POUNDCAKE_IMAGE_DIGEST           (optional; sha256:...; required when tag unset)
-  POUNDCAKE_UI_IMAGE_REPO          (optional; sets uiImage.repository)
+  POUNDCAKE_UI_IMAGE_REPO          (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake-ui; sets uiImage.repository)
   POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
-  POUNDCAKE_BAKERY_IMAGE_REPO      (optional; sets bakery.image.repository)
-  POUNDCAKE_BAKERY_IMAGE_TAG       (optional; sets bakery.image.tag; defaults to POUNDCAKE_IMAGE_TAG)
-  POUNDCAKE_NO_LOCAL_BAKERY        (default: false; disables local Bakery resources)
-  POUNDCAKE_REMOTE_BAKERY_ENABLED  (default: true when no-local-bakery mode is used)
-  POUNDCAKE_REMOTE_BAKERY_URL      (required when no-local-bakery and remote bakery enabled)
+  POUNDCAKE_REMOTE_BAKERY_ENABLED  (optional; defaults to auto based on discovered/explicit Bakery URL)
+  POUNDCAKE_REMOTE_BAKERY_URL      (optional; explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
   POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (optional existing secret for remote Bakery HMAC keys)
-  POUNDCAKE_ENABLED                (default: true; controls PoundCake/StackStorm resources)
-  POUNDCAKE_ENABLE_BAKERY          (default: false; enables Bakery resources in full mode)
+  POUNDCAKE_SHARED_DB_MODE         (default: auto; valid: auto, on, off)
+  POUNDCAKE_SHARED_DB_SERVER_NAME  (optional; shared DB server/service name)
   POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
   POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME
+  POUNDCAKE_MARIADB_OPERATOR_CRDS_RELEASE_NAME
   POUNDCAKE_MARIADB_OPERATOR_NAMESPACE
+  POUNDCAKE_MARIADB_OPERATOR_CRDS_CHART_NAME
   POUNDCAKE_MARIADB_OPERATOR_CHART_NAME
   POUNDCAKE_MARIADB_OPERATOR_CHART_REPO_URL
   POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION
@@ -173,15 +172,14 @@ Environment overrides:
   POUNDCAKE_REDIS_OPERATOR_CHART_NAME
   POUNDCAKE_REDIS_OPERATOR_CHART_REPO_URL
   POUNDCAKE_REDIS_OPERATOR_CHART_VERSION
-  POUNDCAKE_RABBITMQ_OPERATOR_RELEASE_NAME
   POUNDCAKE_RABBITMQ_OPERATOR_NAMESPACE
-  POUNDCAKE_RABBITMQ_OPERATOR_CHART_NAME
-  POUNDCAKE_RABBITMQ_OPERATOR_CHART_REPO_URL
-  POUNDCAKE_RABBITMQ_OPERATOR_CHART_VERSION
-  POUNDCAKE_BAKERY_RACKSPACE_URL   (optional; used to create/set bakery secret)
-  POUNDCAKE_BAKERY_RACKSPACE_USERNAME (optional)
-  POUNDCAKE_BAKERY_RACKSPACE_PASSWORD (optional)
-  POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME (default: bakery-rackspace-core)
+  POUNDCAKE_RABBITMQ_CLUSTER_OPERATOR_MANIFEST_URL
+  POUNDCAKE_RABBITMQ_TOPOLOGY_OPERATOR_MANIFEST_URL
+  POUNDCAKE_MONGODB_OPERATOR_RELEASE_NAME
+  POUNDCAKE_MONGODB_OPERATOR_NAMESPACE
+  POUNDCAKE_MONGODB_OPERATOR_CHART_NAME
+  POUNDCAKE_MONGODB_OPERATOR_CHART_REPO_URL
+  POUNDCAKE_MONGODB_OPERATOR_CHART_VERSION
   HELM_REGISTRY_USERNAME           (optional; for OCI login)
   HELM_REGISTRY_PASSWORD           (optional; for OCI login)
   POUNDCAKE_IMAGE_PULL_SECRET_NAME     (default: ghcr-pull)
@@ -200,7 +198,8 @@ Environment overrides:
 Examples:
   ./install/install-poundcake-helm.sh
   ./install/install-poundcake-helm.sh --validate
-  ./install/install-poundcake-helm.sh --target both
+  ./install/install-poundcake-helm.sh --remote-bakery-url http://bakery.rackspace.svc.cluster.local:8000
+  ./install/install-poundcake-helm.sh --shared-db-mode on --shared-db-server-name bakery-pc-bakery-mariadb
   ./install/install-poundcake-helm.sh --skip-preflight -f /path/to/values.yaml
 USAGE_EOF
 }
@@ -247,7 +246,46 @@ crd_exists_any() {
   return 1
 }
 
-install_or_verify_operator() {
+resolve_operator_version_from_config() {
+  local env_value="$1"
+  local chart_key="$2"
+  local fallback="$3"
+  local resolved=""
+  local candidate_files=()
+
+  if [[ -n "${env_value}" ]]; then
+    echo "${env_value}"
+    return
+  fi
+
+  if [[ -n "${VERSION_FILE}" ]]; then
+    candidate_files+=("${VERSION_FILE}")
+  fi
+  candidate_files+=(
+    "/etc/genestack/helm-chart-version.yaml"
+    "/etc/genestack/helm-chart-versions.yaml"
+  )
+
+  local candidate=""
+  for candidate in "${candidate_files[@]}"; do
+    [[ -f "${candidate}" ]] || continue
+    resolved="$(get_chart_version_from_file "${candidate}" "${chart_key}")"
+    if [[ -n "${resolved}" ]]; then
+      echo "${resolved}"
+      return
+    fi
+  done
+
+  echo "${fallback}"
+}
+
+resolve_operator_versions() {
+  MARIADB_OPERATOR_VERSION="$(resolve_operator_version_from_config "${POUNDCAKE_MARIADB_OPERATOR_CHART_VERSION:-}" "mariadb-operator" "${MARIADB_OPERATOR_VERSION}")"
+  REDIS_OPERATOR_VERSION="$(resolve_operator_version_from_config "${POUNDCAKE_REDIS_OPERATOR_CHART_VERSION:-}" "redis-operator" "${REDIS_OPERATOR_VERSION}")"
+  MONGODB_OPERATOR_VERSION="$(resolve_operator_version_from_config "${POUNDCAKE_MONGODB_OPERATOR_CHART_VERSION:-}" "mongodb-operator" "${MONGODB_OPERATOR_VERSION}")"
+}
+
+install_or_verify_helm_operator() {
   local operator_key="$1"
   local crd_names_raw="$2"
   local release_name="$3"
@@ -300,6 +338,102 @@ install_or_verify_operator() {
   fi
 }
 
+install_or_verify_manifest_operator() {
+  local operator_key="$1"
+  local crd_names_raw="$2"
+  local manifest_url="$3"
+  local check_namespace="$4"
+  local check_deployment="$5"
+  local crd_names=()
+  local crd_name_display=""
+
+  IFS=',' read -r -a crd_names <<< "${crd_names_raw}"
+  crd_name_display="${crd_names[0]}"
+
+  if crd_exists_any "${crd_names[@]}"; then
+    log_info "Operator '${operator_key}' already present (CRD ${crd_name_display}); skipping install."
+    return 0
+  fi
+
+  case "${OPERATOR_MODE}" in
+    skip)
+      log_info "Operator mode is skip. Not installing '${operator_key}' (missing CRD ${crd_name_display})."
+      return 0
+      ;;
+    verify)
+      log_error "Operator '${operator_key}' is missing (CRD ${crd_name_display})."
+      log_error "Set --operators-mode install-missing to auto-install missing operators."
+      exit 1
+      ;;
+    install-missing)
+      log_info "Installing missing operator '${operator_key}' from ${manifest_url}"
+      kubectl apply -f "${manifest_url}" >/dev/null
+      if [[ -n "${check_deployment}" ]]; then
+        kubectl -n "${check_namespace}" wait --timeout=5m "deployments.apps/${check_deployment}" --for=condition=available >/dev/null
+      fi
+      ;;
+    *)
+      log_error "Unsupported operators mode '${OPERATOR_MODE}'."
+      exit 1
+      ;;
+  esac
+
+  if ! crd_exists_any "${crd_names[@]}"; then
+    log_error "Operator '${operator_key}' install completed but CRD ${crd_name_display} is still missing."
+    exit 1
+  fi
+}
+
+install_or_verify_mariadb_operator() {
+  local crd_name="mariadbs.k8s.mariadb.com"
+  if crd_exists "${crd_name}"; then
+    log_info "Operator 'mariadb-operator' already present (CRD ${crd_name}); skipping install."
+    return 0
+  fi
+
+  case "${OPERATOR_MODE}" in
+    skip)
+      log_info "Operator mode is skip. Not installing 'mariadb-operator' (missing CRD ${crd_name})."
+      return 0
+      ;;
+    verify)
+      log_error "Operator 'mariadb-operator' is missing (CRD ${crd_name})."
+      log_error "Set --operators-mode install-missing to auto-install missing operators."
+      exit 1
+      ;;
+    install-missing)
+      log_info "Installing missing operator 'mariadb-operator' CRDs and controller (version ${MARIADB_OPERATOR_VERSION})..."
+      helm upgrade --install "${MARIADB_OPERATOR_CRDS_RELEASE_NAME}" "${MARIADB_OPERATOR_CRDS_CHART_NAME}" \
+        --repo "${MARIADB_OPERATOR_CHART_REPO_URL}" \
+        --version "${MARIADB_OPERATOR_VERSION}" \
+        --namespace "${MARIADB_OPERATOR_NAMESPACE}" \
+        --create-namespace \
+        --wait \
+        --atomic \
+        --cleanup-on-fail \
+        --timeout "${HELM_TIMEOUT}"
+      helm upgrade --install "${MARIADB_OPERATOR_RELEASE_NAME}" "${MARIADB_OPERATOR_CHART_NAME}" \
+        --repo "${MARIADB_OPERATOR_CHART_REPO_URL}" \
+        --version "${MARIADB_OPERATOR_VERSION}" \
+        --namespace "${MARIADB_OPERATOR_NAMESPACE}" \
+        --create-namespace \
+        --wait \
+        --atomic \
+        --cleanup-on-fail \
+        --timeout "${HELM_TIMEOUT}"
+      ;;
+    *)
+      log_error "Unsupported operators mode '${OPERATOR_MODE}'."
+      exit 1
+      ;;
+  esac
+
+  if ! crd_exists "${crd_name}"; then
+    log_error "Operator 'mariadb-operator' install completed but CRD ${crd_name} is still missing."
+    exit 1
+  fi
+}
+
 ensure_required_operators() {
   log_info "Operator mode: ${OPERATOR_MODE}"
 
@@ -308,85 +442,46 @@ ensure_required_operators() {
     return 0
   fi
 
-  install_or_verify_operator \
-    "mariadb-operator" \
-    "mariadbs.k8s.mariadb.com" \
-    "${MARIADB_OPERATOR_RELEASE_NAME}" \
-    "${MARIADB_OPERATOR_CHART_NAME}" \
-    "${MARIADB_OPERATOR_CHART_REPO_URL}" \
-    "${MARIADB_OPERATOR_VERSION}" \
-    "${MARIADB_OPERATOR_NAMESPACE}"
+  resolve_operator_versions
 
-  if [[ "${POUNDCAKE_ENABLED}" == "true" ]]; then
-    install_or_verify_operator \
-      "redis-operator" \
-      "redis.redis.redis.opstreelabs.in,redis.redis.opstreelabs.in" \
-      "${REDIS_OPERATOR_RELEASE_NAME}" \
-      "${REDIS_OPERATOR_CHART_NAME}" \
-      "${REDIS_OPERATOR_CHART_REPO_URL}" \
-      "${REDIS_OPERATOR_VERSION}" \
-      "${REDIS_OPERATOR_NAMESPACE}"
+  install_or_verify_mariadb_operator
 
-    install_or_verify_operator \
-      "rabbitmq-cluster-operator" \
-      "rabbitmqclusters.rabbitmq.com" \
-      "${RABBITMQ_OPERATOR_RELEASE_NAME}" \
-      "${RABBITMQ_OPERATOR_CHART_NAME}" \
-      "${RABBITMQ_OPERATOR_CHART_REPO_URL}" \
-      "${RABBITMQ_OPERATOR_VERSION}" \
-      "${RABBITMQ_OPERATOR_NAMESPACE}"
-  fi
-}
-
-apply_bakery_rackspace_secret() {
-  local should_manage_secret="false"
-
-  if [[ "${INTERACTIVE_BAKERY_CREDS}" == "true" ]]; then
-    should_manage_secret="true"
-    local prompt_url_default="${BAKERY_RACKSPACE_URL:-https://ws.core.rackspace.com}"
-    local prompt_user_default="${BAKERY_RACKSPACE_USERNAME:-}"
-    local prompt_url=""
-    local prompt_user=""
-    local prompt_password=""
-
-    read -r -p "Bakery Rackspace Core URL [${prompt_url_default}]: " prompt_url
-    BAKERY_RACKSPACE_URL="${prompt_url:-${prompt_url_default}}"
-    read -r -p "Bakery Rackspace Core username [${prompt_user_default}]: " prompt_user
-    BAKERY_RACKSPACE_USERNAME="${prompt_user:-${prompt_user_default}}"
-    read -r -s -p "Bakery Rackspace Core password: " prompt_password
-    echo
-    BAKERY_RACKSPACE_PASSWORD="${prompt_password}"
-  fi
-
-  if [[ -n "${BAKERY_RACKSPACE_URL}${BAKERY_RACKSPACE_USERNAME}${BAKERY_RACKSPACE_PASSWORD}" ]]; then
-    should_manage_secret="true"
-  fi
-
-  if [[ "${should_manage_secret}" != "true" ]]; then
+  if [[ "${INSTALL_PROFILE}" == "bakery" ]]; then
+    log_info "Installer profile is bakery-only; skipping non-MariaDB operator installs."
     return 0
   fi
 
-  if [[ -z "${BAKERY_RACKSPACE_URL}" || -z "${BAKERY_RACKSPACE_USERNAME}" || -z "${BAKERY_RACKSPACE_PASSWORD}" ]]; then
-    log_error "Bakery Rackspace Core credentials require URL, username, and password."
-    log_error "Use --interactive-bakery-creds or provide all of:"
-    log_error "  --bakery-rackspace-url --bakery-rackspace-username --bakery-rackspace-password"
-    exit 1
-  fi
+  install_or_verify_helm_operator \
+    "redis-operator" \
+    "redis.redis.redis.opstreelabs.in,redis.redis.opstreelabs.in" \
+    "${REDIS_OPERATOR_RELEASE_NAME}" \
+    "${REDIS_OPERATOR_CHART_NAME}" \
+    "${REDIS_OPERATOR_CHART_REPO_URL}" \
+    "${REDIS_OPERATOR_VERSION}" \
+    "${REDIS_OPERATOR_NAMESPACE}"
 
-  if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-    log_info "Namespace '${NAMESPACE}' does not exist; creating it for Bakery secret setup..."
-    kubectl create namespace "${NAMESPACE}" >/dev/null
-  fi
+  install_or_verify_manifest_operator \
+    "rabbitmq-cluster-operator" \
+    "rabbitmqclusters.rabbitmq.com" \
+    "${RABBITMQ_CLUSTER_OPERATOR_MANIFEST_URL}" \
+    "${RABBITMQ_OPERATOR_NAMESPACE}" \
+    "rabbitmq-cluster-operator"
 
-  log_info "Applying Bakery Rackspace Core secret '${BAKERY_RACKSPACE_SECRET_NAME}' in namespace '${NAMESPACE}'..."
-  kubectl -n "${NAMESPACE}" create secret generic "${BAKERY_RACKSPACE_SECRET_NAME}" \
-    --from-literal=rackspace-core-url="${BAKERY_RACKSPACE_URL}" \
-    --from-literal=rackspace-core-username="${BAKERY_RACKSPACE_USERNAME}" \
-    --from-literal=rackspace-core-password="${BAKERY_RACKSPACE_PASSWORD}" \
-    --dry-run=client -o yaml | kubectl apply -f -
+  install_or_verify_manifest_operator \
+    "rabbitmq-topology-operator" \
+    "queues.rabbitmq.com" \
+    "${RABBITMQ_TOPOLOGY_OPERATOR_MANIFEST_URL}" \
+    "${RABBITMQ_OPERATOR_NAMESPACE}" \
+    "messaging-topology-operator"
 
-  BAKERY_SECRET_SET_ARGS+=(--set "bakery.enabled=true")
-  BAKERY_SECRET_SET_ARGS+=(--set-string "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
+  install_or_verify_helm_operator \
+    "mongodb-community-operator" \
+    "mongodbcommunity.mongodbcommunity.mongodb.com" \
+    "${MONGODB_OPERATOR_RELEASE_NAME}" \
+    "${MONGODB_OPERATOR_CHART_NAME}" \
+    "${MONGODB_OPERATOR_CHART_REPO_URL}" \
+    "${MONGODB_OPERATOR_VERSION}" \
+    "${MONGODB_OPERATOR_NAMESPACE}"
 }
 
 ensure_oci_registry_auth() {
@@ -452,6 +547,159 @@ normalize_bool_or_empty() {
       ;;
     *)
       echo ""
+      ;;
+  esac
+}
+
+normalize_mode_or_empty() {
+  local raw="$1"
+  local trimmed="${raw#"${raw%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  trimmed="${trimmed%\"}"
+  trimmed="${trimmed#\"}"
+  trimmed="${trimmed%\'}"
+  trimmed="${trimmed#\'}"
+  trimmed="$(echo "${trimmed}" | tr '[:upper:]' '[:lower:]')"
+  case "${trimmed}" in
+    auto|on|off)
+      echo "${trimmed}"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+discover_colocated_bakery() {
+  DISCOVERED_BAKERY_URL=""
+  DISCOVERED_SHARED_DB_HOST=""
+
+  if [[ -n "${REMOTE_BAKERY_URL}" ]]; then
+    log_info "Skipping Bakery auto-discovery because remote Bakery URL was provided explicitly."
+    return 0
+  fi
+
+  local service_names=()
+  local deployment_names=()
+  local service_name=""
+  local service_port=""
+  local deployment_name=""
+  local deployment_env=""
+
+  while IFS= read -r service_name; do
+    [[ -n "${service_name}" ]] || continue
+    service_names+=("${service_name}")
+  done < <(
+    kubectl -n "${NAMESPACE}" get service -l app.kubernetes.io/component=bakery \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed '/^[[:space:]]*$/d'
+  )
+  while IFS= read -r deployment_name; do
+    [[ -n "${deployment_name}" ]] || continue
+    deployment_names+=("${deployment_name}")
+  done < <(
+    kubectl -n "${NAMESPACE}" get deployment -l app.kubernetes.io/component=bakery \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed '/^[[:space:]]*$/d'
+  )
+
+  if (( ${#service_names[@]} > 1 )); then
+    log_error "Bakery auto-discovery is ambiguous: multiple Bakery services found in namespace '${NAMESPACE}'."
+    log_error "Provide --remote-bakery-url explicitly."
+    exit 1
+  fi
+
+  if (( ${#deployment_names[@]} > 1 )); then
+    log_error "Shared DB auto-discovery is ambiguous: multiple Bakery deployments found in namespace '${NAMESPACE}'."
+    log_error "Provide --shared-db-server-name explicitly."
+    exit 1
+  fi
+
+  if (( ${#service_names[@]} == 0 && ${#deployment_names[@]} == 0 )); then
+    log_info "No in-namespace Bakery resources discovered; using embedded DB mode unless explicitly overridden."
+    return 0
+  fi
+
+  if (( ${#service_names[@]} == 1 )); then
+    service_name="${service_names[0]}"
+    service_port="$(kubectl -n "${NAMESPACE}" get service "${service_name}" -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || true)"
+    if [[ -z "${service_port}" ]]; then
+      service_port="8000"
+    fi
+    DISCOVERED_BAKERY_URL="http://${service_name}.${NAMESPACE}.svc.cluster.local:${service_port}"
+  fi
+
+  if (( ${#deployment_names[@]} == 1 )); then
+    deployment_name="${deployment_names[0]}"
+    deployment_env="$(
+      kubectl -n "${NAMESPACE}" get deployment "${deployment_name}" \
+        -o jsonpath='{range .spec.template.spec.containers[*]}{range .env[*]}{.name}={.value}{"\n"}{end}{end}' 2>/dev/null || true
+    )"
+    DISCOVERED_SHARED_DB_HOST="$(echo "${deployment_env}" | awk -F= '$1=="DATABASE_HOST" && length($2) > 0 { print $2; exit }')"
+  fi
+
+  if [[ -n "${DISCOVERED_BAKERY_URL}" ]]; then
+    log_info "Discovered in-namespace Bakery URL: ${DISCOVERED_BAKERY_URL}"
+  fi
+  if [[ -n "${DISCOVERED_SHARED_DB_HOST}" ]]; then
+    log_info "Discovered shared DB server name from Bakery deployment: ${DISCOVERED_SHARED_DB_HOST}"
+  fi
+
+  if [[ -z "${DISCOVERED_BAKERY_URL}" || -z "${DISCOVERED_SHARED_DB_HOST}" ]]; then
+    log_warn "Bakery discovery is partial (URL='${DISCOVERED_BAKERY_URL:-<none>}', DB host='${DISCOVERED_SHARED_DB_HOST:-<none>}')."
+  fi
+}
+
+resolve_runtime_modes() {
+  local normalized_shared_mode=""
+  local normalized_remote_bakery_enabled=""
+
+  normalized_shared_mode="$(normalize_mode_or_empty "${SHARED_DB_MODE}")"
+  if [[ -z "${normalized_shared_mode}" ]]; then
+    log_error "POUNDCAKE_SHARED_DB_MODE (or --shared-db-mode) must be one of: auto, on, off."
+    exit 1
+  fi
+  SHARED_DB_MODE="${normalized_shared_mode}"
+
+  normalized_remote_bakery_enabled="$(normalize_bool_or_empty "${REMOTE_BAKERY_ENABLED}")"
+  if [[ -n "${REMOTE_BAKERY_ENABLED}" && -z "${normalized_remote_bakery_enabled}" ]]; then
+    log_error "--remote-bakery-enabled (or POUNDCAKE_REMOTE_BAKERY_ENABLED) must be true or false."
+    exit 1
+  fi
+  REMOTE_BAKERY_ENABLED="${normalized_remote_bakery_enabled}"
+
+  RESOLVED_BAKERY_URL="${REMOTE_BAKERY_URL:-${DISCOVERED_BAKERY_URL}}"
+  if [[ -n "${REMOTE_BAKERY_ENABLED}" ]]; then
+    RESOLVED_BAKERY_CLIENT_ENABLED="${REMOTE_BAKERY_ENABLED}"
+  elif [[ -n "${RESOLVED_BAKERY_URL}" ]]; then
+    RESOLVED_BAKERY_CLIENT_ENABLED="true"
+  else
+    RESOLVED_BAKERY_CLIENT_ENABLED="false"
+  fi
+
+  if [[ "${RESOLVED_BAKERY_CLIENT_ENABLED}" == "true" && -z "${RESOLVED_BAKERY_URL}" ]]; then
+    log_error "Bakery client is enabled but Bakery URL is empty."
+    log_error "Provide --remote-bakery-url or ensure a single Bakery service is discoverable in namespace '${NAMESPACE}'."
+    exit 1
+  fi
+
+  RESOLVED_SHARED_DB_SERVER_NAME="${SHARED_DB_SERVER_NAME:-${DISCOVERED_SHARED_DB_HOST}}"
+  case "${SHARED_DB_MODE}" in
+    auto)
+      if [[ -n "${RESOLVED_SHARED_DB_SERVER_NAME}" ]]; then
+        RESOLVED_DATABASE_MODE="shared_operator"
+      else
+        RESOLVED_DATABASE_MODE="embedded"
+      fi
+      ;;
+    on)
+      RESOLVED_DATABASE_MODE="shared_operator"
+      if [[ -z "${RESOLVED_SHARED_DB_SERVER_NAME}" ]]; then
+        log_error "Shared DB mode is 'on' but no shared DB server name was resolved."
+        log_error "Set --shared-db-server-name or deploy Bakery first so installer auto-discovery can read DATABASE_HOST."
+        exit 1
+      fi
+      ;;
+    off)
+      RESOLVED_DATABASE_MODE="embedded"
       ;;
   esac
 }
@@ -591,28 +839,19 @@ rotate_chart_secrets() {
 }
 
 validate_image_pin_input() {
-  if [[ "${POUNDCAKE_ENABLED}" != "true" ]]; then
-    if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-      log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
-      exit 1
-    fi
-    if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]] && [[ ! "${POUNDCAKE_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-      log_error "POUNDCAKE_IMAGE_DIGEST must match sha256:<64-hex>."
-      exit 1
-    fi
-    return
-  fi
-
   if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
     log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
     exit 1
   fi
-  if [[ -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-    log_error "Image pin required: set POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
-    exit 1
-  fi
   if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]] && [[ ! "${POUNDCAKE_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     log_error "POUNDCAKE_IMAGE_DIGEST must match sha256:<64-hex>."
+    exit 1
+  fi
+  if [[ "${INSTALL_PROFILE}" == "bakery" && -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+    return
+  fi
+  if [[ -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
+    log_error "Image pin required: set POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
     exit 1
   fi
 }
@@ -636,12 +875,12 @@ verify_rendered_endpoint_contract() {
     }
     want && /^[[:space:]]+readinessProbe:[[:space:]]*$/ { probe="ready"; next }
     want && /^[[:space:]]+livenessProbe:[[:space:]]*$/ { probe="live"; next }
-    want && probe=="ready" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/ready[[:space:]]*$/ { ready=1; next }
-    want && probe=="live" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/live[[:space:]]*$/ { live=1; next }
+    want && probe=="ready" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/health[[:space:]]*$/ { ready=1; next }
+    want && probe=="live" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/health[[:space:]]*$/ { live=1; next }
     /^---[[:space:]]*$/ { kind=""; name=""; inmeta=0; want=0; probe="" }
     END { exit((ready && live) ? 0 : 1) }
   ' "${rendered_manifest}"; then
-    log_error "Rendered manifest contract failed: poundcake-api probes must target /api/v1/ready and /api/v1/live."
+    log_error "Rendered manifest contract failed: poundcake-api probes must target /api/v1/health."
     exit 1
   fi
 
@@ -662,9 +901,26 @@ fi
 
 if [[ -n "${POUNDCAKE_INSTALL_MODE:-}" ]]; then
   log_error "POUNDCAKE_INSTALL_MODE is no longer supported."
-  log_error "Use install/install-poundcake-helm.sh --target <poundcake|bakery|both>."
+  log_error "Use install/install-poundcake-helm.sh for PoundCake or install/install-bakery-helm.sh for Bakery."
   exit 1
 fi
+
+if [[ "${POUNDCAKE_NO_LOCAL_BAKERY:-false}" == "true" ]]; then
+  log_error "POUNDCAKE_NO_LOCAL_BAKERY is no longer supported."
+  log_error "Use --remote-bakery-url and --remote-bakery-enabled for PoundCake Bakery client settings."
+  exit 1
+fi
+
+for deprecated_toggle_env in \
+  POUNDCAKE_ENABLED \
+  POUNDCAKE_ENABLE_BAKERY
+do
+  if [[ -n "${!deprecated_toggle_env:-}" ]]; then
+    log_error "${deprecated_toggle_env} is no longer supported."
+    log_error "PoundCake installer now always renders poundcake.enabled=true and bakery.enabled=false."
+    exit 1
+  fi
+done
 
 for deprecated_env in \
   POUNDCAKE_BAKERY_DB_INTEGRATED \
@@ -674,7 +930,7 @@ for deprecated_env in \
 do
   if [[ -n "${!deprecated_env:-}" ]]; then
     log_error "${deprecated_env} is no longer supported."
-    log_error "Bakery integrated/shared DB mode was removed; Bakery now requires dedicated DB server provisioning."
+    log_error "Bakery DB settings are managed by install-bakery.sh."
     exit 1
   fi
 done
@@ -691,13 +947,14 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --enable-bakery)
-      ENABLE_BAKERY="true"
-      shift
+      log_error "Option '$1' was removed."
+      log_error "PoundCake installer always deploys PoundCake only."
+      log_error "Use install/install-bakery-helm.sh to deploy Bakery."
+      exit 1
       ;;
     --mode|--mode=*)
       log_error "Option '$1' was removed."
-      log_error "Use install/install-poundcake-helm.sh --target <poundcake|bakery|both>."
-      log_error "Or pass --set poundcake.enabled=<true|false> and --set bakery.enabled=<true|false>."
+      log_error "Use install/install-poundcake-helm.sh for PoundCake or install/install-bakery-helm.sh for Bakery."
       exit 1
       ;;
     --operators-mode)
@@ -721,12 +978,9 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --interactive-bakery-creds|--interactive-bakery-credentials)
-      INTERACTIVE_BAKERY_CREDS="true"
-      shift
-      ;;
-    --no-local-bakery)
-      NO_LOCAL_BAKERY="true"
-      shift
+      log_error "Option '$1' is not supported by install-poundcake.sh."
+      log_error "Bakery credentials are configured via install-bakery.sh."
+      exit 1
       ;;
     --remote-bakery-url)
       REMOTE_BAKERY_URL="$2"
@@ -744,25 +998,35 @@ while [[ $# -gt 0 ]]; do
       REMOTE_BAKERY_AUTH_SECRET="$2"
       shift 2
       ;;
-    --bakery-rackspace-url)
-      BAKERY_RACKSPACE_URL="$2"
+    --shared-db-mode)
+      SHARED_DB_MODE="$2"
       shift 2
       ;;
-    --bakery-rackspace-username)
-      BAKERY_RACKSPACE_USERNAME="$2"
+    --shared-db-mode=*)
+      SHARED_DB_MODE="${1#*=}"
+      shift
+      ;;
+    --shared-db-server-name)
+      SHARED_DB_SERVER_NAME="$2"
       shift 2
       ;;
-    --bakery-rackspace-password)
-      BAKERY_RACKSPACE_PASSWORD="$2"
-      shift 2
+    --shared-db-server-name=*)
+      SHARED_DB_SERVER_NAME="${1#*=}"
+      shift
       ;;
-    --bakery-rackspace-secret-name)
-      BAKERY_RACKSPACE_SECRET_NAME="$2"
-      shift 2
+    --bakery-rackspace-url|--bakery-rackspace-username|--bakery-rackspace-password|--bakery-rackspace-secret-name)
+      log_error "Option '$1' is not supported by install-poundcake.sh."
+      log_error "Use install-bakery.sh to configure Bakery credentials and secrets."
+      exit 1
+      ;;
+    --no-local-bakery)
+      log_error "Option '$1' is no longer supported."
+      log_error "Use --remote-bakery-url and --remote-bakery-enabled instead."
+      exit 1
       ;;
     --bakery-db-integrated|--bakery-db-host|--bakery-db-name|--bakery-db-user|--bakery-db-password|--bakery-db-password-secret-name|--bakery-db-password-secret-key|--bakery-db-admin-secret-name|--bakery-db-admin-password-key|--bakery-db-sql-image)
       log_error "Option '$1' is no longer supported."
-      log_error "Bakery integrated/shared DB mode was removed; Bakery now requires dedicated DB server provisioning."
+      log_error "Bakery DB flags are managed by install-bakery.sh."
       exit 1
       ;;
     *)
@@ -777,28 +1041,10 @@ if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" 
   exit 1
 fi
 
-POUNDCAKE_ENABLED="$(normalize_bool_or_empty "${POUNDCAKE_ENABLED}")"
-if [[ -z "${POUNDCAKE_ENABLED}" ]]; then
-  log_error "POUNDCAKE_ENABLED must be true or false."
+if [[ "${INSTALL_PROFILE}" != "poundcake" && "${INSTALL_PROFILE}" != "bakery" ]]; then
+  log_error "Invalid installer profile '${INSTALL_PROFILE}'."
+  log_error "Valid values: poundcake, bakery."
   exit 1
-fi
-
-ENABLE_BAKERY="$(normalize_bool_or_empty "${ENABLE_BAKERY}")"
-if [[ -z "${ENABLE_BAKERY}" ]]; then
-  log_error "POUNDCAKE_ENABLE_BAKERY must be true or false."
-  exit 1
-fi
-
-if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
-  REMOTE_BAKERY_ENABLED="$(normalize_bool_or_empty "${REMOTE_BAKERY_ENABLED}")"
-  if [[ -z "${REMOTE_BAKERY_ENABLED}" ]]; then
-    log_error "--remote-bakery-enabled (or POUNDCAKE_REMOTE_BAKERY_ENABLED) must be true or false."
-    exit 1
-  fi
-  if [[ "${REMOTE_BAKERY_ENABLED}" == "true" && -z "${REMOTE_BAKERY_URL}" ]]; then
-    log_error "--no-local-bakery requires --remote-bakery-url (or POUNDCAKE_REMOTE_BAKERY_URL) when remote bakery client is enabled."
-    exit 1
-  fi
 fi
 
 if [[ "${INSTALL_DEBUG}" == "true" ]]; then
@@ -807,7 +1053,8 @@ if [[ "${INSTALL_DEBUG}" == "true" ]]; then
   set -x
 fi
 
-log_info "Installer options: poundcake_enabled=${POUNDCAKE_ENABLED}, enable_bakery=${ENABLE_BAKERY}, operators_mode=${OPERATOR_MODE}, no_local_bakery=${NO_LOCAL_BAKERY}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
+log_info "Installer profile: ${INSTALL_PROFILE}"
+log_info "Installer options: operators_mode=${OPERATOR_MODE}, shared_db_mode=${SHARED_DB_MODE}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
@@ -890,12 +1137,9 @@ log_phase "values file discovery"
 discover_override_args
 log_info "Resolved override file argument count: ${#OVERRIDE_ARGS[@]}"
 
-log_phase "bakery credential secret configuration"
-if [[ "${NO_LOCAL_BAKERY}" != "true" ]]; then
-  apply_bakery_rackspace_secret
-else
-  log_info "Skipping local Bakery credential secret management because no-local-bakery mode is enabled."
-fi
+log_phase "bakery and shared-db discovery"
+discover_colocated_bakery
+resolve_runtime_modes
 
 if [[ "${ROTATE_SECRETS}" == "true" ]]; then
   log_phase "secret rotation"
@@ -903,7 +1147,7 @@ if [[ "${ROTATE_SECRETS}" == "true" ]]; then
 fi
 
 POST_RENDER_ARGS=()
-if [[ "${POUNDCAKE_ENABLED}" == "true" && -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
+if [[ -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
   POST_RENDER_ARGS+=("--post-renderer" "${POST_RENDERER}")
   if [[ -n "${POST_RENDERER_ARGS}" ]]; then
     POST_RENDER_ARGS+=("--post-renderer-args" "${POST_RENDERER_ARGS}")
@@ -911,29 +1155,35 @@ if [[ "${POUNDCAKE_ENABLED}" == "true" && -f "${POST_RENDERER}" && -d "${POST_RE
 fi
 
 INSTALLER_SET_ARGS=(
-  --set "poundcake.enabled=${POUNDCAKE_ENABLED}"
+  --set "poundcake.enabled=true"
+  --set "bakery.enabled=false"
+  --set "bakery.worker.enabled=false"
   --set-string "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
   --set-string "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
   --set-string "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
   --set-string "stackstormPackSync.endpoint=${PACK_SYNC_ENDPOINT}"
+  --set "bakery.client.enabled=${RESOLVED_BAKERY_CLIENT_ENABLED}"
+  --set-string "bakery.client.auth.mode=${REMOTE_BAKERY_AUTH_MODE}"
 )
 
-if [[ "${ENABLE_BAKERY}" == "true" ]]; then
-  INSTALLER_SET_ARGS+=(--set "bakery.enabled=true")
-  INSTALLER_SET_ARGS+=(--set "bakery.database.createServer=true")
-fi
-if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
-  INSTALLER_SET_ARGS+=(--set "bakery.enabled=false")
-  INSTALLER_SET_ARGS+=(--set "bakery.worker.enabled=false")
+if [[ "${RESOLVED_BAKERY_CLIENT_ENABLED}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set "bakery.client.enforceRemoteBaseUrl=true")
-  INSTALLER_SET_ARGS+=(--set "bakery.client.enabled=${REMOTE_BAKERY_ENABLED}")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.client.auth.mode=${REMOTE_BAKERY_AUTH_MODE}")
-  if [[ -n "${REMOTE_BAKERY_URL}" ]]; then
-    INSTALLER_SET_ARGS+=(--set-string "bakery.client.baseUrl=${REMOTE_BAKERY_URL}")
-  fi
-  if [[ -n "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
-    INSTALLER_SET_ARGS+=(--set-string "bakery.client.auth.existingSecret=${REMOTE_BAKERY_AUTH_SECRET}")
-  fi
+else
+  INSTALLER_SET_ARGS+=(--set "bakery.client.enforceRemoteBaseUrl=false")
+fi
+if [[ -n "${RESOLVED_BAKERY_URL}" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.client.baseUrl=${RESOLVED_BAKERY_URL}")
+fi
+if [[ -n "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.client.auth.existingSecret=${REMOTE_BAKERY_AUTH_SECRET}")
+fi
+
+if [[ "${RESOLVED_DATABASE_MODE}" == "shared_operator" ]]; then
+  INSTALLER_SET_ARGS+=(--set "database.mode=shared_operator")
+  INSTALLER_SET_ARGS+=(--set-string "database.sharedOperator.serverName=${RESOLVED_SHARED_DB_SERVER_NAME}")
+  INSTALLER_SET_ARGS+=(--set "database.sharedOperator.provisionResources=true")
+else
+  INSTALLER_SET_ARGS+=(--set "database.mode=embedded")
 fi
 
 if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
@@ -960,9 +1210,6 @@ if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
 fi
 if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=${BAKERY_IMAGE_TAG}")
-fi
-if (( ${#BAKERY_SECRET_SET_ARGS[@]} )); then
-  INSTALLER_SET_ARGS+=("${BAKERY_SECRET_SET_ARGS[@]}")
 fi
 COMMON_HELM_ARGS=(
   --namespace "${NAMESPACE}"
@@ -1037,46 +1284,46 @@ else
   "${HELM_TEMPLATE_CMD[@]}" > "${RENDERED_MANIFEST}"
 fi
 
-if [[ "${POUNDCAKE_ENABLED}" == "true" ]]; then
+if [[ "${INSTALL_PROFILE}" == "poundcake" ]]; then
   verify_rendered_endpoint_contract "${RENDERED_MANIFEST}" "${PACK_SYNC_ENDPOINT}"
+fi
 
-  if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
-    if ! awk -v secret_name="${IMAGE_PULL_SECRET_NAME}" '
-      BEGIN {kind=""; name=""; want=0; seen=0; found=0}
-      /^kind:[[:space:]]+/ {kind=$2}
-      /^metadata:[[:space:]]*$/ {inmeta=1; next}
-      inmeta && /^  name:[[:space:]]+/ {
-        name=$2
-        inmeta=0
-        if ((kind == "Deployment" && name ~ /^poundcake-/) || (kind == "Job" && name == "poundcake-bootstrap")) {
-          want=1
-        }
-        next
+if [[ "${INSTALL_PROFILE}" == "poundcake" && "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
+  if ! awk -v secret_name="${IMAGE_PULL_SECRET_NAME}" '
+    BEGIN {kind=""; name=""; want=0; seen=0; found=0}
+    /^kind:[[:space:]]+/ {kind=$2}
+    /^metadata:[[:space:]]*$/ {inmeta=1; next}
+    inmeta && /^  name:[[:space:]]+/ {
+      name=$2
+      inmeta=0
+      if ((kind == "Deployment" && name ~ /^poundcake-/) || (kind == "Job" && name == "poundcake-bootstrap")) {
+        want=1
       }
-      want && /^[[:space:]]+imagePullSecrets:[[:space:]]*$/ {in_pull=1; next}
-      want && in_pull && /^[[:space:]]+-[[:space:]]+name:[[:space:]]+/ {
-        if ($3 == secret_name || $3 == "\"" secret_name "\"") {
-          found=1
-        }
+      next
+    }
+    want && /^[[:space:]]+imagePullSecrets:[[:space:]]*$/ {in_pull=1; next}
+    want && in_pull && /^[[:space:]]+-[[:space:]]+name:[[:space:]]+/ {
+      if ($3 == secret_name || $3 == "\"" secret_name "\"") {
+        found=1
       }
-      /^---[[:space:]]*$/ {
-        if (want && found) {
-          seen=1
-        }
-        kind=""; name=""; want=0; in_pull=0; found=0; inmeta=0
+    }
+    /^---[[:space:]]*$/ {
+      if (want && found) {
+        seen=1
       }
-      END {
-        if (want && found) {
-          seen=1
-        }
-        exit(seen ? 0 : 1)
+      kind=""; name=""; want=0; in_pull=0; found=0; inmeta=0
+    }
+    END {
+      if (want && found) {
+        seen=1
       }
-    ' "${RENDERED_MANIFEST}"; then
-      log_error "Rendered PoundCake manifests do not include imagePullSecrets '${IMAGE_PULL_SECRET_NAME}'."
-      log_error "Refusing install to avoid anonymous private-registry pulls."
-      rm -f "${RENDERED_MANIFEST}"
-      exit 1
-    fi
+      exit(seen ? 0 : 1)
+    }
+  ' "${RENDERED_MANIFEST}"; then
+    log_error "Rendered PoundCake manifests do not include imagePullSecrets '${IMAGE_PULL_SECRET_NAME}'."
+    log_error "Refusing install to avoid anonymous private-registry pulls."
+    rm -f "${RENDERED_MANIFEST}"
+    exit 1
   fi
 fi
 rm -f "${RENDERED_MANIFEST}"
@@ -1084,7 +1331,13 @@ rm -f "${RENDERED_MANIFEST}"
 log_phase "helm install execution"
 log_info "Installing PoundCake release: ${RELEASE_NAME}"
 log_info "Namespace: ${NAMESPACE}"
-log_info "PoundCake enabled: ${POUNDCAKE_ENABLED}"
+if [[ "${INSTALL_PROFILE}" == "bakery" ]]; then
+  log_info "PoundCake resources: disabled"
+  log_info "Bakery resources: enabled"
+else
+  log_info "PoundCake resources: enabled"
+  log_info "Bakery resources: disabled"
+fi
 log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
   log_info "Chart version: ${CHART_VERSION:-"(not set)"}"
@@ -1107,15 +1360,16 @@ fi
 if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
   log_info "Bakery image tag override: ${BAKERY_IMAGE_TAG}"
 fi
-if [[ "${NO_LOCAL_BAKERY}" == "true" ]]; then
-  log_info "Local Bakery deployment: disabled (no-local-bakery mode)"
-  log_info "Remote Bakery client enabled: ${REMOTE_BAKERY_ENABLED}"
-  if [[ -n "${REMOTE_BAKERY_URL}" ]]; then
-    log_info "Remote Bakery URL: ${REMOTE_BAKERY_URL}"
-  fi
-  if [[ -n "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
-    log_info "Remote Bakery auth secret override: ${REMOTE_BAKERY_AUTH_SECRET}"
-  fi
+log_info "Bakery client enabled: ${RESOLVED_BAKERY_CLIENT_ENABLED}"
+if [[ -n "${RESOLVED_BAKERY_URL}" ]]; then
+  log_info "Bakery client URL: ${RESOLVED_BAKERY_URL}"
+fi
+if [[ -n "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
+  log_info "Bakery client auth secret override: ${REMOTE_BAKERY_AUTH_SECRET}"
+fi
+log_info "Database mode: ${RESOLVED_DATABASE_MODE}"
+if [[ "${RESOLVED_DATABASE_MODE}" == "shared_operator" ]]; then
+  log_info "Shared DB server name: ${RESOLVED_SHARED_DB_SERVER_NAME}"
 fi
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   log_info "Image pull secret injection: enabled (${IMAGE_PULL_SECRET_NAME})"

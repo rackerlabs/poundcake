@@ -1,4 +1,5 @@
 {{- if .Values.poundcake.enabled }}
+{{- if eq (include "poundcake.databaseMode" .) "embedded" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -94,6 +95,7 @@ spec:
             name: poundcake-scripts
             defaultMode: 0755
 ---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

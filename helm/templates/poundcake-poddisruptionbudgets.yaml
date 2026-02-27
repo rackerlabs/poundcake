@@ -1,5 +1,6 @@
 {{- if .Values.poundcake.enabled }}
 {{- if .Values.pdb.enabled }}
+{{- if eq (include "poundcake.databaseMode" .) "embedded" }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -17,6 +18,7 @@ spec:
       app.kubernetes.io/component: mariadb
       {{- include "poundcake.selectorLabels" . | nindent 6 }}
 ---
+{{- end }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

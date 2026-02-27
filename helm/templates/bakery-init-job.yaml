@@ -1,6 +1,6 @@
 {{- if and .Values.bakery.enabled (not .Values.poundcake.enabled) }}
 {{- if not .Values.bakery.database.createServer }}
-{{- fail "bakery.database.createServer=false is not supported. Bakery requires a dedicated MariaDB server." }}
+{{- fail "bakery.database.createServer=false is not supported. Bakery requires an operator-managed MariaDB server." }}
 {{- end }}
 {{- if not .Values.mariadbOperator.enabled }}
 {{- fail "bakery.database.createServer=true requires mariadbOperator.enabled=true" }}

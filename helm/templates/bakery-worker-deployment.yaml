@@ -1,7 +1,7 @@
 {{- $bakeryEnabled := .Values.bakery.enabled -}}
 {{- if and $bakeryEnabled .Values.bakery.worker.enabled }}
 {{- if not .Values.bakery.database.createServer }}
-{{- fail "bakery.database.createServer=false is not supported. Bakery requires a dedicated MariaDB server." }}
+{{- fail "bakery.database.createServer=false is not supported. Bakery requires an operator-managed MariaDB server." }}
 {{- end }}
 {{- if and .Values.bakery.database.createServer (not .Values.mariadbOperator.enabled) }}
 {{- fail "bakery.database.createServer=true requires mariadbOperator.enabled=true" }}
@@ -241,16 +241,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.rackspaceCore.existingSecret }}
                   key: {{ .Values.bakery.rackspaceCore.secretKeys.password }}
-            {{- else if and .Values.bakery.rackspaceCore.url .Values.bakery.rackspaceCore.password }}
-            - name: RACKSPACE_CORE_URL
-              value: {{ .Values.bakery.rackspaceCore.url | quote }}
-            - name: RACKSPACE_CORE_USERNAME
-              value: {{ .Values.bakery.rackspaceCore.username | quote }}
-            - name: RACKSPACE_CORE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakerySecretName" . }}
-                  key: rackspace-core-password
             {{- end }}
             - name: RACKSPACE_CORE_VERIFY_SSL
               value: {{ .Values.bakery.rackspaceCore.verifySsl | quote }}

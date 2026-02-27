@@ -215,24 +215,30 @@ Secret ownership model:
 
 Database ownership contract:
 - PoundCake API and Bakery must use separate database names and credentials.
-- PoundCake and Bakery run separate MariaDB servers.
+- When co-located in one namespace, PoundCake and Bakery can share one MariaDB server.
+- Even on a shared server, PoundCake and Bakery must keep separate schema/database ownership and separate users.
 - API migrations are API-owned; Bakery migrations are Bakery-owned and run by the Bakery DB init hook job.
 
-Remote Bakery mode (no in-cluster Bakery):
-- Use installer flag `--no-local-bakery` (or `POUNDCAKE_NO_LOCAL_BAKERY=true`) to disable all in-cluster Bakery resources.
-- In this mode, PoundCake comms client targets an external Bakery endpoint via:
-  - `POUNDCAKE_REMOTE_BAKERY_ENABLED` / `--remote-bakery-enabled` (default: `true`),
-  - `--remote-bakery-url` / `POUNDCAKE_REMOTE_BAKERY_URL` (required when remote client is enabled),
-  - `--remote-bakery-auth-mode` / `POUNDCAKE_REMOTE_BAKERY_AUTH_MODE` (default: `hmac`),
-  - `--remote-bakery-auth-secret` / `POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET` (optional).
-- Safety rules:
-  - Bakery-only installs (`./install/install-poundcake-helm.sh --target bakery`) cannot be combined with `--no-local-bakery`.
-  - chart rendering fails fast if `bakery.client.enforceRemoteBaseUrl=true`, `bakery.client.enabled=true`, and `bakery.client.baseUrl` is empty.
+Install model:
+- `./install/install-bakery-helm.sh` installs Bakery only.
+- `./install/install-poundcake-helm.sh` installs PoundCake only.
+- `install-poundcake-helm.sh` no longer supports `--target`.
+
+Co-located install order:
+1. Install Bakery first in the namespace.
+2. Install PoundCake second in the same namespace.
+3. PoundCake installer auto-discovers Bakery URL and shared DB host, then enables:
+`bakery.client.enabled=true`, `database.mode=shared_operator`, `database.sharedOperator.serverName=<discovered>`.
+4. You can force explicit shared DB mode with `--shared-db-mode on --shared-db-server-name <server>`.
+
+External Bakery mode (not co-located):
+- Set `--remote-bakery-url` / `POUNDCAKE_REMOTE_BAKERY_URL`.
+- Optional: `--remote-bakery-enabled`, `--remote-bakery-auth-mode`, `--remote-bakery-auth-secret`.
+- If no Bakery URL is explicit and no Bakery is discovered in-namespace, PoundCake installer sets `bakery.client.enabled=false`.
 
 Example:
 ```bash
 ./install/install-poundcake-helm.sh \
-  --no-local-bakery \
   --remote-bakery-url https://bakery.example.com \
   --remote-bakery-auth-mode hmac \
   --remote-bakery-auth-secret external-bakery-hmac
