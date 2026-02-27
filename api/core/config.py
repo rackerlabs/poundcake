@@ -213,10 +213,15 @@ class Settings(BaseSettings):
 
     auth_enabled: bool = True
     auth_secret_name: str = "poundcake-admin"
-    auth_secret_namespace: str = "poundcake"
+    auth_secret_namespace: str = Field(
+        default_factory=lambda: os.getenv("POD_NAMESPACE", "poundcake")
+    )
     auth_session_timeout: int = 86400
     auth_secret_key: str = Field(default_factory=lambda: os.urandom(32).hex())
     auth_internal_api_key: str = ""
+    # Preferred in-cluster credential source (injected from Secret via env vars).
+    auth_username: str = ""
+    auth_password: str = ""
 
     # Development/local auth fallback
     auth_dev_username: str = ""

@@ -114,6 +114,23 @@ spec:
             - name: POUNDCAKE_AUTH_ENABLED
               value: {{ .Values.auth.enabled | quote }}
             {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_AUTH_SECRET_NAME
+              value: {{ include "poundcake.fullname" . }}-admin
+            - name: POUNDCAKE_AUTH_SECRET_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POUNDCAKE_AUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: username
+            - name: POUNDCAKE_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.fullname" . }}-admin
+                  key: password
             - name: POUNDCAKE_AUTH_INTERNAL_API_KEY
               valueFrom:
                 secretKeyRef:

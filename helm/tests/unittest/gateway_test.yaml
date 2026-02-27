@@ -111,3 +111,60 @@ tests:
           path: spec.rules[0].backendRefs[0].port
           value: 8080
         documentIndex: 2
+
+  - it: renders https api listener with tls configuration
+    set:
+      gateway.enabled: true
+      gateway.listeners.ui.enabled: false
+      gateway.listeners.api.protocol: HTTPS
+      gateway.listeners.api.port: 443
+      gateway.listeners.api.tls.secretName: poundcake-gw-tls-secret
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.listeners[0].name
+          value: api
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[0].protocol
+          value: HTTPS
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[0].tls.mode
+          value: Terminate
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[0].tls.certificateRefs[0].name
+          value: poundcake-gw-tls-secret
+        documentIndex: 0
+
+  - it: shares api listener when api and ui listener tuples are identical
+    set:
+      gateway.enabled: true
+      gateway.listeners.api.hostname: poundcake.example.com
+      gateway.listeners.ui.hostname: poundcake.example.com
+      gateway.listeners.api.port: 443
+      gateway.listeners.ui.port: 443
+      gateway.listeners.api.protocol: HTTPS
+      gateway.listeners.ui.protocol: HTTPS
+      gateway.listeners.api.tls.secretName: poundcake-gw-tls-secret
+      gateway.listeners.ui.tls.secretName: poundcake-gw-tls-secret
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.listeners[0].name
+          value: api
+        documentIndex: 0
+      - notExists:
+          path: spec.listeners[1]
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: api
+        documentIndex: 1
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: api
+        documentIndex: 2

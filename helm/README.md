@@ -331,15 +331,26 @@ gateway:
   listeners:
     api:
       enabled: true
-      hostname: api.poundcake.local
-      port: 80
-      pathPrefix: /
+      hostname: poundcake.api.ord.cloudmunchers.net
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        secretName: poundcake-gw-tls-secret
+      pathPrefix: /api
     ui:
       enabled: true
-      hostname: ui.poundcake.local
-      port: 80
+      hostname: poundcake.api.ord.cloudmunchers.net
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        secretName: poundcake-gw-tls-secret
       pathPrefix: /
 ```
+
+If API and UI listeners use the same hostname, port, and protocol, the chart
+renders a single Gateway listener and attaches both routes to it.
 
 #### Pod Disruption Budgets
 

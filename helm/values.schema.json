@@ -47,7 +47,7 @@
         },
         "tag": {
           "type": "string",
-          "default": "2.0.96"
+          "default": "2.0.97"
         },
         "digest": {
           "type": "string",
@@ -135,7 +135,7 @@
         },
         "tag": {
           "type": "string",
-          "default": "2.0.96"
+          "default": "2.0.97"
         },
         "pullPolicy": {
           "type": "string",
@@ -402,6 +402,18 @@
                 "enabled": { "type": "boolean", "default": true },
                 "hostname": { "type": "string", "default": "api.poundcake.local" },
                 "port": { "type": "integer", "default": 80 },
+                "protocol": {
+                  "type": "string",
+                  "enum": ["HTTP", "HTTPS"],
+                  "default": "HTTP"
+                },
+                "tls": {
+                  "type": "object",
+                  "properties": {
+                    "mode": { "type": "string", "default": "Terminate" },
+                    "secretName": { "type": "string", "default": "" }
+                  }
+                },
                 "pathPrefix": { "type": "string", "default": "/" }
               }
             },
@@ -411,6 +423,18 @@
                 "enabled": { "type": "boolean", "default": true },
                 "hostname": { "type": "string", "default": "ui.poundcake.local" },
                 "port": { "type": "integer", "default": 80 },
+                "protocol": {
+                  "type": "string",
+                  "enum": ["HTTP", "HTTPS"],
+                  "default": "HTTP"
+                },
+                "tls": {
+                  "type": "object",
+                  "properties": {
+                    "mode": { "type": "string", "default": "Terminate" },
+                    "secretName": { "type": "string", "default": "" }
+                  }
+                },
                 "pathPrefix": { "type": "string", "default": "/" }
               }
             }

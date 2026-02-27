@@ -146,15 +146,25 @@ gateway:
   className: envoyproxy
   name: poundcake-gateway
   listeners:
+    # If api/ui share hostname+port+protocol, chart renders one listener (api)
+    # and attaches both HTTPRoutes to that section.
     api:
       enabled: true
       hostname: api.poundcake.local
       port: 80
+      protocol: HTTP
+      tls:
+        mode: Terminate
+        secretName: ""
       pathPrefix: /
     ui:
       enabled: true
       hostname: ui.poundcake.local
       port: 80
+      protocol: HTTP
+      tls:
+        mode: Terminate
+        secretName: ""
       pathPrefix: /
 
   # Session persistence configuration
@@ -758,7 +768,7 @@ bakery:
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: IfNotPresent
-    tag: "2.0.96"
+    tag: "2.0.97"
 
   # Service configuration
   service:
@@ -927,7 +937,7 @@ bakery:
 
 poundcakeImage:
   repository: ghcr.io/rackerlabs/poundcake
-  tag: "2.0.96"
+  tag: "2.0.97"
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
   pullPolicy: Always
@@ -943,7 +953,7 @@ poundcakeImage:
 
 uiImage:
   repository: ghcr.io/rackerlabs/poundcake-ui
-  tag: "2.0.96"
+  tag: "2.0.97"
   pullPolicy: IfNotPresent
   containerPort: 8080
   runtimeWritablePaths:

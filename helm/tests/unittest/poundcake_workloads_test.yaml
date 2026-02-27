@@ -120,23 +120,23 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.96
+          value: ghcr.io/rackerlabs/poundcake:2.0.97
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.96
+          value: ghcr.io/rackerlabs/poundcake:2.0.97
         documentIndex: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.96
+          value: ghcr.io/rackerlabs/poundcake:2.0.97
         documentIndex: 3
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.96
+          value: ghcr.io/rackerlabs/poundcake:2.0.97
         documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.96
+          value: ghcr.io/rackerlabs/poundcake:2.0.97
         documentIndex: 5
 
   - it: supports immutable digest image references for PoundCake workloads
@@ -454,6 +454,39 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: POUNDCAKE_AUTH_SECRET_NAME
+            value: RELEASE-NAME-poundcake-admin
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_SECRET_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-admin
+                key: username
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-admin
+                key: password
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: POUNDCAKE_AUTH_INTERNAL_API_KEY
             valueFrom:
               secretKeyRef:
@@ -511,6 +544,26 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_AUTH_INTERNAL_API_KEY
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_SECRET_NAME
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_SECRET_NAMESPACE
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_USERNAME
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_PASSWORD
         documentIndex: 0
       - notContains:
           path: spec.template.spec.containers[0].env

@@ -1,5 +1,12 @@
 {{- if .Values.poundcake.enabled }}
 {{- if .Values.gateway.enabled }}
+{{- $apiEnabled := .Values.gateway.listeners.api.enabled }}
+{{- $uiEnabled := .Values.gateway.listeners.ui.enabled }}
+{{- $apiHostname := default "" .Values.gateway.listeners.api.hostname }}
+{{- $uiHostname := default "" .Values.gateway.listeners.ui.hostname }}
+{{- $apiProtocol := upper (default "HTTP" .Values.gateway.listeners.api.protocol) }}
+{{- $uiProtocol := upper (default "HTTP" .Values.gateway.listeners.ui.protocol) }}
+{{- $sharedListener := and $apiEnabled $uiEnabled (eq $apiHostname $uiHostname) (eq (int .Values.gateway.listeners.api.port) (int .Values.gateway.listeners.ui.port)) (eq $apiProtocol $uiProtocol) }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -9,29 +16,43 @@ metadata:
 spec:
   gatewayClassName: {{ .Values.gateway.className }}
   listeners:
-    {{- if .Values.gateway.listeners.api.enabled }}
+    {{- if $apiEnabled }}
     - name: api
-      protocol: HTTP
+      protocol: {{ $apiProtocol }}
       port: {{ .Values.gateway.listeners.api.port }}
-      {{- if .Values.gateway.listeners.api.hostname }}
-      hostname: {{ .Values.gateway.listeners.api.hostname | quote }}
+      {{- if $apiHostname }}
+      hostname: {{ $apiHostname | quote }}
+      {{- end }}
+      {{- if eq $apiProtocol "HTTPS" }}
+      tls:
+        mode: {{ default "Terminate" .Values.gateway.listeners.api.tls.mode }}
+        certificateRefs:
+          - kind: Secret
+            name: {{ required "gateway.listeners.api.tls.secretName is required when gateway.listeners.api.protocol=HTTPS" .Values.gateway.listeners.api.tls.secretName }}
       {{- end }}
       allowedRoutes:
         namespaces:
           from: Same
     {{- end }}
-    {{- if .Values.gateway.listeners.ui.enabled }}
+    {{- if and $uiEnabled (not $sharedListener) }}
     - name: ui
-      protocol: HTTP
+      protocol: {{ $uiProtocol }}
       port: {{ .Values.gateway.listeners.ui.port }}
-      {{- if .Values.gateway.listeners.ui.hostname }}
-      hostname: {{ .Values.gateway.listeners.ui.hostname | quote }}
+      {{- if $uiHostname }}
+      hostname: {{ $uiHostname | quote }}
+      {{- end }}
+      {{- if eq $uiProtocol "HTTPS" }}
+      tls:
+        mode: {{ default "Terminate" .Values.gateway.listeners.ui.tls.mode }}
+        certificateRefs:
+          - kind: Secret
+            name: {{ required "gateway.listeners.ui.tls.secretName is required when gateway.listeners.ui.protocol=HTTPS" .Values.gateway.listeners.ui.tls.secretName }}
       {{- end }}
       allowedRoutes:
         namespaces:
           from: Same
     {{- end }}
-{{- if .Values.gateway.listeners.api.enabled }}
+{{- if $apiEnabled }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -43,9 +64,9 @@ spec:
   parentRefs:
     - name: {{ .Values.gateway.name }}
       sectionName: api
-  {{- if .Values.gateway.listeners.api.hostname }}
+  {{- if $apiHostname }}
   hostnames:
-    - {{ .Values.gateway.listeners.api.hostname | quote }}
+    - {{ $apiHostname | quote }}
   {{- end }}
   rules:
     - matches:
@@ -56,7 +77,7 @@ spec:
         - name: poundcake-api
           port: {{ .Values.services.api.port }}
 {{- end }}
-{{- if .Values.gateway.listeners.ui.enabled }}
+{{- if $uiEnabled }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -67,10 +88,10 @@ metadata:
 spec:
   parentRefs:
     - name: {{ .Values.gateway.name }}
-      sectionName: ui
-  {{- if .Values.gateway.listeners.ui.hostname }}
+      sectionName: {{ ternary "api" "ui" $sharedListener }}
+  {{- if $uiHostname }}
   hostnames:
-    - {{ .Values.gateway.listeners.ui.hostname | quote }}
+    - {{ $uiHostname | quote }}
   {{- end }}
   rules:
     - matches:

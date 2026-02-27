@@ -36,7 +36,11 @@ def get_admin_credentials() -> tuple[str, str] | None:
     if not settings.auth_enabled:
         return None
 
-    # 1. Attempt to load from Kubernetes (Helm/K8s Environment)
+    # 1. Prefer explicit env-provided credentials (Helm-injected secret refs).
+    if settings.auth_username and settings.auth_password:
+        return (settings.auth_username, settings.auth_password)
+
+    # 2. Attempt to load from Kubernetes API secret.
     try:
         k8s_client_module = importlib.import_module("kubernetes.client")
         k8s_config_module = importlib.import_module("kubernetes.config")
@@ -67,7 +71,7 @@ def get_admin_credentials() -> tuple[str, str] | None:
             extra={"error": str(e)},
         )
 
-        # 2. Fallback to environment variables (Docker Compose / Local Dev)
+        # 3. Fallback to local development environment variables.
         if settings.auth_dev_username and settings.auth_dev_password:
             return (settings.auth_dev_username, settings.auth_dev_password)
 
