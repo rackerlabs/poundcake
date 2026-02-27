@@ -255,7 +255,7 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "gate_wait_for_true_file \\\"/app/config/poundcake_bootstrap_ready\\\""
+          pattern: "gate_wait_for_http_status \\\"http://poundcake-api:8000/api/v1/health\\\""
         documentIndex: 2
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]

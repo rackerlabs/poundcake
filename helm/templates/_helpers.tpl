@@ -201,6 +201,20 @@ poundcake-mariadb
 {{- end -}}
 {{- end -}}
 
+{{- define "poundcake.secretChecksumMaterial" -}}
+{{- $bakery := .Values.bakery | default dict -}}
+{{- $material := dict
+  "databaseMode" (include "poundcake.databaseMode" .)
+  "databaseHost" (include "poundcake.databaseHost" .)
+  "secrets" (.Values.secrets | default dict)
+  "auth" (.Values.auth | default dict)
+  "stackstorm" (.Values.stackstorm | default dict)
+  "stackstormServices" (.Values.stackstormServices | default dict)
+  "bakeryClient" ($bakery.client | default dict)
+-}}
+{{ toYaml $material }}
+{{- end -}}
+
 {{- define "poundcake.bakeryWaitForDbInitContainer" -}}
 - name: wait-for-db
   image: {{ .Values.images.busybox | quote }}

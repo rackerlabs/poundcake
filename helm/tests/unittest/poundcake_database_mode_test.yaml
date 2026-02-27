@@ -36,6 +36,7 @@ tests:
             name: POUNDCAKE_DATABASE_URL
             value: mysql+pymysql://$(DB_USER):$(DB_PASSWORD)@poundcake-mariadb:3306/$(DB_NAME)
         template: templates/poundcake-workloads.yaml
+        documentIndex: 0
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'DB_SVC="poundcake-mariadb"'
@@ -73,12 +74,12 @@ tests:
         documentIndex: 0
       - equal:
           path: kind
-          value: Grant
+          value: User
         template: templates/poundcake-shared-mariadb.yaml
         documentIndex: 1
       - equal:
           path: kind
-          value: User
+          value: Grant
         template: templates/poundcake-shared-mariadb.yaml
         documentIndex: 2
       - equal:
@@ -92,6 +93,7 @@ tests:
             name: POUNDCAKE_DATABASE_URL
             value: mysql+pymysql://$(DB_USER):$(DB_PASSWORD)@bakery-pc-bakery-mariadb:3306/$(DB_NAME)
         template: templates/poundcake-workloads.yaml
+        documentIndex: 0
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'DB_SVC="bakery-pc-bakery-mariadb"'

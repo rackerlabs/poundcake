@@ -1,7 +1,6 @@
 from pathlib import Path
 import re
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_TEMPLATE = REPO_ROOT / "ui" / "nginx" / "nginx.conf"
 UI_DOCKERFILE = REPO_ROOT / "ui" / "Dockerfile"

@@ -17,7 +17,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-register
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-register") | nindent 8 }}
@@ -136,7 +136,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-auth
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-auth") | nindent 8 }}
@@ -227,7 +227,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-api
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-api") | nindent 8 }}
@@ -346,7 +346,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-actionrunner
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-actionrunner") | nindent 8 }}
@@ -456,7 +456,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-rulesengine
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-rulesengine") | nindent 8 }}
@@ -534,7 +534,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-workflowengine
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-workflowengine") | nindent 8 }}
@@ -644,7 +644,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-scheduler
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-scheduler") | nindent 8 }}
@@ -723,7 +723,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-notifier
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-notifier") | nindent 8 }}
@@ -802,7 +802,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-garbagecollector
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-garbagecollector") | nindent 8 }}
@@ -881,7 +881,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-timersengine
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-timersengine") | nindent 8 }}
@@ -961,7 +961,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-sensorcontainer
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-sensorcontainer") | nindent 8 }}
@@ -1041,7 +1041,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-stream
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-stream") | nindent 8 }}
@@ -1124,7 +1124,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-web
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-web") | nindent 8 }}
@@ -1207,7 +1207,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/poundcake-secrets: {{ include (print $.Template.BasePath "/poundcake-secret.yaml") . | sha256sum }}
+        checksum/poundcake-secrets: {{ include "poundcake.secretChecksumMaterial" . | sha256sum }}
       labels:
         app.kubernetes.io/component: stackstorm-client
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-client") | nindent 8 }}
