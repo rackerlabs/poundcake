@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection
 
 script_dir = Path(__file__).parent
 api_dir = script_dir.parent
@@ -34,7 +35,7 @@ def _sync_database_url_from_env() -> str:
     return url
 
 
-def _table_exists(conn, table_name: str) -> bool:
+def _table_exists(conn: Connection, table_name: str) -> bool:
     row = conn.execute(
         text("""
             SELECT 1
@@ -48,7 +49,7 @@ def _table_exists(conn, table_name: str) -> bool:
     return row is not None
 
 
-def _column_exists(conn, table_name: str, column_name: str) -> bool:
+def _column_exists(conn: Connection, table_name: str, column_name: str) -> bool:
     row = conn.execute(
         text("""
             SELECT 1
@@ -63,7 +64,7 @@ def _column_exists(conn, table_name: str, column_name: str) -> bool:
     return row is not None
 
 
-def _index_exists(conn, table_name: str, index_name: str) -> bool:
+def _index_exists(conn: Connection, table_name: str, index_name: str) -> bool:
     row = conn.execute(
         text("""
             SELECT 1
@@ -78,7 +79,9 @@ def _index_exists(conn, table_name: str, index_name: str) -> bool:
     return row is not None
 
 
-def _apply_table_reconciliation(conn, table_name: str, ddl_statements: list[str]) -> None:
+def _apply_table_reconciliation(
+    conn: Connection, table_name: str, ddl_statements: list[str]
+) -> None:
     if not _table_exists(conn, table_name):
         logger.warning(
             "Skipping reconciliation for missing table",
