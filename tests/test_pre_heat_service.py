@@ -244,7 +244,10 @@ async def test_pre_heat_firing_reuses_previous_confirmed_solved_ticket():
 
     with (
         patch("api.services.pre_heat.settings.bakery_enabled", True),
-        patch("api.services.pre_heat.find_first_matching_suppression", new=AsyncMock(return_value=None)),
+        patch(
+            "api.services.pre_heat.find_first_matching_suppression",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         result = await pre_heat(payload, db=db, req_id="REQ-NEW")
 

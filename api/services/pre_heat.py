@@ -27,8 +27,10 @@ TERMINAL_TICKET_STATES = {"closed", "terminal"}
 def _resolved_ticket_state() -> str:
     if settings.bakery_active_provider.lower() == "rackspace_core":
         return (
-            settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
-        ).lower().replace(" ", "_")
+            (settings.bakery_rackspace_confirmed_solved_status or "confirmed solved")
+            .lower()
+            .replace(" ", "_")
+        )
     return "closed"
 
 

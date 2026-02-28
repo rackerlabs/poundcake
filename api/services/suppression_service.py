@@ -400,9 +400,7 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
                         "moving summary ticket to confirmed solved."
                     ),
                     "state": (
-                        (
-                            settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
-                        )
+                        (settings.bakery_rackspace_confirmed_solved_status or "confirmed solved")
                         .lower()
                         .replace(" ", "_")
                         if settings.bakery_active_provider.lower() == "rackspace_core"

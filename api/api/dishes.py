@@ -45,8 +45,10 @@ TERMINAL_TICKET_STATES = {"closed", "terminal"}
 def _resolved_ticket_state() -> str:
     settings = get_settings()
     if settings.bakery_active_provider.lower() == "rackspace_core":
-        return (settings.bakery_rackspace_confirmed_solved_status or "confirmed solved").lower().replace(
-            " ", "_"
+        return (
+            (settings.bakery_rackspace_confirmed_solved_status or "confirmed solved")
+            .lower()
+            .replace(" ", "_")
         )
     return "closed"
 
@@ -192,7 +194,9 @@ async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSes
     if not settings.bakery_enabled:
         return
 
-    result = await db.execute(select(Dish).options(joinedload(Dish.recipe)).where(Dish.id == dish_id))
+    result = await db.execute(
+        select(Dish).options(joinedload(Dish.recipe)).where(Dish.id == dish_id)
+    )
     dish = result.scalars().first()
     if not dish or not dish.order_id or dish.processing_status not in {"failed", "complete"}:
         return
@@ -213,7 +217,9 @@ async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSes
     execution_summary = _build_execution_summary(dish, ingredients)
     catch_all_name = (settings.catch_all_recipe_name or "").strip().lower()
     is_catch_all = bool(
-        catch_all_name and dish.recipe and (dish.recipe.name or "").strip().lower() == catch_all_name
+        catch_all_name
+        and dish.recipe
+        and (dish.recipe.name or "").strip().lower() == catch_all_name
     )
 
     try:
@@ -302,7 +308,9 @@ async def cook_dishes(
                 fallback_result = await db.execute(
                     select(Recipe)
                     .options(
-                        joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient)
+                        joinedload(Recipe.recipe_ingredients).joinedload(
+                            RecipeIngredient.ingredient
+                        )
                     )
                     .where(Recipe.name == catch_all_name, Recipe.enabled.is_(True))
                     .with_for_update()
@@ -708,7 +716,10 @@ async def update_dish(
     previous_processing_status: str | None = None
     async with db.begin():
         result = await db.execute(
-            select(Dish).options(joinedload(Dish.recipe)).where(Dish.id == dish_id).with_for_update()
+            select(Dish)
+            .options(joinedload(Dish.recipe))
+            .where(Dish.id == dish_id)
+            .with_for_update()
         )
         dish = result.unique().scalars().first()
         if not dish:

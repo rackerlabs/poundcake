@@ -395,7 +395,9 @@ class SuppressionSummary(Base):
     total_still_firing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     by_alertname_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     by_severity_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
-    still_firing_alerts_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    still_firing_alerts_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MYSQL_JSON, nullable=True
+    )
     first_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     summary_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
