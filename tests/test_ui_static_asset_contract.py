@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_JS_ROOT = REPO_ROOT / "ui" / "static" / "assets" / "js"
 
