@@ -24,6 +24,7 @@ from api.core.metrics import (
 from api.models.models import (
     AlertSuppression,
     AlertSuppressionMatcher,
+    Order,
     SuppressedEvent,
     SuppressionSummary,
 )
@@ -190,8 +191,11 @@ def build_summary_ticket_payload(
         f"Scope: {suppression.scope}\n"
         f"Matcher Snapshot: {json.dumps(matcher_snapshot)}\n"
         f"Total Suppressed: {summary.total_suppressed}\n"
+        f"Cleared During Suppression: {summary.total_cleared}\n"
+        f"Still Firing At End: {summary.total_still_firing}\n"
         f"By Alertname: {json.dumps(by_alertname)}\n"
         f"By Severity: {json.dumps(by_severity)}\n"
+        f"Still Firing Alerts: {json.dumps(summary.still_firing_alerts_json or {})}\n"
         f"First Seen: {summary.first_seen_at.isoformat() if summary.first_seen_at else 'N/A'}\n"
         f"Last Seen: {summary.last_seen_at.isoformat() if summary.last_seen_at else 'N/A'}"
     )
@@ -204,6 +208,8 @@ def build_summary_ticket_payload(
             "suppression_id": suppression.id,
             "scope": suppression.scope,
             "total_suppressed": summary.total_suppressed,
+            "total_cleared": summary.total_cleared,
+            "total_still_firing": summary.total_still_firing,
         },
     }
 
@@ -220,13 +226,88 @@ async def compute_suppression_stats(
     by_severity = Counter((e.severity or "unknown") for e in events)
     first_seen = min((e.received_at for e in events), default=None)
     last_seen = max((e.received_at for e in events), default=None)
+    latest_by_fingerprint: dict[str, SuppressedEvent] = {}
+    for event in sorted(events, key=lambda item: item.received_at):
+        if not event.fingerprint:
+            continue
+        latest_by_fingerprint[event.fingerprint] = event
+    cleared = 0
+    still_firing = 0
+    still_firing_alerts: dict[str, Any] = {}
+    for fingerprint, event in latest_by_fingerprint.items():
+        status = (event.status or "").lower()
+        if status == "resolved":
+            cleared += 1
+            continue
+        still_firing += 1
+        still_firing_alerts[fingerprint] = {
+            "alertname": event.alertname or "Unknown",
+            "severity": event.severity or "unknown",
+            "last_status": event.status,
+            "last_received_at": event.received_at.isoformat(),
+            "labels": event.labels_json or {},
+            "annotations": event.annotations_json or {},
+            "req_id": event.req_id,
+        }
     return {
         "total_suppressed": len(events),
         "by_alertname": dict(by_alertname),
         "by_severity": dict(by_severity),
         "first_seen_at": first_seen,
         "last_seen_at": last_seen,
+        "total_cleared": cleared,
+        "total_still_firing": still_firing,
+        "still_firing_alerts": still_firing_alerts,
+        "latest_by_fingerprint": latest_by_fingerprint,
     }
+
+
+async def _requeue_still_firing_events(
+    db: AsyncSession,
+    suppression_id: int,
+    latest_by_fingerprint: dict[str, SuppressedEvent],
+    req_id: str,
+) -> int:
+    created = 0
+    for fingerprint, event in latest_by_fingerprint.items():
+        if (event.status or "").lower() == "resolved":
+            continue
+        active_result = await db.execute(
+            select(Order).where(Order.fingerprint == fingerprint, Order.is_active.is_(True))
+        )
+        if active_result.scalars().first():
+            continue
+
+        labels = event.labels_json or {}
+        annotations = event.annotations_json or {}
+        group_name = labels.get("group_name") or labels.get("alertname") or "Unknown"
+        replay_order = Order(
+            req_id=event.req_id or f"{req_id}-SUPPRESSION-REPLAY",
+            fingerprint=fingerprint,
+            alert_status="firing",
+            processing_status="new",
+            is_active=True,
+            alert_group_name=group_name,
+            severity=labels.get("severity", "unknown"),
+            instance=labels.get("instance"),
+            labels=labels,
+            annotations=annotations,
+            raw_data={
+                "fingerprint": fingerprint,
+                "status": "firing",
+                "labels": labels,
+                "annotations": annotations,
+                "suppression_replay": True,
+                "suppression_id": suppression_id,
+            },
+            counter=1,
+            starts_at=event.received_at,
+        )
+        db.add(replay_order)
+        created += 1
+    if created > 0:
+        await db.flush()
+    return created
 
 
 async def _get_or_create_summary(
@@ -255,7 +336,6 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
         select(AlertSuppression)
         .options(selectinload(AlertSuppression.matchers))
         .where(
-            AlertSuppression.summary_ticket_enabled.is_(True),
             AlertSuppression.ends_at < now,
             AlertSuppression.canceled_at.is_(None),
         )
@@ -273,11 +353,21 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
         try:
             stats = await compute_suppression_stats(db, suppression.id)
             summary.total_suppressed = stats["total_suppressed"]
+            summary.total_cleared = stats["total_cleared"]
+            summary.total_still_firing = stats["total_still_firing"]
             summary.by_alertname_json = stats["by_alertname"]
             summary.by_severity_json = stats["by_severity"]
+            summary.still_firing_alerts_json = stats["still_firing_alerts"]
             summary.first_seen_at = stats["first_seen_at"]
             summary.last_seen_at = stats["last_seen_at"]
             summary.summary_created_at = now
+
+            replayed_orders = await _requeue_still_firing_events(
+                db=db,
+                suppression_id=suppression.id,
+                latest_by_fingerprint=stats["latest_by_fingerprint"],
+                req_id=req_id,
+            )
 
             if summary.total_suppressed == 0:
                 summary.state = "closed"
@@ -286,7 +376,7 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
                 finalized += 1
                 continue
 
-            if not summary.bakery_ticket_id:
+            if suppression.summary_ticket_enabled and not summary.bakery_ticket_id:
                 create_payload = build_summary_ticket_payload(suppression, summary)
                 accepted = await create_ticket(req_id=req_id, payload=create_payload)
                 summary.bakery_ticket_id = accepted.get("ticket_id")
@@ -299,11 +389,25 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
                         raise RuntimeError(f"Bakery create operation failed: {create_op}")
                     record_suppression_summary_ticket("create_succeeded")
 
-            if summary.bakery_ticket_id and not summary.bakery_close_operation_id:
+            if (
+                suppression.summary_ticket_enabled
+                and summary.bakery_ticket_id
+                and not summary.bakery_close_operation_id
+            ):
                 close_payload = {
                     "resolution_notes": (
-                        f"Suppression window {suppression.id} ended; auto-closing summary ticket"
-                    )
+                        f"Suppression window {suppression.id} ended; "
+                        "moving summary ticket to confirmed solved."
+                    ),
+                    "state": (
+                        (
+                            settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+                        )
+                        .lower()
+                        .replace(" ", "_")
+                        if settings.bakery_active_provider.lower() == "rackspace_core"
+                        else "closed"
+                    ),
                 }
                 close_accepted = await close_ticket(
                     req_id=req_id,
@@ -323,6 +427,15 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
             summary.last_error = None
             await db.commit()
             finalized += 1
+            logger.info(
+                "Suppression finalized",
+                extra={
+                    "req_id": req_id,
+                    "suppression_id": suppression.id,
+                    "replayed_orders": replayed_orders,
+                    "total_still_firing": summary.total_still_firing,
+                },
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Suppression summary lifecycle failed",

@@ -47,6 +47,9 @@ def _make_order(status: str = "new") -> Order:
         severity="high",
         instance="host1",
         counter=1,
+        bakery_ticket_state=None,
+        bakery_permanent_failure=False,
+        bakery_last_error=None,
         labels={"alertname": "Test"},
         annotations={},
         raw_data={},
@@ -203,3 +206,49 @@ async def test_pre_heat_firing_suppressed_does_not_create_order():
     assert result["status"] == "ignored_suppressed"
     assert result["results"][0]["suppression_id"] == 10
     save_event.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_pre_heat_firing_reuses_previous_confirmed_solved_ticket():
+    previous = _make_order(status="complete")
+    previous.is_active = False
+    previous.bakery_ticket_id = "ticket-123"
+    previous.bakery_ticket_state = "confirmed_solved"
+    previous.bakery_permanent_failure = False
+
+    db = AsyncMock()
+    db.begin = Mock(return_value=DummyBegin())
+    db.execute = AsyncMock(side_effect=[ScalarResult(first=None), ScalarResult(first=previous)])
+    created: list[Order] = []
+
+    def _add(order: Order) -> None:
+        created.append(order)
+
+    async def _flush() -> None:
+        if created:
+            created[-1].id = 456
+
+    db.add = Mock(side_effect=_add)
+    db.flush = AsyncMock(side_effect=_flush)
+
+    payload = {
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {"alertname": "CPUHigh", "instance": "host1"},
+                "annotations": {},
+                "fingerprint": "fp-1",
+            }
+        ]
+    }
+
+    with (
+        patch("api.services.pre_heat.settings.bakery_enabled", True),
+        patch("api.services.pre_heat.find_first_matching_suppression", new=AsyncMock(return_value=None)),
+    ):
+        result = await pre_heat(payload, db=db, req_id="REQ-NEW")
+
+    assert result["status"] == "created"
+    assert result["order_id"] == 456
+    assert created[0].bakery_ticket_id == "ticket-123"
+    assert created[0].bakery_ticket_state == "confirmed_solved"

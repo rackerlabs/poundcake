@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.models.models import Dish, DishIngredient, Order
+from api.models.models import Dish, DishIngredient, Order, Recipe
 
 
 class ScalarResult:
@@ -73,6 +73,9 @@ def _make_order(order_id: int = 1, status: str = "new") -> Order:
         severity="high",
         instance="host1",
         counter=1,
+        bakery_ticket_state=None,
+        bakery_permanent_failure=False,
+        bakery_last_error=None,
         labels={"alertname": "Test"},
         annotations={},
         raw_data={},
@@ -123,6 +126,24 @@ def _make_dish_ingredient(ingredient_id: int = 1) -> DishIngredient:
         deleted_at=None,
         created_at=now,
         updated_at=now,
+    )
+
+
+def _make_recipe(recipe_id: int = 1, name: str = "group") -> Recipe:
+    now = datetime.now(timezone.utc)
+    return Recipe(
+        id=recipe_id,
+        name=name,
+        description=None,
+        enabled=True,
+        source_type="undefined",
+        workflow_id=None,
+        workflow_payload=None,
+        workflow_parameters=None,
+        created_at=now,
+        updated_at=now,
+        deleted=False,
+        deleted_at=None,
     )
 
 
@@ -265,6 +286,28 @@ def test_update_dish_updates_order_when_terminal(client, mock_db_session):
     assert response.status_code == 200
     assert order.processing_status == "complete"
     assert order.is_active is False
+
+
+def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
+    dish = _make_dish(status="processing")
+    dish.recipe = _make_recipe(name="catch-all")
+    order = _make_order(status="processing")
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    with (
+        patch(
+            "api.api.dishes.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name="catch-all"),
+        ),
+        patch("api.api.dishes._sync_bakery_for_terminal_dish", new=AsyncMock()),
+    ):
+        response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
+
+    assert response.status_code == 200
+    assert order.processing_status == "processing"
+    assert order.is_active is True
 
 
 def test_get_order_timeline(client, mock_db_session):

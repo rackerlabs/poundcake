@@ -258,6 +258,9 @@ class OrderBase(BaseModel):
     starts_at: datetime
     bakery_ticket_id: Optional[str] = Field(None, max_length=36)
     bakery_operation_id: Optional[str] = Field(None, max_length=36)
+    bakery_ticket_state: Optional[str] = Field(None, max_length=32)
+    bakery_permanent_failure: bool = False
+    bakery_last_error: Optional[str] = None
     bakery_comms_id: Optional[str] = Field(None, max_length=36)
     fingerprint_when_active: Optional[str] = Field(None, max_length=255)
 
@@ -283,6 +286,9 @@ class OrderUpdate(BaseModel):
     is_active: Optional[bool] = None
     ends_at: Optional[datetime] = None
     bakery_comms_id: Optional[str] = Field(None, max_length=36)
+    bakery_ticket_state: Optional[str] = Field(None, max_length=32)
+    bakery_permanent_failure: Optional[bool] = None
+    bakery_last_error: Optional[str] = None
     fingerprint_when_active: Optional[str] = Field(None, max_length=255)
 
 
@@ -446,8 +452,11 @@ class SuppressedActivityResponse(BaseModel):
 class SuppressionSummaryResponse(BaseModel):
     state: str
     total_suppressed: int
+    total_cleared: int = 0
+    total_still_firing: int = 0
     by_alertname_json: Optional[Dict[str, Any]] = None
     by_severity_json: Optional[Dict[str, Any]] = None
+    still_firing_alerts_json: Optional[Dict[str, Any]] = None
     first_seen_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
     bakery_ticket_id: Optional[str] = None

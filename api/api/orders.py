@@ -298,6 +298,7 @@ async def get_order_timeline(
                 correlation_ids={
                     "bakery_ticket_id": order.bakery_ticket_id or "",
                     "bakery_operation_id": order.bakery_operation_id or "",
+                    "bakery_ticket_state": order.bakery_ticket_state or "",
                 },
             )
         )

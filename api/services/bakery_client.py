@@ -16,7 +16,7 @@ from shared.hmac import build_hmac_signing_payload, canonical_json_body, hmac_sh
 
 logger = get_logger(__name__)
 
-TERMINAL_OPERATION_STATUSES = {"succeeded", "failed", "dead_letter"}
+TERMINAL_OPERATION_STATUSES = {"succeeded", "dead_letter"}
 
 
 def _canonical_body(payload: dict[str, Any] | None) -> str:
@@ -145,6 +145,10 @@ async def add_ticket_comment(req_id: str, ticket_id: str, comment: str) -> dict[
 
 async def get_operation(operation_id: str) -> dict[str, Any]:
     return await _request("get_operation", "GET", f"/api/v1/operations/{operation_id}")
+
+
+async def get_ticket(ticket_id: str) -> dict[str, Any]:
+    return await _request("get_ticket", "GET", f"/api/v1/tickets/{ticket_id}")
 
 
 async def poll_operation(operation_id: str) -> dict[str, Any]:

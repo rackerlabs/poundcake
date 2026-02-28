@@ -47,7 +47,7 @@
         },
         "tag": {
           "type": "string",
-          "default": "2.0.97"
+          "default": "2.0.98"
         },
         "digest": {
           "type": "string",
@@ -135,7 +135,7 @@
         },
         "tag": {
           "type": "string",
-          "default": "2.0.97"
+          "default": "2.0.98"
         },
         "pullPolicy": {
           "type": "string",

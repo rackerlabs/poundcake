@@ -16,10 +16,83 @@ from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.metrics import record_order_resolved_before_dish_start
 from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
+from api.services.bakery_client import add_ticket_comment, close_ticket, poll_operation
 from api.services.suppression_service import find_first_matching_suppression, save_suppressed_event
 
 logger = get_logger(__name__)
 settings = get_settings()
+TERMINAL_TICKET_STATES = {"closed", "terminal"}
+
+
+def _resolved_ticket_state() -> str:
+    if settings.bakery_active_provider.lower() == "rackspace_core":
+        return (
+            settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+        ).lower().replace(" ", "_")
+    return "closed"
+
+
+async def _sync_ticket_on_alert_resolved(
+    *,
+    req_id: str,
+    order: Order,
+    alert_name: str,
+    fingerprint: str,
+) -> None:
+    if not settings.bakery_enabled:
+        return
+    if not order.bakery_ticket_id or order.bakery_permanent_failure:
+        return
+
+    cleared_at = datetime.now(timezone.utc).isoformat()
+    comment = (
+        f"Alert cleared: {alert_name}\n"
+        f"Fingerprint: {fingerprint}\n"
+        f"Order ID: {order.id}\n"
+        f"Cleared At: {cleared_at}"
+    )
+    try:
+        await add_ticket_comment(req_id=req_id, ticket_id=order.bakery_ticket_id, comment=comment)
+        close_payload = {
+            "resolution_notes": (
+                f"Alert cleared for order {order.id} "
+                f"(fingerprint={fingerprint}); moving to confirmed solved."
+            ),
+            "state": _resolved_ticket_state(),
+        }
+        accepted = await close_ticket(
+            req_id=req_id,
+            ticket_id=order.bakery_ticket_id,
+            payload=close_payload,
+        )
+        order.bakery_operation_id = accepted.get("operation_id")
+        order.bakery_ticket_state = _resolved_ticket_state()
+        operation_id = accepted.get("operation_id")
+        if operation_id:
+            op_payload = await poll_operation(operation_id)
+            op_status = str(op_payload.get("status") or "")
+            if op_status == "dead_letter":
+                order.bakery_permanent_failure = True
+                order.bakery_last_error = str(op_payload.get("last_error") or "dead_letter")
+            elif op_status == "succeeded":
+                order.bakery_permanent_failure = False
+                order.bakery_last_error = None
+    except TimeoutError:
+        logger.info(
+            "Bakery resolve operation still in progress",
+            extra={
+                "req_id": req_id,
+                "order_id": order.id,
+                "ticket_id": order.bakery_ticket_id,
+                "operation_id": order.bakery_operation_id,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        order.bakery_last_error = str(exc)
+        logger.error(
+            "Failed to sync Bakery ticket on alert resolve",
+            extra={"req_id": req_id, "order_id": order.id, "error": str(exc)},
+        )
 
 
 async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
@@ -117,6 +190,30 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
 
                 if alert_status == "firing":
                     if not existing:
+                        reusable_ticket_id: str | None = None
+                        reusable_ticket_state: str | None = None
+                        if settings.bakery_enabled:
+                            previous_result = await db.execute(
+                                select(Order)
+                                .where(
+                                    Order.fingerprint == fingerprint,
+                                    Order.is_active.is_(False),
+                                    Order.bakery_ticket_id.is_not(None),
+                                    Order.bakery_permanent_failure.is_(False),
+                                )
+                                .order_by(Order.updated_at.desc())
+                                .with_for_update()
+                            )
+                            previous_order = previous_result.scalars().first()
+                            if (
+                                previous_order
+                                and previous_order.bakery_ticket_id
+                                and (previous_order.bakery_ticket_state or "").lower()
+                                not in TERMINAL_TICKET_STATES
+                            ):
+                                reusable_ticket_id = previous_order.bakery_ticket_id
+                                reusable_ticket_state = previous_order.bakery_ticket_state or "open"
+
                         # Create fresh record; status 'new' triggers the Dish flow later
                         # Parse startsAt or use current time as default
                         starts_at = alert_data.get("startsAt")
@@ -142,6 +239,8 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                             raw_data=alert_data,
                             counter=1,
                             starts_at=starts_at,
+                            bakery_ticket_id=reusable_ticket_id,
+                            bakery_ticket_state=reusable_ticket_state,
                         )
                         db.add(new_order)
                         await db.flush()
@@ -205,6 +304,12 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                         existing.processing_status = "canceled"
                     existing.is_active = False
                     existing.updated_at = datetime.now(timezone.utc)
+                    await _sync_ticket_on_alert_resolved(
+                        req_id=req_id,
+                        order=existing,
+                        alert_name=alert_name,
+                        fingerprint=fingerprint,
+                    )
 
                     if resolved_before_dish:
                         logger.warning(

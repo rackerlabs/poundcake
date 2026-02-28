@@ -107,6 +107,7 @@ function renderPlatformSummary(overview, stats) {
   appendLabeledValue(summary, "Orders Failed", overview?.failures?.orders_failed || 0);
   appendLabeledValue(summary, "Dishes Failed", overview?.failures?.dishes_failed || 0);
   appendLabeledValue(summary, "Bakery Summary Failures", overview?.bakery?.summary_failures || 0);
+  appendLabeledValue(summary, "Bakery Dead Letters (Orders)", overview?.bakery?.order_dead_letters || 0);
   appendLabeledValue(summary, "Alerts (24h)", stats.recent_alerts || 0);
 
   const hints = overview?.failures?.runbook_hints || [];

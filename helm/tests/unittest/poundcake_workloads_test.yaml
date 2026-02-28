@@ -120,23 +120,23 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.97
+          value: ghcr.io/rackerlabs/poundcake:2.0.98
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.97
+          value: ghcr.io/rackerlabs/poundcake:2.0.98
         documentIndex: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.97
+          value: ghcr.io/rackerlabs/poundcake:2.0.98
         documentIndex: 3
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.97
+          value: ghcr.io/rackerlabs/poundcake:2.0.98
         documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.97
+          value: ghcr.io/rackerlabs/poundcake:2.0.98
         documentIndex: 5
 
   - it: supports immutable digest image references for PoundCake workloads

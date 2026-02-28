@@ -163,6 +163,12 @@ spec:
               value: {{ .Values.bakery.client.pollIntervalSeconds | quote }}
             - name: POUNDCAKE_BAKERY_POLL_TIMEOUT_SECONDS
               value: {{ .Values.bakery.client.pollTimeoutSeconds | quote }}
+            - name: POUNDCAKE_BAKERY_ACTIVE_PROVIDER
+              value: {{ .Values.bakery.config.activeProvider | default "" | quote }}
+            - name: POUNDCAKE_CATCH_ALL_RECIPE_NAME
+              value: {{ .Values.poundcakeApi.ticketing.catchAllRecipeName | default "catch-all" | quote }}
+            - name: POUNDCAKE_BAKERY_RACKSPACE_CONFIRMED_SOLVED_STATUS
+              value: {{ .Values.poundcakeApi.ticketing.rackspaceConfirmedSolvedStatus | default "confirmed solved" | quote }}
             {{- $bakeryClientSecretName := .Values.bakery.client.auth.existingSecret | default (include "poundcake.bakerySecretName" .) }}
             - name: POUNDCAKE_BAKERY_HMAC_KEY_ID
               valueFrom:

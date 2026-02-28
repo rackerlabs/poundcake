@@ -253,6 +253,13 @@ def _build_provider_payload(
         return provider_payload
 
     if action == "close":
+        if settings.active_provider == "rackspace_core":
+            status_hint = _first_non_empty(
+                provider_payload.get("status"),
+                payload.get("state"),
+            )
+            if status_hint is not None:
+                provider_payload.setdefault("status", str(status_hint).replace("_", " "))
         if payload.get("resolution_notes") is not None:
             provider_payload.setdefault("close_notes", payload.get("resolution_notes"))
         if payload.get("resolution_code") is not None:
@@ -411,7 +418,14 @@ def _persist_success(operation_id: str, result: dict[str, Any]) -> None:
             ticket.provider_ticket_id = str(external_ticket_id)
             ticket.state = "open"
         elif operation.action == "close":
-            ticket.state = "closed"
+            if settings.active_provider == "rackspace_core":
+                requested_state = str((operation.request_payload or {}).get("state") or "").lower()
+                if requested_state.replace(" ", "_") == "confirmed_solved":
+                    ticket.state = "confirmed_solved"
+                else:
+                    ticket.state = "closed"
+            else:
+                ticket.state = "closed"
         elif operation.action == "update":
             ticket.state = "updating"
         elif operation.action == "comment":

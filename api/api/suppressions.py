@@ -320,6 +320,12 @@ async def get_observability_overview(
     bakery_failures = await db.scalar(
         select(func.count(SuppressionSummary.id)).where(SuppressionSummary.state == "failed")
     )
+    order_ticket_dead_letters = await db.scalar(
+        select(func.count(Order.id)).where(
+            Order.bakery_permanent_failure.is_(True),
+            Order.is_active.is_(True),
+        )
+    )
 
     top_errors_result = await db.execute(
         select(Dish.error_message, func.count(Dish.id))
@@ -351,6 +357,11 @@ async def get_observability_overview(
         runbook_hints.append(
             "Bakery summary failures detected. Verify Bakery auth, endpoint reachability, and operation status."
         )
+    if int(order_ticket_dead_letters or 0) > 0:
+        runbook_hints.append(
+            "Order-level Bakery dead letters detected. Verify provider-required labels "
+            "(for example coreAccountID) and replay handling."
+        )
     if int(order_new or 0) > 20:
         runbook_hints.append(
             "Order queue backlog is high. Check prep-chef throughput and API latency."
@@ -370,6 +381,7 @@ async def get_observability_overview(
         },
         bakery={
             "summary_failures": int(bakery_failures or 0),
+            "order_dead_letters": int(order_ticket_dead_letters or 0),
         },
         suppressions={
             "active": int(active_suppressions),
@@ -422,11 +434,13 @@ async def get_bakery_ticketing_history(
                 reference_id=str(order.id),
                 ticket_id=order.bakery_ticket_id,
                 operation_id=order.bakery_operation_id,
-                status=order.processing_status,
+                status=order.bakery_ticket_state or order.processing_status,
                 updated_at=order.updated_at,
                 details={
                     "alert_group_name": order.alert_group_name,
                     "req_id": order.req_id,
+                    "permanent_failure": order.bakery_permanent_failure,
+                    "last_error": order.bakery_last_error,
                 },
             )
         )

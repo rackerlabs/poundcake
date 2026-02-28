@@ -245,6 +245,11 @@ class Order(Base):
     counter: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     bakery_ticket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     bakery_operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    bakery_ticket_state: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    bakery_permanent_failure: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    bakery_last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     bakery_comms_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     fingerprint_when_active: Mapped[str | None] = mapped_column(
         String(255),
@@ -386,8 +391,11 @@ class SuppressionSummary(Base):
         index=True,
     )
     total_suppressed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_cleared: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_still_firing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     by_alertname_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     by_severity_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    still_firing_alerts_json: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     first_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     summary_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
