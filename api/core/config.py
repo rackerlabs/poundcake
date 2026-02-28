@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     # Prometheus Operator CRD settings (Kubernetes)
     prometheus_use_crds: bool = True
-    prometheus_crd_namespace: str = "monitoring"
+    prometheus_crd_namespace: str = "prometheus"
     prometheus_crd_labels: dict[str, str] = Field(default_factory=dict)
 
     # ==========================================================================

@@ -48,13 +48,14 @@
 }
 
 .topbar .btn.ghost {
-  color: rgba(242, 255, 252, 0.95);
-  border-color: rgba(242, 255, 252, 0.35);
-  background: rgba(255, 255, 255, 0.08);
+  color: #0b2d2a;
+  border-color: #d1f7ef;
+  background: #ecfff9;
+  font-weight: 700;
 }
 
 .topbar .btn.ghost:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: #d9fff4;
 }
 
 .page {

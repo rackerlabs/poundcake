@@ -114,6 +114,48 @@ tests:
           value: 9
         documentIndex: 0
 
+  - it: binds workloads to the poundcake service account and wires Prometheus CRD env
+    set:
+      serviceAccount.create: true
+      serviceAccount.name: ""
+      prometheus.url: http://prometheus.example:9090
+      prometheus.verifySsl: false
+      prometheus.useCrds: true
+      prometheus.crdNamespace: prometheus
+      prometheus.crdLabels:
+        release: kube-prometheus-stack
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-poundcake
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-poundcake
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-poundcake
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_PROMETHEUS_URL
+            value: "http://prometheus.example:9090"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
+            value: "prometheus"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_PROMETHEUS_USE_CRDS
+            value: "true"
+        documentIndex: 0
+
   - it: defaults PoundCake workload image tag to chart appVersion when unset
     set:
       poundcakeImage.tag: ""

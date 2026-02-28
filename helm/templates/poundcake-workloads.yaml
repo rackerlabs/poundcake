@@ -29,6 +29,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       initContainers:
         - name: wait-stage-ready
           image: {{ .Values.images.busybox }}
@@ -109,6 +110,16 @@ spec:
               value: {{ .Values.logFormat | quote }}
             - name: POUNDCAKE_APP_VERSION
               value: {{ .Chart.AppVersion | quote }}
+            - name: POUNDCAKE_PROMETHEUS_URL
+              value: {{ .Values.prometheus.url | quote }}
+            - name: POUNDCAKE_PROMETHEUS_VERIFY_SSL
+              value: {{ .Values.prometheus.verifySsl | quote }}
+            - name: POUNDCAKE_PROMETHEUS_USE_CRDS
+              value: {{ .Values.prometheus.useCrds | quote }}
+            - name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
+              value: {{ .Values.prometheus.crdNamespace | quote }}
+            - name: POUNDCAKE_PROMETHEUS_CRD_LABELS
+              value: {{ .Values.prometheus.crdLabels | toJson | quote }}
             - name: SERVICE_NAME
               value: api
             - name: POUNDCAKE_AUTH_ENABLED
@@ -266,6 +277,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}
@@ -347,6 +359,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       initContainers:
         - name: wait-stage10
           image: {{ .Values.images.busybox }}
@@ -442,6 +455,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}
@@ -523,6 +537,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}
@@ -611,6 +626,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}

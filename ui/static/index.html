@@ -29,6 +29,8 @@
       <nav class="nav-tabs" aria-label="Primary tabs">
         <button class="tab-btn is-active" type="button" data-tab="dashboard">Dashboard</button>
         <button class="tab-btn" type="button" data-tab="alerts">Alert Status</button>
+        <button class="tab-btn" type="button" data-tab="recipes">Recipes</button>
+        <button class="tab-btn" type="button" data-tab="ingredients">Ingredients</button>
         <button class="tab-btn" type="button" data-tab="incident">Incident Detail</button>
         <button class="tab-btn" type="button" data-tab="suppressions">Suppressions</button>
         <button class="tab-btn" type="button" data-tab="ticketing">Ticketing</button>
@@ -99,6 +101,197 @@
           <h3>Incident Timeline</h3>
           <div id="alerts-timeline"></div>
         </article>
+      </section>
+
+      <section id="tab-recipes" class="panel" aria-labelledby="recipes-title">
+        <h2 class="section-title" id="recipes-title">Recipe Management</h2>
+
+        <div class="filter-bar">
+          <button class="btn primary" type="button" id="recipes-refresh">Refresh</button>
+          <button class="btn success" type="button" id="recipes-new">New Recipe</button>
+          <span class="spacer"></span>
+          <span class="muted">Recipe ingredient links can be set on create.</span>
+        </div>
+
+        <div class="grid cols-2">
+          <article class="card">
+            <h3 id="recipe-form-title">Create Recipe</h3>
+            <form id="recipe-form">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="recipe-name">Name</label>
+                  <input id="recipe-name" type="text" required>
+                </div>
+                <div class="form-field">
+                  <label for="recipe-source-type">Source Type</label>
+                  <input id="recipe-source-type" type="text" value="undefined">
+                </div>
+                <div class="form-field full">
+                  <label for="recipe-description">Description</label>
+                  <textarea id="recipe-description" rows="3"></textarea>
+                </div>
+                <div class="form-field">
+                  <label for="recipe-enabled">Enabled</label>
+                  <select id="recipe-enabled">
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="recipe-workflow-id">Workflow ID (optional)</label>
+                  <input id="recipe-workflow-id" type="text">
+                </div>
+                <div class="form-field full">
+                  <label for="recipe-workflow-payload">Workflow Payload (JSON)</label>
+                  <textarea id="recipe-workflow-payload" rows="4" placeholder='{"key":"value"}'></textarea>
+                </div>
+                <div class="form-field full">
+                  <label for="recipe-workflow-params">Workflow Parameters (JSON)</label>
+                  <textarea id="recipe-workflow-params" rows="4" placeholder='{"param":"value"}'></textarea>
+                </div>
+              </div>
+
+              <div class="mt-4">
+                <div class="row between mb-2">
+                  <strong>Recipe Ingredients</strong>
+                  <button class="btn small ghost" type="button" id="recipe-add-ingredient">Add Ingredient</button>
+                </div>
+                <div id="recipe-ingredient-list" class="stack"></div>
+              </div>
+
+              <div class="inline-actions mt-4">
+                <button class="btn success" type="submit" id="recipe-save">Save Recipe</button>
+                <button class="btn ghost" type="button" id="recipe-cancel">Cancel</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card">
+            <h3>Recipe Details</h3>
+            <div id="recipe-detail" class="details-panel muted">Select a recipe to view details.</div>
+          </article>
+        </div>
+
+        <div class="table-wrap mt-4">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Enabled</th>
+                <th>Source</th>
+                <th>Ingredients</th>
+                <th>Workflow</th>
+                <th>Updated</th>
+                <th>Ops</th>
+              </tr>
+            </thead>
+            <tbody id="recipes-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-ingredients" class="panel" aria-labelledby="ingredients-title">
+        <h2 class="section-title" id="ingredients-title">Ingredient Management</h2>
+
+        <div class="filter-bar">
+          <button class="btn primary" type="button" id="ingredients-refresh">Refresh</button>
+          <button class="btn success" type="button" id="ingredients-new">New Ingredient</button>
+        </div>
+
+        <div class="grid cols-2">
+          <article class="card">
+            <h3 id="ingredient-form-title">Create Ingredient</h3>
+            <form id="ingredient-form">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="ingredient-task-id">Task ID</label>
+                  <input id="ingredient-task-id" type="text" required>
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-task-name">Task Name</label>
+                  <input id="ingredient-task-name" type="text" required>
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-action-id">Action ID</label>
+                  <input id="ingredient-action-id" type="text">
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-source-type">Source Type</label>
+                  <input id="ingredient-source-type" type="text" value="undefined">
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-blocking">Blocking</label>
+                  <select id="ingredient-blocking">
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-on-failure">On Failure</label>
+                  <select id="ingredient-on-failure">
+                    <option value="stop">stop</option>
+                    <option value="continue">continue</option>
+                    <option value="retry">retry</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-expected-duration">Expected Duration (sec)</label>
+                  <input id="ingredient-expected-duration" type="number" min="1" value="60">
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-timeout-duration">Timeout (sec)</label>
+                  <input id="ingredient-timeout-duration" type="number" min="1" value="300">
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-retry-count">Retry Count</label>
+                  <input id="ingredient-retry-count" type="number" min="0" value="0">
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-retry-delay">Retry Delay (sec)</label>
+                  <input id="ingredient-retry-delay" type="number" min="0" value="5">
+                </div>
+                <div class="form-field full">
+                  <label for="ingredient-action-payload">Action Payload</label>
+                  <textarea id="ingredient-action-payload" rows="3"></textarea>
+                </div>
+                <div class="form-field full">
+                  <label for="ingredient-action-params">Action Parameters (JSON)</label>
+                  <textarea id="ingredient-action-params" rows="4" placeholder='{"key":"value"}'></textarea>
+                </div>
+              </div>
+
+              <div class="inline-actions mt-4">
+                <button class="btn success" type="submit" id="ingredient-save">Save Ingredient</button>
+                <button class="btn ghost" type="button" id="ingredient-cancel">Cancel</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card">
+            <h3>Ingredient Details</h3>
+            <div id="ingredient-detail" class="details-panel muted">Select an ingredient to view details.</div>
+          </article>
+        </div>
+
+        <div class="table-wrap mt-4">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Task ID</th>
+                <th>Task Name</th>
+                <th>Action ID</th>
+                <th>Blocking</th>
+                <th>Expected/Timeout</th>
+                <th>Retries</th>
+                <th>Updated</th>
+                <th>Ops</th>
+              </tr>
+            </thead>
+            <tbody id="ingredients-table-body"></tbody>
+          </table>
+        </div>
       </section>
 
       <section id="tab-incident" class="panel" aria-labelledby="incident-title">

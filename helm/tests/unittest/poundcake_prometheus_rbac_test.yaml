@@ -1,0 +1,61 @@
+suite: poundcake-prometheus-rbac
+templates:
+  - templates/poundcake-prometheus-rbac.yaml
+tests:
+  - it: renders ClusterRole and ClusterRoleBinding when CRD mode is enabled
+    set:
+      poundcake.enabled: true
+      prometheus.useCrds: true
+      serviceAccount.create: true
+      serviceAccount.name: ""
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: kind
+          value: ClusterRole
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: ClusterRoleBinding
+        documentIndex: 1
+      - equal:
+          path: rules[0].apiGroups[0]
+          value: monitoring.coreos.com
+        documentIndex: 0
+      - equal:
+          path: rules[0].resources[0]
+          value: prometheusrules
+        documentIndex: 0
+      - contains:
+          path: rules[0].verbs
+          content: list
+        documentIndex: 0
+      - contains:
+          path: rules[0].verbs
+          content: patch
+        documentIndex: 0
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+        documentIndex: 1
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-poundcake
+        documentIndex: 1
+
+  - it: does not render when CRD mode is disabled
+    set:
+      poundcake.enabled: true
+      prometheus.useCrds: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render when poundcake resources are disabled
+    set:
+      poundcake.enabled: false
+      prometheus.useCrds: true
+    asserts:
+      - hasDocuments:
+          count: 0

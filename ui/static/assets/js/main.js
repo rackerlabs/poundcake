@@ -15,6 +15,8 @@ import {
 
 import * as dashboardTab from "./tabs/dashboard.js";
 import * as alertsTab from "./tabs/alerts.js";
+import * as recipesTab from "./tabs/recipes.js";
+import * as ingredientsTab from "./tabs/ingredients.js";
 import * as incidentTab from "./tabs/incident.js";
 import * as suppressionsTab from "./tabs/suppressions.js";
 import * as ticketingTab from "./tabs/ticketing.js";
@@ -24,6 +26,8 @@ import * as historyTab from "./tabs/history.js";
 const tabModules = {
   dashboard: dashboardTab,
   alerts: alertsTab,
+  recipes: recipesTab,
+  ingredients: ingredientsTab,
   incident: incidentTab,
   suppressions: suppressionsTab,
   ticketing: ticketingTab,

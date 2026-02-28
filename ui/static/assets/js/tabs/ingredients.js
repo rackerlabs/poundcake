@@ -1,0 +1,250 @@
+import { apiDelete, apiGet, apiPost, apiPut } from "../lib/api-client.js";
+import { $, clearNode, el, appendLabeledValue } from "../lib/dom.js";
+import { compactJson, formatDate } from "../lib/format.js";
+
+let ctx = null;
+let ingredientsCache = [];
+let editingIngredientId = null;
+
+function parseOptionalJson(raw, fieldName) {
+  const value = (raw || "").trim();
+  if (!value) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error(`${fieldName} must be valid JSON`);
+  }
+}
+
+function asInt(inputId, fallback = 0) {
+  const raw = $(inputId)?.value ?? "";
+  const parsed = Number.parseInt(String(raw), 10);
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function resetForm() {
+  editingIngredientId = null;
+  $("#ingredient-form-title").textContent = "Create Ingredient";
+  $("#ingredient-task-id").value = "";
+  $("#ingredient-task-name").value = "";
+  $("#ingredient-action-id").value = "";
+  $("#ingredient-source-type").value = "undefined";
+  $("#ingredient-blocking").value = "true";
+  $("#ingredient-on-failure").value = "stop";
+  $("#ingredient-expected-duration").value = "60";
+  $("#ingredient-timeout-duration").value = "300";
+  $("#ingredient-retry-count").value = "0";
+  $("#ingredient-retry-delay").value = "5";
+  $("#ingredient-action-payload").value = "";
+  $("#ingredient-action-params").value = "";
+}
+
+function loadFormFromIngredient(ingredient) {
+  editingIngredientId = ingredient.id;
+  $("#ingredient-form-title").textContent = `Edit Ingredient #${ingredient.id}`;
+  $("#ingredient-task-id").value = ingredient.task_id || "";
+  $("#ingredient-task-name").value = ingredient.task_name || "";
+  $("#ingredient-action-id").value = ingredient.action_id || "";
+  $("#ingredient-source-type").value = ingredient.source_type || "undefined";
+  $("#ingredient-blocking").value = String(Boolean(ingredient.is_blocking));
+  $("#ingredient-on-failure").value = ingredient.on_failure || "stop";
+  $("#ingredient-expected-duration").value = String(ingredient.expected_duration_sec || 60);
+  $("#ingredient-timeout-duration").value = String(ingredient.timeout_duration_sec || 300);
+  $("#ingredient-retry-count").value = String(ingredient.retry_count || 0);
+  $("#ingredient-retry-delay").value = String(ingredient.retry_delay || 5);
+  $("#ingredient-action-payload").value = ingredient.action_payload || "";
+  $("#ingredient-action-params").value = ingredient.action_parameters
+    ? JSON.stringify(ingredient.action_parameters, null, 2)
+    : "";
+}
+
+function payloadFromForm() {
+  return {
+    task_id: ($("#ingredient-task-id")?.value || "").trim(),
+    task_name: ($("#ingredient-task-name")?.value || "").trim(),
+    action_id: ($("#ingredient-action-id")?.value || "").trim() || null,
+    action_payload: ($("#ingredient-action-payload")?.value || "").trim() || null,
+    action_parameters: parseOptionalJson(
+      $("#ingredient-action-params")?.value,
+      "Action Parameters",
+    ),
+    source_type: ($("#ingredient-source-type")?.value || "undefined").trim() || "undefined",
+    is_blocking: ($("#ingredient-blocking")?.value || "true") === "true",
+    expected_duration_sec: asInt("#ingredient-expected-duration", 60),
+    timeout_duration_sec: asInt("#ingredient-timeout-duration", 300),
+    retry_count: asInt("#ingredient-retry-count", 0),
+    retry_delay: asInt("#ingredient-retry-delay", 5),
+    on_failure: ($("#ingredient-on-failure")?.value || "stop").trim() || "stop",
+  };
+}
+
+function renderIngredientDetail(ingredient) {
+  const detail = $("#ingredient-detail");
+  clearNode(detail);
+
+  if (!ingredient) {
+    detail.className = "details-panel muted";
+    detail.textContent = "Select an ingredient to view details.";
+    return;
+  }
+
+  detail.className = "details-panel";
+  appendLabeledValue(detail, "ID", ingredient.id);
+  appendLabeledValue(detail, "Task ID", ingredient.task_id);
+  appendLabeledValue(detail, "Task Name", ingredient.task_name);
+  appendLabeledValue(detail, "Action ID", ingredient.action_id || "-");
+  appendLabeledValue(detail, "Source Type", ingredient.source_type || "-");
+  appendLabeledValue(detail, "Blocking", String(Boolean(ingredient.is_blocking)));
+  appendLabeledValue(
+    detail,
+    "Expected/Timeout",
+    `${ingredient.expected_duration_sec || "-"} / ${ingredient.timeout_duration_sec || "-"}`,
+  );
+  appendLabeledValue(detail, "Retry", `${ingredient.retry_count || 0} @ ${ingredient.retry_delay || 0}s`);
+  appendLabeledValue(detail, "On Failure", ingredient.on_failure || "-");
+  appendLabeledValue(detail, "Updated", formatDate(ingredient.updated_at));
+
+  const payload = el("pre", { text: compactJson(ingredient.action_parameters) });
+  payload.style.marginTop = "8px";
+  detail.appendChild(el("h4", { text: "Action Parameters" }));
+  detail.appendChild(payload);
+}
+
+function ingredientRow(ingredient) {
+  const tr = el("tr");
+
+  tr.appendChild(el("td", { text: ingredient.id }));
+  tr.appendChild(el("td", { text: ingredient.task_id }));
+  tr.appendChild(el("td", { text: ingredient.task_name }));
+  tr.appendChild(el("td", { text: ingredient.action_id || "-" }));
+  tr.appendChild(el("td", { text: String(Boolean(ingredient.is_blocking)) }));
+  tr.appendChild(
+    el("td", {
+      text: `${ingredient.expected_duration_sec || "-"} / ${ingredient.timeout_duration_sec || "-"}`,
+    }),
+  );
+  tr.appendChild(el("td", { text: `${ingredient.retry_count || 0} @ ${ingredient.retry_delay || 0}s` }));
+  tr.appendChild(el("td", { text: formatDate(ingredient.updated_at) }));
+
+  const ops = el("td", { className: "inline-actions" });
+  ops.appendChild(
+    el("button", {
+      className: "btn small primary",
+      text: "Edit",
+      on: {
+        click: () => {
+          loadFormFromIngredient(ingredient);
+          renderIngredientDetail(ingredient);
+        },
+      },
+    }),
+  );
+  ops.appendChild(
+    el("button", {
+      className: "btn small ghost",
+      text: "View",
+      on: {
+        click: () => renderIngredientDetail(ingredient),
+      },
+    }),
+  );
+  ops.appendChild(
+    el("button", {
+      className: "btn small danger",
+      text: "Delete",
+      on: {
+        click: async () => {
+          const ok = await ctx.confirm(
+            `Delete ingredient '${ingredient.task_id}' (ID ${ingredient.id})?`,
+          );
+          if (!ok) {
+            return;
+          }
+          await apiDelete(`/api/v1/ingredients/${ingredient.id}`);
+          ctx.notify("success", `Ingredient ${ingredient.id} deleted.`);
+          await load();
+          if (editingIngredientId === ingredient.id) {
+            resetForm();
+          }
+        },
+      },
+    }),
+  );
+  tr.appendChild(ops);
+
+  return tr;
+}
+
+function renderTable() {
+  const body = $("#ingredients-table-body");
+  clearNode(body);
+
+  if (!ingredientsCache.length) {
+    const tr = el("tr");
+    tr.appendChild(
+      el("td", {
+        attrs: { colspan: "9" },
+        className: "empty",
+        text: "No ingredients found.",
+      }),
+    );
+    body.appendChild(tr);
+    return;
+  }
+
+  ingredientsCache.forEach((ingredient) => {
+    body.appendChild(ingredientRow(ingredient));
+  });
+}
+
+async function saveIngredient(event) {
+  event.preventDefault();
+  const payload = payloadFromForm();
+
+  if (!payload.task_id || !payload.task_name) {
+    throw new Error("Task ID and Task Name are required.");
+  }
+
+  if (editingIngredientId) {
+    await apiPut(`/api/v1/ingredients/${editingIngredientId}`, payload);
+    ctx.notify("success", `Ingredient ${editingIngredientId} updated.`);
+  } else {
+    await apiPost("/api/v1/ingredients/", payload);
+    ctx.notify("success", "Ingredient created.");
+  }
+
+  resetForm();
+  await load();
+}
+
+export async function load() {
+  const ingredients = await apiGet("/api/v1/ingredients/?limit=500");
+  ingredientsCache = Array.isArray(ingredients) ? ingredients : [];
+  renderTable();
+}
+
+export function init(context) {
+  ctx = context;
+  resetForm();
+  renderIngredientDetail(null);
+
+  $("#ingredients-refresh")?.addEventListener("click", () => {
+    load().catch((error) => ctx.notify("error", error.message));
+  });
+  $("#ingredients-new")?.addEventListener("click", () => {
+    resetForm();
+    renderIngredientDetail(null);
+  });
+  $("#ingredient-cancel")?.addEventListener("click", () => {
+    resetForm();
+    renderIngredientDetail(null);
+  });
+  $("#ingredient-form")?.addEventListener("submit", (event) => {
+    saveIngredient(event).catch((error) => ctx.notify("error", error.message));
+  });
+}
