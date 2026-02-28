@@ -79,6 +79,16 @@ def get_admin_credentials() -> tuple[str, str] | None:
         return None
 
 
+def _request_is_secure(request: Request) -> bool:
+    """Determine if request should receive a Secure cookie."""
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        first = forwarded_proto.split(",", 1)[0].strip().lower()
+        if first:
+            return first == "https"
+    return request.url.scheme.lower() == "https"
+
+
 def create_session(username: str) -> str:
     """Create a new session and return the token."""
     settings = get_settings()
@@ -213,7 +223,7 @@ async def login(request: Request, response: Response) -> SessionResponse:
                 value=token,
                 httponly=True,
                 samesite="lax",
-                secure=not get_settings().debug,
+                secure=_request_is_secure(request),
                 path="/",  # Make cookie available to all paths
                 max_age=get_settings().auth_session_timeout,
             )

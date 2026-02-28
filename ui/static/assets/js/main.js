@@ -186,7 +186,13 @@ function wireTopLevelEvents() {
 async function bootstrap() {
   setUnauthorizedHandler(() => redirectToLogin());
 
-  const session = await checkSession();
+  let session;
+  try {
+    session = await checkSession();
+  } catch {
+    redirectToLogin();
+    return;
+  }
   if (!session.authenticated) {
     redirectToLogin();
     return;
@@ -228,5 +234,6 @@ async function bootstrap() {
 document.addEventListener("DOMContentLoaded", () => {
   bootstrap().catch((error) => {
     notify("error", `UI bootstrap failed: ${error.message}`);
+    redirectToLogin();
   });
 });

@@ -30,6 +30,12 @@ bakery:
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     tag: latest
+  config:
+    # Keep true during validation windows to avoid creating external tickets.
+    ticketingDryRun: true
+  rackspaceCore:
+    # Set false for lab endpoints using certs that do not match hostnames.
+    verifySsl: false
 
 gateway:
   enabled: true

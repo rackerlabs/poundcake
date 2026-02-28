@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False),
-        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="stackstorm"),
+        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="undefined"),
         sa.Column("workflow_id", sa.String(length=255), nullable=True),
         sa.Column("workflow_payload", mysql.JSON(), nullable=True),
         sa.Column("workflow_parameters", mysql.JSON(), nullable=True),
@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column("action_id", sa.String(length=100), nullable=True),
         sa.Column("action_payload", sa.Text(), nullable=True),
         sa.Column("action_parameters", mysql.JSON(), nullable=True),
-        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="stackstorm"),
+        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="undefined"),
         sa.Column("is_blocking", sa.Boolean(), nullable=False),
         sa.Column("expected_duration_sec", sa.Integer(), nullable=False),
         sa.Column("timeout_duration_sec", sa.Integer(), nullable=False),
@@ -112,6 +112,9 @@ def upgrade() -> None:
             counter INTEGER NOT NULL,
             bakery_ticket_id VARCHAR(36),
             bakery_operation_id VARCHAR(36),
+            bakery_ticket_state VARCHAR(32),
+            bakery_permanent_failure BOOLEAN NOT NULL DEFAULT 0,
+            bakery_last_error TEXT,
             labels JSON NOT NULL,
             annotations JSON,
             raw_data JSON,
@@ -149,6 +152,13 @@ def upgrade() -> None:
     op.create_index(op.f("ix_orders_bakery_ticket_id"), "orders", ["bakery_ticket_id"], unique=False)
     op.create_index(
         op.f("ix_orders_bakery_operation_id"), "orders", ["bakery_operation_id"], unique=False
+    )
+    op.create_index(op.f("ix_orders_bakery_ticket_state"), "orders", ["bakery_ticket_state"], unique=False)
+    op.create_index(
+        op.f("ix_orders_bakery_permanent_failure"),
+        "orders",
+        ["bakery_permanent_failure"],
+        unique=False,
     )
 
     # Dishes
@@ -369,8 +379,11 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("suppression_id", sa.Integer(), nullable=False),
         sa.Column("total_suppressed", sa.Integer(), nullable=False),
+        sa.Column("total_cleared", sa.Integer(), nullable=False),
+        sa.Column("total_still_firing", sa.Integer(), nullable=False),
         sa.Column("by_alertname_json", mysql.JSON(), nullable=True),
         sa.Column("by_severity_json", mysql.JSON(), nullable=True),
+        sa.Column("still_firing_alerts_json", mysql.JSON(), nullable=True),
         sa.Column("first_seen_at", sa.DateTime(), nullable=True),
         sa.Column("last_seen_at", sa.DateTime(), nullable=True),
         sa.Column("summary_created_at", sa.DateTime(), nullable=True),
@@ -476,8 +489,13 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_dishes_id"), table_name="dishes")
     op.drop_table("dishes")
 
+    op.drop_index(op.f("ix_orders_bakery_permanent_failure"), table_name="orders")
+    op.drop_index(op.f("ix_orders_bakery_ticket_state"), table_name="orders")
     op.drop_index(op.f("ix_orders_bakery_operation_id"), table_name="orders")
     op.drop_index(op.f("ix_orders_bakery_ticket_id"), table_name="orders")
+    op.drop_column("orders", "bakery_last_error")
+    op.drop_column("orders", "bakery_permanent_failure")
+    op.drop_column("orders", "bakery_ticket_state")
     op.drop_column("orders", "bakery_operation_id")
     op.drop_column("orders", "bakery_ticket_id")
 

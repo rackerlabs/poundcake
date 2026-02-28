@@ -36,6 +36,16 @@ else
     exit 1
 fi
 
+echo "Reconciling database schema for existing installs..."
+python3 /app/api/scripts/reconcile_schema.py
+
+if [ $? -eq 0 ]; then
+    echo "[OK] Database schema reconciliation complete"
+else
+    echo "✗ Database schema reconciliation failed!"
+    exit 1
+fi
+
 echo "========================================="
 echo "  Launching PoundCake API"
 echo "========================================="

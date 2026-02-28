@@ -190,10 +190,15 @@ def _build_provider_payload(
         if settings.active_provider == "rackspace_core":
             account_number = (
                 provider_payload.get("account_number")
+                or provider_payload.get("accountNumber")
                 or provider_payload.get("coreAccountID")
                 or provider_payload.get("rackspace_com_coreAccountID")
+                or labels.get("account_number")
+                or labels.get("accountNumber")
                 or labels.get("coreAccountID")
                 or labels.get("rackspace_com_coreAccountID")
+                or annotations.get("account_number")
+                or annotations.get("accountNumber")
                 or annotations.get("coreAccountID")
                 or annotations.get("rackspace_com_coreAccountID")
             )
@@ -229,9 +234,13 @@ def _build_provider_payload(
                 )
         return provider_payload
 
-    if not ticket.provider_ticket_id:
+    if ticket.provider_ticket_id:
+        provider_payload.setdefault("ticket_id", ticket.provider_ticket_id)
+    elif settings.ticketing_dry_run:
+        # In dry-run mode we never require a provider-issued ID to proceed.
+        provider_payload.setdefault("ticket_id", f"dryrun-{ticket.internal_ticket_id}")
+    else:
         raise ValueError("Provider ticket id is not available yet for this ticket")
-    provider_payload.setdefault("ticket_id", ticket.provider_ticket_id)
 
     if action == "update":
         updates = provider_payload.get("updates")
@@ -508,10 +517,28 @@ def _persist_non_retryable_failure(operation_id: str, error: str) -> None:
         db.commit()
 
 
+def _build_dry_run_result(
+    operation: TicketOperation,
+    ticket: Ticket,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    simulated_ticket_id = ticket.provider_ticket_id or f"dryrun-{ticket.internal_ticket_id}"
+    return {
+        "success": True,
+        "ticket_id": simulated_ticket_id,
+        "data": {
+            "dry_run": True,
+            "provider": settings.active_provider,
+            "action": operation.action,
+            "operation_id": operation.operation_id,
+            "payload": payload,
+        },
+    }
+
+
 def _process_operation(operation: TicketOperation) -> None:
     started = time.monotonic()
     ticket = _load_ticket(operation.internal_ticket_id)
-    mixer = get_mixer(settings.active_provider)
     payload = _build_provider_payload(operation.action, ticket, operation.request_payload)
     missing = _preflight_missing_fields(settings.active_provider, operation.action, payload)
     if missing:
@@ -530,7 +557,17 @@ def _process_operation(operation: TicketOperation) -> None:
         _persist_non_retryable_failure(operation.operation_id, error)
         return
 
-    result = asyncio.run(mixer.process_request(operation.action, payload))
+    if settings.ticketing_dry_run:
+        logger.info(
+            "Dry-run enabled; skipping provider call",
+            operation_id=operation.operation_id,
+            action=operation.action,
+            provider=settings.active_provider,
+        )
+        result = _build_dry_run_result(operation, ticket, payload)
+    else:
+        mixer = get_mixer(settings.active_provider)
+        result = asyncio.run(mixer.process_request(operation.action, payload))
     BAKERY_OPERATION_LATENCY_SECONDS.labels(action=operation.action).observe(
         max(time.monotonic() - started, 0.0)
     )

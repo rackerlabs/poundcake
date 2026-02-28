@@ -6,4 +6,4 @@
 #
 """PoundCake version - single source of truth."""
 
-__version__ = "2.0.98"
+__version__ = "2.0.99"
