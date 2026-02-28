@@ -30,6 +30,9 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+# Keep frontend module libs in image build context.
+!ui/static/assets/js/lib/
+!ui/static/assets/js/lib/**
 .pytest_cache/
 .coverage
 htmlcov/

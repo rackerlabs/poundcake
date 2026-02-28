@@ -47,6 +47,16 @@
   color: rgba(242, 255, 252, 0.9);
 }
 
+.topbar .btn.ghost {
+  color: rgba(242, 255, 252, 0.95);
+  border-color: rgba(242, 255, 252, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.topbar .btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .page {
   width: min(1400px, 95vw);
   margin: 0 auto;

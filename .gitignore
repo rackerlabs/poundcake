@@ -26,6 +26,9 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+# Keep frontend module libs tracked.
+!ui/static/assets/js/lib/
+!ui/static/assets/js/lib/**
 
 # Virtual Environments
 .env
