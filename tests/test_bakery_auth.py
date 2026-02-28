@@ -79,7 +79,9 @@ def test_require_hmac_auth_rejects_invalid_signature(monkeypatch) -> None:
         path="/api/v1/tickets",
         body=body,
     )
-    headers["Authorization"] = headers["Authorization"][:-1] + "0"
+    auth_prefix, signature = headers["Authorization"].split(":", maxsplit=1)
+    flipped_first = "0" if signature[0] != "0" else "1"
+    headers["Authorization"] = f"{auth_prefix}:{flipped_first}{signature[1:]}"
     response = client.post("/api/v1/tickets", content=body, headers=headers)
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid request signature"
