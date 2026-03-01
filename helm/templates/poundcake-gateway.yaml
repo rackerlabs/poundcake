@@ -7,64 +7,38 @@
 {{- $apiProtocol := upper (default "HTTP" .Values.gateway.listeners.api.protocol) }}
 {{- $uiProtocol := upper (default "HTTP" .Values.gateway.listeners.ui.protocol) }}
 {{- $sharedListener := and $apiEnabled $uiEnabled (eq $apiHostname $uiHostname) (eq (int .Values.gateway.listeners.api.port) (int .Values.gateway.listeners.ui.port)) (eq $apiProtocol $uiProtocol) }}
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: {{ .Values.gateway.name }}
-  labels:
-    {{- include "poundcake.labels" . | nindent 4 }}
-spec:
-  gatewayClassName: {{ .Values.gateway.className }}
-  listeners:
-    {{- if $apiEnabled }}
-    - name: api
-      protocol: {{ $apiProtocol }}
-      port: {{ .Values.gateway.listeners.api.port }}
-      {{- if $apiHostname }}
-      hostname: {{ $apiHostname | quote }}
-      {{- end }}
-      {{- if eq $apiProtocol "HTTPS" }}
-      tls:
-        mode: {{ default "Terminate" .Values.gateway.listeners.api.tls.mode }}
-        certificateRefs:
-          - kind: Secret
-            name: {{ required "gateway.listeners.api.tls.secretName is required when gateway.listeners.api.protocol=HTTPS" .Values.gateway.listeners.api.tls.secretName }}
-      {{- end }}
-      allowedRoutes:
-        namespaces:
-          from: Same
-    {{- end }}
-    {{- if and $uiEnabled (not $sharedListener) }}
-    - name: ui
-      protocol: {{ $uiProtocol }}
-      port: {{ .Values.gateway.listeners.ui.port }}
-      {{- if $uiHostname }}
-      hostname: {{ $uiHostname | quote }}
-      {{- end }}
-      {{- if eq $uiProtocol "HTTPS" }}
-      tls:
-        mode: {{ default "Terminate" .Values.gateway.listeners.ui.tls.mode }}
-        certificateRefs:
-          - kind: Secret
-            name: {{ required "gateway.listeners.ui.tls.secretName is required when gateway.listeners.ui.protocol=HTTPS" .Values.gateway.listeners.ui.tls.secretName }}
-      {{- end }}
-      allowedRoutes:
-        namespaces:
-          from: Same
-    {{- end }}
+{{- $parentGatewayName := default .Values.gateway.name .Values.gateway.gatewayName }}
+{{- $parentGatewayNamespace := .Values.gateway.gatewayNamespace }}
+{{- $routeHostnames := .Values.gateway.hostnames | default list }}
+{{- $listenerHostname := default "" .Values.gateway.listener.hostname }}
+{{- $gatewaySectionName := default "" .Values.gateway.listener.name }}
 {{- if $apiEnabled }}
----
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: poundcake-api-route
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
+  {{- with .Values.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   parentRefs:
-    - name: {{ .Values.gateway.name }}
-      sectionName: api
-  {{- if $apiHostname }}
+    - name: {{ $parentGatewayName }}
+      {{- if $parentGatewayNamespace }}
+      namespace: {{ $parentGatewayNamespace }}
+      {{- end }}
+      sectionName: {{ default "api" $gatewaySectionName }}
+  {{- if gt (len $routeHostnames) 0 }}
+  hostnames:
+    {{- range $hostname := $routeHostnames }}
+    - {{ $hostname | quote }}
+    {{- end }}
+  {{- else if $listenerHostname }}
+  hostnames:
+    - {{ $listenerHostname | quote }}
+  {{- else if $apiHostname }}
   hostnames:
     - {{ $apiHostname | quote }}
   {{- end }}
@@ -72,7 +46,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: {{ .Values.gateway.listeners.api.pathPrefix | quote }}
+            value: {{ default "/api" .Values.gateway.listeners.api.pathPrefix | quote }}
       backendRefs:
         - name: poundcake-api
           port: {{ .Values.services.api.port }}
@@ -85,11 +59,26 @@ metadata:
   name: poundcake-ui-route
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
+  {{- with .Values.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   parentRefs:
-    - name: {{ .Values.gateway.name }}
-      sectionName: {{ ternary "api" "ui" $sharedListener }}
-  {{- if $uiHostname }}
+    - name: {{ $parentGatewayName }}
+      {{- if $parentGatewayNamespace }}
+      namespace: {{ $parentGatewayNamespace }}
+      {{- end }}
+      sectionName: {{ default (ternary "api" "ui" $sharedListener) $gatewaySectionName }}
+  {{- if gt (len $routeHostnames) 0 }}
+  hostnames:
+    {{- range $hostname := $routeHostnames }}
+    - {{ $hostname | quote }}
+    {{- end }}
+  {{- else if $listenerHostname }}
+  hostnames:
+    - {{ $listenerHostname | quote }}
+  {{- else if $uiHostname }}
   hostnames:
     - {{ $uiHostname | quote }}
   {{- end }}
@@ -97,7 +86,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: {{ .Values.gateway.listeners.ui.pathPrefix | quote }}
+            value: {{ default "/" .Values.gateway.listeners.ui.pathPrefix | quote }}
       backendRefs:
         - name: poundcake-ui
           port: {{ .Values.services.ui.port }}

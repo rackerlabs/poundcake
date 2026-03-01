@@ -7,27 +7,35 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders envoy gateway with api and ui listeners and routes
+  - it: renders routes that attach to an existing gateway
     set:
       gateway.enabled: true
     asserts:
       - hasDocuments:
-          count: 3
+          count: 2
       - equal:
           path: kind
-          value: Gateway
+          value: HTTPRoute
         documentIndex: 0
       - equal:
-          path: spec.gatewayClassName
-          value: envoyproxy
+          path: metadata.name
+          value: poundcake-api-route
         documentIndex: 0
       - equal:
-          path: spec.listeners[0].name
+          path: spec.parentRefs[0].sectionName
           value: api
         documentIndex: 0
       - equal:
-          path: spec.listeners[1].name
-          value: ui
+          path: spec.parentRefs[0].name
+          value: poundcake-gateway
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: poundcake-api
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8000
         documentIndex: 0
       - equal:
           path: kind
@@ -35,42 +43,29 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.name
-          value: poundcake-api-route
-        documentIndex: 1
-      - equal:
-          path: spec.parentRefs[0].sectionName
-          value: api
-        documentIndex: 1
-      - equal:
-          path: spec.rules[0].backendRefs[0].name
-          value: poundcake-api
-        documentIndex: 1
-      - equal:
-          path: spec.rules[0].backendRefs[0].port
-          value: 8000
-        documentIndex: 1
-      - equal:
-          path: metadata.name
           value: poundcake-ui-route
-        documentIndex: 2
+        documentIndex: 1
       - equal:
           path: spec.parentRefs[0].sectionName
           value: ui
-        documentIndex: 2
+        documentIndex: 1
       - equal:
           path: spec.rules[0].backendRefs[0].name
           value: poundcake-ui
-        documentIndex: 2
+        documentIndex: 1
       - equal:
           path: spec.rules[0].backendRefs[0].port
           value: 80
-        documentIndex: 2
+        documentIndex: 1
 
-  - it: applies gateway listener and route overrides
+  - it: applies parent gateway and route overrides
     set:
       gateway.enabled: true
-      gateway.className: eg
-      gateway.name: edge
+      gateway.gatewayName: flex-gateway
+      gateway.gatewayNamespace: envoy-gateway
+      gateway.listener.name: poundcake-https
+      gateway.hostnames:
+        - poundcake.api.example.com
       gateway.listeners.api.hostname: api.example.com
       gateway.listeners.api.port: 8088
       gateway.listeners.api.pathPrefix: /api
@@ -81,62 +76,68 @@ tests:
     asserts:
       - equal:
           path: metadata.name
-          value: edge
+          value: poundcake-api-route
         documentIndex: 0
       - equal:
-          path: spec.gatewayClassName
-          value: eg
+          path: spec.parentRefs[0].name
+          value: flex-gateway
         documentIndex: 0
       - equal:
-          path: spec.listeners[0].port
-          value: 8088
+          path: spec.parentRefs[0].namespace
+          value: envoy-gateway
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: poundcake-https
         documentIndex: 0
       - equal:
           path: spec.hostnames[0]
-          value: api.example.com
-        documentIndex: 1
+          value: poundcake.api.example.com
+        documentIndex: 0
       - equal:
           path: spec.rules[0].matches[0].path.value
           value: /api
-        documentIndex: 1
+        documentIndex: 0
       - equal:
           path: spec.rules[0].backendRefs[0].port
           value: 9000
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs[0].name
+          value: flex-gateway
+        documentIndex: 1
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: envoy-gateway
+        documentIndex: 1
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: poundcake-https
         documentIndex: 1
       - equal:
           path: spec.hostnames[0]
-          value: ui.example.com
-        documentIndex: 2
+          value: poundcake.api.example.com
+        documentIndex: 1
       - equal:
           path: spec.rules[0].backendRefs[0].port
           value: 8080
-        documentIndex: 2
+        documentIndex: 1
 
-  - it: renders https api listener with tls configuration
+  - it: renders only api route when ui listener is disabled
     set:
       gateway.enabled: true
       gateway.listeners.ui.enabled: false
-      gateway.listeners.api.protocol: HTTPS
-      gateway.listeners.api.port: 443
-      gateway.listeners.api.tls.secretName: poundcake-gw-tls-secret
+      gateway.listeners.api.pathPrefix: /api
     asserts:
       - hasDocuments:
-          count: 2
+          count: 1
       - equal:
-          path: spec.listeners[0].name
-          value: api
+          path: metadata.name
+          value: poundcake-api-route
         documentIndex: 0
       - equal:
-          path: spec.listeners[0].protocol
-          value: HTTPS
-        documentIndex: 0
-      - equal:
-          path: spec.listeners[0].tls.mode
-          value: Terminate
-        documentIndex: 0
-      - equal:
-          path: spec.listeners[0].tls.certificateRefs[0].name
-          value: poundcake-gw-tls-secret
+          path: spec.rules[0].matches[0].path.value
+          value: /api
         documentIndex: 0
 
   - it: shares api listener when api and ui listener tuples are identical
@@ -148,23 +149,14 @@ tests:
       gateway.listeners.ui.port: 443
       gateway.listeners.api.protocol: HTTPS
       gateway.listeners.ui.protocol: HTTPS
-      gateway.listeners.api.tls.secretName: poundcake-gw-tls-secret
-      gateway.listeners.ui.tls.secretName: poundcake-gw-tls-secret
     asserts:
       - hasDocuments:
-          count: 3
+          count: 2
       - equal:
-          path: spec.listeners[0].name
+          path: spec.parentRefs[0].sectionName
           value: api
-        documentIndex: 0
-      - notExists:
-          path: spec.listeners[1]
         documentIndex: 0
       - equal:
           path: spec.parentRefs[0].sectionName
           value: api
         documentIndex: 1
-      - equal:
-          path: spec.parentRefs[0].sectionName
-          value: api
-        documentIndex: 2

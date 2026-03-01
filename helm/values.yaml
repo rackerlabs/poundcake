@@ -90,50 +90,36 @@ ingress:
   #    hosts:
   #      - poundcake.local
 
-# Envoy Gateway API HTTPRoute configuration
-# Use this instead of ingress for Envoy Gateway deployments
-#
-# This configuration will:
-# 1. Check if a Gateway listener exists for PoundCake
-# 2. Create or update the listener if needed (idempotent)
-# 3. Create an HTTPRoute that attaches to that listener
+# Gateway API route attachment configuration.
+# When enabled, PoundCake renders HTTPRoutes that attach to an existing Gateway.
+# PoundCake does not create a Gateway resource.
 gateway:
   enabled: false
 
-  # Gateway reference (required if enabled)
-  # The Gateway resource must already exist (created by infrastructure team)
+  # Parent Gateway reference.
+  # gatewayName should point to an existing shared Gateway.
+  # gatewayNamespace is optional; if omitted, the HTTPRoute namespace is used.
   gatewayName: ""  # Example: flex-gateway
   gatewayNamespace: ""  # Example: envoy-gateway
 
-  # Gateway Listener Configuration
-  # This will be automatically created/updated in the Gateway
+  # Existing listener section on the parent Gateway.
+  # If omitted, route defaults are derived from gateway.listeners.* compatibility fields.
   listener:
-    # Listener name - will be used as sectionName in HTTPRoute
+    # Existing listener section name on parent Gateway (used as HTTPRoute parentRefs.sectionName)
     name: ""  # Example: poundcake-https
 
-    # Full hostname for your PoundCake deployment
+    # Optional default hostname used by both API/UI HTTPRoutes when gateway.hostnames is empty.
     hostname: ""  # Example: poundcake.api.ord.cloudmunchers.net
 
-    # Listener port and protocol
+    # Informational/compatibility fields.
     port: 443
-    protocol: "HTTPS"  # HTTPS or HTTP
-
-    # TLS certificate secret (required if protocol is HTTPS)
-    # This secret must exist in the same namespace as the Gateway
+    protocol: "HTTPS"
     tlsSecretName: ""  # Example: poundcake-gw-tls-secret
-
-    # Namespace access control for HTTPRoutes
-    # "All" allows HTTPRoutes from any namespace to attach
-    # "Same" restricts to same namespace as Gateway
-    # "Selector" uses namespaceSelector (not configured here)
     allowedNamespaces: "All"
-
-    # Update listener if it already exists but config differs
-    # Set to false to skip updates if listener already exists
     updateIfExists: true
 
-  # HTTPRoute Configuration
-  # Hostnames for the HTTPRoute (should match listener.hostname)
+  # HTTPRoute hostnames. Applied to both API and UI routes.
+  # If empty, listener.hostname is used, then legacy listeners.api/ui.hostname values.
   # - poundcake.api.ord.cloudmunchers.net
   hostnames: []
 
@@ -142,7 +128,8 @@ gateway:
     # application: gateway-api
     # route: poundcake
 
-  # Alternate gateway/listener schema used by some templates.
+  # Legacy compatibility fields used for path prefix and fallback section names.
+  # If gatewayName is empty, gateway.name is used as parentRefs.name.
   className: envoyproxy
   name: poundcake-gateway
   listeners:
@@ -768,7 +755,7 @@ bakery:
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: IfNotPresent
-    tag: "2.0.99"
+    tag: "2.0.100"
 
   # Service configuration
   service:
@@ -937,7 +924,7 @@ bakery:
 
 poundcakeImage:
   repository: ghcr.io/rackerlabs/poundcake
-  tag: "2.0.99"
+  tag: "2.0.100"
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
   pullPolicy: Always
@@ -953,7 +940,7 @@ poundcakeImage:
 
 uiImage:
   repository: ghcr.io/rackerlabs/poundcake-ui
-  tag: "2.0.99"
+  tag: "2.0.100"
   pullPolicy: IfNotPresent
   containerPort: 8080
   runtimeWritablePaths:
