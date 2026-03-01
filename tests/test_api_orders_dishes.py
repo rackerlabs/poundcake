@@ -284,8 +284,8 @@ def test_update_dish_updates_order_when_terminal(client, mock_db_session):
 
     response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
     assert response.status_code == 200
-    assert order.processing_status == "complete"
-    assert order.is_active is False
+    assert order.processing_status == "processing"
+    assert order.is_active is True
 
 
 def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
@@ -306,6 +306,25 @@ def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
         response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
 
     assert response.status_code == 200
+    assert order.processing_status == "processing"
+    assert order.is_active is True
+
+
+def test_cook_dishes_without_recipe_keeps_order_active(client, mock_db_session):
+    order = _make_order(status="new")
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=order), ScalarResult(first=None)]
+    )
+
+    with patch(
+        "api.api.dishes.get_settings",
+        return_value=SimpleNamespace(catch_all_recipe_name=""),
+    ):
+        response = client.post("/api/v1/dishes/cook/1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ignored"
     assert order.processing_status == "processing"
     assert order.is_active is True
 

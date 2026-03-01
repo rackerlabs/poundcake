@@ -22,7 +22,6 @@ from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES, ORDER_TERMINAL_
 from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient, Ingredient
 from api.services.bakery_client import (
     add_ticket_comment,
-    close_ticket,
     create_ticket,
     poll_operation,
     update_ticket,
@@ -58,16 +57,6 @@ def _reopen_payload() -> dict[str, Any]:
     if settings.bakery_active_provider.lower() == "rackspace_core":
         return {"context": {"attributes": {"status": "New"}}}
     return {"state": "open"}
-
-
-def _close_payload_for_success(order_id: int) -> dict[str, Any]:
-    state = _resolved_ticket_state()
-    return {
-        "resolution_notes": (
-            f"Auto-remediation completed for order {order_id}; moving ticket to {state}."
-        ),
-        "state": state,
-    }
 
 
 def _build_execution_summary(dish: Dish, ingredients: list[DishIngredient]) -> str:
@@ -215,12 +204,6 @@ async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSes
     )
     ingredients = ingredient_result.scalars().all()
     execution_summary = _build_execution_summary(dish, ingredients)
-    catch_all_name = (settings.catch_all_recipe_name or "").strip().lower()
-    is_catch_all = bool(
-        catch_all_name
-        and dish.recipe
-        and (dish.recipe.name or "").strip().lower() == catch_all_name
-    )
 
     try:
         await _ensure_order_ticket(
@@ -242,20 +225,7 @@ async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSes
             ),
         )
 
-        if dish.processing_status == "complete" and not is_catch_all:
-            accepted = await close_ticket(
-                req_id=req_id,
-                ticket_id=order.bakery_ticket_id,
-                payload=_close_payload_for_success(order.id),
-            )
-            order.bakery_operation_id = accepted.get("operation_id")
-            await _poll_and_apply_operation(
-                req_id=req_id,
-                order=order,
-                operation_id=order.bakery_operation_id,
-                success_state=_resolved_ticket_state(),
-            )
-        elif order.bakery_ticket_state is None:
+        if order.bakery_ticket_state is None:
             order.bakery_ticket_state = "open"
             order.bakery_permanent_failure = False
             order.bakery_last_error = None
@@ -320,11 +290,12 @@ async def cook_dishes(
 
         if not recipe:
             if order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
-                order.processing_status = "complete"
-                order.is_active = False
+                # Keep order active until Alertmanager sends a resolved event.
+                order.processing_status = "processing"
+                order.is_active = True
                 order.updated_at = datetime.now(timezone.utc)
             logger.error(
-                "No recipe found, order closed",
+                "No recipe found; order remains active pending alert resolution",
                 extra={
                     "req_id": req_id,
                     "order_id": order_id,
@@ -779,8 +750,9 @@ async def update_dish(
                         },
                     )
                 else:
-                    order.processing_status = dish.processing_status
-                    order.is_active = False
+                    # Keep order in-flight until the alert itself clears.
+                    order.processing_status = "processing"
+                    order.is_active = True
                     order.updated_at = datetime.now(timezone.utc)
 
     if dish is None:
