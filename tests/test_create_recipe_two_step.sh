@@ -31,16 +31,16 @@ INGREDIENT_SUFFIX=$(printf "%s" "${TEST_RECIPE}-$$-${RANDOM}" \
   | tr -cs 'a-z0-9' '_' \
   | sed -e 's/^_//' -e 's/_$//' \
   | cut -c1-48)
-ING_TASK_ID="core.local.${INGREDIENT_SUFFIX}"
-ING_TASK_NAME="echo_${INGREDIENT_SUFFIX}"
+ING_EXECUTION_TARGET="core.local.${INGREDIENT_SUFFIX}"
+ING_TASK_KEY_TEMPLATE="echo_${INGREDIENT_SUFFIX}"
 
 ING1_PAYLOAD=$(jq -n \
-  --arg task_id "${ING_TASK_ID}" \
-  --arg task_name "${ING_TASK_NAME}" \
+  --arg execution_target "${ING_EXECUTION_TARGET}" \
+  --arg task_key_template "${ING_TASK_KEY_TEMPLATE}" \
   --argjson is_blocking "$IS_BLOCKING" \
   '{
-    task_id: $task_id,
-    task_name: $task_name,
+    execution_target: $execution_target,
+    task_key_template: $task_key_template,
     action_parameters: {
       cmd: {
         type: "string",
@@ -60,7 +60,7 @@ ING1_PAYLOAD=$(jq -n \
 ING1_ID=$(api_request_json POST "${API_URL}/ingredients/" "${ING1_PAYLOAD}" | jq -r '.id')
 
 if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
-  log_error "Failed to create ingredient ${ING_TASK_ID}"
+  log_error "Failed to create ingredient ${ING_EXECUTION_TARGET}"
   exit 1
 fi
 
