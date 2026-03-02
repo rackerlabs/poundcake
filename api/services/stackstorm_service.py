@@ -750,6 +750,24 @@ def _safe_workflow_name(name: str | None) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name or "workflow")
 
 
+def _normalize_execution_parameters(recipe: Recipe | dict[str, Any]) -> dict[str, Any]:
+    """Return StackStorm action parameters as a JSON object."""
+    if not isinstance(recipe, dict):
+        return {}
+
+    if "execution_parameters" not in recipe:
+        return {}
+
+    execution_parameters = recipe.get("execution_parameters")
+    if execution_parameters is None:
+        return {}
+
+    if not isinstance(execution_parameters, dict):
+        raise ValueError("execution_parameters must be an object when provided")
+
+    return execution_parameters
+
+
 def build_stackstorm_pack_files(
     recipes: list[Recipe | dict[str, Any]],
     pack_name: str | None = None,
@@ -836,11 +854,7 @@ async def register_workflow_to_st2(
         "runner_type": "orquesta",
         "entry_point": f"workflows/{safe_name}.yaml",
         "enabled": True,
-        "parameters": (
-            recipe.get("execution_parameters")
-            if isinstance(recipe, dict)
-            else {}
-        ),
+        "parameters": _normalize_execution_parameters(recipe),
         "description": (
             recipe.get("description") if isinstance(recipe, dict) else recipe.description
         ),

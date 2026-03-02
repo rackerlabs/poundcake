@@ -41,14 +41,13 @@ ING1_PAYLOAD=$(jq -n \
   '{
     execution_target: $execution_target,
     task_key_template: $task_key_template,
-    action_parameters: {
+    execution_parameters: {
       cmd: {
         type: "string",
         description: "Command to execute",
         required: true
       }
     },
-    source_type: "stackstorm",
     is_blocking: $is_blocking,
     expected_duration_sec: 30,
     timeout_duration_sec: 300,
@@ -78,8 +77,6 @@ RECIPE_PAYLOAD=$(jq -n \
     name: $name,
     description: $desc,
     enabled: true,
-    workflow_payload: null,
-    workflow_parameters: {},
     recipe_ingredients: [
       {
         ingredient_id: $ing1_id,
@@ -87,7 +84,7 @@ RECIPE_PAYLOAD=$(jq -n \
         on_success: "continue",
         parallel_group: 0,
         depth: 0,
-        input_parameters: {
+        execution_parameters_override: {
           cmd: $step1_cmd
         }
       },
@@ -97,7 +94,7 @@ RECIPE_PAYLOAD=$(jq -n \
         on_success: "continue",
         parallel_group: 0,
         depth: 0,
-        input_parameters: {
+        execution_parameters_override: {
           cmd: $step2_cmd
         }
       }
