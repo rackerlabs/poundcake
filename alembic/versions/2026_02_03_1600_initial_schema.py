@@ -217,6 +217,16 @@ def upgrade() -> None:
             sa.String(length=100),
             sa.Computed("IFNULL(execution_ref, '')", persisted=True),
         ),
+        sa.Column(
+            "recipe_ingredient_id_norm",
+            sa.Integer(),
+            sa.Computed("IFNULL(recipe_ingredient_id, 0)", persisted=True),
+        ),
+        sa.Column(
+            "task_key_norm",
+            sa.String(length=255),
+            sa.Computed("IFNULL(task_key, '')", persisted=True),
+        ),
         sa.Column("execution_status", sa.String(length=50), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
@@ -246,9 +256,9 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index(
-        "ux_dish_ingredients_dish_recipe_exec",
+        "ux_dish_ingredients_dish_step",
         "dish_ingredients",
-        ["dish_id", "recipe_ingredient_id", "execution_ref_norm"],
+        ["dish_id", "recipe_ingredient_id_norm", "task_key_norm"],
         unique=True,
     )
 
@@ -486,7 +496,7 @@ def downgrade() -> None:
     op.drop_index("ix_alert_suppressions_id", table_name="alert_suppressions")
     op.drop_table("alert_suppressions")
 
-    op.drop_index("ux_dish_ingredients_dish_recipe_exec", table_name="dish_ingredients")
+    op.drop_index("ux_dish_ingredients_dish_step", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_execution_engine", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_execution_ref", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_task_key", table_name="dish_ingredients")
