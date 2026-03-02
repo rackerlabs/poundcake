@@ -52,10 +52,6 @@ async def create_recipe(
             name=recipe.name,
             description=recipe.description,
             enabled=recipe.enabled,
-            source_type=recipe.source_type,
-            workflow_id=recipe.workflow_id,
-            workflow_payload=recipe.workflow_payload,
-            workflow_parameters=recipe.workflow_parameters,
         )
         db.add(db_recipe)
         await db.flush()
@@ -79,7 +75,8 @@ async def create_recipe(
                 on_success=ri.on_success,
                 parallel_group=ri.parallel_group,
                 depth=ri.depth,
-                input_parameters=ri.input_parameters,
+                execution_parameters_override=ri.execution_parameters_override,
+                run_phase=ri.run_phase,
             )
             db.add(db_recipe_ingredient)
 
@@ -115,7 +112,6 @@ async def list_recipes(
 
     Query Parameters:
     - name: Filter by recipe name
-    - source_type: Filter by recipe source type
     - enabled: Filter by enabled status (true/false)
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
@@ -128,8 +124,6 @@ async def list_recipes(
 
     if params.name is not None:
         query = query.where(Recipe.name == params.name)
-    if params.source_type is not None:
-        query = query.where(Recipe.source_type == params.source_type)
     if params.enabled is not None:
         query = query.where(Recipe.enabled == params.enabled)
 
@@ -200,7 +194,7 @@ async def delete_recipe(
 @router.put("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 @router.patch("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession = Depends(get_db)):
-    """Update a recipe (used to store workflow_id/payload/parameters)."""
+    """Update a recipe."""
     recipe: Recipe | None = None
     async with db.begin():
         result = await db.execute(select(Recipe).where(Recipe.id == recipe_id).with_for_update())

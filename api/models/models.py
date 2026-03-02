@@ -45,8 +45,12 @@ class RecipeIngredient(Base):
     parallel_group: Mapped[int] = mapped_column(default=0, nullable=False)
     # Depth in the task graph (for parallel/linear ordering)
     depth: Mapped[int] = mapped_column(default=0, nullable=False)
-    # Optional per-step overrides injected into Orquesta task input
-    input_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    # Optional per-step execution parameter overrides.
+    execution_parameters_override: Mapped[dict[str, Any] | None] = mapped_column(
+        MYSQL_JSON, nullable=True
+    )
+    # Controls when this step is eligible to run in the order lifecycle.
+    run_phase: Mapped[str] = mapped_column(String(16), default="both", nullable=False)
 
     recipe: Mapped["Recipe"] = relationship(back_populates="recipe_ingredients")
     ingredient: Mapped["Ingredient"] = relationship()
@@ -56,7 +60,7 @@ class RecipeIngredient(Base):
 
 class Recipe(Base):
     """
-    Workflows (ST2 runner_type: orquesta)
+    Workflow templates and metadata
     """
 
     __tablename__ = "recipes"
@@ -65,14 +69,6 @@ class Recipe(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    source_type: Mapped[str] = mapped_column(String(50), default="undefined", nullable=False)
-
-    # Store the ST2 Ref (e.g. 'my_pack.my_workflow')
-    workflow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    workflow_payload: Mapped[dict[str, Any] | None] = mapped_column(
-        MYSQL_JSON, nullable=True
-    )  # Orquesta JSON payload
-    workflow_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -102,21 +98,22 @@ class Recipe(Base):
 
 class Ingredient(Base):
     """
-    Atomic Actions (ST2 runner_type != orquesta)
+    Atomic execution definitions.
     """
 
     __tablename__ = "ingredients"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    task_id: Mapped[str] = mapped_column(
+    execution_target: Mapped[str] = mapped_column(
         String(100), nullable=False, unique=True, index=True
-    )  # ST2 action.ref (e.g. 'core.local')
-    task_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    source_type: Mapped[str] = mapped_column(String(50), default="undefined", nullable=False)
+    )
+    task_key_template: Mapped[str] = mapped_column(String(255), nullable=False)
+    execution_engine: Mapped[str] = mapped_column(String(50), default="undefined", nullable=False)
+    ingredient_kind: Mapped[str] = mapped_column(String(32), default="utility", nullable=False)
 
     action_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # ST2 UUID for reuse
-    action_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
-    action_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    execution_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    execution_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
 
     is_blocking: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_duration_sec: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -145,8 +142,8 @@ class Dish(Base):
     # Traceability ID from Middleware (X-Request-Id)
     req_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
 
-    # Unique UUID returned by StackStorm for this specific run
-    workflow_execution_id: Mapped[str | None] = mapped_column(
+    # Engine execution reference for this run
+    execution_ref: Mapped[str | None] = mapped_column(
         String(100), nullable=True, index=True
     )
 
@@ -156,7 +153,7 @@ class Dish(Base):
     processing_status: Mapped[str] = mapped_column(
         String(50), default="new", nullable=False, index=True
     )
-    status: Mapped[str | None] = mapped_column(String(50), nullable=True)  # running, etc.
+    execution_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -200,10 +197,15 @@ class DishIngredient(Base):
         ForeignKey("recipe_ingredients.id"), nullable=True
     )
 
-    task_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    st2_execution_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    task_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    execution_engine: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    execution_target: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    execution_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    execution_payload: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    execution_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    execution_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

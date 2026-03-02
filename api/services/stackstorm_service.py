@@ -621,12 +621,19 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
 
     for i, ri in enumerate(sorted_steps):
         if isinstance(recipe_object, dict):
+            run_phase = (ri.get("run_phase") or "both").lower()
+        else:
+            run_phase = (ri.run_phase or "both").lower()
+        if run_phase not in ("firing", "both"):
+            continue
+
+        if isinstance(recipe_object, dict):
             ingredient = ri.get("ingredient") or {}
             step_order = ri.get("step_order")
             depth = ri.get("depth") or 0
-            task_name_raw = ingredient.get("task_name", "task")
-            task_id = ingredient.get("task_id")
-            input_parameters = ri.get("input_parameters") or {}
+            task_name_raw = ingredient.get("task_key_template", "task")
+            task_id = ingredient.get("execution_target")
+            input_parameters = ri.get("execution_parameters_override") or {}
             retry_count = ingredient.get("retry_count") or 0
             retry_delay = ingredient.get("retry_delay")
             is_blocking = ingredient.get("is_blocking", True)
@@ -636,9 +643,9 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                 continue
             step_order = ri.step_order
             depth = ri.depth
-            task_name_raw = ingredient.task_name
-            task_id = ingredient.task_id
-            input_parameters = ri.input_parameters or {}
+            task_name_raw = ingredient.task_key_template
+            task_id = ingredient.execution_target
+            input_parameters = ri.execution_parameters_override or {}
             retry_count = ingredient.retry_count
             retry_delay = ingredient.retry_delay
             is_blocking = ingredient.is_blocking
@@ -760,17 +767,10 @@ def build_stackstorm_pack_files(
     }
 
     for recipe in recipes:
-        workflow_payload = (
-            recipe.get("workflow_payload") if isinstance(recipe, dict) else recipe.workflow_payload
-        )
         recipe_name = recipe.get("name") if isinstance(recipe, dict) else recipe.name
 
         try:
-            yaml_payload = (
-                yaml.safe_dump(workflow_payload, sort_keys=False)
-                if isinstance(workflow_payload, dict)
-                else generate_orquesta_yaml(recipe)
-            )
+            yaml_payload = generate_orquesta_yaml(recipe)
         except Exception as exc:
             logger.warning(
                 "Skipping recipe while building StackStorm pack files",
@@ -837,9 +837,9 @@ async def register_workflow_to_st2(
         "entry_point": f"workflows/{safe_name}.yaml",
         "enabled": True,
         "parameters": (
-            recipe.get("workflow_parameters")
+            recipe.get("execution_parameters")
             if isinstance(recipe, dict)
-            else (recipe.workflow_parameters or {})
+            else {}
         ),
         "description": (
             recipe.get("description") if isinstance(recipe, dict) else recipe.description

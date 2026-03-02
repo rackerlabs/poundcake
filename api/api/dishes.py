@@ -63,8 +63,8 @@ def _build_execution_summary(dish: Dish, ingredients: list[DishIngredient]) -> s
     payload: dict[str, Any] = {
         "dish_id": dish.id,
         "dish_processing_status": dish.processing_status,
-        "dish_status": dish.status,
-        "workflow_execution_id": dish.workflow_execution_id,
+        "dish_execution_status": dish.execution_status,
+        "execution_ref": dish.execution_ref,
         "error_message": dish.error_message,
         "result": dish.result,
         "ingredients": [],
@@ -73,9 +73,11 @@ def _build_execution_summary(dish: Dish, ingredients: list[DishIngredient]) -> s
         payload["ingredients"].append(
             {
                 "id": item.id,
-                "task_id": item.task_id,
-                "st2_execution_id": item.st2_execution_id,
-                "status": item.status,
+                "task_key": item.task_key,
+                "execution_engine": item.execution_engine,
+                "execution_target": item.execution_target,
+                "execution_ref": item.execution_ref,
+                "status": item.execution_status,
                 "started_at": item.started_at.isoformat() if item.started_at else None,
                 "completed_at": item.completed_at.isoformat() if item.completed_at else None,
                 "error_message": item.error_message,
@@ -154,7 +156,7 @@ async def _ensure_order_ticket(
         "title": f"[{order.severity or 'unknown'}] {order.alert_group_name}",
         "description": (
             f"Order {order.id} completed remediation processing for req_id={order.req_id}\n"
-            f"Dish {dish.id} status={dish.status or dish.processing_status}\n"
+            f"Dish {dish.id} status={dish.execution_status or dish.processing_status}\n"
             "Execution output:\n"
             f"{execution_summary}"
         ),
@@ -245,6 +247,68 @@ def _rowcount(result: object) -> int:
     return int(getattr(cast(Any, result), "rowcount", 0) or 0)
 
 
+def _is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
+    normalized = (step_phase or "both").lower()
+    if normalized == "both":
+        return True
+    return normalized == target_phase
+
+
+def _decode_execution_payload(raw_payload: str | None) -> dict[str, Any] | None:
+    if not raw_payload:
+        return None
+    try:
+        return json.loads(raw_payload)
+    except Exception:
+        return {"raw": raw_payload}
+
+
+def _build_step_task_key(ri: RecipeIngredient) -> str:
+    task_suffix = ((ri.ingredient.task_key_template if ri.ingredient else None) or "task").replace(
+        ".", "_"
+    )
+    return f"step_{ri.step_order}_{task_suffix}"
+
+
+def _build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
+    base = dict((ri.ingredient.execution_parameters if ri.ingredient else None) or {})
+    if ri.execution_parameters_override:
+        base.update(ri.execution_parameters_override)
+    return base or None
+
+
+def _seed_dish_ingredients_for_phase(
+    *,
+    dish_id: int,
+    recipe: Recipe,
+    phase: str,
+    existing_by_recipe_ingredient_id: dict[int, DishIngredient] | None = None,
+) -> list[DishIngredient]:
+    existing = existing_by_recipe_ingredient_id or {}
+    seeded: list[DishIngredient] = []
+    for ri in recipe.recipe_ingredients:
+        if ri.ingredient is None:
+            continue
+        if not _is_phase_eligible(ri.run_phase, phase):
+            continue
+        if ri.id in existing:
+            continue
+
+        seeded.append(
+            DishIngredient(
+                dish_id=dish_id,
+                recipe_ingredient_id=ri.id,
+                task_key=_build_step_task_key(ri),
+                execution_engine=ri.ingredient.execution_engine,
+                execution_target=ri.ingredient.execution_target,
+                execution_payload=_decode_execution_payload(ri.ingredient.execution_payload),
+                execution_parameters=_build_step_parameters(ri),
+                execution_status="pending",
+            )
+        )
+    return seeded
+
+
 @router.post("/dishes/cook/{order_id}", response_model=CookResponse)
 async def cook_dishes(
     request: Request, order_id: int, db: AsyncSession = Depends(get_db)
@@ -332,7 +396,10 @@ async def cook_dishes(
             select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
             .select_from(RecipeIngredient)
             .join(Ingredient, RecipeIngredient.ingredient_id == Ingredient.id)
-            .where(RecipeIngredient.recipe_id == recipe.id)
+            .where(
+                RecipeIngredient.recipe_id == recipe.id,
+                RecipeIngredient.run_phase.in_(("firing", "both")),
+            )
         )
         expected_duration_sec = expected_result.scalar() or 0
 
@@ -345,6 +412,8 @@ async def cook_dishes(
         )
         db.add(new_dish)
         await db.flush()
+        for row in _seed_dish_ingredients_for_phase(dish_id=new_dish.id, recipe=recipe, phase="firing"):
+            db.add(row)
         # Refresh inside transaction for consistency
         await db.refresh(new_dish)
 
@@ -385,7 +454,7 @@ async def fetch_dishes(
     - processing_status: Filter by processing status (new/pending/processing/complete/failed)
     - req_id: Filter by request ID
     - order_id: Filter by order ID (integer)
-    - workflow_execution_id: Filter by StackStorm workflow execution ID
+    - execution_ref: Filter by execution reference
     - limit: Maximum number of results (default: 100, max: 1000)
     - offset: Number of results to skip (default: 0)
 
@@ -400,7 +469,7 @@ async def fetch_dishes(
             "processing_status": params.processing_status,
             "filter_req_id": params.req_id,
             "order_id": params.order_id,
-            "workflow_execution_id": params.workflow_execution_id,
+            "execution_ref": params.execution_ref,
             "limit": params.limit,
             "offset": params.offset,
         },
@@ -418,8 +487,8 @@ async def fetch_dishes(
         query = query.where(Dish.req_id == params.req_id)
     if params.order_id:
         query = query.where(Dish.order_id == params.order_id)
-    if params.workflow_execution_id:
-        query = query.where(Dish.workflow_execution_id == params.workflow_execution_id)
+    if params.execution_ref:
+        query = query.where(Dish.execution_ref == params.execution_ref)
 
     if params.processing_status and params.processing_status == "new":
         query = query.order_by(asc(Dish.created_at))
@@ -563,32 +632,40 @@ async def upsert_dish_ingredients(
         task_to_recipe_ingredient = {}
         if dish.recipe and dish.recipe.recipe_ingredients:
             for ri in dish.recipe.recipe_ingredients:
-                if ri.ingredient and ri.ingredient.task_name:
-                    raw_task_name = ri.ingredient.task_name
+                if ri.ingredient and ri.ingredient.task_key_template:
+                    raw_task_name = ri.ingredient.task_key_template
                     workflow_task_name = f"step_{ri.step_order}_{raw_task_name.replace('.', '_')}"
                     task_to_recipe_ingredient[workflow_task_name] = ri.id
-                    # Keep raw task name mapping for backward compatibility.
                     task_to_recipe_ingredient[raw_task_name] = ri.id
 
         now = datetime.now(timezone.utc)
 
-        seen_keys: set[tuple[str, str]] = set()
+        seen_keys: set[tuple[int, str]] = set()
         rows: list[dict] = []
         for item in payload.items:
-            task_id = item.task_id
-            st2_execution_id = item.st2_execution_id
-            if not task_id and not st2_execution_id:
+            task_key = item.task_key
+            recipe_ingredient_id = item.recipe_ingredient_id
+            if recipe_ingredient_id is None and task_key:
+                recipe_ingredient_id = task_to_recipe_ingredient.get(task_key)
+            execution_ref = item.execution_ref
+            if recipe_ingredient_id is None and not execution_ref:
                 continue
-            dedupe_key = (task_id or "", st2_execution_id or "")
+            dedupe_key = (recipe_ingredient_id or 0, execution_ref or "")
             if dedupe_key in seen_keys:
                 continue
             seen_keys.add(dedupe_key)
 
             row = {
                 "dish_id": dish_id,
-                "task_id": task_id,
-                "st2_execution_id": st2_execution_id,
-                "status": item.status,
+                "recipe_ingredient_id": recipe_ingredient_id,
+                "task_key": task_key,
+                "execution_engine": item.execution_engine,
+                "execution_target": item.execution_target,
+                "execution_ref": execution_ref,
+                "execution_payload": item.execution_payload,
+                "execution_parameters": item.execution_parameters,
+                "execution_status": item.execution_status,
+                "attempt": item.attempt or 0,
                 "started_at": item.started_at,
                 "completed_at": item.completed_at,
                 "canceled_at": item.canceled_at,
@@ -596,16 +673,19 @@ async def upsert_dish_ingredients(
                 "error_message": item.error_message,
                 "updated_at": now,
             }
-            if task_id in task_to_recipe_ingredient:
-                row["recipe_ingredient_id"] = task_to_recipe_ingredient[task_id]
             rows.append(row)
 
         if rows:
             insert_stmt = mysql_insert(DishIngredient).values(rows)
             update_stmt = {
-                "task_id": insert_stmt.inserted.task_id,
-                "st2_execution_id": insert_stmt.inserted.st2_execution_id,
-                "status": insert_stmt.inserted.status,
+                "task_key": insert_stmt.inserted.task_key,
+                "execution_engine": insert_stmt.inserted.execution_engine,
+                "execution_target": insert_stmt.inserted.execution_target,
+                "execution_ref": insert_stmt.inserted.execution_ref,
+                "execution_payload": insert_stmt.inserted.execution_payload,
+                "execution_parameters": insert_stmt.inserted.execution_parameters,
+                "execution_status": insert_stmt.inserted.execution_status,
+                "attempt": insert_stmt.inserted.attempt,
                 "started_at": insert_stmt.inserted.started_at,
                 "completed_at": insert_stmt.inserted.completed_at,
                 "canceled_at": insert_stmt.inserted.canceled_at,

@@ -11,7 +11,7 @@ function historyRow(item) {
     item.recipe?.name ||
     item.req_id ||
     (item.order_id ? `Order ${item.order_id}` : "Unknown");
-  const actionName = item.recipe?.workflow_id || "Recipe dispatch";
+  const actionName = item.recipe?.name || "Recipe dispatch";
   const started = item.started_at || item.created_at;
 
   tr.appendChild(el("td", { text: alertName }));
@@ -25,7 +25,7 @@ function historyRow(item) {
     ]),
   );
   tr.appendChild(el("td", { text: formatDate(started) }));
-  tr.appendChild(el("td", { text: item.workflow_execution_id || "-" }));
+  tr.appendChild(el("td", { text: item.execution_ref || "-" }));
 
   return tr;
 }
