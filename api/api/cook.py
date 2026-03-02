@@ -213,6 +213,12 @@ async def register_st2_workflow(
     try:
         workflow_id = await register_workflow_to_st2(settings.stackstorm_url, api_key, payload)
         return {"workflow_id": workflow_id}
+    except ValueError as e:
+        logger.warning(
+            "Invalid workflow registration payload",
+            extra={"req_id": req_id, "error": str(e)},
+        )
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(
             "Failed to register workflow",

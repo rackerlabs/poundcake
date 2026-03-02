@@ -21,4 +21,14 @@ for runner in "${RUNNERS[@]}"; do
   grep -q 'register_cleanup_trap' "${runner}"
 done
 
+legacy_keys_pattern='\b(workflow_payload|workflow_parameters|input_parameters|action_parameters|source_type)\b'
+if grep -R -nE "${legacy_keys_pattern}" \
+  "${SCRIPT_DIR}" \
+  --include='*.sh' \
+  --include='run_*' \
+  --exclude='lint_shell_tests.sh'; then
+  echo "Legacy recipe/ingredient payload keys found in shell tests." >&2
+  exit 1
+fi
+
 echo "Shell syntax checks passed."
