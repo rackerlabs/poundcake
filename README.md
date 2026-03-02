@@ -67,6 +67,16 @@ flowchart TD
     J --> K["timer: finalize + status update"]
 ```
 
+## Order Processing Status Lifecycle
+
+| From | Event | To | Notes |
+|---|---|---|---|
+| `new` | `prep-chef -> /dishes/cook/{order_id}` | `processing` | Atomic transition when dish creation is claimed. |
+| `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-catch-all, non-terminal orders. |
+| `new` or `processing` | Alertmanager sends `resolved` | `resolving` | Resolve-phase orchestration is initiated by pre-heat. |
+| `resolving` | `prep-chef -> /orders/{order_id}/resolve` | `complete` | Resolve flow finalizes order and marks inactive. |
+| `complete`/`failed`/`canceled` | Any webhook/timer follow-up | unchanged | Terminal statuses are immutable and not re-opened by side effects. |
+
 ## Components
 
 - **PoundCake API**: FastAPI entry point for webhooks, recipe management, and StackStorm bridge.

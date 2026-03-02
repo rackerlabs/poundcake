@@ -18,7 +18,11 @@ from datetime import datetime, timezone, timedelta
 from api.core.database import get_db
 from api.core.config import get_settings
 from api.core.logging import get_logger
-from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES, ORDER_TERMINAL_PROCESSING_STATUSES
+from api.core.statuses import (
+    DISH_TERMINAL_PROCESSING_STATUSES,
+    ORDER_TERMINAL_PROCESSING_STATUSES,
+    can_transition_to_resolving,
+)
 from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient, Ingredient
 from api.services.bakery_client import (
     add_ticket_comment,
@@ -648,9 +652,12 @@ async def upsert_dish_ingredients(
             if recipe_ingredient_id is None and task_key:
                 recipe_ingredient_id = task_to_recipe_ingredient.get(task_key)
             execution_ref = item.execution_ref
-            if recipe_ingredient_id is None and not execution_ref:
+            if recipe_ingredient_id is None and not task_key and execution_ref:
+                # Keep unknown tasks stable under step-identity uniqueness.
+                task_key = execution_ref
+            if recipe_ingredient_id is None and not task_key:
                 continue
-            dedupe_key = (recipe_ingredient_id or 0, execution_ref or "")
+            dedupe_key = (recipe_ingredient_id or 0, task_key or "")
             if dedupe_key in seen_keys:
                 continue
             seen_keys.add(dedupe_key)
@@ -678,15 +685,25 @@ async def upsert_dish_ingredients(
         if rows:
             insert_stmt = mysql_insert(DishIngredient).values(rows)
             update_stmt = {
-                "task_key": insert_stmt.inserted.task_key,
-                "execution_engine": insert_stmt.inserted.execution_engine,
-                "execution_target": insert_stmt.inserted.execution_target,
+                "task_key": func.coalesce(DishIngredient.task_key, insert_stmt.inserted.task_key),
+                "execution_engine": func.coalesce(
+                    DishIngredient.execution_engine, insert_stmt.inserted.execution_engine
+                ),
+                "execution_target": func.coalesce(
+                    DishIngredient.execution_target, insert_stmt.inserted.execution_target
+                ),
                 "execution_ref": insert_stmt.inserted.execution_ref,
-                "execution_payload": insert_stmt.inserted.execution_payload,
-                "execution_parameters": insert_stmt.inserted.execution_parameters,
+                "execution_payload": func.coalesce(
+                    insert_stmt.inserted.execution_payload, DishIngredient.execution_payload
+                ),
+                "execution_parameters": func.coalesce(
+                    insert_stmt.inserted.execution_parameters, DishIngredient.execution_parameters
+                ),
                 "execution_status": insert_stmt.inserted.execution_status,
                 "attempt": insert_stmt.inserted.attempt,
-                "started_at": insert_stmt.inserted.started_at,
+                "started_at": func.coalesce(
+                    DishIngredient.started_at, insert_stmt.inserted.started_at
+                ),
                 "completed_at": insert_stmt.inserted.completed_at,
                 "canceled_at": insert_stmt.inserted.canceled_at,
                 "result": insert_stmt.inserted.result,
@@ -811,13 +828,8 @@ async def update_dish(
                 select(Order).where(Order.id == dish.order_id).with_for_update()
             )
             order = result.scalars().first()
-            if order and order.processing_status != "complete":
-                if order.processing_status == "canceled":
-                    logger.info(
-                        "Skipping order status update because order is canceled",
-                        extra={"req_id": req_id, "order_id": order.id, "dish_id": dish.id},
-                    )
-                elif is_catch_all:
+            if order and order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
+                if is_catch_all:
                     # Keep catch-all orders active so resolved alerts can close/reopen the same ticket.
                     order.updated_at = datetime.now(timezone.utc)
                     logger.info(
@@ -830,8 +842,9 @@ async def update_dish(
                         },
                     )
                 else:
-                    # Keep order in-flight until the alert itself clears.
-                    order.processing_status = "processing"
+                    # Advance to resolve-phase orchestration once firing workflow is terminal.
+                    if can_transition_to_resolving(order.processing_status, "dish_terminal"):
+                        order.processing_status = "resolving"
                     order.is_active = True
                     order.updated_at = datetime.now(timezone.utc)
 
