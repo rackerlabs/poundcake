@@ -34,6 +34,7 @@ DishProcessingStatus = Literal[
 OrderProcessingStatus = Literal[
     "new",
     "processing",
+    "resolving",
     "complete",
     "failed",
     "canceled",
@@ -112,6 +113,18 @@ OnFailureAction = Literal[
     "continue",
     "stop",
     "retry",
+]
+
+RunPhase = Literal[
+    "firing",
+    "resolving",
+    "both",
+]
+
+IngredientKind = Literal[
+    "remediation",
+    "comms",
+    "utility",
 ]
 
 # =============================================================================

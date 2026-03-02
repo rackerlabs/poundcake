@@ -32,7 +32,7 @@ function ingredientOptions(selectedId = null) {
   ingredientsCache.forEach((ingredient) => {
     const option = el("option", {
       attrs: { value: ingredient.id },
-      text: `${ingredient.id} - ${ingredient.task_id}`,
+      text: `${ingredient.id} - ${ingredient.execution_target}`,
     });
     if (selectedId && Number(selectedId) === Number(ingredient.id)) {
       option.selected = true;
@@ -90,8 +90,10 @@ function recipeIngredientRow(item = null, disabled = false) {
   const paramsInput = el("input", {
     attrs: {
       type: "text",
-      value: item?.input_parameters ? JSON.stringify(item.input_parameters) : "",
-      placeholder: "input_parameters JSON",
+      value: item?.execution_parameters_override
+        ? JSON.stringify(item.execution_parameters_override)
+        : "",
+      placeholder: "execution_parameters_override JSON",
     },
   });
   paramsInput.style.minWidth = "240px";
@@ -134,7 +136,10 @@ function gatherRecipeIngredients() {
       on_success: onSuccess.value || "continue",
       parallel_group: asInt(parallelInput.value, 0),
       depth: asInt(depthInput.value, 0),
-      input_parameters: parseOptionalJson(paramsInput.value, "Recipe ingredient input_parameters"),
+      execution_parameters_override: parseOptionalJson(
+        paramsInput.value,
+        "Recipe ingredient execution_parameters_override",
+      ),
     };
   });
 }
@@ -162,14 +167,10 @@ function fillRecipeForm(recipe) {
   $("#recipe-name").disabled = true;
   $("#recipe-description").value = recipe.description || "";
   $("#recipe-enabled").value = String(Boolean(recipe.enabled));
-  $("#recipe-source-type").value = recipe.source_type || "undefined";
-  $("#recipe-workflow-id").value = recipe.workflow_id || "";
-  $("#recipe-workflow-payload").value = recipe.workflow_payload
-    ? JSON.stringify(recipe.workflow_payload, null, 2)
-    : "";
-  $("#recipe-workflow-params").value = recipe.workflow_parameters
-    ? JSON.stringify(recipe.workflow_parameters, null, 2)
-    : "";
+  $("#recipe-source-type").value = "undefined";
+  $("#recipe-workflow-id").value = "";
+  $("#recipe-workflow-payload").value = "";
+  $("#recipe-workflow-params").value = "";
 
   clearNode($("#recipe-ingredient-list"));
   const recipeIngredients = Array.isArray(recipe.recipe_ingredients)
@@ -199,8 +200,6 @@ function renderRecipeDetail(recipe) {
   appendLabeledValue(detail, "ID", recipe.id);
   appendLabeledValue(detail, "Name", recipe.name);
   appendLabeledValue(detail, "Enabled", String(Boolean(recipe.enabled)));
-  appendLabeledValue(detail, "Source Type", recipe.source_type || "-");
-  appendLabeledValue(detail, "Workflow ID", recipe.workflow_id || "-");
   appendLabeledValue(
     detail,
     "Ingredient Links",
@@ -221,7 +220,8 @@ function renderRecipeDetail(recipe) {
       .slice()
       .sort((a, b) => (a.step_order || 0) - (b.step_order || 0))
       .forEach((item) => {
-        const ingredientName = item.ingredient?.task_id || `ingredient:${item.ingredient_id}`;
+        const ingredientName =
+          item.ingredient?.execution_target || `ingredient:${item.ingredient_id}`;
         list.appendChild(
           el("div", { className: "activity-item" }, [
             el("div", { text: `#${item.step_order} ${ingredientName}` }),
@@ -237,10 +237,8 @@ function renderRecipeDetail(recipe) {
   detail.appendChild(links);
 
   const payloads = el("div", { className: "mt-4" });
-  payloads.appendChild(el("h4", { text: "Workflow Payload" }));
-  payloads.appendChild(el("pre", { text: compactJson(recipe.workflow_payload) }));
-  payloads.appendChild(el("h4", { text: "Workflow Parameters" }));
-  payloads.appendChild(el("pre", { text: compactJson(recipe.workflow_parameters) }));
+  payloads.appendChild(el("h4", { text: "Recipe Metadata" }));
+  payloads.appendChild(el("pre", { text: compactJson({ name: recipe.name, enabled: recipe.enabled }) }));
   detail.appendChild(payloads);
 }
 
@@ -249,13 +247,13 @@ function recipeRow(recipe) {
   tr.appendChild(el("td", { text: recipe.id }));
   tr.appendChild(el("td", { text: recipe.name || "-" }));
   tr.appendChild(el("td", { text: String(Boolean(recipe.enabled)) }));
-  tr.appendChild(el("td", { text: recipe.source_type || "-" }));
+  tr.appendChild(el("td", { text: "-" }));
   tr.appendChild(
     el("td", {
       text: Array.isArray(recipe.recipe_ingredients) ? recipe.recipe_ingredients.length : 0,
     }),
   );
-  tr.appendChild(el("td", { text: recipe.workflow_id || "-" }));
+  tr.appendChild(el("td", { text: "-" }));
   tr.appendChild(el("td", { text: formatDate(recipe.updated_at) }));
 
   const ops = el("td", { className: "inline-actions" });
@@ -344,13 +342,6 @@ async function saveRecipe(event) {
     name,
     description: ($("#recipe-description")?.value || "").trim() || null,
     enabled: ($("#recipe-enabled")?.value || "true") === "true",
-    source_type: ($("#recipe-source-type")?.value || "undefined").trim() || "undefined",
-    workflow_id: ($("#recipe-workflow-id")?.value || "").trim() || null,
-    workflow_payload: parseOptionalJson($("#recipe-workflow-payload")?.value, "Workflow Payload"),
-    workflow_parameters: parseOptionalJson(
-      $("#recipe-workflow-params")?.value,
-      "Workflow Parameters",
-    ),
   };
 
   if (!editingRecipeId) {

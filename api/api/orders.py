@@ -7,15 +7,17 @@
 """API routes for Order management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, asc, desc
+from sqlalchemy import select, asc, desc, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 from typing import List
 from datetime import datetime, timezone
 
 from api.core.database import get_db
+from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
-from api.models.models import Dish, DishIngredient, Order
+from api.models.models import Dish, DishIngredient, Order, Recipe, RecipeIngredient, Ingredient
 from api.schemas.schemas import (
     IncidentTimelineEvent,
     IncidentTimelineResponse,
@@ -30,6 +32,11 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
+def _is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
+    normalized = (step_phase or "both").lower()
+    return normalized == "both" or normalized == target_phase
+
+
 @router.get("/orders", response_model=List[OrderResponse])
 async def fetch_orders(
     request: Request,
@@ -40,7 +47,7 @@ async def fetch_orders(
     Get orders with optional filtering.
 
     Query Parameters:
-    - processing_status: Filter by processing status (new/pending/processing/complete/failed)
+    - processing_status: Filter by processing status (new/pending/processing/resolving/complete/failed/canceled)
     - alert_status: Filter by alert status (firing/resolved)
     - req_id: Filter by request ID
     - alert_group_name: Filter by alert group name
@@ -205,6 +212,131 @@ async def update_order(
     return order
 
 
+@router.post("/orders/{order_id}/resolve", response_model=OrderResponse)
+async def resolve_order(
+    request: Request,
+    order_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Resolve-phase orchestration for an order using resolve-eligible recipe steps only."""
+    req_id = request.state.req_id
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+
+    async with db.begin():
+        order_result = await db.execute(select(Order).where(Order.id == order_id).with_for_update())
+        order = order_result.scalars().first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if order.processing_status == "complete":
+            return order
+        if order.processing_status != "resolving":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Order must be in resolving status (current={order.processing_status})",
+            )
+
+        recipe_result = await db.execute(
+            select(Recipe)
+            .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
+            .where(Recipe.name == order.alert_group_name, Recipe.enabled.is_(True))
+            .with_for_update()
+        )
+        recipe = recipe_result.unique().scalars().first()
+        if not recipe:
+            catch_all_name = (settings.catch_all_recipe_name or "").strip()
+            if catch_all_name:
+                fallback_result = await db.execute(
+                    select(Recipe)
+                    .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
+                    .where(Recipe.name == catch_all_name, Recipe.enabled.is_(True))
+                    .with_for_update()
+                )
+                recipe = fallback_result.unique().scalars().first()
+        if not recipe:
+            raise HTTPException(status_code=404, detail="No recipe available for resolve flow")
+
+        dish_result = await db.execute(
+            select(Dish).where(Dish.order_id == order.id).order_by(Dish.created_at.desc()).with_for_update()
+        )
+        dish = dish_result.scalars().first()
+
+        if dish is None:
+            expected_result = await db.execute(
+                select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
+                .select_from(RecipeIngredient)
+                .join(Ingredient, RecipeIngredient.ingredient_id == Ingredient.id)
+                .where(
+                    RecipeIngredient.recipe_id == recipe.id,
+                    RecipeIngredient.run_phase.in_(("resolving", "both")),
+                )
+            )
+            expected_duration_sec = expected_result.scalar() or 0
+
+            dish = Dish(
+                req_id=order.req_id,
+                order_id=order.id,
+                recipe_id=recipe.id,
+                processing_status="complete",
+                execution_status="succeeded",
+                started_at=now,
+                completed_at=now,
+                expected_duration_sec=expected_duration_sec,
+                actual_duration_sec=0,
+            )
+            db.add(dish)
+            await db.flush()
+
+        existing_result = await db.execute(
+            select(DishIngredient)
+            .where(DishIngredient.dish_id == dish.id, DishIngredient.deleted.is_(False))
+            .with_for_update()
+        )
+        existing_by_recipe_ingredient_id = {
+            row.recipe_ingredient_id: row
+            for row in existing_result.scalars().all()
+            if row.recipe_ingredient_id is not None
+        }
+
+        for ri in recipe.recipe_ingredients:
+            if ri.ingredient is None:
+                continue
+            if not _is_phase_eligible(ri.run_phase, "resolving"):
+                continue
+            if ri.id in existing_by_recipe_ingredient_id:
+                continue
+
+            task_suffix = (ri.ingredient.task_key_template or "task").replace(".", "_")
+            task_key = f"step_{ri.step_order}_{task_suffix}"
+            params = dict(ri.ingredient.execution_parameters or {})
+            if ri.execution_parameters_override:
+                params.update(ri.execution_parameters_override)
+            db.add(
+                DishIngredient(
+                    dish_id=dish.id,
+                    recipe_ingredient_id=ri.id,
+                    task_key=task_key,
+                    execution_engine=ri.ingredient.execution_engine,
+                    execution_target=ri.ingredient.execution_target,
+                    execution_status="pending",
+                    execution_parameters=params or None,
+                )
+            )
+
+        order.processing_status = "complete"
+        order.is_active = False
+        order.updated_at = now
+        dish.updated_at = now
+
+    await db.refresh(order)
+    logger.info(
+        "Order resolve flow completed",
+        extra={"req_id": req_id, "order_id": order_id, "processing_status": order.processing_status},
+    )
+    return order
+
+
 @router.get("/orders/{order_id}/timeline", response_model=IncidentTimelineResponse)
 async def get_order_timeline(
     request: Request,
@@ -247,12 +379,12 @@ async def get_order_timeline(
                 status=dish.processing_status,
                 title=f"Dish {dish.id} {dish.processing_status}",
                 details={
-                    "status": dish.status,
+                    "status": dish.execution_status,
                     "error_message": dish.error_message,
                 },
                 correlation_ids={
                     "dish_id": str(dish.id),
-                    "workflow_execution_id": dish.workflow_execution_id or "",
+                    "execution_ref": dish.execution_ref or "",
                 },
             )
         )
@@ -266,13 +398,13 @@ async def get_order_timeline(
                 IncidentTimelineEvent(
                     timestamp=ingredient.started_at or ingredient.created_at,
                     event_type="task",
-                    status=ingredient.status or "unknown",
-                    title=f"Task {ingredient.task_id or 'unknown'}",
+                    status=ingredient.execution_status or "unknown",
+                    title=f"Task {ingredient.task_key or 'unknown'}",
                     details={
                         "error_message": ingredient.error_message,
                     },
                     correlation_ids={
-                        "st2_execution_id": ingredient.st2_execution_id or "",
+                        "execution_ref": ingredient.execution_ref or "",
                         "dish_ingredient_id": str(ingredient.id),
                     },
                 )

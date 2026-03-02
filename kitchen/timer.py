@@ -41,9 +41,9 @@ def update_dish(
     dish: dict[str, Any],
     req_id: str,
     processing_status: Optional[str] = None,
-    status: Optional[str] = None,
+    execution_status: Optional[str] = None,
     error_msg: Optional[str] = None,
-    workflow_execution_id: Optional[str] = None,
+    execution_ref: Optional[str] = None,
     retry_attempt: Optional[int] = None,
     clear_error: bool = False,
     final_status: bool = False,
@@ -60,14 +60,14 @@ def update_dish(
 
     if processing_status:
         payload["processing_status"] = processing_status
-    if status:
-        payload["status"] = status
+    if execution_status:
+        payload["execution_status"] = execution_status
     if clear_error:
         payload["error_message"] = None
     elif error_msg is not None:
         payload["error_message"] = error_msg
-    if workflow_execution_id is not None:
-        payload["workflow_execution_id"] = workflow_execution_id
+    if execution_ref is not None:
+        payload["execution_ref"] = execution_ref
     if retry_attempt is not None:
         payload["retry_attempt"] = retry_attempt
     if result is not None:
@@ -131,47 +131,7 @@ def _maybe_retry_missing_workflow_execution(
     retry_attempt = int(dish.get("retry_attempt") or 0)
     if retry_attempt != 0:
         return False, None
-
-    recipe = dish.get("recipe") or {}
-    workflow_id = recipe.get("workflow_id")
-    if not workflow_id:
-        return False, "retry skipped: recipe workflow_id is missing"
-
-    workflow_parameters = recipe.get("workflow_parameters") or {}
-
-    # Give pack-sync sidecars a short window to observe the workflow file.
-    time.sleep(2)
-    exec_resp = request_with_retry_sync(
-        "POST",
-        f"{API_BASE_URL}/cook/execute",
-        json={"action": workflow_id, "parameters": workflow_parameters},
-        headers=get_service_headers(req_id),
-        timeout=30,
-        retries=POLLER_RETRIES,
-    )
-    if exec_resp.status_code not in (200, 201):
-        return False, f"retry execute failed with HTTP {exec_resp.status_code}: {exec_resp.text}"
-
-    exec_id = (exec_resp.json() or {}).get("id")
-    if not exec_id:
-        return False, "retry execute response missing execution id"
-
-    updated = update_dish(
-        dish,
-        req_id,
-        processing_status="processing",
-        workflow_execution_id=exec_id,
-        retry_attempt=retry_attempt + 1,
-        clear_error=True,
-    )
-    if not updated:
-        return False, "failed to persist retried execution id"
-
-    logger.warning(
-        "Retried workflow execution after missing workflow file",
-        extra={"req_id": req_id, "dish_id": dish.get("id"), "execution_id": exec_id},
-    )
-    return True, None
+    return False, "retry skipped: recipe-level workflow metadata no longer exists"
 
 
 def cancel_execution(execution_id: str, req_id: str) -> bool:
@@ -237,14 +197,14 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
             }
         )
         logger.critical("Dish exceeded safety timeout; killing execution", extra=extra)
-        exec_id = dish.get("workflow_execution_id")
+        exec_id = dish.get("execution_ref")
         if exec_id:
             cancel_execution(exec_id, req_id)
         update_dish(
             dish,
             req_id,
             processing_status="failed",
-            status="timeout",
+            execution_status="timeout",
             error_msg=f"Task killed: elapsed time {int(elapsed)}s exceeded 5x expected duration",
             final_status=True,
         )
@@ -303,7 +263,7 @@ def monitor_dishes() -> None:
 
         for dish in dishes:
             req_id = dish.get("req_id", SYSTEM_REQ_ID)
-            execution_id = dish.get("workflow_execution_id")
+            execution_id = dish.get("execution_ref")
             extra: dict[str, Any] = {"req_id": req_id}
 
             claim_resp = request_with_retry_sync(
@@ -326,7 +286,7 @@ def monitor_dishes() -> None:
                 )
                 continue
             dish = claim_resp.json()
-            execution_id = dish.get("workflow_execution_id")
+            execution_id = dish.get("execution_ref")
 
             if check_for_timeouts(dish, req_id):
                 continue
@@ -354,7 +314,7 @@ def monitor_dishes() -> None:
                             dish,
                             req_id,
                             processing_status="failed",
-                            status="abandoned",
+                            execution_status="abandoned",
                             error_msg="Missing workflow execution id",
                             final_status=True,
                         )
@@ -433,7 +393,7 @@ def monitor_dishes() -> None:
                                 [
                                     {
                                         "id": child.get("id"),
-                                        "task_id": (
+                                        "task_key": (
                                             child.get("context", {})
                                             .get("orquesta", {})
                                             .get("task_id")
@@ -466,7 +426,7 @@ def monitor_dishes() -> None:
                                 [
                                     {
                                         "id": child.get("id"),
-                                        "task_id": (
+                                        "task_key": (
                                             child.get("context", {})
                                             .get("orquesta", {})
                                             .get("task_id")
@@ -514,10 +474,10 @@ def monitor_dishes() -> None:
                             if ing_resp.status_code == 200:
                                 for ing in ing_resp.json():
                                     key = (
-                                        ing.get("task_id") or "",
-                                        ing.get("st2_execution_id"),
+                                        ing.get("task_key") or "",
+                                        ing.get("execution_ref"),
                                     )
-                                    existing_status[key] = ing.get("status")
+                                    existing_status[key] = ing.get("execution_status")
                         except Exception:
                             existing_status = {}
 
@@ -525,7 +485,7 @@ def monitor_dishes() -> None:
                             if not isinstance(task, dict):
                                 continue
                             task_status = task.get("status")
-                            cache_key = (task.get("task_id") or "", task.get("id"))
+                            cache_key = (task.get("task_key") or "", task.get("id"))
                             prev_status = existing_status.get(cache_key)
                             if prev_status != task_status:
                                 logger.debug(
@@ -533,16 +493,16 @@ def monitor_dishes() -> None:
                                     extra={
                                         "req_id": req_id,
                                         "dish_id": dish.get("id"),
-                                        "task_id": task.get("task_id"),
+                                        "task_key": task.get("task_key"),
                                         "status": task_status,
                                     },
                                 )
 
                             items.append(
                                 {
-                                    "st2_execution_id": task.get("id"),
-                                    "task_id": task.get("task_id"),
-                                    "status": task_status,
+                                    "execution_ref": task.get("id"),
+                                    "task_key": task.get("task_key"),
+                                    "execution_status": task_status,
                                     "started_at": task.get("start_timestamp")
                                     or dish.get("created_at"),
                                     "completed_at": task.get("end_timestamp"),
@@ -580,7 +540,7 @@ def monitor_dishes() -> None:
                         dish,
                         req_id,
                         processing_status=processing_status,
-                        status=st2_status,
+                        execution_status=st2_status,
                         error_msg=err,
                         final_status=True,
                         result=dish_result,
@@ -615,7 +575,7 @@ def monitor_dishes() -> None:
                     dish,
                     req_id,
                     processing_status="failed",
-                    status="abandoned",
+                    execution_status="abandoned",
                     error_msg="ST2 execution not found",
                     final_status=True,
                 )

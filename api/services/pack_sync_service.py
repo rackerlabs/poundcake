@@ -50,7 +50,6 @@ async def get_pack_sync_artifact_response(
         .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
         .where(Recipe.deleted.is_(False))
         .where(Recipe.enabled.is_(True))
-        .where(Recipe.source_type == "stackstorm")
     )
     recipes = result.unique().scalars().all()
     artifact_bytes, etag = build_stackstorm_pack_artifact(recipes=recipes)

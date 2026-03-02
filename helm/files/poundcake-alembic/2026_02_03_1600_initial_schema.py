@@ -33,10 +33,6 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False),
-        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="undefined"),
-        sa.Column("workflow_id", sa.String(length=255), nullable=True),
-        sa.Column("workflow_payload", mysql.JSON(), nullable=True),
-        sa.Column("workflow_parameters", mysql.JSON(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("deleted", sa.Boolean(), nullable=False),
@@ -50,12 +46,13 @@ def upgrade() -> None:
     op.create_table(
         "ingredients",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("task_id", sa.String(length=100), nullable=False),
-        sa.Column("task_name", sa.String(length=255), nullable=False),
+        sa.Column("execution_target", sa.String(length=100), nullable=False),
+        sa.Column("task_key_template", sa.String(length=255), nullable=False),
         sa.Column("action_id", sa.String(length=100), nullable=True),
-        sa.Column("action_payload", sa.Text(), nullable=True),
-        sa.Column("action_parameters", mysql.JSON(), nullable=True),
-        sa.Column("source_type", sa.String(length=50), nullable=False, server_default="undefined"),
+        sa.Column("execution_payload", sa.Text(), nullable=True),
+        sa.Column("execution_parameters", mysql.JSON(), nullable=True),
+        sa.Column("execution_engine", sa.String(length=50), nullable=False, server_default="undefined"),
+        sa.Column("ingredient_kind", sa.String(length=32), nullable=False, server_default="utility"),
         sa.Column("is_blocking", sa.Boolean(), nullable=False),
         sa.Column("expected_duration_sec", sa.Integer(), nullable=False),
         sa.Column("timeout_duration_sec", sa.Integer(), nullable=False),
@@ -69,7 +66,12 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_ingredients_id"), "ingredients", ["id"], unique=False)
-    op.create_index(op.f("ix_ingredients_task_id"), "ingredients", ["task_id"], unique=True)
+    op.create_index(
+        op.f("ix_ingredients_execution_target"),
+        "ingredients",
+        ["execution_target"],
+        unique=True,
+    )
 
     # Recipe Ingredients (junction)
     op.create_table(
@@ -81,7 +83,8 @@ def upgrade() -> None:
         sa.Column("on_success", sa.String(length=50), nullable=False, server_default="continue"),
         sa.Column("parallel_group", sa.Integer(), nullable=False),
         sa.Column("depth", sa.Integer(), nullable=False),
-        sa.Column("input_parameters", mysql.JSON(), nullable=True),
+        sa.Column("execution_parameters_override", mysql.JSON(), nullable=True),
+        sa.Column("run_phase", sa.String(length=16), nullable=False, server_default="both"),
         sa.ForeignKeyConstraint(["ingredient_id"], ["ingredients.id"]),
         sa.ForeignKeyConstraint(["recipe_id"], ["recipes.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -166,11 +169,11 @@ def upgrade() -> None:
         "dishes",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("req_id", sa.String(length=100), nullable=False),
-        sa.Column("workflow_execution_id", sa.String(length=100), nullable=True),
+        sa.Column("execution_ref", sa.String(length=100), nullable=True),
         sa.Column("order_id", sa.Integer(), nullable=True),
         sa.Column("recipe_id", sa.Integer(), nullable=False),
         sa.Column("processing_status", sa.String(length=50), nullable=False),
-        sa.Column("status", sa.String(length=50), nullable=True),
+        sa.Column("execution_status", sa.String(length=50), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
         sa.Column("expected_duration_sec", sa.Integer(), nullable=True),
@@ -187,9 +190,9 @@ def upgrade() -> None:
     op.create_index(op.f("ix_dishes_id"), "dishes", ["id"], unique=False)
     op.create_index(op.f("ix_dishes_req_id"), "dishes", ["req_id"], unique=False)
     op.create_index(
-        op.f("ix_dishes_workflow_execution_id"),
+        op.f("ix_dishes_execution_ref"),
         "dishes",
-        ["workflow_execution_id"],
+        ["execution_ref"],
         unique=False,
     )
     op.create_index(
@@ -202,19 +205,19 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("dish_id", sa.Integer(), nullable=False),
         sa.Column("recipe_ingredient_id", sa.Integer(), nullable=True),
-        sa.Column("task_id", sa.String(length=255), nullable=True),
-        sa.Column("st2_execution_id", sa.String(length=100), nullable=True),
+        sa.Column("task_key", sa.String(length=255), nullable=True),
+        sa.Column("execution_engine", sa.String(length=50), nullable=True),
+        sa.Column("execution_target", sa.String(length=255), nullable=True),
+        sa.Column("execution_ref", sa.String(length=100), nullable=True),
+        sa.Column("execution_payload", mysql.JSON(), nullable=True),
+        sa.Column("execution_parameters", mysql.JSON(), nullable=True),
+        sa.Column("attempt", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column(
-            "task_id_norm",
-            sa.String(length=255),
-            sa.Computed("IFNULL(task_id, '')", persisted=True),
-        ),
-        sa.Column(
-            "st2_execution_id_norm",
+            "execution_ref_norm",
             sa.String(length=100),
-            sa.Computed("IFNULL(st2_execution_id, '')", persisted=True),
+            sa.Computed("IFNULL(execution_ref, '')", persisted=True),
         ),
-        sa.Column("status", sa.String(length=50), nullable=True),
+        sa.Column("execution_status", sa.String(length=50), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
         sa.Column("canceled_at", sa.DateTime(), nullable=True),
@@ -229,17 +232,23 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_dish_ingredients_dish_id", "dish_ingredients", ["dish_id"], unique=False)
-    op.create_index("ix_dish_ingredients_task_id", "dish_ingredients", ["task_id"], unique=False)
+    op.create_index("ix_dish_ingredients_task_key", "dish_ingredients", ["task_key"], unique=False)
     op.create_index(
-        "ix_dish_ingredients_st2_execution_id",
+        "ix_dish_ingredients_execution_ref",
         "dish_ingredients",
-        ["st2_execution_id"],
+        ["execution_ref"],
         unique=False,
     )
     op.create_index(
-        "ux_dish_ingredients_dish_task_exec",
+        "ix_dish_ingredients_execution_engine",
         "dish_ingredients",
-        ["dish_id", "task_id_norm", "st2_execution_id_norm"],
+        ["execution_engine"],
+        unique=False,
+    )
+    op.create_index(
+        "ux_dish_ingredients_dish_recipe_exec",
+        "dish_ingredients",
+        ["dish_id", "recipe_ingredient_id", "execution_ref_norm"],
         unique=True,
     )
 
@@ -477,14 +486,15 @@ def downgrade() -> None:
     op.drop_index("ix_alert_suppressions_id", table_name="alert_suppressions")
     op.drop_table("alert_suppressions")
 
-    op.drop_index("ux_dish_ingredients_dish_task_exec", table_name="dish_ingredients")
-    op.drop_index("ix_dish_ingredients_st2_execution_id", table_name="dish_ingredients")
-    op.drop_index("ix_dish_ingredients_task_id", table_name="dish_ingredients")
+    op.drop_index("ux_dish_ingredients_dish_recipe_exec", table_name="dish_ingredients")
+    op.drop_index("ix_dish_ingredients_execution_engine", table_name="dish_ingredients")
+    op.drop_index("ix_dish_ingredients_execution_ref", table_name="dish_ingredients")
+    op.drop_index("ix_dish_ingredients_task_key", table_name="dish_ingredients")
     op.drop_index("ix_dish_ingredients_dish_id", table_name="dish_ingredients")
     op.drop_table("dish_ingredients")
 
     op.drop_index(op.f("ix_dishes_processing_status"), table_name="dishes")
-    op.drop_index(op.f("ix_dishes_workflow_execution_id"), table_name="dishes")
+    op.drop_index(op.f("ix_dishes_execution_ref"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_req_id"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_id"), table_name="dishes")
     op.drop_table("dishes")
@@ -518,7 +528,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_recipe_ingredients_id"), table_name="recipe_ingredients")
     op.drop_table("recipe_ingredients")
 
-    op.drop_index(op.f("ix_ingredients_task_id"), table_name="ingredients")
+    op.drop_index(op.f("ix_ingredients_execution_target"), table_name="ingredients")
     op.drop_index(op.f("ix_ingredients_id"), table_name="ingredients")
     op.drop_table("ingredients")
 

@@ -66,9 +66,9 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
     pruned = 0
     now = datetime.now(timezone.utc)
 
-    # Only sync ingredients with source_type="stackstorm"
-    result = await db.execute(select(Ingredient).where(Ingredient.source_type == "stackstorm"))
-    existing = {ing.task_id: ing for ing in result.scalars().all()}
+    # Only sync ingredients with execution_engine="stackstorm"
+    result = await db.execute(select(Ingredient).where(Ingredient.execution_engine == "stackstorm"))
+    existing = {ing.execution_target: ing for ing in result.scalars().all()}
     action_refs = set()
 
     for action in actions:
@@ -83,12 +83,13 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
 
         if ing is None:
             ing = Ingredient(
-                task_id=action_ref,
-                task_name=action.get("name") or action_ref,
+                execution_target=action_ref,
+                task_key_template=action.get("name") or action_ref,
                 action_id=action.get("id"),
-                action_payload=payload,
-                action_parameters=parameters,
-                source_type="stackstorm",
+                execution_payload=payload,
+                execution_parameters=parameters,
+                execution_engine="stackstorm",
+                ingredient_kind="remediation",
                 is_blocking=True,
                 expected_duration_sec=DEFAULT_DURATION,
                 timeout_duration_sec=DEFAULT_TIMEOUT,
@@ -104,23 +105,24 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
         else:
             # Only update if something actually changed
             changed = False
-            new_task_name = action.get("name") or ing.task_name
+            new_task_name = action.get("name") or ing.task_key_template
             new_action_id = action.get("id")
 
             if (
-                ing.task_name != new_task_name
+                ing.task_key_template != new_task_name
                 or ing.action_id != new_action_id
-                or ing.action_payload != payload
-                or ing.action_parameters != parameters
-                or ing.source_type != "stackstorm"
+                or ing.execution_payload != payload
+                or ing.execution_parameters != parameters
+                or ing.execution_engine != "stackstorm"
                 or ing.deleted is True
                 or ing.deleted_at is not None
             ):
-                ing.task_name = new_task_name
+                ing.task_key_template = new_task_name
                 ing.action_id = new_action_id
-                ing.action_payload = payload
-                ing.action_parameters = parameters
-                ing.source_type = "stackstorm"
+                ing.execution_payload = payload
+                ing.execution_parameters = parameters
+                ing.execution_engine = "stackstorm"
+                ing.ingredient_kind = "remediation"
                 ing.deleted = False
                 ing.deleted_at = None
                 ing.updated_at = now
@@ -129,7 +131,7 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
             if changed:
                 updated += 1
 
-    # Only prune StackStorm ingredients (existing dict already filtered by source_type)
+    # Only prune StackStorm ingredients (existing dict already filtered by execution_engine)
     if PRUNE_MISSING:
         for ref, ing in existing.items():
             if ref not in action_refs:
@@ -148,11 +150,7 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
     now = datetime.now(timezone.utc)
 
     result = await db.execute(select(Recipe))
-    existing = {
-        rec.workflow_id: rec
-        for rec in result.scalars().all()
-        if rec.workflow_id and rec.source_type == "stackstorm"
-    }
+    existing = {rec.name: rec for rec in result.scalars().all()}
 
     for action in actions:
         workflow_id = action.get("ref")
@@ -167,18 +165,12 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
                 workflow_payload = yaml.safe_load(workflow_payload) or {}
             except Exception:
                 workflow_payload = None
-        workflow_parameters = action.get("parameters") or {}
-
-        rec = existing.get(workflow_id)
+        rec = existing.get(name)
         if rec is None:
             rec = Recipe(
                 name=name,
                 description=description,
                 enabled=True,
-                source_type="stackstorm",
-                workflow_id=workflow_id,
-                workflow_payload=workflow_payload,
-                workflow_parameters=workflow_parameters,
                 deleted=False,
                 deleted_at=None,
                 updated_at=now,
@@ -189,9 +181,6 @@ async def upsert_recipes(db: AsyncSession, actions: list[dict]) -> dict[str, int
         else:
             rec.name = name
             rec.description = description
-            rec.source_type = "stackstorm"
-            rec.workflow_payload = workflow_payload
-            rec.workflow_parameters = workflow_parameters
             rec.deleted = False
             rec.deleted_at = None
             rec.updated_at = now
@@ -271,7 +260,7 @@ async def sync_recipe_ingredients_from_yaml(
             depth_map.setdefault(t, 0)
 
     result = await db.execute(select(Ingredient))
-    existing_ingredients = {ing.task_id: ing for ing in result.scalars().all()}
+    existing_ingredients = {ing.execution_target: ing for ing in result.scalars().all()}
     missing = []
     for task_name in ordered_tasks:
         action_ref = task_actions.get(task_name)
@@ -282,12 +271,13 @@ async def sync_recipe_ingredients_from_yaml(
                 missing.append(action_ref)
                 continue
             stub = Ingredient(
-                task_id=action_ref,
-                task_name=action_ref,
+                execution_target=action_ref,
+                task_key_template=action_ref,
                 action_id=None,
-                action_payload=None,
-                action_parameters={},
-                source_type="native",
+                execution_payload=None,
+                execution_parameters={},
+                execution_engine="native",
+                ingredient_kind="utility",
                 is_blocking=True,
                 expected_duration_sec=DEFAULT_DURATION,
                 timeout_duration_sec=DEFAULT_TIMEOUT,
@@ -331,6 +321,8 @@ async def sync_recipe_ingredients_from_yaml(
                 on_success="continue",
                 parallel_group=depth,
                 depth=depth,
+                execution_parameters_override=(tasks.get(task_name, {}) or {}).get("input"),
+                run_phase="firing",
             )
         )
         step_order += 1

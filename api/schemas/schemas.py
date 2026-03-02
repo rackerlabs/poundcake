@@ -19,6 +19,8 @@ from api.types import (
     SuppressionScope,
     SuppressionStatus,
     SuppressionMatcherOperator,
+    RunPhase,
+    IngredientKind,
 )
 
 # =============================================================================
@@ -58,14 +60,15 @@ class StatsResponse(BaseModel):
 class IngredientBase(BaseModel):
     """Base schema for Ingredient creation/updates."""
 
-    task_id: str = Field(..., max_length=100)
-    task_name: str = Field(..., max_length=255)
+    execution_target: str = Field(..., max_length=100)
+    task_key_template: str = Field(..., max_length=255)
 
     action_id: Optional[str] = Field(None, max_length=100)
-    action_payload: Optional[str] = None
-    action_parameters: Optional[Dict[str, Any]] = None
+    execution_payload: Optional[str] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
 
-    source_type: str = Field(default="undefined", max_length=50)
+    execution_engine: str = Field(default="undefined", max_length=50)
+    ingredient_kind: IngredientKind = Field(default="utility")
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
@@ -83,12 +86,13 @@ class IngredientCreate(IngredientBase):
 class IngredientUpdate(BaseModel):
     """Schema for updating an ingredient (all fields optional)."""
 
-    task_id: Optional[str] = Field(None, max_length=100)
-    task_name: Optional[str] = Field(None, max_length=255)
+    execution_target: Optional[str] = Field(None, max_length=100)
+    task_key_template: Optional[str] = Field(None, max_length=255)
     action_id: Optional[str] = Field(None, max_length=100)
-    action_payload: Optional[str] = None
-    action_parameters: Optional[Dict[str, Any]] = None
-    source_type: Optional[str] = Field(None, max_length=50)
+    execution_payload: Optional[str] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
+    execution_engine: Optional[str] = Field(None, max_length=50)
+    ingredient_kind: Optional[IngredientKind] = None
     is_blocking: Optional[bool] = None
     expected_duration_sec: Optional[int] = Field(None, gt=0)
     timeout_duration_sec: Optional[int] = Field(None, gt=0)
@@ -120,7 +124,8 @@ class RecipeIngredientBase(BaseModel):
     on_success: OnSuccessAction = Field(default="continue")
     parallel_group: int = Field(default=0, ge=0)
     depth: int = Field(default=0, ge=0)
-    input_parameters: Optional[Dict[str, Any]] = None
+    execution_parameters_override: Optional[Dict[str, Any]] = None
+    run_phase: RunPhase = Field(default="both")
 
 
 class RecipeIngredientCreate(RecipeIngredientBase):
@@ -146,10 +151,6 @@ class RecipeBase(BaseModel):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     enabled: bool = True
-    source_type: str = Field(default="undefined", max_length=50)
-    workflow_id: Optional[str] = Field(None, max_length=255)
-    workflow_payload: Optional[Dict[str, Any]] = None
-    workflow_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeCreate(RecipeBase):
@@ -164,10 +165,6 @@ class RecipeUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     enabled: Optional[bool] = None
-    source_type: Optional[str] = Field(None, max_length=50)
-    workflow_id: Optional[str] = Field(None, max_length=255)
-    workflow_payload: Optional[Dict[str, Any]] = None
-    workflow_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeResponse(RecipeBase):
@@ -204,8 +201,8 @@ class DishUpdate(BaseModel):
     """Schema for updating a dish."""
 
     processing_status: Optional[DishProcessingStatus] = None
-    status: Optional[str] = Field(None, max_length=50)
-    workflow_execution_id: Optional[str] = Field(None, max_length=100)
+    execution_status: Optional[str] = Field(None, max_length=50)
+    execution_ref: Optional[str] = Field(None, max_length=100)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     expected_duration_sec: Optional[int] = None
@@ -221,8 +218,8 @@ class DishResponse(DishBase):
     id: int
     order_id: Optional[int] = None
     recipe_id: int
-    workflow_execution_id: Optional[str] = None
-    status: Optional[str] = None
+    execution_ref: Optional[str] = None
+    execution_status: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     expected_duration_sec: Optional[int] = None
@@ -313,9 +310,15 @@ class OrderResponse(OrderBase):
 class DishIngredientUpsert(BaseModel):
     """Upsert payload for dish ingredient execution results."""
 
-    st2_execution_id: Optional[str] = None
-    task_id: Optional[str] = None
-    status: Optional[str] = None
+    recipe_ingredient_id: Optional[int] = None
+    execution_ref: Optional[str] = None
+    task_key: Optional[str] = None
+    execution_engine: Optional[str] = None
+    execution_target: Optional[str] = None
+    execution_payload: Optional[Dict[str, Any]] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
+    execution_status: Optional[str] = None
+    attempt: Optional[int] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
@@ -339,9 +342,14 @@ class DishIngredientResponse(BaseModel):
     id: int
     dish_id: int
     recipe_ingredient_id: Optional[int] = None
-    task_id: Optional[str] = None
-    st2_execution_id: Optional[str] = None
-    status: Optional[str] = None
+    task_key: Optional[str] = None
+    execution_engine: Optional[str] = None
+    execution_target: Optional[str] = None
+    execution_ref: Optional[str] = None
+    execution_payload: Optional[Dict[str, Any]] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
+    execution_status: Optional[str] = None
+    attempt: int
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None

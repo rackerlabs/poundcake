@@ -60,11 +60,11 @@ class DishQueryParams(BaseModel):
         None, min_length=1, max_length=100, description="Filter by request ID"
     )
     order_id: Optional[int] = Field(None, ge=1, description="Filter by order ID (positive integer)")
-    workflow_execution_id: Optional[str] = Field(
+    execution_ref: Optional[str] = Field(
         None,
         min_length=1,
         max_length=100,
-        description="Filter by StackStorm workflow execution ID",
+        description="Filter by execution reference",
     )
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
@@ -80,9 +80,6 @@ class RecipeQueryParams(BaseModel):
     name: Optional[str] = Field(
         None, min_length=1, max_length=255, description="Filter by recipe name"
     )
-    source_type: Optional[str] = Field(
-        None, min_length=1, max_length=50, description="Filter by recipe source type"
-    )
     enabled: Optional[bool] = Field(None, description="Filter by enabled status (true/false)")
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
@@ -95,11 +92,11 @@ class IngredientQueryParams(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    task_id: Optional[str] = Field(
-        None, min_length=1, max_length=100, description="Filter by task_id (action ref)"
+    execution_target: Optional[str] = Field(
+        None, min_length=1, max_length=100, description="Filter by execution target"
     )
-    task_name: Optional[str] = Field(
-        None, min_length=1, max_length=255, description="Filter by task name"
+    task_key_template: Optional[str] = Field(
+        None, min_length=1, max_length=255, description="Filter by task key template"
     )
     limit: int = Field(
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
@@ -113,7 +110,7 @@ class OrderQueryParams(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Reject unknown parameters in body
 
     processing_status: Optional[OrderProcessingStatus] = Field(
-        None, description="Filter by processing status (new/processing/complete/failed/canceled)"
+        None, description="Filter by processing status (new/processing/resolving/complete/failed/canceled)"
     )
     alert_status: Optional[AlertStatus] = Field(
         None, description="Filter by alert status (firing/resolved)"

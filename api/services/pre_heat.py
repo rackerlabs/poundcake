@@ -314,14 +314,24 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                         .values(
                             counter=Order.counter + 1,
                             alert_status="firing",
+                            processing_status=(
+                                "processing"
+                                if (existing.processing_status or "").lower() == "resolving"
+                                else Order.processing_status
+                            ),
                             is_active=True,
                             updated_at=datetime.now(timezone.utc),
                         )
                     )
+                    reopened_from_resolving = (existing.processing_status or "").lower() == "resolving"
 
                     logger.info(
                         "Order counter incremented",
-                        extra={"req_id": req_id, "order_id": existing.id},
+                        extra={
+                            "req_id": req_id,
+                            "order_id": existing.id,
+                            "reopened_from_resolving": reopened_from_resolving,
+                        },
                     )
                     results.append(
                         {
@@ -365,14 +375,15 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
 
                     existing.alert_status = "resolved"
                     existing.ends_at = ends_at
-                    if ticket_clear_synced:
-                        existing.processing_status = "complete"
-                        existing.is_active = False
-                    else:
-                        # Do not finalize while clear-note sync to ticket is pending.
-                        existing.processing_status = "processing"
-                        existing.is_active = True
+                    # Route resolved orders through resolve-phase orchestration.
+                    existing.processing_status = "resolving"
+                    existing.is_active = True
                     existing.updated_at = datetime.now(timezone.utc)
+                    if not ticket_clear_synced:
+                        logger.info(
+                            "Resolve ticket synchronization still pending; order remains resolving",
+                            extra={"req_id": req_id, "order_id": existing.id},
+                        )
 
                     if resolved_before_dish:
                         logger.warning(

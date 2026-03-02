@@ -3,20 +3,21 @@ from api.schemas.schemas import IngredientCreate, RecipeCreate, RecipeIngredient
 
 
 def test_model_defaults_and_constraints_align_with_alembic_contract():
-    assert Recipe.__table__.c.source_type.default.arg == "undefined"
-    assert Ingredient.__table__.c.source_type.default.arg == "undefined"
-    assert Ingredient.__table__.c.task_id.unique is True
+    assert Ingredient.__table__.c.execution_engine.default.arg == "undefined"
+    assert Ingredient.__table__.c.ingredient_kind.default.arg == "utility"
+    assert Ingredient.__table__.c.execution_target.unique is True
     assert Recipe.__table__.c.deleted.nullable is False
     assert Ingredient.__table__.c.deleted.nullable is False
 
 
-def test_schema_defaults_source_type_are_undefined():
+def test_schema_defaults_execution_engine_are_undefined():
     ingredient = IngredientCreate(
-        task_id="core.local",
-        task_name="core.local",
+        execution_target="core.local",
+        task_key_template="core.local",
         expected_duration_sec=30,
     )
-    assert ingredient.source_type == "undefined"
+    assert ingredient.execution_engine == "undefined"
+    assert ingredient.ingredient_kind == "utility"
 
     recipe = RecipeCreate(
         name="recipe-default-source-type",
@@ -27,4 +28,5 @@ def test_schema_defaults_source_type_are_undefined():
             )
         ],
     )
-    assert recipe.source_type == "undefined"
+    assert recipe.enabled is True
+    assert recipe.recipe_ingredients[0].run_phase == "both"
