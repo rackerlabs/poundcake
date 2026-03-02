@@ -24,15 +24,15 @@ require_cmd jq
 log_info "Creating single-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
 
 # Check if core.local ingredient already exists
-ING_ID=$(api_request_json GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
+ING_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=core.local" | jq -r '.[0].id // empty')
 
 if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
   log_info "Ingredient core.local not found, creating it..."
   ING_PAYLOAD=$(jq -n \
     --argjson is_blocking "$IS_BLOCKING" \
     '{
-      task_id: "core.local",
-      task_name: "single_echo",
+      execution_target: "core.local",
+      task_key_template: "single_echo",
       action_parameters: {
         cmd: {
           type: "string",

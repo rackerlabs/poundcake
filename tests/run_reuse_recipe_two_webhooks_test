@@ -27,12 +27,12 @@ require_cmd jq
 log_info "Using recipe: ${TEST_RECIPE}"
 
 # Find or create core.local ingredient.
-ING_ID=$(api_request_json GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
+ING_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=core.local" | jq -r '.[0].id // empty')
 if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
   ING_PAYLOAD=$(jq -n \
     '{
-      task_id: "core.local",
-      task_name: "local",
+      execution_target: "core.local",
+      task_key_template: "local",
       source_type: "stackstorm",
       is_blocking: true,
       expected_duration_sec: 30,
