@@ -6,16 +6,22 @@ let ctx = null;
 let ingredientsCache = [];
 let editingIngredientId = null;
 
-function parseOptionalJson(raw, fieldName) {
+function parseOptionalJson(raw, fieldName, options = {}) {
   const value = (raw || "").trim();
   if (!value) {
     return undefined;
   }
+  const requireObject = options.requireObject === true;
+  let parsed;
   try {
-    return JSON.parse(value);
+    parsed = JSON.parse(value);
   } catch {
     throw new Error(`${fieldName} must be valid JSON`);
   }
+  if (requireObject && (Array.isArray(parsed) || typeof parsed !== "object" || parsed === null)) {
+    throw new Error(`${fieldName} must be a JSON object`);
+  }
+  return parsed;
 }
 
 function asInt(inputId, fallback = 0) {
@@ -34,6 +40,7 @@ function resetForm() {
   $("#ingredient-task-name").value = "";
   $("#ingredient-action-id").value = "";
   $("#ingredient-source-type").value = "undefined";
+  $("#ingredient-purpose").value = "utility";
   $("#ingredient-blocking").value = "true";
   $("#ingredient-on-failure").value = "stop";
   $("#ingredient-expected-duration").value = "60";
@@ -49,15 +56,19 @@ function loadFormFromIngredient(ingredient) {
   $("#ingredient-form-title").textContent = `Edit Ingredient #${ingredient.id}`;
   $("#ingredient-task-id").value = ingredient.execution_target || "";
   $("#ingredient-task-name").value = ingredient.task_key_template || "";
-  $("#ingredient-action-id").value = ingredient.action_id || "";
+  $("#ingredient-action-id").value = ingredient.execution_id || ingredient.action_id || "";
   $("#ingredient-source-type").value = ingredient.execution_engine || "undefined";
+  $("#ingredient-purpose").value =
+    ingredient.execution_purpose || ingredient.ingredient_kind || "utility";
   $("#ingredient-blocking").value = String(Boolean(ingredient.is_blocking));
   $("#ingredient-on-failure").value = ingredient.on_failure || "stop";
   $("#ingredient-expected-duration").value = String(ingredient.expected_duration_sec || 60);
   $("#ingredient-timeout-duration").value = String(ingredient.timeout_duration_sec || 300);
   $("#ingredient-retry-count").value = String(ingredient.retry_count || 0);
   $("#ingredient-retry-delay").value = String(ingredient.retry_delay || 5);
-  $("#ingredient-action-payload").value = ingredient.execution_payload || "";
+  $("#ingredient-action-payload").value = ingredient.execution_payload
+    ? JSON.stringify(ingredient.execution_payload, null, 2)
+    : "";
   $("#ingredient-action-params").value = ingredient.execution_parameters
     ? JSON.stringify(ingredient.execution_parameters, null, 2)
     : "";
@@ -67,13 +78,18 @@ function payloadFromForm() {
   return {
     execution_target: ($("#ingredient-task-id")?.value || "").trim(),
     task_key_template: ($("#ingredient-task-name")?.value || "").trim(),
-    action_id: ($("#ingredient-action-id")?.value || "").trim() || null,
-    execution_payload: ($("#ingredient-action-payload")?.value || "").trim() || null,
+    execution_id: ($("#ingredient-action-id")?.value || "").trim() || null,
+    execution_payload: parseOptionalJson(
+      $("#ingredient-action-payload")?.value,
+      "Execution Payload",
+      { requireObject: true },
+    ),
     execution_parameters: parseOptionalJson(
       $("#ingredient-action-params")?.value,
       "Action Parameters",
     ),
     execution_engine: ($("#ingredient-source-type")?.value || "undefined").trim() || "undefined",
+    execution_purpose: ($("#ingredient-purpose")?.value || "utility").trim() || "utility",
     is_blocking: ($("#ingredient-blocking")?.value || "true") === "true",
     expected_duration_sec: asInt("#ingredient-expected-duration", 60),
     timeout_duration_sec: asInt("#ingredient-timeout-duration", 300),
@@ -97,8 +113,17 @@ function renderIngredientDetail(ingredient) {
   appendLabeledValue(detail, "ID", ingredient.id);
   appendLabeledValue(detail, "Execution Target", ingredient.execution_target);
   appendLabeledValue(detail, "Task Key Template", ingredient.task_key_template);
-  appendLabeledValue(detail, "Action ID", ingredient.action_id || "-");
+  appendLabeledValue(
+    detail,
+    "Execution ID",
+    ingredient.execution_id || ingredient.action_id || "-",
+  );
   appendLabeledValue(detail, "Execution Engine", ingredient.execution_engine || "-");
+  appendLabeledValue(
+    detail,
+    "Execution Purpose",
+    ingredient.execution_purpose || ingredient.ingredient_kind || "-",
+  );
   appendLabeledValue(detail, "Blocking", String(Boolean(ingredient.is_blocking)));
   appendLabeledValue(
     detail,
@@ -108,6 +133,11 @@ function renderIngredientDetail(ingredient) {
   appendLabeledValue(detail, "Retry", `${ingredient.retry_count || 0} @ ${ingredient.retry_delay || 0}s`);
   appendLabeledValue(detail, "On Failure", ingredient.on_failure || "-");
   appendLabeledValue(detail, "Updated", formatDate(ingredient.updated_at));
+
+  const executionPayload = el("pre", { text: compactJson(ingredient.execution_payload) });
+  executionPayload.style.marginTop = "8px";
+  detail.appendChild(el("h4", { text: "Execution Payload" }));
+  detail.appendChild(executionPayload);
 
   const payload = el("pre", { text: compactJson(ingredient.execution_parameters) });
   payload.style.marginTop = "8px";
@@ -121,7 +151,7 @@ function ingredientRow(ingredient) {
   tr.appendChild(el("td", { text: ingredient.id }));
   tr.appendChild(el("td", { text: ingredient.execution_target }));
   tr.appendChild(el("td", { text: ingredient.task_key_template }));
-  tr.appendChild(el("td", { text: ingredient.action_id || "-" }));
+  tr.appendChild(el("td", { text: ingredient.execution_id || ingredient.action_id || "-" }));
   tr.appendChild(el("td", { text: String(Boolean(ingredient.is_blocking)) }));
   tr.appendChild(
     el("td", {

@@ -6,7 +6,7 @@
 #
 """Pydantic schemas for PoundCake API."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -20,7 +20,7 @@ from api.types import (
     SuppressionStatus,
     SuppressionMatcherOperator,
     RunPhase,
-    IngredientKind,
+    ExecutionPurpose,
 )
 
 # =============================================================================
@@ -63,18 +63,56 @@ class IngredientBase(BaseModel):
     execution_target: str = Field(..., max_length=100)
     task_key_template: str = Field(..., max_length=255)
 
-    action_id: Optional[str] = Field(None, max_length=100)
-    execution_payload: Optional[str] = None
+    execution_id: Optional[str] = Field(None, max_length=100)
+    action_id: Optional[str] = Field(
+        None, max_length=100, description="Deprecated alias for execution_id"
+    )
+    execution_payload: Optional[Dict[str, Any]] = None
     execution_parameters: Optional[Dict[str, Any]] = None
 
     execution_engine: str = Field(default="undefined", max_length=50)
-    ingredient_kind: IngredientKind = Field(default="utility")
+    execution_purpose: ExecutionPurpose = Field(default="utility")
+    ingredient_kind: Optional[ExecutionPurpose] = Field(
+        None, description="Deprecated alias for execution_purpose"
+    )
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
     retry_count: int = Field(default=0, ge=0)
     retry_delay: int = Field(default=5, ge=0)
     on_failure: OnFailureAction = Field(default="stop")
+
+    @field_validator("execution_payload")
+    @classmethod
+    def _validate_execution_payload(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        if value is None:
+            return value
+        if not isinstance(value, dict):
+            raise ValueError("execution_payload must be an object when provided")
+        return value
+
+    @field_validator("execution_engine")
+    @classmethod
+    def _validate_execution_engine(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"undefined", "stackstorm", "bakery", "native", "argocd"}:
+            raise ValueError(
+                "execution_engine must be one of: undefined, stackstorm, bakery, native, argocd"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def _coalesce_deprecated_aliases(self) -> "IngredientBase":
+        if self.execution_id is None and self.action_id is not None:
+            self.execution_id = self.action_id
+        if self.action_id is None and self.execution_id is not None:
+            self.action_id = self.execution_id
+        if self.ingredient_kind is not None:
+            self.execution_purpose = self.ingredient_kind
+        self.ingredient_kind = self.execution_purpose
+        return self
 
 
 class IngredientCreate(IngredientBase):
@@ -88,17 +126,58 @@ class IngredientUpdate(BaseModel):
 
     execution_target: Optional[str] = Field(None, max_length=100)
     task_key_template: Optional[str] = Field(None, max_length=255)
-    action_id: Optional[str] = Field(None, max_length=100)
-    execution_payload: Optional[str] = None
+    execution_id: Optional[str] = Field(None, max_length=100)
+    action_id: Optional[str] = Field(
+        None, max_length=100, description="Deprecated alias for execution_id"
+    )
+    execution_payload: Optional[Dict[str, Any]] = None
     execution_parameters: Optional[Dict[str, Any]] = None
     execution_engine: Optional[str] = Field(None, max_length=50)
-    ingredient_kind: Optional[IngredientKind] = None
+    execution_purpose: Optional[ExecutionPurpose] = None
+    ingredient_kind: Optional[ExecutionPurpose] = Field(
+        None, description="Deprecated alias for execution_purpose"
+    )
     is_blocking: Optional[bool] = None
     expected_duration_sec: Optional[int] = Field(None, gt=0)
     timeout_duration_sec: Optional[int] = Field(None, gt=0)
     retry_count: Optional[int] = Field(None, ge=0)
     retry_delay: Optional[int] = Field(None, ge=0)
     on_failure: Optional[OnFailureAction] = None
+
+    @field_validator("execution_payload")
+    @classmethod
+    def _validate_execution_payload(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        if value is None:
+            return value
+        if not isinstance(value, dict):
+            raise ValueError("execution_payload must be an object when provided")
+        return value
+
+    @field_validator("execution_engine")
+    @classmethod
+    def _validate_execution_engine(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalized = value.strip().lower()
+        if normalized not in {"undefined", "stackstorm", "bakery", "native", "argocd"}:
+            raise ValueError(
+                "execution_engine must be one of: undefined, stackstorm, bakery, native, argocd"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def _coalesce_deprecated_aliases(self) -> "IngredientUpdate":
+        if self.execution_id is None and self.action_id is not None:
+            self.execution_id = self.action_id
+        if self.action_id is None and self.execution_id is not None:
+            self.action_id = self.execution_id
+        if self.execution_purpose is None and self.ingredient_kind is not None:
+            self.execution_purpose = self.ingredient_kind
+        if self.ingredient_kind is None and self.execution_purpose is not None:
+            self.ingredient_kind = self.execution_purpose
+        return self
 
 
 class IngredientResponse(IngredientBase):

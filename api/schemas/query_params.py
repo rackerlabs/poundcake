@@ -110,7 +110,8 @@ class OrderQueryParams(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Reject unknown parameters in body
 
     processing_status: Optional[OrderProcessingStatus] = Field(
-        None, description="Filter by processing status (new/processing/resolving/complete/failed/canceled)"
+        None,
+        description="Filter by processing status (new/processing/resolving/complete/failed/canceled)",
     )
     alert_status: Optional[AlertStatus] = Field(
         None, description="Filter by alert status (firing/resolved)"

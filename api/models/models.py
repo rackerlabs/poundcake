@@ -11,7 +11,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    Computed,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -102,17 +112,20 @@ class Ingredient(Base):
     """
 
     __tablename__ = "ingredients"
+    __table_args__ = (
+        UniqueConstraint(
+            "execution_engine", "execution_target", name="ux_ingredients_engine_target"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    execution_target: Mapped[str] = mapped_column(
-        String(100), nullable=False, unique=True, index=True
-    )
+    execution_target: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     task_key_template: Mapped[str] = mapped_column(String(255), nullable=False)
     execution_engine: Mapped[str] = mapped_column(String(50), default="undefined", nullable=False)
-    ingredient_kind: Mapped[str] = mapped_column(String(32), default="utility", nullable=False)
+    execution_purpose: Mapped[str] = mapped_column(String(32), default="utility", nullable=False)
 
-    action_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # ST2 UUID for reuse
-    execution_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    execution_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    execution_payload: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     execution_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
 
     is_blocking: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -129,6 +142,23 @@ class Ingredient(Base):
     deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Backward-compat aliases for one release cycle.
+    @property
+    def action_id(self) -> str | None:
+        return self.execution_id
+
+    @action_id.setter
+    def action_id(self, value: str | None) -> None:
+        self.execution_id = value
+
+    @property
+    def ingredient_kind(self) -> str:
+        return self.execution_purpose
+
+    @ingredient_kind.setter
+    def ingredient_kind(self, value: str) -> None:
+        self.execution_purpose = value
+
 
 class Dish(Base):
     """
@@ -143,9 +173,7 @@ class Dish(Base):
     req_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
 
     # Engine execution reference for this run
-    execution_ref: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True
-    )
+    execution_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"), nullable=True)
     recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), nullable=False)

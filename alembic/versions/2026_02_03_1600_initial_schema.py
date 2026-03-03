@@ -48,11 +48,11 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("execution_target", sa.String(length=100), nullable=False),
         sa.Column("task_key_template", sa.String(length=255), nullable=False),
-        sa.Column("action_id", sa.String(length=100), nullable=True),
-        sa.Column("execution_payload", sa.Text(), nullable=True),
+        sa.Column("execution_id", sa.String(length=100), nullable=True),
+        sa.Column("execution_payload", mysql.JSON(), nullable=True),
         sa.Column("execution_parameters", mysql.JSON(), nullable=True),
         sa.Column("execution_engine", sa.String(length=50), nullable=False, server_default="undefined"),
-        sa.Column("ingredient_kind", sa.String(length=32), nullable=False, server_default="utility"),
+        sa.Column("execution_purpose", sa.String(length=32), nullable=False, server_default="utility"),
         sa.Column("is_blocking", sa.Boolean(), nullable=False),
         sa.Column("expected_duration_sec", sa.Integer(), nullable=False),
         sa.Column("timeout_duration_sec", sa.Integer(), nullable=False),
@@ -66,10 +66,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_ingredients_id"), "ingredients", ["id"], unique=False)
+    op.create_index(op.f("ix_ingredients_execution_target"), "ingredients", ["execution_target"], unique=False)
     op.create_index(
-        op.f("ix_ingredients_execution_target"),
+        "ux_ingredients_engine_target",
         "ingredients",
-        ["execution_target"],
+        ["execution_engine", "execution_target"],
         unique=True,
     )
 
@@ -538,6 +539,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_recipe_ingredients_id"), table_name="recipe_ingredients")
     op.drop_table("recipe_ingredients")
 
+    op.drop_index("ux_ingredients_engine_target", table_name="ingredients")
     op.drop_index(op.f("ix_ingredients_execution_target"), table_name="ingredients")
     op.drop_index(op.f("ix_ingredients_id"), table_name="ingredients")
     op.drop_table("ingredients")

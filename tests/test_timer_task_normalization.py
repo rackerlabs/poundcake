@@ -77,7 +77,7 @@ def test_monitor_dishes_normalizes_task_name_and_action_execution_id(
     items = ingredient_bulk_posts[0]["items"]
     assert len(items) == 1
     assert items[0]["task_key"] == "step_1_local"
-    assert items[0]["execution_ref"] == "69a640038d77dff9f77ea0a9"
+    assert items[0]["execution_ref"] == "task-exec-31"
     assert items[0]["execution_status"] == "succeeded"
     assert items[0]["completed_at"] == "2026-03-03T01:57:23.686000Z"
 
@@ -88,4 +88,3 @@ def test_monitor_dishes_normalizes_task_name_and_action_execution_id(
     assert kwargs["execution_status"] == "succeeded"
     assert kwargs["final_status"] is True
     assert kwargs["started_at"] == "2026-03-03T01:57:23.634000Z"
-

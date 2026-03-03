@@ -121,11 +121,14 @@ RunPhase = Literal[
     "both",
 ]
 
-IngredientKind = Literal[
+ExecutionPurpose = Literal[
     "remediation",
     "comms",
     "utility",
 ]
+
+# Backward-compatible alias.
+IngredientKind = ExecutionPurpose
 
 # =============================================================================
 # Sort Order Types

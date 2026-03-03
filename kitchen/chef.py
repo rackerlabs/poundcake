@@ -28,9 +28,7 @@ SYSTEM_REQ_ID = "SYSTEM-CHEF"
 POLLER_RETRIES = get_settings().poller_http_retries
 CHEF_PATCH_RETRIES = get_settings().chef_patch_retries
 CHEF_PATCH_RETRY_BACKOFF_SECONDS = get_settings().chef_patch_retry_backoff_seconds
-CHEF_EXECUTE_MISSING_WORKFLOW_RETRIES = max(
-    0, get_settings().chef_execute_missing_workflow_retries
-)
+CHEF_EXECUTE_MISSING_WORKFLOW_RETRIES = max(0, get_settings().chef_execute_missing_workflow_retries)
 CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS = max(
     0.1, get_settings().chef_execute_missing_workflow_retry_backoff_seconds
 )
@@ -169,9 +167,8 @@ def run_chef() -> None:
                         st2_exec_id = exec_resp.json().get("id")
                         break
 
-                    if (
-                        attempt < max_attempts
-                        and _is_missing_workflow_file_response(exec_resp.text)
+                    if attempt < max_attempts and _is_missing_workflow_file_response(
+                        exec_resp.text
                     ):
                         logger.warning(
                             "Workflow file not yet available on StackStorm runner; retrying execution",

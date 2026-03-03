@@ -104,42 +104,75 @@ async def _request(
 
 
 async def create_ticket(req_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return await create_ticket_with_key(req_id=req_id, payload=payload, idempotency_key=None)
+
+
+async def create_ticket_with_key(
+    req_id: str, payload: dict[str, Any], idempotency_key: str | None
+) -> dict[str, Any]:
     return await _request(
         "create",
         "POST",
         "/api/v1/tickets",
         payload=payload,
-        idempotency_key=build_idempotency_key(req_id, "create"),
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "create"),
     )
 
 
 async def close_ticket(req_id: str, ticket_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return await close_ticket_with_key(
+        req_id=req_id, ticket_id=ticket_id, payload=payload, idempotency_key=None
+    )
+
+
+async def close_ticket_with_key(
+    req_id: str, ticket_id: str, payload: dict[str, Any], idempotency_key: str | None
+) -> dict[str, Any]:
     return await _request(
         "close",
         "POST",
         f"/api/v1/tickets/{ticket_id}/close",
         payload=payload,
-        idempotency_key=build_idempotency_key(req_id, "close"),
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "close"),
     )
 
 
 async def update_ticket(req_id: str, ticket_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return await update_ticket_with_key(
+        req_id=req_id, ticket_id=ticket_id, payload=payload, idempotency_key=None
+    )
+
+
+async def update_ticket_with_key(
+    req_id: str, ticket_id: str, payload: dict[str, Any], idempotency_key: str | None
+) -> dict[str, Any]:
     return await _request(
         "update",
         "PATCH",
         f"/api/v1/tickets/{ticket_id}",
         payload=payload,
-        idempotency_key=build_idempotency_key(req_id, "update"),
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "update"),
     )
 
 
 async def add_ticket_comment(req_id: str, ticket_id: str, comment: str) -> dict[str, Any]:
+    return await add_ticket_comment_with_key(
+        req_id=req_id, ticket_id=ticket_id, payload={"comment": comment}, idempotency_key=None
+    )
+
+
+async def add_ticket_comment_with_key(
+    req_id: str,
+    ticket_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None,
+) -> dict[str, Any]:
     return await _request(
         "comment",
         "POST",
         f"/api/v1/tickets/{ticket_id}/comments",
-        payload={"comment": comment},
-        idempotency_key=build_idempotency_key(req_id, "comment"),
+        payload=payload,
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "comment"),
     )
 
 

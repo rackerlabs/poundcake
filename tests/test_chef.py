@@ -17,7 +17,7 @@ class _Resp:
         return self._json_data
 
 
-def test_run_chef_marks_dish_failed_for_unsupported_recipe_source(
+def test_run_chef_register_failure_marks_dish_failed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, str, dict | None, dict | None]] = []
@@ -32,6 +32,7 @@ def test_run_chef_marks_dish_failed_for_unsupported_recipe_source(
                     "recipe": {"id": 10, "source_type": "github", "workflow_parameters": {}},
                 },
             ),
+            _Resp(500, {"detail": "register failed"}, text="register failed"),
             _Resp(200, {"ok": True}),
         ]
     )
@@ -53,14 +54,14 @@ def test_run_chef_marks_dish_failed_for_unsupported_recipe_source(
         and url.endswith("/dishes/1")
         and body
         and body.get("processing_status") == "failed"
-        and "Unsupported recipe source_type" in body.get("error_message", "")
+        and "register failed" in body.get("error_message", "")
         and headers
         and headers.get("X-Internal-API-Key") == "worker-key"
         for method, url, body, headers in calls
     )
 
 
-def test_run_chef_executes_existing_workflow_and_patches_execution_id(
+def test_run_chef_executes_registered_workflow_and_patches_execution_ref(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, str, dict | None]] = []
@@ -80,7 +81,7 @@ def test_run_chef_executes_existing_workflow_and_patches_execution_id(
                     },
                 },
             ),
-            _Resp(200, {"name": "wf.my_action"}),
+            _Resp(200, {"workflow_id": "poundcake.wf_my_action"}),
             _Resp(201, {"id": "st2-exec-1"}),
             _Resp(200, {"id": 2}),
         ]
@@ -102,12 +103,10 @@ def test_run_chef_executes_existing_workflow_and_patches_execution_id(
     assert any(
         method == "POST"
         and url.endswith("/cook/execute")
-        and body == {"action": "wf.my_action", "parameters": {"foo": "bar"}}
+        and body == {"action": "poundcake.wf_my_action", "parameters": {}}
         for method, url, body in calls
     )
     assert any(
-        method == "PATCH"
-        and url.endswith("/dishes/2")
-        and body == {"workflow_execution_id": "st2-exec-1"}
+        method == "PATCH" and url.endswith("/dishes/2") and body == {"execution_ref": "st2-exec-1"}
         for method, url, body in calls
     )

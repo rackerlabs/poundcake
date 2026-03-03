@@ -26,23 +26,21 @@ def _missing_workflow_error(path_suffix: str = "AutomatedTestRecipe-1.yaml") -> 
     )
 
 
-def test_missing_workflow_failure_retries_once_and_rebinds_execution(
+def test_missing_workflow_failure_without_retry_metadata_falls_back_to_failed_finalize(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dish = {
         "id": 31,
         "req_id": "REQ-31",
-        "workflow_execution_id": "exec-old",
+        "execution_ref": "exec-old",
         "retry_attempt": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "recipe": {"workflow_id": "poundcake.auto-31", "workflow_parameters": {"x": "y"}},
     }
     updated: list[dict] = []
     called_urls: list[str] = []
-    execute_headers: dict | None = None
 
     def _request(method: str, url: str, **kwargs):
-        nonlocal execute_headers
         called_urls.append(str(url))
         path = str(url)
         if path.endswith("/dishes"):
@@ -56,9 +54,6 @@ def test_missing_workflow_failure_retries_once_and_rebinds_execution(
             return _Resp(200, [])
         if "/cook/executions/" in path:
             return _Resp(200, {"status": "failed", "result": {"error": _missing_workflow_error()}})
-        if path.endswith("/cook/execute") and method == "POST":
-            execute_headers = kwargs.get("headers")
-            return _Resp(201, {"id": "exec-new"})
         raise AssertionError(f"Unexpected request: {method} {path}")
 
     def _update(_dish: dict, _req_id: str, **kwargs) -> bool:
@@ -74,16 +69,11 @@ def test_missing_workflow_failure_retries_once_and_rebinds_execution(
 
     timer.monitor_dishes()
 
-    assert any(url.endswith("/cook/execute") for url in called_urls)
+    assert not any(url.endswith("/cook/execute") for url in called_urls)
     assert len(updated) == 1
-    assert updated[0]["processing_status"] == "processing"
-    assert updated[0]["workflow_execution_id"] == "exec-new"
-    assert updated[0]["retry_attempt"] == 1
-    assert updated[0]["clear_error"] is True
-    assert "final_status" not in updated[0]
-    assert execute_headers is not None
-    assert execute_headers.get("X-Request-ID") == "REQ-31"
-    assert execute_headers.get("X-Internal-API-Key") == "worker-key"
+    assert updated[0]["processing_status"] == "failed"
+    assert updated[0]["final_status"] is True
+    assert "workflow file retry failed" in str(updated[0]["error_msg"])
 
 
 def test_non_matching_failure_does_not_retry(
@@ -92,7 +82,7 @@ def test_non_matching_failure_does_not_retry(
     dish = {
         "id": 32,
         "req_id": "REQ-32",
-        "workflow_execution_id": "exec-32",
+        "execution_ref": "exec-32",
         "retry_attempt": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "recipe": {"workflow_id": "poundcake.auto-32", "workflow_parameters": {}},
@@ -140,7 +130,7 @@ def test_retry_attempt_one_does_not_retry_again(
     dish = {
         "id": 33,
         "req_id": "REQ-33",
-        "workflow_execution_id": "exec-33",
+        "execution_ref": "exec-33",
         "retry_attempt": 1,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "recipe": {"workflow_id": "poundcake.auto-33", "workflow_parameters": {}},
@@ -189,7 +179,7 @@ def test_retry_execute_failure_falls_back_to_failed_finalize(
     dish = {
         "id": 34,
         "req_id": "REQ-34",
-        "workflow_execution_id": "exec-34",
+        "execution_ref": "exec-34",
         "retry_attempt": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "recipe": {"workflow_id": "poundcake.auto-34", "workflow_parameters": {}},
@@ -211,8 +201,6 @@ def test_retry_execute_failure_falls_back_to_failed_finalize(
             return _Resp(
                 200, {"status": "failed", "result": {"error": _missing_workflow_error("y.yaml")}}
             )
-        if path.endswith("/cook/execute") and method == "POST":
-            return _Resp(500, {"faultstring": "boom"}, text="boom")
         raise AssertionError(f"Unexpected request: {method} {path}")
 
     def _update(_dish: dict, _req_id: str, **kwargs) -> bool:
@@ -231,4 +219,3 @@ def test_retry_execute_failure_falls_back_to_failed_finalize(
     assert updated[0]["processing_status"] == "failed"
     assert updated[0]["final_status"] is True
     assert "workflow file retry failed" in str(updated[0]["error_msg"])
-    assert "HTTP 500" in str(updated[0]["error_msg"])

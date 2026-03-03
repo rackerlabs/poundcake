@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.testclient import TestClient
 
 from api.api.cook import router as cook_router
@@ -21,6 +22,13 @@ class _Resp:
 
 def _build_app() -> FastAPI:
     app = FastAPI()
+
+    class _ReqIdMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            request.state.req_id = "TEST-REQ-ID"
+            return await call_next(request)
+
+    app.add_middleware(_ReqIdMiddleware)
     app.include_router(cook_router, prefix="/api/v1")
     return app
 

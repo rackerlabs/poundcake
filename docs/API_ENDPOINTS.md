@@ -68,6 +68,12 @@ This document reflects the current PoundCake API surface.
 - `GET /ingredients/by-name/{recipe_name}`
 - `GET /ingredients/by-recipe/{recipe_id}`
 
+Ingredient payload contract:
+- `execution_payload` is `object | null`
+- when `execution_engine=bakery` and `execution_purpose=comms`, `execution_payload.template` must be an object
+- `execution_id` and `execution_purpose` are canonical fields
+- `action_id` and `ingredient_kind` are accepted/returned as deprecated aliases
+
 ### Orders
 - `GET /orders`
 - `POST /orders`

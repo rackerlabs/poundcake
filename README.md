@@ -116,8 +116,11 @@ flowchart TD
 - `recipe_ingredients.step_order` -> task ordering and task key prefix (`step_{n}_...`)
 - `recipe_ingredients.depth` -> explicit stage ordering when any depth > 0
 - `recipe_ingredients.input_parameters` -> task `input`
-- `ingredients.task_id` -> task `action`
-- `ingredients.task_name` -> task key suffix
+- `ingredients.execution_target` -> task `action`
+- `ingredients.task_key_template` -> task key suffix
+- `ingredients.execution_purpose` -> execution role (`remediation|utility|comms`)
+- `ingredients.execution_id` -> template execution identifier metadata
+- `ingredients.execution_payload` -> JSON object payload template/metadata (`object | null`)
 - `ingredients.is_blocking` -> stage grouping when no explicit depth is used
 - `ingredients.retry_count`, `ingredients.retry_delay` -> task `retry`
 

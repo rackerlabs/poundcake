@@ -78,18 +78,18 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
         action_refs.add(action_ref)
 
         ing = existing.get(action_ref)
-        payload = json.dumps(action)
+        payload = action
         parameters = action.get("parameters") or {}
 
         if ing is None:
             ing = Ingredient(
                 execution_target=action_ref,
                 task_key_template=action.get("name") or action_ref,
-                action_id=action.get("id"),
+                execution_id=action.get("id"),
                 execution_payload=payload,
                 execution_parameters=parameters,
                 execution_engine="stackstorm",
-                ingredient_kind="remediation",
+                execution_purpose="remediation",
                 is_blocking=True,
                 expected_duration_sec=DEFAULT_DURATION,
                 timeout_duration_sec=DEFAULT_TIMEOUT,
@@ -110,7 +110,7 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
 
             if (
                 ing.task_key_template != new_task_name
-                or ing.action_id != new_action_id
+                or ing.execution_id != new_action_id
                 or ing.execution_payload != payload
                 or ing.execution_parameters != parameters
                 or ing.execution_engine != "stackstorm"
@@ -118,11 +118,11 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
                 or ing.deleted_at is not None
             ):
                 ing.task_key_template = new_task_name
-                ing.action_id = new_action_id
+                ing.execution_id = new_action_id
                 ing.execution_payload = payload
                 ing.execution_parameters = parameters
                 ing.execution_engine = "stackstorm"
-                ing.ingredient_kind = "remediation"
+                ing.execution_purpose = "remediation"
                 ing.deleted = False
                 ing.deleted_at = None
                 ing.updated_at = now
@@ -273,11 +273,11 @@ async def sync_recipe_ingredients_from_yaml(
             stub = Ingredient(
                 execution_target=action_ref,
                 task_key_template=action_ref,
-                action_id=None,
+                execution_id=None,
                 execution_payload=None,
                 execution_parameters={},
                 execution_engine="native",
-                ingredient_kind="utility",
+                execution_purpose="utility",
                 is_blocking=True,
                 expected_duration_sec=DEFAULT_DURATION,
                 timeout_duration_sec=DEFAULT_TIMEOUT,

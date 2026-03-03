@@ -324,7 +324,9 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                             updated_at=datetime.now(timezone.utc),
                         )
                     )
-                    reopened_from_resolving = (existing.processing_status or "").lower() == "resolving"
+                    reopened_from_resolving = (
+                        existing.processing_status or ""
+                    ).lower() == "resolving"
 
                     logger.info(
                         "Order counter incremented",

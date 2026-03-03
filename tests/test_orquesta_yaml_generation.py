@@ -10,11 +10,11 @@ def _recipe_with_steps(steps):
             {
                 "step_order": step["step_order"],
                 "depth": step.get("depth", 0),
-                "input_parameters": step.get("input_parameters", {}),
+                "execution_parameters_override": step.get("input_parameters", {}),
                 "ingredient": {
-                    "task_id": step.get("task_id", "core.local"),
-                    "task_name": step["task_name"],
-                    "action_parameters": step.get("action_parameters", {}),
+                    "execution_target": step.get("task_id", "core.local"),
+                    "task_key_template": step["task_name"],
+                    "execution_parameters": step.get("action_parameters", {}),
                     "is_blocking": step["is_blocking"],
                     "retry_count": 0,
                     "retry_delay": 0,

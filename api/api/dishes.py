@@ -258,15 +258,6 @@ def _is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
     return normalized == target_phase
 
 
-def _decode_execution_payload(raw_payload: str | None) -> dict[str, Any] | None:
-    if not raw_payload:
-        return None
-    try:
-        return json.loads(raw_payload)
-    except Exception:
-        return {"raw": raw_payload}
-
-
 def _build_step_task_key(ri: RecipeIngredient) -> str:
     task_suffix = ((ri.ingredient.task_key_template if ri.ingredient else None) or "task").replace(
         ".", "_"
@@ -305,7 +296,7 @@ def _seed_dish_ingredients_for_phase(
                 task_key=_build_step_task_key(ri),
                 execution_engine=ri.ingredient.execution_engine,
                 execution_target=ri.ingredient.execution_target,
-                execution_payload=_decode_execution_payload(ri.ingredient.execution_payload),
+                execution_payload=ri.ingredient.execution_payload,
                 execution_parameters=_build_step_parameters(ri),
                 execution_status="pending",
             )
@@ -416,7 +407,9 @@ async def cook_dishes(
         )
         db.add(new_dish)
         await db.flush()
-        for row in _seed_dish_ingredients_for_phase(dish_id=new_dish.id, recipe=recipe, phase="firing"):
+        for row in _seed_dish_ingredients_for_phase(
+            dish_id=new_dish.id, recipe=recipe, phase="firing"
+        ):
             db.add(row)
         # Refresh inside transaction for consistency
         await db.refresh(new_dish)

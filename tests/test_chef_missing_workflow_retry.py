@@ -64,9 +64,7 @@ def test_run_chef_retries_execute_when_workflow_file_missing(
     assert execute_calls[0][2] == {"action": "poundcake.AutomatedTestRecipe-1", "parameters": {}}
 
     assert any(
-        method == "PATCH"
-        and url.endswith("/dishes/11")
-        and body == {"execution_ref": "exec-11"}
+        method == "PATCH" and url.endswith("/dishes/11") and body == {"execution_ref": "exec-11"}
         for method, url, body in calls
     )
 

@@ -41,7 +41,10 @@ async def create_ingredient(
     )
 
     result = await db.execute(
-        select(Ingredient).where(Ingredient.execution_target == ingredient.execution_target)
+        select(Ingredient).where(
+            Ingredient.execution_target == ingredient.execution_target,
+            Ingredient.execution_engine == ingredient.execution_engine,
+        )
     )
     existing = result.scalars().first()
     if existing:
@@ -55,17 +58,21 @@ async def create_ingredient(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Ingredient with execution_target '{ingredient.execution_target}' already exists",
+            detail=(
+                "Ingredient with execution_target "
+                f"'{ingredient.execution_target}' already exists for engine "
+                f"'{ingredient.execution_engine}'"
+            ),
         )
 
     db_ingredient = Ingredient(
         execution_target=ingredient.execution_target,
         task_key_template=ingredient.task_key_template,
-        action_id=ingredient.action_id,
+        execution_id=ingredient.execution_id,
         execution_payload=ingredient.execution_payload,
         execution_parameters=ingredient.execution_parameters,
         execution_engine=ingredient.execution_engine,
-        ingredient_kind=ingredient.ingredient_kind,
+        execution_purpose=ingredient.execution_purpose,
         is_blocking=ingredient.is_blocking,
         expected_duration_sec=ingredient.expected_duration_sec,
         timeout_duration_sec=ingredient.timeout_duration_sec,

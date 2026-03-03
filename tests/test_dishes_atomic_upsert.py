@@ -132,7 +132,7 @@ def test_bulk_upsert_dedupes_by_step_identity(client, mock_db_session):
                 execution_engine="i_execution_engine",
                 execution_target="i_execution_target",
                 execution_ref="i_execution_ref",
-                execution_payload="i_execution_payload",
+                execution_payload={"key": "i_execution_payload"},
                 execution_parameters="i_execution_parameters",
                 execution_status="i_execution_status",
                 attempt="i_attempt",
@@ -199,7 +199,7 @@ def test_bulk_upsert_unknown_task_uses_step_identity_fallback(client, mock_db_se
                 execution_engine="i_execution_engine",
                 execution_target="i_execution_target",
                 execution_ref="i_execution_ref",
-                execution_payload="i_execution_payload",
+                execution_payload={"key": "i_execution_payload"},
                 execution_parameters="i_execution_parameters",
                 execution_status="i_execution_status",
                 attempt="i_attempt",
@@ -247,8 +247,7 @@ def test_bulk_upsert_unknown_task_uses_step_identity_fallback(client, mock_db_se
 def test_atomic_upsert_concurrency_db_level():
     engine = create_engine(os.environ["POUNDCAKE_MARIADB_TEST_URL"], future=True)
     table_name = f"tmp_dish_ingredients_{uuid.uuid4().hex[:8]}"
-    upsert_sql = text(
-        f"""
+    upsert_sql = text(f"""
         INSERT INTO {table_name}
             (dish_id, recipe_ingredient_id, task_key, execution_ref, execution_status, updated_at)
         VALUES
@@ -257,13 +256,10 @@ def test_atomic_upsert_concurrency_db_level():
             execution_ref = VALUES(execution_ref),
             execution_status = VALUES(execution_status),
             updated_at = VALUES(updated_at)
-        """
-    )
+        """)
 
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                f"""
+        conn.execute(text(f"""
                 CREATE TABLE {table_name} (
                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
                     dish_id BIGINT NOT NULL,
@@ -276,9 +272,7 @@ def test_atomic_upsert_concurrency_db_level():
                     updated_at DATETIME(6) NOT NULL,
                     UNIQUE KEY ux_dish_step (dish_id, recipe_ingredient_id_norm, task_key_norm)
                 )
-                """
-            )
-        )
+                """))
 
     errors: list[Exception] = []
 
@@ -307,17 +301,13 @@ def test_atomic_upsert_concurrency_db_level():
     try:
         assert not errors
         with engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    f"""
+            row = conn.execute(text(f"""
                     SELECT COUNT(*) AS cnt, MIN(execution_status) AS status, MIN(execution_ref) AS execution_ref
                     FROM {table_name}
                     WHERE dish_id = 7
                       AND IFNULL(recipe_ingredient_id, 0) = 3
                       AND IFNULL(task_key, '') = 'step_1_core_local'
-                    """
-                )
-            ).mappings().first()
+                    """)).mappings().first()
             assert row is not None
             assert row["cnt"] == 1
             assert row["status"] == "succeeded"

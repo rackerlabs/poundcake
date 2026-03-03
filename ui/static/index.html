@@ -213,12 +213,20 @@
                   <input id="ingredient-task-name" type="text" required>
                 </div>
                 <div class="form-field">
-                  <label for="ingredient-action-id">Action ID</label>
+                  <label for="ingredient-action-id">Execution ID</label>
                   <input id="ingredient-action-id" type="text">
                 </div>
                 <div class="form-field">
                   <label for="ingredient-source-type">Source Type</label>
                   <input id="ingredient-source-type" type="text" value="undefined">
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-purpose">Execution Purpose</label>
+                  <select id="ingredient-purpose">
+                    <option value="utility">utility</option>
+                    <option value="remediation">remediation</option>
+                    <option value="comms">comms</option>
+                  </select>
                 </div>
                 <div class="form-field">
                   <label for="ingredient-blocking">Blocking</label>
@@ -281,7 +289,7 @@
                 <th>ID</th>
                 <th>Task ID</th>
                 <th>Task Name</th>
-                <th>Action ID</th>
+                <th>Execution ID</th>
                 <th>Blocking</th>
                 <th>Expected/Timeout</th>
                 <th>Retries</th>
