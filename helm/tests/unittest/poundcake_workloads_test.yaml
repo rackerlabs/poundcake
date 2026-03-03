@@ -304,6 +304,23 @@ tests:
           pattern: "GATE_LOG_ENABLED=\\\"true\\\""
         documentIndex: 2
 
+  - it: uses services.api.port for PoundCake service URLs
+    set:
+      services.api.port: 9000
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: http://poundcake-api:9000
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "gate_wait_for_tcp \\\"poundcake-api\\\" \\\"9000\\\""
+        documentIndex: 2
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "gate_wait_for_http_status \\\"http://poundcake-api:9000/api/v1/health\\\""
+        documentIndex: 2
+
   - it: supports gate logging overrides on poundcake init gates
     set:
       startupHooks.gateLogging.enabled: false

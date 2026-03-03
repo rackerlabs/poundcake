@@ -14,6 +14,7 @@ TEST_RECIPE=${TEST_RECIPE:-}
 IS_BLOCKING=${IS_BLOCKING:-false}
 STEP1_CMD=${STEP1_CMD:-'echo "step 1"'}
 STEP2_CMD=${STEP2_CMD:-'echo "step 2"'}
+ING_ON_FAILURE=${ING_ON_FAILURE:-stop}
 
 if [ -z "$TEST_RECIPE" ]; then
   echo "TEST_RECIPE is required"
@@ -38,6 +39,7 @@ ING1_PAYLOAD=$(jq -n \
   --arg execution_target "${ING_EXECUTION_TARGET}" \
   --arg task_key_template "${ING_TASK_KEY_TEMPLATE}" \
   --argjson is_blocking "$IS_BLOCKING" \
+  --arg on_failure "$ING_ON_FAILURE" \
   '{
     execution_target: $execution_target,
     task_key_template: $task_key_template,
@@ -53,7 +55,7 @@ ING1_PAYLOAD=$(jq -n \
     timeout_duration_sec: 300,
     retry_count: 0,
     retry_delay: 5,
-    on_failure: "stop"
+    on_failure: $on_failure
   }')
 
 ING1_ID=$(api_request_json POST "${API_URL}/ingredients/" "${ING1_PAYLOAD}" | jq -r '.id')
