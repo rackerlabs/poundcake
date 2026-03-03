@@ -32,15 +32,17 @@ INGREDIENT_SUFFIX=$(printf "%s" "${TEST_RECIPE}-$$-${RANDOM}" \
   | tr -cs 'a-z0-9' '_' \
   | sed -e 's/^_//' -e 's/_$//' \
   | cut -c1-48)
-ING_EXECUTION_TARGET="core.local.${INGREDIENT_SUFFIX}"
+ING_EXECUTION_TARGET="core.local"
 ING_TASK_KEY_TEMPLATE="echo_${INGREDIENT_SUFFIX}"
 
 ING1_PAYLOAD=$(jq -n \
+  --arg execution_engine "stackstorm" \
   --arg execution_target "${ING_EXECUTION_TARGET}" \
   --arg task_key_template "${ING_TASK_KEY_TEMPLATE}" \
   --argjson is_blocking "$IS_BLOCKING" \
   --arg on_failure "$ING_ON_FAILURE" \
   '{
+    execution_engine: $execution_engine,
     execution_target: $execution_target,
     task_key_template: $task_key_template,
     execution_parameters: {

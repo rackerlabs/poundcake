@@ -29,8 +29,10 @@ ING_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=core.loc
 if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
   log_info "Ingredient core.local not found, creating it..."
   ING_PAYLOAD=$(jq -n \
+    --arg execution_engine "stackstorm" \
     --argjson is_blocking "$IS_BLOCKING" \
     '{
+      execution_engine: $execution_engine,
       execution_target: "core.local",
       task_key_template: "single_echo",
       execution_parameters: {

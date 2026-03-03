@@ -191,12 +191,12 @@ Notes:
 
 ## Blocking vs Non-Blocking Semantics
 
-For the two-step workflow runners, blocking behavior is validated from `dishes.result` task timestamps:
+For the two-step workflow runners, blocking behavior is validated from task timestamps:
 
 - Blocking recipe pass condition: step 2 starts at or after step 1 completes.
 - Non-blocking recipe pass condition: step 2 starts before step 1 completes, or starts within `NON_BLOCKING_TOLERANCE_SEC` of step 1 start.
 
-The assertion source is the StackStorm task timestamp payload stored in `dishes.result`, not `dish_ingredients` second-level timestamps.
+Assertion source is `dishes.result` when available, with fallback to `/dishes/{id}/ingredients` task records.
 
 List available runner scripts:
 

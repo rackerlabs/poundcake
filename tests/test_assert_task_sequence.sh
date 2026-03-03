@@ -4,7 +4,7 @@
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# Test: Assert two-step task sequence semantics from dish.result task timestamps.
+# Test: Assert two-step task sequence semantics from task execution timestamps.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,6 +39,24 @@ normalize_timestamp() {
     return 0
   fi
 
+  if [[ "${ts}" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\.([0-9]+))?\+00:00$ ]]; then
+    base="${BASH_REMATCH[1]}"
+    frac="${BASH_REMATCH[3]:-0}"
+    frac="${frac}000000"
+    frac="${frac:0:6}"
+    printf "%s.%sZ" "${base}" "${frac}"
+    return 0
+  fi
+
+  if [[ "${ts}" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\.([0-9]+))?$ ]]; then
+    base="${BASH_REMATCH[1]}"
+    frac="${BASH_REMATCH[3]:-0}"
+    frac="${frac}000000"
+    frac="${frac:0:6}"
+    printf "%s.%sZ" "${base}" "${frac}"
+    return 0
+  fi
+
   log_error "Invalid timestamp format: ${ts}"
   return 1
 }
@@ -56,6 +74,7 @@ if [ "$(echo "${dishes}" | jq -r 'length')" -eq 0 ]; then
 fi
 
 dish=$(echo "${dishes}" | jq -cr 'sort_by(.created_at) | last')
+dish_id=$(echo "${dish}" | jq -r '.id')
 
 tasks=$(echo "${dish}" | jq -cer '
   if (.result | type) == "array" then
@@ -68,25 +87,38 @@ tasks=$(echo "${dish}" | jq -cer '
 ')
 
 if [ "$(echo "${tasks}" | jq -r 'length')" -lt 2 ]; then
-  log_error "Expected at least two task entries in dish.result"
+  ingredients=$(api_request_json GET "${API_URL}/dishes/${dish_id}/ingredients")
+  tasks=$(echo "${ingredients}" | jq -cer '
+    map({
+      task_key: .task_key,
+      execution_ref: .execution_ref,
+      execution_status: .execution_status,
+      start_timestamp: .started_at,
+      end_timestamp: .completed_at
+    })
+  ')
+fi
+
+if [ "$(echo "${tasks}" | jq -r 'length')" -lt 2 ]; then
+  log_error "Expected at least two task entries from dish.result or dish ingredients"
   echo "${tasks}" | jq
   exit 1
 fi
 
-step_1=$(echo "${tasks}" | jq -cr 'map(select((.task_id // "") | test("^step_1_"))) | sort_by(.start_timestamp // .end_timestamp // "") | .[0]')
-step_2=$(echo "${tasks}" | jq -cr 'map(select((.task_id // "") | test("^step_2_"))) | sort_by(.start_timestamp // .end_timestamp // "") | .[0]')
+step_1=$(echo "${tasks}" | jq -cr 'map(select((.task_key // .task_id // "") | test("^step_1_"))) | sort_by(.start_timestamp // .started_at // .end_timestamp // .completed_at // "") | .[0]')
+step_2=$(echo "${tasks}" | jq -cr 'map(select((.task_key // .task_id // "") | test("^step_2_"))) | sort_by(.start_timestamp // .started_at // .end_timestamp // .completed_at // "") | .[0]')
 
 if [ -z "${step_1}" ] || [ "${step_1}" = "null" ] || [ -z "${step_2}" ] || [ "${step_2}" = "null" ]; then
-  log_error "Could not find both step_1_* and step_2_* task entries in dish.result"
+  log_error "Could not find both step_1_* and step_2_* task entries in task payload"
   echo "${tasks}" | jq
   exit 1
 fi
 
-step_1_task_id=$(echo "${step_1}" | jq -r '.task_id // empty')
-step_1_start=$(echo "${step_1}" | jq -r '.start_timestamp // empty')
-step_1_end=$(echo "${step_1}" | jq -r '.end_timestamp // empty')
-step_2_task_id=$(echo "${step_2}" | jq -r '.task_id // empty')
-step_2_start=$(echo "${step_2}" | jq -r '.start_timestamp // empty')
+step_1_task_id=$(echo "${step_1}" | jq -r '.task_key // .task_id // empty')
+step_1_start=$(echo "${step_1}" | jq -r '.start_timestamp // .started_at // empty')
+step_1_end=$(echo "${step_1}" | jq -r '.end_timestamp // .completed_at // empty')
+step_2_task_id=$(echo "${step_2}" | jq -r '.task_key // .task_id // empty')
+step_2_start=$(echo "${step_2}" | jq -r '.start_timestamp // .started_at // empty')
 
 if [ -z "${step_1_start}" ] || [ -z "${step_1_end}" ] || [ -z "${step_2_start}" ]; then
   log_error "Missing required timestamps for step sequence assertion"
