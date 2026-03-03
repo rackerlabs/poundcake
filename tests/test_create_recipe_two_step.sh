@@ -78,11 +78,13 @@ fi
 ING2_ID="$ING1_ID"
 
 if [ "${IS_BLOCKING}" = "true" ]; then
-  STEP1_DEPTH=0
-  STEP2_DEPTH=1
+  # Force explicit depth mode in workflow generation for deterministic sequencing.
+  STEP1_DEPTH=1
+  STEP2_DEPTH=2
 else
-  STEP1_DEPTH=0
-  STEP2_DEPTH=0
+  # Same explicit depth => same stage => parallel/non-blocking.
+  STEP1_DEPTH=1
+  STEP2_DEPTH=1
 fi
 
 RECIPE_PAYLOAD=$(jq -n \
