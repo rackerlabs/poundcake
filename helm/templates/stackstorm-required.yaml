@@ -1,4 +1,5 @@
 {{- if .Values.poundcake.enabled }}
+{{- include "poundcake.validateUniqueUrlServicePorts" . -}}
 {{- $apiURL := include "poundcake.stackstormApiUrl" . -}}
 {{- $authURL := include "poundcake.stackstormAuthUrl" . -}}
 {{- if not (regexMatch "^https?://.+" $apiURL) -}}

@@ -134,6 +134,64 @@ def _maybe_retry_missing_workflow_execution(
     return False, "retry skipped: recipe-level workflow metadata no longer exists"
 
 
+def _mark_pending_ingredients_failed(dish_id: int, req_id: str, error_message: str) -> None:
+    """Backfill pending ingredient rows to failed for terminal workflow failures."""
+    try:
+        ingredients_resp = request_with_retry_sync(
+            "GET",
+            f"{API_BASE_URL}/dishes/{dish_id}/ingredients",
+            headers=get_service_headers(req_id),
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
+        if ingredients_resp.status_code != 200:
+            return
+
+        ingredients = ingredients_resp.json() or []
+        failed_at = datetime.now(timezone.utc).isoformat()
+        pending_statuses = {"pending", "running", "processing", "queued", None}
+        items = []
+        for ingredient in ingredients:
+            if not isinstance(ingredient, dict):
+                continue
+            if ingredient.get("execution_status") not in pending_statuses:
+                continue
+            if ingredient.get("completed_at"):
+                continue
+
+            recipe_ingredient_id = ingredient.get("recipe_ingredient_id")
+            task_key = ingredient.get("task_key")
+            if recipe_ingredient_id is None and not task_key:
+                continue
+
+            items.append(
+                {
+                    "recipe_ingredient_id": recipe_ingredient_id,
+                    "task_key": task_key,
+                    "execution_status": "failed",
+                    "completed_at": failed_at,
+                    "error_message": error_message,
+                }
+            )
+
+        if not items:
+            return
+
+        request_with_retry_sync(
+            "POST",
+            f"{API_BASE_URL}/dishes/{dish_id}/ingredients/bulk",
+            json={"items": items},
+            headers=get_service_headers(req_id),
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to backfill pending dish ingredients after workflow failure",
+            extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
+        )
+
+
 def cancel_execution(execution_id: str, req_id: str) -> bool:
     """Instructs API to stop an execution."""
     try:
@@ -535,6 +593,7 @@ def monitor_dishes() -> None:
                             continue
                         if retry_error:
                             err = f"{err}; workflow file retry failed: {retry_error}"
+                        _mark_pending_ingredients_failed(dish["id"], req_id, str(err))
 
                     update_dish(
                         dish,

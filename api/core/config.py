@@ -189,6 +189,8 @@ class Settings(BaseSettings):
     external_http_retries: int = 2
     chef_patch_retries: int = 3
     chef_patch_retry_backoff_seconds: float = 1.0
+    chef_execute_missing_workflow_retries: int = 5
+    chef_execute_missing_workflow_retry_backoff_seconds: float = 2.0
     chef_missing_execution_timeout_seconds: int = 60
 
     log_level: str = "INFO"

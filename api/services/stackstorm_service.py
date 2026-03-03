@@ -637,6 +637,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             retry_count = ingredient.get("retry_count") or 0
             retry_delay = ingredient.get("retry_delay")
             is_blocking = ingredient.get("is_blocking", True)
+            on_failure = str(ingredient.get("on_failure") or "stop").lower()
         else:
             ingredient = ri.ingredient
             if ingredient is None:
@@ -649,6 +650,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             retry_count = ingredient.retry_count
             retry_delay = ingredient.retry_delay
             is_blocking = ingredient.is_blocking
+            on_failure = str(ingredient.on_failure or "stop").lower()
 
         task_name = f"step_{step_order}_{task_name_raw.replace('.', '_')}"
         last_task_name = task_name
@@ -671,6 +673,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                 "depth": depth,
                 "step_order": step_order,
                 "is_blocking": is_blocking,
+                "on_failure": on_failure,
             }
         )
 
@@ -681,14 +684,11 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
     for depth in tasks_by_depth:
         tasks_by_depth[depth] = sorted(tasks_by_depth[depth], key=lambda x: x["step_order"])
 
-    def _add_transition(
-        from_task: dict[str, Any],
-        target_names: list[str],
-    ) -> None:
+    def _add_transition(from_task: dict[str, Any], target_names: list[str], when_expr: str) -> None:
         if not target_names:
             return
         transition = {
-            "when": "<% succeeded() %>",
+            "when": when_expr,
             "do": target_names if len(target_names) > 1 else target_names[0],
         }
         next_items = from_task["def"].setdefault("next", [])
@@ -711,7 +711,9 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                 next_task["def"]["join"] = "all"
 
         for prev_task in prev_stage:
-            _add_transition(prev_task, next_names)
+            _add_transition(prev_task, next_names, "<% succeeded() %>")
+            if prev_task.get("on_failure") == "continue":
+                _add_transition(prev_task, next_names, "<% failed() %>")
 
     stages: list[list[dict[str, Any]]] = []
     has_explicit_depth = any(t["depth"] > 0 for t in task_defs)
