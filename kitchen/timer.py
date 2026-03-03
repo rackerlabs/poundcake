@@ -37,6 +37,75 @@ API_UNAVAILABLE_SINCE: float | None = None
 LAST_SUPPRESSION_LIFECYCLE_RUN = 0.0
 
 
+def _task_execution_ref(task: dict[str, Any]) -> str | None:
+    execution_ref = task.get("id")
+    if execution_ref:
+        return str(execution_ref)
+
+    action_executions = task.get("action_executions")
+    if isinstance(action_executions, list):
+        for action_execution in action_executions:
+            if not isinstance(action_execution, dict):
+                continue
+            execution_ref = action_execution.get("id") or action_execution.get("execution_id")
+            if execution_ref:
+                return str(execution_ref)
+    return None
+
+
+def _task_key(task: dict[str, Any], fallback_key: str | None = None) -> str | None:
+    task_key = (
+        task.get("task_key")
+        or task.get("task_id")
+        or task.get("name")
+        or (task.get("context", {}).get("orquesta", {}).get("task_id"))
+        or fallback_key
+    )
+    if task_key is None:
+        return None
+    return str(task_key)
+
+
+def _normalize_tasks(tasks_payload: Any) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    if isinstance(tasks_payload, dict):
+        if isinstance(tasks_payload.get("tasks"), list):
+            tasks_payload = tasks_payload.get("tasks")
+        else:
+            for key, value in tasks_payload.items():
+                if not isinstance(value, dict):
+                    continue
+                normalized.append(
+                    {
+                        "id": _task_execution_ref(value),
+                        "task_key": _task_key(value, str(key)),
+                        "status": value.get("status") or value.get("state"),
+                        "result": value.get("result"),
+                        "start_timestamp": value.get("start_timestamp"),
+                        "end_timestamp": value.get("end_timestamp"),
+                    }
+                )
+            return normalized
+
+    if not isinstance(tasks_payload, list):
+        return normalized
+
+    for task in tasks_payload:
+        if not isinstance(task, dict):
+            continue
+        normalized.append(
+            {
+                "id": _task_execution_ref(task),
+                "task_key": _task_key(task),
+                "status": task.get("status") or task.get("state"),
+                "result": task.get("result"),
+                "start_timestamp": task.get("start_timestamp"),
+                "end_timestamp": task.get("end_timestamp"),
+            }
+        )
+    return normalized
+
+
 def update_dish(
     dish: dict[str, Any],
     req_id: str,
@@ -412,28 +481,23 @@ def monitor_dishes() -> None:
                         tasks_result = None
 
                 # If tasks lack timestamps, prefer child execution list for richer details
-                def _tasks_missing_timestamps(tasks: Any) -> bool:
-                    if not isinstance(tasks, list) or not tasks:
+                def _tasks_missing_timestamps(tasks: list[dict[str, Any]]) -> bool:
+                    if not tasks:
                         return True
                     for task in tasks:
-                        if not isinstance(task, dict):
-                            continue
                         if task.get("start_timestamp") or task.get("end_timestamp"):
                             return False
                     return True
 
-                def _sort_tasks_by_execution(tasks: Any) -> Any:
-                    if not isinstance(tasks, list):
-                        return tasks
-
+                def _sort_tasks_by_execution(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     def _key(item: Any) -> tuple[str, str]:
-                        if not isinstance(item, dict):
-                            return ("", "")
                         start_ts = item.get("start_timestamp") or item.get("end_timestamp") or ""
                         end_ts = item.get("end_timestamp") or ""
                         return (start_ts, end_ts)
 
                     return sorted(tasks, key=_key)
+
+                tasks_result = _normalize_tasks(tasks_result)
 
                 if _tasks_missing_timestamps(tasks_result):
                     try:
@@ -462,12 +526,13 @@ def monitor_dishes() -> None:
                                         "end_timestamp": child.get("end_timestamp"),
                                     }
                                     for child in children
+                                    if isinstance(child, dict)
                                 ]
                             )
                     except Exception:
                         pass
 
-                if tasks_result is None:
+                if not tasks_result:
                     # Fallback: fetch child executions by parent id and store results
                     try:
                         children_resp = request_with_retry_sync(
@@ -495,15 +560,16 @@ def monitor_dishes() -> None:
                                         "end_timestamp": child.get("end_timestamp"),
                                     }
                                     for child in children
+                                    if isinstance(child, dict)
                                 ]
                             )
                     except Exception:
-                        tasks_result = None
+                        tasks_result = []
 
                 tasks_result = _sort_tasks_by_execution(tasks_result)
 
                 dish_started_at = None
-                if tasks_result is not None:
+                if tasks_result:
                     # Store full tasks list for later inspection
                     dish_result = tasks_result
 
@@ -569,7 +635,7 @@ def monitor_dishes() -> None:
                             )
 
                         if items:
-                            request_with_retry_sync(
+                            bulk_resp = request_with_retry_sync(
                                 "POST",
                                 f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients/bulk",
                                 json={"items": items},
@@ -577,6 +643,16 @@ def monitor_dishes() -> None:
                                 timeout=10,
                                 retries=POLLER_RETRIES,
                             )
+                            if bulk_resp.status_code >= 400:
+                                logger.warning(
+                                    "Failed to persist dish ingredient execution updates",
+                                    extra={
+                                        "req_id": req_id,
+                                        "dish_id": dish.get("id"),
+                                        "status_code": bulk_resp.status_code,
+                                        "response": bulk_resp.text,
+                                    },
+                                )
                     except Exception:
                         pass
 
