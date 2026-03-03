@@ -13,6 +13,8 @@ source "${SCRIPT_DIR}/lib.sh"
 REQ_ID=${REQ_ID:-}
 ASSERT_MODE=${ASSERT_MODE:-blocking}
 NON_BLOCKING_TOLERANCE_SEC=${NON_BLOCKING_TOLERANCE_SEC:-1}
+TASK_TIMESTAMP_TIMEOUT_SEC=${TASK_TIMESTAMP_TIMEOUT_SEC:-30}
+TASK_TIMESTAMP_POLL_INTERVAL_SEC=${TASK_TIMESTAMP_POLL_INTERVAL_SEC:-2}
 
 require_cmd curl
 require_cmd jq
@@ -63,7 +65,12 @@ normalize_timestamp() {
 
 to_epoch_seconds() {
   local ts="$1"
-  echo "${ts}" | jq -r 'sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601'
+  jq -rn --arg ts "${ts}" '$ts | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601'
+}
+
+is_valid_json() {
+  local payload="$1"
+  echo "${payload}" | jq -e . >/dev/null 2>&1
 }
 
 dishes=$(api_request_json GET "${API_URL}/dishes?req_id=${REQ_ID}")
@@ -76,19 +83,26 @@ fi
 dish=$(echo "${dishes}" | jq -cr 'sort_by(.created_at) | last')
 dish_id=$(echo "${dish}" | jq -r '.id')
 
-tasks=$(echo "${dish}" | jq -cer '
-  if (.result | type) == "array" then
-    .result
-  elif (.result | type) == "object" and (.result.tasks | type) == "array" then
-    .result.tasks
-  else
-    []
-  end
-')
+build_tasks_payload() {
+  local dish_json="$1"
+  local from_result from_ingredients
+  from_result=$(echo "${dish_json}" | jq -cer '
+    if (.result | type) == "array" then
+      .result
+    elif (.result | type) == "object" and (.result.tasks | type) == "array" then
+      .result.tasks
+    else
+      []
+    end
+  ')
 
-if [ "$(echo "${tasks}" | jq -r 'length')" -lt 2 ]; then
-  ingredients=$(api_request_json GET "${API_URL}/dishes/${dish_id}/ingredients")
-  tasks=$(echo "${ingredients}" | jq -cer '
+  if [ "$(echo "${from_result}" | jq -r 'length')" -ge 2 ]; then
+    echo "${from_result}"
+    return 0
+  fi
+
+  from_ingredients=$(api_request_json GET "${API_URL}/dishes/${dish_id}/ingredients")
+  echo "${from_ingredients}" | jq -cer '
     map({
       task_key: .task_key,
       execution_ref: .execution_ref,
@@ -96,8 +110,55 @@ if [ "$(echo "${tasks}" | jq -r 'length')" -lt 2 ]; then
       start_timestamp: .started_at,
       end_timestamp: .completed_at
     })
-  ')
-fi
+  '
+}
+
+wait_for_task_starts() {
+  local deadline now tasks_local started_count dishes_local dish_local
+  deadline=$(( $(date +%s) + TASK_TIMESTAMP_TIMEOUT_SEC ))
+  tasks_local='[]'
+  while true; do
+    dishes_local=$(api_request_json GET "${API_URL}/dishes?req_id=${REQ_ID}")
+    if ! is_valid_json "${dishes_local}"; then
+      sleep "${TASK_TIMESTAMP_POLL_INTERVAL_SEC}"
+      continue
+    fi
+
+    if [ "$(echo "${dishes_local}" | jq -r 'length')" -eq 0 ]; then
+      sleep "${TASK_TIMESTAMP_POLL_INTERVAL_SEC}"
+      continue
+    fi
+
+    dish_local=$(echo "${dishes_local}" | jq -cr 'sort_by(.created_at) | last')
+    if ! is_valid_json "${dish_local}"; then
+      sleep "${TASK_TIMESTAMP_POLL_INTERVAL_SEC}"
+      continue
+    fi
+
+    tasks_local=$(build_tasks_payload "${dish_local}")
+    if ! is_valid_json "${tasks_local}"; then
+      sleep "${TASK_TIMESTAMP_POLL_INTERVAL_SEC}"
+      continue
+    fi
+
+    if [ "$(echo "${tasks_local}" | jq -r 'length')" -ge 2 ]; then
+      started_count=$(echo "${tasks_local}" | jq -r '[.[] | select((.start_timestamp // .started_at) != null)] | length')
+      if [ "${started_count}" -ge 2 ]; then
+        echo "${tasks_local}"
+        return 0
+      fi
+    fi
+
+    now=$(date +%s)
+    if [ "${now}" -ge "${deadline}" ]; then
+      echo "${tasks_local}"
+      return 0
+    fi
+    sleep "${TASK_TIMESTAMP_POLL_INTERVAL_SEC}"
+  done
+}
+
+tasks=$(wait_for_task_starts)
 
 if [ "$(echo "${tasks}" | jq -r 'length')" -lt 2 ]; then
   log_error "Expected at least two task entries from dish.result or dish ingredients"
@@ -120,23 +181,27 @@ step_1_end=$(echo "${step_1}" | jq -r '.end_timestamp // .completed_at // empty'
 step_2_task_id=$(echo "${step_2}" | jq -r '.task_key // .task_id // empty')
 step_2_start=$(echo "${step_2}" | jq -r '.start_timestamp // .started_at // empty')
 
-if [ -z "${step_1_start}" ] || [ -z "${step_1_end}" ] || [ -z "${step_2_start}" ]; then
-  log_error "Missing required timestamps for step sequence assertion"
+if [ -z "${step_1_start}" ] || [ -z "${step_2_start}" ]; then
+  log_error "Missing required start timestamps for step sequence assertion"
   echo "${tasks}" | jq
   exit 1
 fi
 
 step_1_start_norm=$(normalize_timestamp "${step_1_start}")
-step_1_end_norm=$(normalize_timestamp "${step_1_end}")
 step_2_start_norm=$(normalize_timestamp "${step_2_start}")
 step_1_start_epoch=$(to_epoch_seconds "${step_1_start_norm}")
 step_2_start_epoch=$(to_epoch_seconds "${step_2_start_norm}")
 
 log_info "Sequence check mode=${ASSERT_MODE}"
-log_info "step_1=${step_1_task_id} start=${step_1_start_norm} end=${step_1_end_norm}"
+log_info "step_1=${step_1_task_id} start=${step_1_start_norm} end=${step_1_end:-<pending>}"
 log_info "step_2=${step_2_task_id} start=${step_2_start_norm}"
 
 if [ "${ASSERT_MODE}" = "blocking" ]; then
+  if [ -z "${step_1_end}" ]; then
+    log_error "Blocking assertion failed: step_1 has not completed yet"
+    exit 1
+  fi
+  step_1_end_norm=$(normalize_timestamp "${step_1_end}")
   if [[ "${step_2_start_norm}" < "${step_1_end_norm}" ]]; then
     log_error "Blocking assertion failed: step_2 started before step_1 completed"
     exit 1
@@ -145,9 +210,12 @@ if [ "${ASSERT_MODE}" = "blocking" ]; then
   exit 0
 fi
 
-if [[ "${step_2_start_norm}" < "${step_1_end_norm}" ]]; then
-  log_info "Non-blocking assertion passed: step_2 overlaps with step_1"
-  exit 0
+if [ -n "${step_1_end}" ]; then
+  step_1_end_norm=$(normalize_timestamp "${step_1_end}")
+  if [[ "${step_2_start_norm}" < "${step_1_end_norm}" ]]; then
+    log_info "Non-blocking assertion passed: step_2 overlaps with step_1"
+    exit 0
+  fi
 fi
 
 if [ $((step_2_start_epoch - step_1_start_epoch)) -le "${NON_BLOCKING_TOLERANCE_SEC}" ]; then
