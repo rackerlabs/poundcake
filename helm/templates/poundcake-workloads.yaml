@@ -245,10 +245,10 @@ spec:
                 path: alembic/env.py
               - key: script.py.mako
                 path: alembic/script.py.mako
-              - key: versions__init__.py
-                path: alembic/versions/__init__.py
-              - key: 2026_02_03_1600_initial_schema.py
-                path: alembic/versions/2026_02_03_1600_initial_schema.py
+              {{- range $path, $_ := .Files.Glob "files/poundcake-alembic/versions/*.py" }}
+              - key: {{ base $path }}
+                path: alembic/versions/{{ base $path }}
+              {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment

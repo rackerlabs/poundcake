@@ -18,8 +18,11 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import SessionLocal
+from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.models.models import Ingredient, Recipe, RecipeIngredient
+from api.services.bootstrap_ingredient_catalog import upsert_bootstrap_bakery_ingredients
+from api.services.bootstrap_recipe_catalog import upsert_bootstrap_recipe_catalog
 from api.services.stackstorm_service import get_action_manager
 
 logger = get_logger(__name__)
@@ -40,10 +43,38 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
     async with SessionLocal() as db:
         ingredient_stats = await upsert_ingredients(db, actions)
         recipe_stats = await upsert_recipes(db, workflows)
+        bootstrap_catalog_stats = {
+            "ingredients": {
+                "created": 0,
+                "updated": 0,
+                "skipped": 0,
+                "errors": 0,
+                "error_messages": [],
+                "source": "",
+            },
+            "recipes": {
+                "created": 0,
+                "updated": 0,
+                "skipped": 0,
+                "processed": 0,
+                "errors": 0,
+                "error_messages": [],
+                "source": "",
+            },
+        }
+        if mark_bootstrap:
+            settings = get_settings()
+            bootstrap_catalog_stats["ingredients"] = await upsert_bootstrap_bakery_ingredients(
+                db, file_path=settings.bootstrap_ingredients_file
+            )
+            bootstrap_catalog_stats["recipes"] = await upsert_bootstrap_recipe_catalog(
+                db, recipes_dir=settings.bootstrap_recipes_dir
+            )
 
     stats: dict[str, Any] = {}
     stats["ingredients"] = ingredient_stats
     stats["recipes"] = recipe_stats
+    stats["bootstrap_catalog"] = bootstrap_catalog_stats
 
     if mark_bootstrap:
         try:

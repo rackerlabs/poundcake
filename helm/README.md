@@ -699,6 +699,12 @@ The chart uses Helm hooks to ensure proper startup order:
 8. Wait for MariaDB
 9. Run PoundCake bootstrap
 
+PoundCake bootstrap catalog behavior:
+- During `poundcake-bootstrap`, Dishwasher sync reads bootstrap Bakery ingredients from `/app/bootstrap/ingredients/bakery.yaml`.
+- During `poundcake-bootstrap`, Dishwasher sync reads bootstrap recipe catalog entries from `/app/bootstrap/recipes`.
+- Override file path with `POUNDCAKE_BOOTSTRAP_INGREDIENTS_FILE`.
+- Override recipes directory with `POUNDCAKE_BOOTSTRAP_RECIPES_DIR`.
+
 #### Gate Flow Diagram
 
 ```mermaid

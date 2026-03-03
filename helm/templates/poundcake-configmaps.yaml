@@ -48,8 +48,8 @@ data:
 {{ .Files.Get "files/poundcake-alembic/env.py" | indent 4 }}
   script.py.mako: |
 {{ .Files.Get "files/poundcake-alembic/script.py.mako" | indent 4 }}
-  versions__init__.py: |
-{{ .Files.Get "files/poundcake-alembic/versions__init__.py" | indent 4 }}
-  2026_02_03_1600_initial_schema.py: |
-{{ .Files.Get "files/poundcake-alembic/2026_02_03_1600_initial_schema.py" | indent 4 }}
+{{- range $path, $_ := .Files.Glob "files/poundcake-alembic/versions/*.py" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
 {{- end }}

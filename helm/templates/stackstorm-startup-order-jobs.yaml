@@ -832,6 +832,10 @@ spec:
               value: "0"
             - name: POUNDCAKE_BOOTSTRAP_MARK
               value: "true"
+            - name: POUNDCAKE_BOOTSTRAP_INGREDIENTS_FILE
+              value: "/app/bootstrap/ingredients/bakery.yaml"
+            - name: POUNDCAKE_BOOTSTRAP_RECIPES_DIR
+              value: "/app/bootstrap/recipes"
             - name: SERVICE_NAME
               value: "dishwasher-bootstrap"
             - name: POUNDCAKE_AUTH_ENABLED

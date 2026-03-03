@@ -50,6 +50,7 @@ def client():
 def mock_db_session():
     with patch("api.core.database.SessionLocal") as mock_session:
         mock_db = AsyncMock()
+        mock_db.add = Mock()
         mock_db.begin = Mock(return_value=_BeginContext())
         mock_db.refresh = AsyncMock(return_value=None)
         mock_db.flush = AsyncMock(return_value=None)
