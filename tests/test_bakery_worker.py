@@ -24,3 +24,9 @@ def test_non_create_operations_use_synthetic_ticket_id_in_dry_run() -> None:
     assert (
         'provider_payload.setdefault("ticket_id", f"dryrun-{ticket.internal_ticket_id}")' in source
     )
+
+
+def test_worker_persists_provider_normalized_payload_before_execution() -> None:
+    source = _worker_source()
+    assert "def _persist_normalized_payload(" in source
+    assert "_persist_normalized_payload(operation.operation_id, payload)" in source

@@ -445,6 +445,19 @@ def _persist_success(operation_id: str, result: dict[str, Any]) -> None:
         db.commit()
 
 
+def _persist_normalized_payload(operation_id: str, payload: dict[str, Any]) -> None:
+    now = _now()
+    with SessionLocal() as db:
+        operation = (
+            db.query(TicketOperation).filter(TicketOperation.operation_id == operation_id).first()
+        )
+        if not operation:
+            return
+        operation.normalized_payload = payload
+        operation.updated_at = now
+        db.commit()
+
+
 def _persist_failure(operation_id: str, error: str) -> None:
     now = _now()
     with SessionLocal() as db:
@@ -540,6 +553,7 @@ def _process_operation(operation: TicketOperation) -> None:
     started = time.monotonic()
     ticket = _load_ticket(operation.internal_ticket_id)
     payload = _build_provider_payload(operation.action, ticket, operation.request_payload)
+    _persist_normalized_payload(operation.operation_id, payload)
     missing = _preflight_missing_fields(settings.active_provider, operation.action, payload)
     if missing:
         error = (

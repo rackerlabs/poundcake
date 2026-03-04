@@ -39,6 +39,7 @@ PoundCake API
 2. Bakery persists operation state to MariaDB and returns without waiting on provider completion.
 3. Bakery worker(s) claim queued operations, execute provider calls, and update operation/ticket state with retries + dead-letter behavior.
 4. PoundCake polls `GET /api/v1/operations/{operation_id}` until terminal, then reads `GET /api/v1/tickets/{ticket_id}` as needed.
+5. Call `POST /api/v1/tickets/{ticket_id}/find` to refresh ticket information from provider (or local cache in dry-run mode).
 
 ### Mixers
 
@@ -83,6 +84,7 @@ All endpoints are prefixed with `/api/v1`.
 | `POST` | `/api/v1/tickets/{ticket_id}/comments` | Queue comment operation |
 | `POST` | `/api/v1/tickets/{ticket_id}/close` | Queue close operation |
 | `GET` | `/api/v1/tickets/{ticket_id}` | Get logical ticket state |
+| `POST` | `/api/v1/tickets/{ticket_id}/find` | Resolve ticket details (provider search when dry-run is off, local cache when dry-run is on) |
 | `GET` | `/api/v1/tickets/{ticket_id}/operations` | Get operation history |
 | `GET` | `/api/v1/operations/{operation_id}` | Get operation status/details |
 

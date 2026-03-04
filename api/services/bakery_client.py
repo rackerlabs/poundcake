@@ -151,6 +151,10 @@ async def get_ticket(ticket_id: str) -> dict[str, Any]:
     return await _request("get_ticket", "GET", f"/api/v1/tickets/{ticket_id}")
 
 
+async def find_ticket(ticket_id: str) -> dict[str, Any]:
+    return await _request("find_ticket", "POST", f"/api/v1/tickets/{ticket_id}/find")
+
+
 async def poll_operation(operation_id: str) -> dict[str, Any]:
     settings = get_settings()
     deadline = time.monotonic() + settings.bakery_poll_timeout_seconds

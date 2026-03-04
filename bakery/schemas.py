@@ -68,6 +68,10 @@ class TicketResponse(BaseModel):
     latest_error: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    data_source: str = "local_cache"
+    ticket_data: Optional[Dict[str, Any]] = None
+    last_sync_operation_id: Optional[str] = None
+    last_sync_at: Optional[datetime] = None
 
 
 class TicketOperationResponse(BaseModel):
