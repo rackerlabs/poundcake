@@ -76,6 +76,7 @@ class IngredientBase(BaseModel):
     ingredient_kind: Optional[ExecutionPurpose] = Field(
         None, description="Deprecated alias for execution_purpose"
     )
+    is_default: bool = False
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
@@ -138,6 +139,7 @@ class IngredientUpdate(BaseModel):
     ingredient_kind: Optional[ExecutionPurpose] = Field(
         None, description="Deprecated alias for execution_purpose"
     )
+    is_default: Optional[bool] = None
     is_blocking: Optional[bool] = None
     expected_duration_sec: Optional[int] = Field(None, gt=0)
     timeout_duration_sec: Optional[int] = Field(None, gt=0)

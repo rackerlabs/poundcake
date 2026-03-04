@@ -6,6 +6,7 @@
 #
 """Pre-heat service - Creates new orders or increments existing ones."""
 
+import inspect
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -32,6 +33,14 @@ def _resolved_ticket_state() -> str:
             .replace(" ", "_")
         )
     return "closed"
+
+
+async def _in_transaction(db: AsyncSession) -> bool:
+    """Return transaction state for real sessions and async-mocked sessions."""
+    in_tx = db.in_transaction()
+    if inspect.isawaitable(in_tx):
+        in_tx = await in_tx
+    return bool(in_tx)
 
 
 async def _sync_ticket_on_alert_resolved(
@@ -199,7 +208,7 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                 )
                 continue
 
-        if db.in_transaction():
+        if await _in_transaction(db):
             await db.rollback()
 
         try:

@@ -241,7 +241,7 @@ class Settings(BaseSettings):
     bakery_poll_interval_seconds: float = 2.0
     bakery_poll_timeout_seconds: int = 60
     bakery_active_provider: str = ""
-    catch_all_recipe_name: str = "catch-all"
+    catch_all_recipe_name: str = "fallback-recipe"
     bakery_rackspace_confirmed_solved_status: str = "confirmed solved"
 
     # ==========================================================================

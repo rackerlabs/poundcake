@@ -77,7 +77,7 @@ async def test_orchestrator_stops_after_retry_exhaustion():
     result = await orchestrator.execute(
         ExecutionContext(
             engine="bakery",
-            execution_target="tickets.comment",
+            execution_target="core",
             req_id="REQ-2",
             retry_count=1,
             retry_delay=0,

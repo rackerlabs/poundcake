@@ -72,7 +72,7 @@ flowchart TD
 | From | Event | To | Notes |
 |---|---|---|---|
 | `new` | `prep-chef -> /dishes/cook/{order_id}` | `processing` | Atomic transition when dish creation is claimed. |
-| `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-catch-all, non-terminal orders. |
+| `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-fallback-recipe, non-terminal orders. |
 | `new` or `processing` | Alertmanager sends `resolved` | `resolving` | Resolve-phase orchestration is initiated by pre-heat. |
 | `resolving` | `prep-chef -> /orders/{order_id}/resolve` | `complete` | Resolve flow finalizes order and marks inactive. |
 | `complete`/`failed`/`canceled` | Any webhook/timer follow-up | unchanged | Terminal statuses are immutable and not re-opened by side effects. |
@@ -84,7 +84,7 @@ stateDiagram-v2
     [*] --> new: firing webhook\nPOST /api/v1/webhook -> pre_heat creates order
 
     new --> processing: prep-chef cook\nPOST /api/v1/dishes/cook/{order_id}
-    processing --> resolving: dish terminal (non-catch-all)\nPATCH /api/v1/dishes/{dish_id}
+    processing --> resolving: dish terminal (non-fallback-recipe)\nPATCH /api/v1/dishes/{dish_id}
 
     new --> resolving: resolved webhook\npre_heat transition check
     processing --> resolving: resolved webhook\npre_heat transition check
@@ -112,7 +112,7 @@ stateDiagram-v2
       - GET /api/v1/operations/{operation_id} (poll loop)
 
       Resolve-phase comms (/orders/{id}/resolve):
-      - tickets.create | tickets.update | tickets.comment | tickets.close
+      - target: core|jira + execution_parameters.operation: ticket_create|ticket_update|ticket_comment|ticket_close
       - mapped Bakery endpoints + operation polling when operation_id is returned
     end note
 

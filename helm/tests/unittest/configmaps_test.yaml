@@ -61,3 +61,7 @@ tests:
       - isNotNull:
           path: data["2026_02_03_1600_initial_schema.py"]
         documentIndex: 3
+      - matchRegex:
+          path: data["2026_02_03_1600_initial_schema.py"]
+          pattern: "sa\\.Column\\(\"is_default\", sa\\.Boolean\\(\\), nullable=False, server_default=sa\\.text\\(\"0\"\\)\\)"
+        documentIndex: 3

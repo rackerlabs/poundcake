@@ -40,7 +40,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: tickets.create
+      execution_target: core
       step_order: 1
       run_phase: resolving
       on_success: continue
@@ -68,7 +68,7 @@ recipe:
   description: missing name
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: tickets.create
+      execution_target: core
       run_phase: invalid
 """.strip(),
         encoding="utf-8",
@@ -94,7 +94,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: tickets.create
+      execution_target: core
       step_order: 1
       run_phase: resolving
       on_success: continue
@@ -114,7 +114,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: tickets.create
+      execution_target: core
       step_order: 1
       run_phase: resolving
       on_success: continue
@@ -125,9 +125,7 @@ recipe:
         encoding="utf-8",
     )
 
-    ingredient = SimpleNamespace(
-        id=41, execution_engine="bakery", execution_target="tickets.create"
-    )
+    ingredient = SimpleNamespace(id=41, execution_engine="bakery", execution_target="core")
     existing_recipe = SimpleNamespace(
         id=7,
         name="node-a",
@@ -181,7 +179,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: tickets.create
+      execution_target: core
       step_order: 1
       run_phase: resolving
       on_success: continue

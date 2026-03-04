@@ -53,39 +53,48 @@ def validate_bakery_target_payload(
     *,
     execution_target: str,
     payload: dict[str, Any],
+    execution_parameters: dict[str, Any] | None = None,
     bakery_ticket_id: str | None = None,
 ) -> str | None:
     target = execution_target.lower()
     ticket_id = str(payload.get("ticket_id") or bakery_ticket_id or "").strip()
+    params = execution_parameters if isinstance(execution_parameters, dict) else {}
+    operation = str(params.get("operation") or "").strip().lower()
 
-    if target == "tickets.create":
+    if target not in {"core", "jira"}:
+        return "bakery execution_target must be one of: core, jira"
+
+    if operation not in {"ticket_create", "ticket_update", "ticket_comment", "ticket_close"}:
+        return (
+            "bakery execution_parameters.operation must be one of: "
+            "ticket_create, ticket_update, ticket_comment, ticket_close"
+        )
+
+    if operation == "ticket_create":
         if not isinstance(payload.get("title"), str) or not payload.get("title"):
-            return "tickets.create requires payload.title"
+            return "ticket_create requires payload.title"
         if not isinstance(payload.get("description"), str) or not payload.get("description"):
-            return "tickets.create requires payload.description"
+            return "ticket_create requires payload.description"
         return None
 
-    if target == "tickets.update":
+    if operation == "ticket_update":
         if not ticket_id:
-            return "tickets.update requires payload.ticket_id or bakery_ticket_id"
+            return "ticket_update requires payload.ticket_id or bakery_ticket_id"
         return None
 
-    if target == "tickets.comment":
+    if operation == "ticket_comment":
         if not ticket_id:
-            return "tickets.comment requires payload.ticket_id or bakery_ticket_id"
+            return "ticket_comment requires payload.ticket_id or bakery_ticket_id"
         if not isinstance(payload.get("comment"), str) or not payload.get("comment"):
-            return "tickets.comment requires payload.comment"
+            return "ticket_comment requires payload.comment"
         return None
 
-    if target == "tickets.close":
+    if operation == "ticket_close":
         if not ticket_id:
-            return "tickets.close requires payload.ticket_id or bakery_ticket_id"
+            return "ticket_close requires payload.ticket_id or bakery_ticket_id"
         return None
 
-    return (
-        "bakery execution_target must be one of: "
-        "tickets.create, tickets.update, tickets.comment, tickets.close"
-    )
+    return None
 
 
 def validate_execution_request(
@@ -119,6 +128,7 @@ def validate_execution_request(
         return validate_bakery_target_payload(
             execution_target=str(execution_target),
             payload=payload,
+            execution_parameters=execution_parameters,
             bakery_ticket_id=ticket_id or None,
         )
     return None
@@ -130,6 +140,7 @@ def validate_runtime_execution_payload(
     execution_purpose: str | None,
     execution_target: str | None,
     execution_payload: dict[str, Any] | None,
+    execution_parameters: dict[str, Any] | None = None,
 ) -> str | None:
     """Validate engine-aware execution payload contract for runtime orchestration."""
     if execution_payload is not None and not isinstance(execution_payload, dict):
@@ -141,10 +152,14 @@ def validate_runtime_execution_payload(
         return "comms ingredients must use execution_engine='bakery'"
 
     target = (execution_target or "").lower()
-    if target not in {"tickets.create", "tickets.update", "tickets.comment", "tickets.close"}:
+    if target not in {"core", "jira"}:
+        return "bakery comms ingredient execution_target must be one of: " "core, jira"
+    params = execution_parameters if isinstance(execution_parameters, dict) else {}
+    operation = str(params.get("operation") or "").strip().lower()
+    if operation not in {"ticket_create", "ticket_update", "ticket_comment", "ticket_close"}:
         return (
-            "bakery comms ingredient execution_target must be one of: "
-            "tickets.create, tickets.update, tickets.comment, tickets.close"
+            "bakery comms ingredient execution_parameters.operation must be one of: "
+            "ticket_create, ticket_update, ticket_comment, ticket_close"
         )
 
     if execution_payload is None:

@@ -23,6 +23,7 @@ from api.core.logging import get_logger
 from api.models.models import Ingredient, Recipe, RecipeIngredient
 from api.services.bootstrap_ingredient_catalog import upsert_bootstrap_bakery_ingredients
 from api.services.bootstrap_recipe_catalog import upsert_bootstrap_recipe_catalog
+from api.services.fallback_recipe import ensure_fallback_recipe
 from api.services.stackstorm_service import get_action_manager
 
 logger = get_logger(__name__)
@@ -70,6 +71,8 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
             bootstrap_catalog_stats["recipes"] = await upsert_bootstrap_recipe_catalog(
                 db, recipes_dir=settings.bootstrap_recipes_dir
             )
+            await ensure_fallback_recipe(db, req_id="SYSTEM-DISHWASHER")
+            await db.commit()
 
     stats: dict[str, Any] = {}
     stats["ingredients"] = ingredient_stats

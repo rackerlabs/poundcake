@@ -42,8 +42,9 @@ async def test_bakery_adapter_create_success_sets_context_update(monkeypatch: py
     result = await adapter.execute_once(
         ExecutionContext(
             engine="bakery",
-            execution_target="tickets.create",
+            execution_target="core",
             execution_payload={"title": "A", "description": "B"},
+            execution_parameters={"operation": "ticket_create"},
             req_id="REQ-BAKERY",
             context={"order_id": 10, "recipe_ingredient_id": 4},
         )
@@ -68,8 +69,9 @@ async def test_bakery_adapter_polls_operation_and_maps_failed_terminal_status(
     result = await adapter.execute_once(
         ExecutionContext(
             engine="bakery",
-            execution_target="tickets.comment",
+            execution_target="core",
             execution_payload={"comment": "c", "ticket_id": "INC-2"},
+            execution_parameters={"operation": "ticket_comment"},
             req_id="REQ-BAKERY-2",
             context={"order_id": 1, "recipe_ingredient_id": 9},
         )

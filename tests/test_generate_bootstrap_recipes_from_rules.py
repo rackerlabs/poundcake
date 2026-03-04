@@ -53,5 +53,5 @@ def test_main_generates_one_recipe_per_group_and_overwrites(tmp_path, monkeypatc
     assert files == ["group-a.yaml", "group-b.yaml"]
     group_a = (out_dir / "group-a.yaml").read_text(encoding="utf-8")
     assert "kind: RecipeCatalogEntry" in group_a
-    assert "execution_target: tickets.create" in group_a
+    assert "execution_target: core" in group_a
     assert "run_phase: resolving" in group_a

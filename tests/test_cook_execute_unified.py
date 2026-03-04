@@ -56,8 +56,9 @@ def test_cook_execute_returns_canonical_envelope_for_bakery():
             "/api/v1/cook/execute",
             json={
                 "execution_engine": "bakery",
-                "execution_target": "tickets.create",
+                "execution_target": "core",
                 "execution_payload": {"title": "t", "description": "d"},
+                "execution_parameters": {"operation": "ticket_create"},
             },
         )
 
@@ -100,8 +101,9 @@ def test_cook_execute_validation_error_returns_400():
         "/api/v1/cook/execute",
         json={
             "execution_engine": "bakery",
-            "execution_target": "tickets.comment",
+            "execution_target": "core",
             "execution_payload": {"comment": "ok"},
+            "execution_parameters": {"operation": "ticket_comment"},
         },
     )
     assert response.status_code == 400

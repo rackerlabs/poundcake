@@ -18,11 +18,10 @@ logger = get_logger(__name__)
 CATALOG_API_VERSION = "poundcake/v1"
 CATALOG_KIND = "IngredientCatalog"
 CANONICAL_BAKERY_TARGETS = {
-    "tickets.create",
-    "tickets.update",
-    "tickets.comment",
-    "tickets.close",
+    "core",
+    "jira",
 }
+LEGACY_BAKERY_TARGETS = {"tickets.create", "tickets.update", "tickets.comment", "tickets.close"}
 
 
 def load_bootstrap_ingredient_catalog(
@@ -97,6 +96,13 @@ def _validate_catalog_entry(entry: dict[str, Any], idx: int) -> tuple[dict[str, 
     execution_parameters = entry.get("execution_parameters")
     if execution_parameters is not None and not isinstance(execution_parameters, dict):
         return {}, f"ingredients[{idx}].execution_parameters must be an object when provided"
+    operation = str((execution_parameters or {}).get("operation") or "").strip().lower()
+    if operation not in {"ticket_create", "ticket_update", "ticket_comment", "ticket_close"}:
+        return (
+            {},
+            f"ingredients[{idx}].execution_parameters.operation must be one of: "
+            "ticket_create, ticket_update, ticket_comment, ticket_close",
+        )
 
     on_failure = entry.get("on_failure", "stop")
     if on_failure not in {"stop", "continue"}:
@@ -110,6 +116,7 @@ def _validate_catalog_entry(entry: dict[str, Any], idx: int) -> tuple[dict[str, 
         "execution_id": entry.get("execution_id"),
         "execution_payload": execution_payload,
         "execution_parameters": execution_parameters,
+        "is_default": bool(entry.get("is_default", False)),
         "is_blocking": bool(entry.get("is_blocking", True)),
         "expected_duration_sec": int(entry.get("expected_duration_sec", 30)),
         "timeout_duration_sec": int(entry.get("timeout_duration_sec", 120)),
@@ -146,7 +153,9 @@ async def upsert_bootstrap_bakery_ingredients(
     result = await db.execute(
         select(Ingredient).where(
             Ingredient.execution_engine == "bakery",
-            Ingredient.execution_target.in_(tuple(sorted(CANONICAL_BAKERY_TARGETS))),
+            Ingredient.execution_target.in_(
+                tuple(sorted(CANONICAL_BAKERY_TARGETS | LEGACY_BAKERY_TARGETS))
+            ),
         )
     )
     existing_by_target = {row.execution_target: row for row in result.scalars().all()}
@@ -178,6 +187,17 @@ async def upsert_bootstrap_bakery_ingredients(
             updated += 1
         else:
             skipped += 1
+
+    # Hard-cut cleanup: soft-delete legacy bootstrap-managed tickets.* targets.
+    for target in sorted(LEGACY_BAKERY_TARGETS):
+        legacy = existing_by_target.get(target)
+        if legacy is None:
+            continue
+        if legacy.deleted is False or legacy.deleted_at is None:
+            legacy.deleted = True
+            legacy.deleted_at = now
+            legacy.updated_at = now
+            updated += 1
 
     await db.commit()
     return {
