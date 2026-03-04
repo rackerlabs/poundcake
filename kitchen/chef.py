@@ -28,6 +28,20 @@ SYSTEM_REQ_ID = "SYSTEM-CHEF"
 POLLER_RETRIES = get_settings().poller_http_retries
 CHEF_PATCH_RETRIES = get_settings().chef_patch_retries
 CHEF_PATCH_RETRY_BACKOFF_SECONDS = get_settings().chef_patch_retry_backoff_seconds
+CHEF_EXECUTE_MISSING_WORKFLOW_RETRIES = max(0, get_settings().chef_execute_missing_workflow_retries)
+CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS = max(
+    0.1, get_settings().chef_execute_missing_workflow_retry_backoff_seconds
+)
+MISSING_WORKFLOW_PATH_FRAGMENT = "/opt/stackstorm/packs/poundcake/actions/workflows/"
+
+
+def _is_missing_workflow_file_response(response_text: str | None) -> bool:
+    if not isinstance(response_text, str):
+        return False
+    return (
+        "No such file or directory" in response_text
+        and MISSING_WORKFLOW_PATH_FRAGMENT in response_text
+    )
 
 
 def run_chef() -> None:
@@ -108,21 +122,27 @@ def run_chef() -> None:
 
             dish = claim_resp.json()
             recipe = dish.get("recipe") or {}
-
-            workflow_id = recipe.get("workflow_id")
-            workflow_parameters = recipe.get("workflow_parameters") or {}
-            source_type = (recipe.get("source_type") or "stackstorm").lower()
-
-            if source_type != "stackstorm":
-                err = f"Unsupported recipe source_type '{source_type}' for chef execution"
+            try:
+                reg_resp = request_with_retry_sync(
+                    "POST",
+                    f"{API_BASE_URL}/cook/workflows/register",
+                    json=recipe,
+                    headers=get_service_headers(req_id),
+                    timeout=30,
+                    retries=POLLER_RETRIES,
+                )
+                if reg_resp.status_code not in (200, 201):
+                    raise Exception(reg_resp.text)
+                workflow_id = reg_resp.json().get("workflow_id")
+            except Exception as e:
                 logger.error(
-                    "Unsupported recipe source type",
-                    extra={"req_id": req_id, "dish_id": dish_id, "source_type": source_type},
+                    "Failed to register workflow",
+                    extra={"req_id": req_id, "dish_id": dish_id, "error": str(e)},
                 )
                 request_with_retry_sync(
                     "PATCH",
                     f"{API_BASE_URL}/dishes/{dish_id}",
-                    json={"processing_status": "failed", "error_message": err},
+                    json={"processing_status": "failed", "error_message": str(e)},
                     headers=get_service_headers(req_id),
                     timeout=10,
                     retries=POLLER_RETRIES,
@@ -130,78 +150,50 @@ def run_chef() -> None:
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # Step 2: if workflow_id exists, confirm in ST2
-            if workflow_id and source_type == "stackstorm":
-                resp = request_with_retry_sync(
-                    "GET",
-                    f"{API_BASE_URL}/cook/actions/{workflow_id}",
-                    headers=get_service_headers(req_id),
-                    timeout=10,
-                    retries=POLLER_RETRIES,
-                )
-                if resp.status_code != 200:
-                    workflow_id = None
-
-            # Step 3/4: register workflow if missing
-            if not workflow_id:
-                try:
-                    reg_resp = request_with_retry_sync(
+            # Execute workflow
+            try:
+                st2_exec_id = None
+                max_attempts = 1 + CHEF_EXECUTE_MISSING_WORKFLOW_RETRIES
+                for attempt in range(1, max_attempts + 1):
+                    exec_resp = request_with_retry_sync(
                         "POST",
-                        f"{API_BASE_URL}/cook/workflows/register",
-                        json=recipe,
+                        f"{API_BASE_URL}/cook/execute",
+                        json={"action": workflow_id, "parameters": {}},
                         headers=get_service_headers(req_id),
                         timeout=30,
                         retries=POLLER_RETRIES,
                     )
-                    if reg_resp.status_code not in (200, 201):
-                        raise Exception(reg_resp.text)
-                    workflow_id = reg_resp.json().get("workflow_id")
+                    if exec_resp.status_code in (200, 201):
+                        st2_exec_id = exec_resp.json().get("id")
+                        break
 
-                    # Store workflow_id (and generated payload if needed)
-                    request_with_retry_sync(
-                        "PATCH",
-                        f"{API_BASE_URL}/recipes/{recipe.get('id')}",
-                        json={
-                            "workflow_id": workflow_id,
-                        },
-                        headers=get_service_headers(req_id),
-                        timeout=10,
-                        retries=POLLER_RETRIES,
-                    )
-                except Exception as e:
-                    logger.error(
-                        "Failed to register workflow",
-                        extra={"req_id": req_id, "dish_id": dish_id, "error": str(e)},
-                    )
-                    request_with_retry_sync(
-                        "PATCH",
-                        f"{API_BASE_URL}/dishes/{dish_id}",
-                        json={"processing_status": "failed", "error_message": str(e)},
-                        headers=get_service_headers(req_id),
-                        timeout=10,
-                        retries=POLLER_RETRIES,
-                    )
-                    time.sleep(POLL_INTERVAL)
-                    continue
+                    if attempt < max_attempts and _is_missing_workflow_file_response(
+                        exec_resp.text
+                    ):
+                        logger.warning(
+                            "Workflow file not yet available on StackStorm runner; retrying execution",
+                            extra={
+                                "req_id": req_id,
+                                "dish_id": dish_id,
+                                "workflow_id": workflow_id,
+                                "attempt": attempt,
+                                "max_attempts": max_attempts,
+                            },
+                        )
+                        time.sleep(CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS)
+                        continue
 
-            # Execute workflow
-            try:
-                exec_resp = request_with_retry_sync(
-                    "POST",
-                    f"{API_BASE_URL}/cook/execute",
-                    json={"action": workflow_id, "parameters": workflow_parameters},
-                    headers=get_service_headers(req_id),
-                    timeout=30,
-                    retries=POLLER_RETRIES,
-                )
-                if exec_resp.status_code not in (200, 201):
                     raise Exception(exec_resp.text)
-                st2_exec_id = exec_resp.json().get("id")
+
+                if not st2_exec_id:
+                    raise Exception(
+                        "StackStorm execution did not return an execution id after retries"
+                    )
 
                 patch_resp = request_with_retry_sync(
                     "PATCH",
                     f"{API_BASE_URL}/dishes/{dish_id}",
-                    json={"workflow_execution_id": st2_exec_id},
+                    json={"execution_ref": st2_exec_id},
                     headers=get_service_headers(req_id),
                     timeout=10,
                     retries=CHEF_PATCH_RETRIES,

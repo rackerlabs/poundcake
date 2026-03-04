@@ -9,8 +9,6 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
-
 import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -173,7 +171,8 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Mappings & Logging
     # ==========================================================================
-    mappings_path: Path = Field(default=Path("config/mappings"))
+    bootstrap_ingredients_file: str = "/app/bootstrap/ingredients/bakery.yaml"
+    bootstrap_recipes_dir: str = "/app/bootstrap/recipes"
     default_timeout: int = 300
     max_concurrent_remediations: int = 10
     httpx_timeout_seconds: int = 30
@@ -189,6 +188,8 @@ class Settings(BaseSettings):
     external_http_retries: int = 2
     chef_patch_retries: int = 3
     chef_patch_retry_backoff_seconds: float = 1.0
+    chef_execute_missing_workflow_retries: int = 5
+    chef_execute_missing_workflow_retry_backoff_seconds: float = 2.0
     chef_missing_execution_timeout_seconds: int = 60
 
     log_level: str = "INFO"
@@ -258,21 +259,3 @@ settings = Settings()
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
-
-def load_yaml_config(path: Path) -> dict[str, Any]:
-    with open(path) as f:
-        return yaml.safe_load(f) or {}
-
-
-def load_all_mappings(mappings_path: Path) -> dict[str, Any]:
-    mappings: dict[str, Any] = {}
-    if not mappings_path.exists():
-        return mappings
-    for pattern in ["*.yaml", "*.yml"]:
-        for yaml_file in mappings_path.glob(pattern):
-            file_mappings = load_yaml_config(yaml_file)
-            if "orders" in file_mappings:
-                for order_name, config in file_mappings["orders"].items():
-                    mappings[order_name] = config
-    return mappings

@@ -14,6 +14,7 @@ TEST_RECIPE=${TEST_RECIPE:-}
 IS_BLOCKING=${IS_BLOCKING:-false}
 STEP1_CMD=${STEP1_CMD:-'echo "step 1"'}
 STEP2_CMD=${STEP2_CMD:-'echo "step 2"'}
+ING_ON_FAILURE=${ING_ON_FAILURE:-stop}
 
 if [ -z "$TEST_RECIPE" ]; then
   echo "TEST_RECIPE is required"
@@ -25,47 +26,66 @@ require_cmd jq
 
 log_info "Creating two-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
 
-# Use a unique ingredient per run to avoid cross-test state leakage on is_blocking.
+# Use a unique task key when we need to create the core.local ingredient.
 INGREDIENT_SUFFIX=$(printf "%s" "${TEST_RECIPE}-$$-${RANDOM}" \
   | tr '[:upper:]' '[:lower:]' \
   | tr -cs 'a-z0-9' '_' \
   | sed -e 's/^_//' -e 's/_$//' \
   | cut -c1-48)
-ING_TASK_ID="core.local.${INGREDIENT_SUFFIX}"
-ING_TASK_NAME="echo_${INGREDIENT_SUFFIX}"
+ING_EXECUTION_TARGET="core.local"
+ING_TASK_KEY_TEMPLATE="echo_${INGREDIENT_SUFFIX}"
 
-ING1_PAYLOAD=$(jq -n \
-  --arg task_id "${ING_TASK_ID}" \
-  --arg task_name "${ING_TASK_NAME}" \
-  --argjson is_blocking "$IS_BLOCKING" \
-  '{
-    task_id: $task_id,
-    task_name: $task_name,
-    action_parameters: {
-      cmd: {
-        type: "string",
-        description: "Command to execute",
-        required: true
-      }
-    },
-    source_type: "stackstorm",
-    is_blocking: $is_blocking,
-    expected_duration_sec: 30,
-    timeout_duration_sec: 300,
-    retry_count: 0,
-    retry_delay: 5,
-    on_failure: "stop"
-  }')
-
-ING1_ID=$(api_request_json POST "${API_URL}/ingredients/" "${ING1_PAYLOAD}" | jq -r '.id')
+ING1_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=${ING_EXECUTION_TARGET}" | jq -r '.[0].id // empty')
 
 if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
-  log_error "Failed to create ingredient ${ING_TASK_ID}"
-  exit 1
+  log_info "Ingredient ${ING_EXECUTION_TARGET} not found, creating it..."
+  ING1_PAYLOAD=$(jq -n \
+    --arg execution_engine "stackstorm" \
+    --arg execution_target "${ING_EXECUTION_TARGET}" \
+    --arg task_key_template "${ING_TASK_KEY_TEMPLATE}" \
+    --argjson is_blocking "$IS_BLOCKING" \
+    --arg on_failure "$ING_ON_FAILURE" \
+    '{
+      execution_engine: $execution_engine,
+      execution_target: $execution_target,
+      task_key_template: $task_key_template,
+      execution_parameters: {
+        cmd: {
+          type: "string",
+          description: "Command to execute",
+          required: true
+        }
+      },
+      is_blocking: $is_blocking,
+      expected_duration_sec: 30,
+      timeout_duration_sec: 300,
+      retry_count: 0,
+      retry_delay: 5,
+      on_failure: $on_failure
+    }')
+
+  ING1_ID=$(api_request_json POST "${API_URL}/ingredients/" "${ING1_PAYLOAD}" | jq -r '.id')
+
+  if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
+    log_error "Failed to create ingredient ${ING_EXECUTION_TARGET}"
+    exit 1
+  fi
+else
+  log_info "Using existing ingredient ${ING_EXECUTION_TARGET} (ID: $ING1_ID)"
 fi
 
 # Reuse the same unique ingredient for both recipe steps.
 ING2_ID="$ING1_ID"
+
+if [ "${IS_BLOCKING}" = "true" ]; then
+  # Force explicit depth mode in workflow generation for deterministic sequencing.
+  STEP1_DEPTH=1
+  STEP2_DEPTH=2
+else
+  # Same explicit depth => same stage => parallel/non-blocking.
+  STEP1_DEPTH=1
+  STEP2_DEPTH=1
+fi
 
 RECIPE_PAYLOAD=$(jq -n \
   --arg name "$TEST_RECIPE" \
@@ -74,20 +94,20 @@ RECIPE_PAYLOAD=$(jq -n \
   --arg step2_cmd "$STEP2_CMD" \
   --argjson ing1_id "$ING1_ID" \
   --argjson ing2_id "$ING2_ID" \
+  --argjson step1_depth "$STEP1_DEPTH" \
+  --argjson step2_depth "$STEP2_DEPTH" \
   '{
     name: $name,
     description: $desc,
     enabled: true,
-    workflow_payload: null,
-    workflow_parameters: {},
     recipe_ingredients: [
       {
         ingredient_id: $ing1_id,
         step_order: 1,
         on_success: "continue",
         parallel_group: 0,
-        depth: 0,
-        input_parameters: {
+        depth: $step1_depth,
+        execution_parameters_override: {
           cmd: $step1_cmd
         }
       },
@@ -96,8 +116,8 @@ RECIPE_PAYLOAD=$(jq -n \
         step_order: 2,
         on_success: "continue",
         parallel_group: 0,
-        depth: 0,
-        input_parameters: {
+        depth: $step2_depth,
+        execution_parameters_override: {
           cmd: $step2_cmd
         }
       }

@@ -34,6 +34,7 @@ DishProcessingStatus = Literal[
 OrderProcessingStatus = Literal[
     "new",
     "processing",
+    "resolving",
     "complete",
     "failed",
     "canceled",
@@ -113,6 +114,21 @@ OnFailureAction = Literal[
     "stop",
     "retry",
 ]
+
+RunPhase = Literal[
+    "firing",
+    "resolving",
+    "both",
+]
+
+ExecutionPurpose = Literal[
+    "remediation",
+    "comms",
+    "utility",
+]
+
+# Backward-compatible alias.
+IngredientKind = ExecutionPurpose
 
 # =============================================================================
 # Sort Order Types

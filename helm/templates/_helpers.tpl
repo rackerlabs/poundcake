@@ -61,7 +61,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- else if .Values.stackstorm.releaseName -}}
 {{- printf "http://%s-st2api:9101" (include "poundcake.stackstormSubchartPrefix" .) -}}
 {{- else -}}
-{{- printf "http://stackstorm-api:9101" -}}
+{{- printf "http://stackstorm-api:%v" .Values.services.stackstormApi.port -}}
 {{- end -}}
 {{- end -}}
 
@@ -71,7 +71,39 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- else if .Values.stackstorm.releaseName -}}
 {{- printf "http://%s-st2auth:9100" (include "poundcake.stackstormSubchartPrefix" .) -}}
 {{- else -}}
-{{- printf "http://stackstorm-auth:9100" -}}
+{{- printf "http://stackstorm-auth:%v" .Values.services.stackstormAuth.port -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.apiServiceUrl" -}}
+{{- printf "http://poundcake-api:%v" .Values.services.api.port -}}
+{{- end -}}
+
+{{- define "poundcake.validateUniqueUrlServicePorts" -}}
+{{- $urlServices := list
+  (dict "name" "services.api.port" "port" (int .Values.services.api.port))
+  (dict "name" "services.ui.port" "port" (int .Values.services.ui.port))
+  (dict "name" "services.stackstormApi.port" "port" (int .Values.services.stackstormApi.port))
+  (dict "name" "services.stackstormAuth.port" "port" (int .Values.services.stackstormAuth.port))
+-}}
+{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "stream")) "true" -}}
+{{- $urlServices = append $urlServices (dict "name" "services.stackstormStream.port" "port" (int .Values.services.stackstormStream.port)) -}}
+{{- end -}}
+{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "web")) "true" -}}
+{{- $urlServices = append $urlServices (dict "name" "services.stackstormWeb.port" "port" (int .Values.services.stackstormWeb.port)) -}}
+{{- end -}}
+{{- if .Values.bakery.enabled -}}
+{{- $urlServices = append $urlServices (dict "name" "bakery.service.port" "port" (int .Values.bakery.service.port)) -}}
+{{- end -}}
+{{- $seen := dict -}}
+{{- range $service := $urlServices -}}
+{{- $name := get $service "name" -}}
+{{- $port := get $service "port" -}}
+{{- $key := printf "%d" $port -}}
+{{- if hasKey $seen $key -}}
+{{- fail (printf "URL-addressable service ports must be unique. %s and %s both use port %d." (get $seen $key) $name $port) -}}
+{{- end -}}
+{{- $_ := set $seen $key $name -}}
 {{- end -}}
 {{- end -}}
 

@@ -96,8 +96,8 @@ def _make_dish(dish_id: int = 1, status: str = "new") -> Dish:
         processing_status=status,
         expected_duration_sec=10,
         actual_duration_sec=None,
-        status=None,
-        workflow_execution_id=None,
+        execution_status=None,
+        execution_ref=None,
         started_at=None,
         completed_at=None,
         result=None,
@@ -114,9 +114,9 @@ def _make_dish_ingredient(ingredient_id: int = 1) -> DishIngredient:
         id=ingredient_id,
         dish_id=1,
         recipe_ingredient_id=None,
-        task_id="core.local",
-        st2_execution_id="st2-1",
-        status="succeeded",
+        execution_target="core.local",
+        execution_ref="st2-1",
+        execution_status="succeeded",
         started_at=now,
         completed_at=now,
         canceled_at=None,
@@ -136,10 +136,6 @@ def _make_recipe(recipe_id: int = 1, name: str = "group") -> Recipe:
         name=name,
         description=None,
         enabled=True,
-        source_type="undefined",
-        workflow_id=None,
-        workflow_payload=None,
-        workflow_parameters=None,
         created_at=now,
         updated_at=now,
         deleted=False,
@@ -284,7 +280,7 @@ def test_update_dish_updates_order_when_terminal(client, mock_db_session):
 
     response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
     assert response.status_code == 200
-    assert order.processing_status == "processing"
+    assert order.processing_status == "resolving"
     assert order.is_active is True
 
 
@@ -308,6 +304,36 @@ def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
     assert response.status_code == 200
     assert order.processing_status == "processing"
     assert order.is_active is True
+
+
+def test_update_dish_terminal_does_not_reactivate_canceled_order(client, mock_db_session):
+    dish = _make_dish(status="processing")
+    order = _make_order(status="canceled")
+    order.is_active = False
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
+
+    assert response.status_code == 200
+    assert order.processing_status == "canceled"
+    assert order.is_active is False
+
+
+def test_update_dish_terminal_does_not_reactivate_failed_order(client, mock_db_session):
+    dish = _make_dish(status="processing")
+    order = _make_order(status="failed")
+    order.is_active = False
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
+
+    assert response.status_code == 200
+    assert order.processing_status == "failed"
+    assert order.is_active is False
 
 
 def test_cook_dishes_without_recipe_keeps_order_active(client, mock_db_session):

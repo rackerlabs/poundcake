@@ -35,27 +35,44 @@ async def create_ingredient(
     """Create a new global ingredient."""
     req_id = request.state.req_id
 
-    logger.info("Creating ingredient", extra={"req_id": req_id, "task_id": ingredient.task_id})
+    logger.info(
+        "Creating ingredient",
+        extra={"req_id": req_id, "execution_target": ingredient.execution_target},
+    )
 
-    # Check if ingredient with this task_id already exists
-    result = await db.execute(select(Ingredient).where(Ingredient.task_id == ingredient.task_id))
+    result = await db.execute(
+        select(Ingredient).where(
+            Ingredient.execution_target == ingredient.execution_target,
+            Ingredient.execution_engine == ingredient.execution_engine,
+        )
+    )
     existing = result.scalars().first()
     if existing:
         logger.warning(
             "Ingredient already exists",
-            extra={"req_id": req_id, "task_id": ingredient.task_id, "existing_id": existing.id},
+            extra={
+                "req_id": req_id,
+                "execution_target": ingredient.execution_target,
+                "existing_id": existing.id,
+            },
         )
         raise HTTPException(
-            status_code=400, detail=f"Ingredient with task_id '{ingredient.task_id}' already exists"
+            status_code=400,
+            detail=(
+                "Ingredient with execution_target "
+                f"'{ingredient.execution_target}' already exists for engine "
+                f"'{ingredient.execution_engine}'"
+            ),
         )
 
     db_ingredient = Ingredient(
-        task_id=ingredient.task_id,
-        task_name=ingredient.task_name,
-        action_id=ingredient.action_id,
-        action_payload=ingredient.action_payload,
-        action_parameters=ingredient.action_parameters,
-        source_type=ingredient.source_type,
+        execution_target=ingredient.execution_target,
+        task_key_template=ingredient.task_key_template,
+        execution_id=ingredient.execution_id,
+        execution_payload=ingredient.execution_payload,
+        execution_parameters=ingredient.execution_parameters,
+        execution_engine=ingredient.execution_engine,
+        execution_purpose=ingredient.execution_purpose,
         is_blocking=ingredient.is_blocking,
         expected_duration_sec=ingredient.expected_duration_sec,
         timeout_duration_sec=ingredient.timeout_duration_sec,
@@ -78,10 +95,10 @@ async def list_ingredients(
     """List global ingredients with optional filtering."""
     query = select(Ingredient)
 
-    if params.task_id is not None:
-        query = query.where(Ingredient.task_id == params.task_id)
-    if params.task_name is not None:
-        query = query.where(Ingredient.task_name == params.task_name)
+    if params.execution_target is not None:
+        query = query.where(Ingredient.execution_target == params.execution_target)
+    if params.task_key_template is not None:
+        query = query.where(Ingredient.task_key_template == params.task_key_template)
 
     query = query.limit(params.limit).offset(params.offset)
     result = await db.execute(query)
@@ -112,7 +129,7 @@ async def delete_ingredient(
         if not ingredient:
             raise HTTPException(status_code=404, detail="Ingredient not found")
 
-        task_name = ingredient.task_name
+        task_name = ingredient.task_key_template
         await db.delete(ingredient)
 
     logger.info(

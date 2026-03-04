@@ -618,9 +618,9 @@ spec:
                 name: stackstorm-secrets
           env:
             - name: ST2_AUTH_URL
-              value: http://stackstorm-auth:9100
+              value: {{ include "poundcake.stackstormAuthUrl" . | quote }}
             - name: ST2_API_URL
-              value: http://stackstorm-api:9101
+              value: {{ include "poundcake.stackstormApiUrl" . | quote }}
           command:
             - /bin/bash
             - -ec
@@ -780,7 +780,7 @@ spec:
             - |
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               PACK_SYNC_ENDPOINT="{{ .Values.stackstormPackSync.endpoint }}"
-              gate_wait_for_tcp "poundcake-api" "8000" "poundcake-bootstrap-api-port" "tcp poundcake-api:8000"
+              gate_wait_for_tcp "poundcake-api" "{{ .Values.services.api.port }}" "poundcake-bootstrap-api-port" "tcp poundcake-api:{{ .Values.services.api.port }}"
               retries=90
               gate_log_wait_start "poundcake-bootstrap-pack-sync-endpoint" "http endpoint ${PACK_SYNC_ENDPOINT}"
               while [ "${retries}" -gt 0 ]; do
@@ -817,7 +817,7 @@ spec:
             - name: PYTHONPATH
               value: /app
             - name: POUNDCAKE_API_URL
-              value: http://poundcake-api:8000
+              value: {{ include "poundcake.apiServiceUrl" . | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: POUNDCAKE_LOG_FORMAT
@@ -832,6 +832,10 @@ spec:
               value: "0"
             - name: POUNDCAKE_BOOTSTRAP_MARK
               value: "true"
+            - name: POUNDCAKE_BOOTSTRAP_INGREDIENTS_FILE
+              value: "/app/bootstrap/ingredients/bakery.yaml"
+            - name: POUNDCAKE_BOOTSTRAP_RECIPES_DIR
+              value: "/app/bootstrap/recipes"
             - name: SERVICE_NAME
               value: "dishwasher-bootstrap"
             - name: POUNDCAKE_AUTH_ENABLED

@@ -24,23 +24,24 @@ require_cmd jq
 log_info "Creating single-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
 
 # Check if core.local ingredient already exists
-ING_ID=$(api_request_json GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
+ING_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=core.local" | jq -r '.[0].id // empty')
 
 if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
   log_info "Ingredient core.local not found, creating it..."
   ING_PAYLOAD=$(jq -n \
+    --arg execution_engine "stackstorm" \
     --argjson is_blocking "$IS_BLOCKING" \
     '{
-      task_id: "core.local",
-      task_name: "single_echo",
-      action_parameters: {
+      execution_engine: $execution_engine,
+      execution_target: "core.local",
+      task_key_template: "single_echo",
+      execution_parameters: {
         cmd: {
           type: "string",
           description: "Command to execute",
           required: true
         }
       },
-      source_type: "stackstorm",
       is_blocking: $is_blocking,
       expected_duration_sec: 30,
       timeout_duration_sec: 300,
@@ -67,8 +68,6 @@ RECIPE_PAYLOAD=$(jq -n \
     name: $name,
     description: $desc,
     enabled: true,
-    workflow_payload: null,
-    workflow_parameters: {},
     recipe_ingredients: [
       {
         ingredient_id: $ing_id,
@@ -76,7 +75,7 @@ RECIPE_PAYLOAD=$(jq -n \
         on_success: "continue",
         parallel_group: 0,
         depth: 0,
-        input_parameters: {
+        execution_parameters_override: {
           cmd: "echo \"single step test\""
         }
       }

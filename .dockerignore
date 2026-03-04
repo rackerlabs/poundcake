@@ -72,6 +72,11 @@ test-*.sh
 # Config examples
 *.example.*
 config/
+!config/bootstrap/
+!config/bootstrap/ingredients/
+!config/bootstrap/ingredients/**
+!config/bootstrap/recipes/
+!config/bootstrap/recipes/**
 
 # Scripts
 quickstart.sh

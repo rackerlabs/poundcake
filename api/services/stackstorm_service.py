@@ -621,27 +621,36 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
 
     for i, ri in enumerate(sorted_steps):
         if isinstance(recipe_object, dict):
+            run_phase = (ri.get("run_phase") or "both").lower()
+        else:
+            run_phase = (ri.run_phase or "both").lower()
+        if run_phase not in ("firing", "both"):
+            continue
+
+        if isinstance(recipe_object, dict):
             ingredient = ri.get("ingredient") or {}
             step_order = ri.get("step_order")
             depth = ri.get("depth") or 0
-            task_name_raw = ingredient.get("task_name", "task")
-            task_id = ingredient.get("task_id")
-            input_parameters = ri.get("input_parameters") or {}
+            task_name_raw = ingredient.get("task_key_template", "task")
+            task_id = ingredient.get("execution_target")
+            input_parameters = ri.get("execution_parameters_override") or {}
             retry_count = ingredient.get("retry_count") or 0
             retry_delay = ingredient.get("retry_delay")
             is_blocking = ingredient.get("is_blocking", True)
+            on_failure = str(ingredient.get("on_failure") or "stop").lower()
         else:
             ingredient = ri.ingredient
             if ingredient is None:
                 continue
             step_order = ri.step_order
             depth = ri.depth
-            task_name_raw = ingredient.task_name
-            task_id = ingredient.task_id
-            input_parameters = ri.input_parameters or {}
+            task_name_raw = ingredient.task_key_template
+            task_id = ingredient.execution_target
+            input_parameters = ri.execution_parameters_override or {}
             retry_count = ingredient.retry_count
             retry_delay = ingredient.retry_delay
             is_blocking = ingredient.is_blocking
+            on_failure = str(ingredient.on_failure or "stop").lower()
 
         task_name = f"step_{step_order}_{task_name_raw.replace('.', '_')}"
         last_task_name = task_name
@@ -664,6 +673,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                 "depth": depth,
                 "step_order": step_order,
                 "is_blocking": is_blocking,
+                "on_failure": on_failure,
             }
         )
 
@@ -674,14 +684,11 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
     for depth in tasks_by_depth:
         tasks_by_depth[depth] = sorted(tasks_by_depth[depth], key=lambda x: x["step_order"])
 
-    def _add_transition(
-        from_task: dict[str, Any],
-        target_names: list[str],
-    ) -> None:
+    def _add_transition(from_task: dict[str, Any], target_names: list[str], when_expr: str) -> None:
         if not target_names:
             return
         transition = {
-            "when": "<% succeeded() %>",
+            "when": when_expr,
             "do": target_names if len(target_names) > 1 else target_names[0],
         }
         next_items = from_task["def"].setdefault("next", [])
@@ -704,7 +711,9 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
                 next_task["def"]["join"] = "all"
 
         for prev_task in prev_stage:
-            _add_transition(prev_task, next_names)
+            _add_transition(prev_task, next_names, "<% succeeded() %>")
+            if prev_task.get("on_failure") == "continue":
+                _add_transition(prev_task, next_names, "<% failed() %>")
 
     stages: list[list[dict[str, Any]]] = []
     has_explicit_depth = any(t["depth"] > 0 for t in task_defs)
@@ -743,6 +752,24 @@ def _safe_workflow_name(name: str | None) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name or "workflow")
 
 
+def _normalize_execution_parameters(recipe: Recipe | dict[str, Any]) -> dict[str, Any]:
+    """Return StackStorm action parameters as a JSON object."""
+    if not isinstance(recipe, dict):
+        return {}
+
+    if "execution_parameters" not in recipe:
+        return {}
+
+    execution_parameters = recipe.get("execution_parameters")
+    if execution_parameters is None:
+        return {}
+
+    if not isinstance(execution_parameters, dict):
+        raise ValueError("execution_parameters must be an object when provided")
+
+    return execution_parameters
+
+
 def build_stackstorm_pack_files(
     recipes: list[Recipe | dict[str, Any]],
     pack_name: str | None = None,
@@ -760,17 +787,10 @@ def build_stackstorm_pack_files(
     }
 
     for recipe in recipes:
-        workflow_payload = (
-            recipe.get("workflow_payload") if isinstance(recipe, dict) else recipe.workflow_payload
-        )
         recipe_name = recipe.get("name") if isinstance(recipe, dict) else recipe.name
 
         try:
-            yaml_payload = (
-                yaml.safe_dump(workflow_payload, sort_keys=False)
-                if isinstance(workflow_payload, dict)
-                else generate_orquesta_yaml(recipe)
-            )
+            yaml_payload = generate_orquesta_yaml(recipe)
         except Exception as exc:
             logger.warning(
                 "Skipping recipe while building StackStorm pack files",
@@ -836,11 +856,7 @@ async def register_workflow_to_st2(
         "runner_type": "orquesta",
         "entry_point": f"workflows/{safe_name}.yaml",
         "enabled": True,
-        "parameters": (
-            recipe.get("workflow_parameters")
-            if isinstance(recipe, dict)
-            else (recipe.workflow_parameters or {})
-        ),
+        "parameters": _normalize_execution_parameters(recipe),
         "description": (
             recipe.get("description") if isinstance(recipe, dict) else recipe.description
         ),

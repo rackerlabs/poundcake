@@ -15,6 +15,7 @@ from api.models.models import Dish, Order
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.metrics import record_order_resolved_before_dish_start
+from api.core.statuses import can_transition_to_resolving, is_order_terminal, should_keep_active
 from api.services.bakery_client import add_ticket_comment, close_ticket, poll_operation
 from api.services.suppression_service import find_first_matching_suppression, save_suppressed_event
 
@@ -314,14 +315,26 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                         .values(
                             counter=Order.counter + 1,
                             alert_status="firing",
+                            processing_status=(
+                                "processing"
+                                if (existing.processing_status or "").lower() == "resolving"
+                                else Order.processing_status
+                            ),
                             is_active=True,
                             updated_at=datetime.now(timezone.utc),
                         )
                     )
+                    reopened_from_resolving = (
+                        existing.processing_status or ""
+                    ).lower() == "resolving"
 
                     logger.info(
                         "Order counter incremented",
-                        extra={"req_id": req_id, "order_id": existing.id},
+                        extra={
+                            "req_id": req_id,
+                            "order_id": existing.id,
+                            "reopened_from_resolving": reopened_from_resolving,
+                        },
                     )
                     results.append(
                         {
@@ -365,14 +378,19 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
 
                     existing.alert_status = "resolved"
                     existing.ends_at = ends_at
-                    if ticket_clear_synced:
-                        existing.processing_status = "complete"
+                    # Route resolved orders through resolve-phase orchestration when non-terminal.
+                    if can_transition_to_resolving(existing.processing_status, "alert_resolved"):
+                        existing.processing_status = "resolving"
+                    if is_order_terminal(existing.processing_status):
                         existing.is_active = False
                     else:
-                        # Do not finalize while clear-note sync to ticket is pending.
-                        existing.processing_status = "processing"
-                        existing.is_active = True
+                        existing.is_active = should_keep_active(existing.processing_status)
                     existing.updated_at = datetime.now(timezone.utc)
+                    if not ticket_clear_synced:
+                        logger.info(
+                            "Resolve ticket synchronization still pending; order remains resolving",
+                            extra={"req_id": req_id, "order_id": existing.id},
+                        )
 
                     if resolved_before_dish:
                         logger.warning(

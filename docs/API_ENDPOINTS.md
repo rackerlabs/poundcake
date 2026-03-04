@@ -68,6 +68,28 @@ This document reflects the current PoundCake API surface.
 - `GET /ingredients/by-name/{recipe_name}`
 - `GET /ingredients/by-recipe/{recipe_id}`
 
+Ingredient payload contract:
+- `execution_payload` is `object | null`
+- when `execution_engine=bakery` and `execution_purpose=comms`, `execution_payload.template` must be an object
+- canonical Bakery comms `execution_target` values are: `tickets.create`, `tickets.update`, `tickets.comment`, `tickets.close`
+- `execution_id` and `execution_purpose` are canonical fields
+- `action_id` and `ingredient_kind` are accepted/returned as deprecated aliases
+
+Bootstrap catalog contract:
+- bootstrap sync reads `POUNDCAKE_BOOTSTRAP_INGREDIENTS_FILE` (default: `/app/bootstrap/ingredients/bakery.yaml`)
+- bootstrap sync reads `POUNDCAKE_BOOTSTRAP_RECIPES_DIR` (default: `/app/bootstrap/recipes`)
+- catalog schema:
+  - `apiVersion: poundcake/v1`
+  - `kind: IngredientCatalog`
+  - `ingredients: []`
+- recipe catalog entry schema (per file):
+  - `apiVersion: poundcake/v1`
+  - `kind: RecipeCatalogEntry`
+  - `recipe: { name, description, enabled, recipe_ingredients[] }`
+- `/cook/sync` response includes:
+  - `bootstrap_catalog.ingredients` stats (`created`, `updated`, `skipped`, `errors`)
+  - `bootstrap_catalog.recipes` stats (`created`, `updated`, `skipped`, `processed`, `errors`)
+
 ### Orders
 - `GET /orders`
 - `POST /orders`

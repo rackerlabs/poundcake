@@ -4,7 +4,7 @@
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# Test: Reuse the same recipe/workflow across two webhook posts in one run
+# Test: Reuse the same recipe/task signature across two webhook posts in one run
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,13 +27,12 @@ require_cmd jq
 log_info "Using recipe: ${TEST_RECIPE}"
 
 # Find or create core.local ingredient.
-ING_ID=$(api_request_json GET "${API_URL}/ingredients/?task_id=core.local" | jq -r '.[0].id // empty')
+ING_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=core.local" | jq -r '.[0].id // empty')
 if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
   ING_PAYLOAD=$(jq -n \
     '{
-      task_id: "core.local",
-      task_name: "local",
-      source_type: "stackstorm",
+      execution_target: "core.local",
+      task_key_template: "local",
       is_blocking: true,
       expected_duration_sec: 30,
       timeout_duration_sec: 300,
@@ -50,7 +49,7 @@ if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
   exit 1
 fi
 
-# Create one two-step recipe with generated workflow (workflow_payload=null).
+# Create one two-step recipe with generated workflow.
 RECIPE_PAYLOAD=$(jq -n \
   --arg name "${TEST_RECIPE}" \
   --arg desc "Automated recipe reuse test" \
@@ -59,9 +58,6 @@ RECIPE_PAYLOAD=$(jq -n \
     name: $name,
     description: $desc,
     enabled: true,
-    source_type: "stackstorm",
-    workflow_payload: null,
-    workflow_parameters: {},
     recipe_ingredients: [
       {
         ingredient_id: $ing_id,
@@ -69,7 +65,7 @@ RECIPE_PAYLOAD=$(jq -n \
         on_success: "continue",
         parallel_group: 0,
         depth: 0,
-        input_parameters: {cmd: "echo \"reuse step 1\""}
+        execution_parameters_override: {cmd: "echo \"reuse step 1\""}
       },
       {
         ingredient_id: $ing_id,
@@ -77,7 +73,7 @@ RECIPE_PAYLOAD=$(jq -n \
         on_success: "continue",
         parallel_group: 0,
         depth: 0,
-        input_parameters: {cmd: "echo \"reuse step 2\""}
+        execution_parameters_override: {cmd: "echo \"reuse step 2\""}
       }
     ]
   }')
@@ -168,48 +164,64 @@ wait_for_order_inactive() {
   done
 }
 
-wait_for_workflow_id() {
-  local start now recipe workflow_id
+wait_for_dish_ingredients() {
+  local dish_id="$1"
+  local start now ingredients count
   start=$(date +%s)
   while true; do
-    recipe=$(api_request_json GET "${API_URL}/recipes/by-name/${TEST_RECIPE}")
-    workflow_id=$(echo "${recipe}" | jq -r '.workflow_id // empty')
-    if [ -n "${workflow_id}" ] && [ "${workflow_id}" != "null" ]; then
-      echo "${workflow_id}"
+    ingredients=$(api_request_json GET "${API_URL}/dishes/${dish_id}/ingredients")
+    count=$(echo "${ingredients}" | jq -r 'length')
+    if [ "${count}" != "0" ]; then
+      echo "${ingredients}"
       return 0
     fi
     now=$(date +%s)
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
-      log_error "Timed out waiting for workflow_id on recipe ${TEST_RECIPE}"
+      log_error "Timed out waiting for dish ingredients for dish_id=${dish_id}"
       return 1
     fi
     sleep "${INTERVAL}"
   done
 }
 
+build_task_signature() {
+  local ingredients_json="$1"
+  echo "${ingredients_json}" | jq -c 'map({
+    task_key,
+    execution_target,
+    execution_engine
+  }) | sort_by(.task_key, .execution_target, .execution_engine)'
+}
+
 log_info "Posting first webhook (${REQ_ID_1})..."
 post_webhook "${REQ_ID_1}" "${FINGERPRINT_1}"
 DISH1_JSON=$(wait_for_dish "${REQ_ID_1}")
-WORKFLOW_ID_1=$(wait_for_workflow_id)
 RECIPE_ID_1=$(echo "${DISH1_JSON}" | jq -r '.recipe_id')
+DISH_ID_1=$(echo "${DISH1_JSON}" | jq -r '.id')
+INGREDIENTS_1=$(wait_for_dish_ingredients "${DISH_ID_1}")
+TASK_SIG_1=$(build_task_signature "${INGREDIENTS_1}")
 wait_for_order_inactive "${REQ_ID_1}"
 
 log_info "Posting second webhook (${REQ_ID_2})..."
 post_webhook "${REQ_ID_2}" "${FINGERPRINT_2}"
 DISH2_JSON=$(wait_for_dish "${REQ_ID_2}")
-WORKFLOW_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe.workflow_id')
 RECIPE_ID_2=$(echo "${DISH2_JSON}" | jq -r '.recipe_id')
+DISH_ID_2=$(echo "${DISH2_JSON}" | jq -r '.id')
+INGREDIENTS_2=$(wait_for_dish_ingredients "${DISH_ID_2}")
+TASK_SIG_2=$(build_task_signature "${INGREDIENTS_2}")
 
 if [ "${RECIPE_ID_1}" != "${RECIPE_ID_2}" ]; then
   log_error "Recipe was not reused: first=${RECIPE_ID_1} second=${RECIPE_ID_2}"
   exit 1
 fi
 
-if [ "${WORKFLOW_ID_1}" != "${WORKFLOW_ID_2}" ]; then
-  log_error "Workflow was not reused: first=${WORKFLOW_ID_1} second=${WORKFLOW_ID_2}"
+if [ "${TASK_SIG_1}" != "${TASK_SIG_2}" ]; then
+  log_error "Task signature was not reused"
+  log_error "first=${TASK_SIG_1}"
+  log_error "second=${TASK_SIG_2}"
   exit 1
 fi
 
-log_info "PASS: recipe and workflow reused across two webhook posts"
+log_info "PASS: recipe and task signature reused across two webhook posts"
 echo "recipe_id=${RECIPE_ID_1}"
-echo "workflow_id=${WORKFLOW_ID_1}"
+echo "task_signature=${TASK_SIG_1}"

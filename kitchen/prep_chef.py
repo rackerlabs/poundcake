@@ -40,29 +40,33 @@ def prep_loop() -> None:
 
     while True:
         try:
-            # Fetch orders with processing_status = 'new'
-            start_time = time.time()
-            resp = request_with_retry_sync(
-                "GET",
-                f"{API_URL}/orders",
-                params={"processing_status": "new", "limit": POLL_LIMIT},
-                headers=_service_headers(SYSTEM_REQ_ID),
-                timeout=10,
-                retries=POLLER_RETRIES,
-            )
-            latency_ms = int((time.time() - start_time) * 1000)
-            if resp.status_code != 200:
-                logger.error(
-                    "Failed to fetch new orders",
-                    extra={
-                        "req_id": SYSTEM_REQ_ID,
-                        "method": "GET",
-                        "status_code": resp.status_code,
-                        "latency_ms": latency_ms,
-                    },
+            orders = []
+            for status in ("new", "resolving"):
+                start_time = time.time()
+                resp = request_with_retry_sync(
+                    "GET",
+                    f"{API_URL}/orders",
+                    params={"processing_status": status, "limit": POLL_LIMIT},
+                    headers=_service_headers(SYSTEM_REQ_ID),
+                    timeout=10,
+                    retries=POLLER_RETRIES,
                 )
-                time.sleep(PREP_INTERVAL)
-                continue
+                latency_ms = int((time.time() - start_time) * 1000)
+                if resp.status_code != 200:
+                    logger.error(
+                        "Failed to fetch orders",
+                        extra={
+                            "req_id": SYSTEM_REQ_ID,
+                            "method": "GET",
+                            "status": status,
+                            "status_code": resp.status_code,
+                            "latency_ms": latency_ms,
+                        },
+                    )
+                    continue
+                fetched = resp.json()
+                if isinstance(fetched, list):
+                    orders.extend(fetched)
 
             if api_unavailable_since is not None:
                 downtime_sec = int(time.time() - api_unavailable_since)
@@ -72,11 +76,10 @@ def prep_loop() -> None:
                 )
                 api_unavailable_since = None
 
-            orders = resp.json()
-
             for order in orders:
                 req_id = order.get("req_id", "UNKNOWN")
                 order_id = order.get("id")
+                processing_status = order.get("processing_status")
 
                 # Pass the original Request ID to the next hop
                 headers = _service_headers(req_id)
@@ -87,13 +90,22 @@ def prep_loop() -> None:
                 )
 
                 start_time = time.time()
-                cook_resp = request_with_retry_sync(
-                    "POST",
-                    f"{API_URL}/dishes/cook/{order_id}",
-                    headers=headers,
-                    timeout=15,
-                    retries=POLLER_RETRIES,
-                )
+                if processing_status == "resolving":
+                    cook_resp = request_with_retry_sync(
+                        "POST",
+                        f"{API_URL}/orders/{order_id}/resolve",
+                        headers=headers,
+                        timeout=15,
+                        retries=POLLER_RETRIES,
+                    )
+                else:
+                    cook_resp = request_with_retry_sync(
+                        "POST",
+                        f"{API_URL}/dishes/cook/{order_id}",
+                        headers=headers,
+                        timeout=15,
+                        retries=POLLER_RETRIES,
+                    )
                 latency_ms = int((time.time() - start_time) * 1000)
 
                 if cook_resp.status_code in [200, 201]:
@@ -107,6 +119,7 @@ def prep_loop() -> None:
                         extra={
                             "req_id": req_id,
                             "order_id": order_id,
+                            "processing_status": processing_status,
                             "cook_status": cook_status,
                             "method": "POST",
                             "status_code": cook_resp.status_code,
@@ -119,6 +132,7 @@ def prep_loop() -> None:
                         extra={
                             "req_id": req_id,
                             "order_id": order_id,
+                            "processing_status": processing_status,
                             "method": "POST",
                             "status_code": cook_resp.status_code,
                             "latency_ms": latency_ms,

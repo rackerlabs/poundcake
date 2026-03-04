@@ -6,7 +6,7 @@
 #
 """Pydantic schemas for PoundCake API."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -19,6 +19,8 @@ from api.types import (
     SuppressionScope,
     SuppressionStatus,
     SuppressionMatcherOperator,
+    RunPhase,
+    ExecutionPurpose,
 )
 
 # =============================================================================
@@ -58,20 +60,59 @@ class StatsResponse(BaseModel):
 class IngredientBase(BaseModel):
     """Base schema for Ingredient creation/updates."""
 
-    task_id: str = Field(..., max_length=100)
-    task_name: str = Field(..., max_length=255)
+    execution_target: str = Field(..., max_length=100)
+    task_key_template: str = Field(..., max_length=255)
 
-    action_id: Optional[str] = Field(None, max_length=100)
-    action_payload: Optional[str] = None
-    action_parameters: Optional[Dict[str, Any]] = None
+    execution_id: Optional[str] = Field(None, max_length=100)
+    action_id: Optional[str] = Field(
+        None, max_length=100, description="Deprecated alias for execution_id"
+    )
+    execution_payload: Optional[Dict[str, Any]] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
 
-    source_type: str = Field(default="undefined", max_length=50)
+    execution_engine: str = Field(default="undefined", max_length=50)
+    execution_purpose: ExecutionPurpose = Field(default="utility")
+    ingredient_kind: Optional[ExecutionPurpose] = Field(
+        None, description="Deprecated alias for execution_purpose"
+    )
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
     retry_count: int = Field(default=0, ge=0)
     retry_delay: int = Field(default=5, ge=0)
     on_failure: OnFailureAction = Field(default="stop")
+
+    @field_validator("execution_payload")
+    @classmethod
+    def _validate_execution_payload(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        if value is None:
+            return value
+        if not isinstance(value, dict):
+            raise ValueError("execution_payload must be an object when provided")
+        return value
+
+    @field_validator("execution_engine")
+    @classmethod
+    def _validate_execution_engine(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"undefined", "stackstorm", "bakery", "native", "argocd"}:
+            raise ValueError(
+                "execution_engine must be one of: undefined, stackstorm, bakery, native, argocd"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def _coalesce_deprecated_aliases(self) -> "IngredientBase":
+        if self.execution_id is None and self.action_id is not None:
+            self.execution_id = self.action_id
+        if self.action_id is None and self.execution_id is not None:
+            self.action_id = self.execution_id
+        if self.ingredient_kind is not None:
+            self.execution_purpose = self.ingredient_kind
+        self.ingredient_kind = self.execution_purpose
+        return self
 
 
 class IngredientCreate(IngredientBase):
@@ -83,18 +124,60 @@ class IngredientCreate(IngredientBase):
 class IngredientUpdate(BaseModel):
     """Schema for updating an ingredient (all fields optional)."""
 
-    task_id: Optional[str] = Field(None, max_length=100)
-    task_name: Optional[str] = Field(None, max_length=255)
-    action_id: Optional[str] = Field(None, max_length=100)
-    action_payload: Optional[str] = None
-    action_parameters: Optional[Dict[str, Any]] = None
-    source_type: Optional[str] = Field(None, max_length=50)
+    execution_target: Optional[str] = Field(None, max_length=100)
+    task_key_template: Optional[str] = Field(None, max_length=255)
+    execution_id: Optional[str] = Field(None, max_length=100)
+    action_id: Optional[str] = Field(
+        None, max_length=100, description="Deprecated alias for execution_id"
+    )
+    execution_payload: Optional[Dict[str, Any]] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
+    execution_engine: Optional[str] = Field(None, max_length=50)
+    execution_purpose: Optional[ExecutionPurpose] = None
+    ingredient_kind: Optional[ExecutionPurpose] = Field(
+        None, description="Deprecated alias for execution_purpose"
+    )
     is_blocking: Optional[bool] = None
     expected_duration_sec: Optional[int] = Field(None, gt=0)
     timeout_duration_sec: Optional[int] = Field(None, gt=0)
     retry_count: Optional[int] = Field(None, ge=0)
     retry_delay: Optional[int] = Field(None, ge=0)
     on_failure: Optional[OnFailureAction] = None
+
+    @field_validator("execution_payload")
+    @classmethod
+    def _validate_execution_payload(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        if value is None:
+            return value
+        if not isinstance(value, dict):
+            raise ValueError("execution_payload must be an object when provided")
+        return value
+
+    @field_validator("execution_engine")
+    @classmethod
+    def _validate_execution_engine(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalized = value.strip().lower()
+        if normalized not in {"undefined", "stackstorm", "bakery", "native", "argocd"}:
+            raise ValueError(
+                "execution_engine must be one of: undefined, stackstorm, bakery, native, argocd"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def _coalesce_deprecated_aliases(self) -> "IngredientUpdate":
+        if self.execution_id is None and self.action_id is not None:
+            self.execution_id = self.action_id
+        if self.action_id is None and self.execution_id is not None:
+            self.action_id = self.execution_id
+        if self.execution_purpose is None and self.ingredient_kind is not None:
+            self.execution_purpose = self.ingredient_kind
+        if self.ingredient_kind is None and self.execution_purpose is not None:
+            self.ingredient_kind = self.execution_purpose
+        return self
 
 
 class IngredientResponse(IngredientBase):
@@ -120,7 +203,8 @@ class RecipeIngredientBase(BaseModel):
     on_success: OnSuccessAction = Field(default="continue")
     parallel_group: int = Field(default=0, ge=0)
     depth: int = Field(default=0, ge=0)
-    input_parameters: Optional[Dict[str, Any]] = None
+    execution_parameters_override: Optional[Dict[str, Any]] = None
+    run_phase: RunPhase = Field(default="both")
 
 
 class RecipeIngredientCreate(RecipeIngredientBase):
@@ -146,10 +230,6 @@ class RecipeBase(BaseModel):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     enabled: bool = True
-    source_type: str = Field(default="undefined", max_length=50)
-    workflow_id: Optional[str] = Field(None, max_length=255)
-    workflow_payload: Optional[Dict[str, Any]] = None
-    workflow_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeCreate(RecipeBase):
@@ -164,10 +244,6 @@ class RecipeUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     enabled: Optional[bool] = None
-    source_type: Optional[str] = Field(None, max_length=50)
-    workflow_id: Optional[str] = Field(None, max_length=255)
-    workflow_payload: Optional[Dict[str, Any]] = None
-    workflow_parameters: Optional[Dict[str, Any]] = None
 
 
 class RecipeResponse(RecipeBase):
@@ -204,8 +280,8 @@ class DishUpdate(BaseModel):
     """Schema for updating a dish."""
 
     processing_status: Optional[DishProcessingStatus] = None
-    status: Optional[str] = Field(None, max_length=50)
-    workflow_execution_id: Optional[str] = Field(None, max_length=100)
+    execution_status: Optional[str] = Field(None, max_length=50)
+    execution_ref: Optional[str] = Field(None, max_length=100)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     expected_duration_sec: Optional[int] = None
@@ -221,8 +297,8 @@ class DishResponse(DishBase):
     id: int
     order_id: Optional[int] = None
     recipe_id: int
-    workflow_execution_id: Optional[str] = None
-    status: Optional[str] = None
+    execution_ref: Optional[str] = None
+    execution_status: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     expected_duration_sec: Optional[int] = None
@@ -313,9 +389,15 @@ class OrderResponse(OrderBase):
 class DishIngredientUpsert(BaseModel):
     """Upsert payload for dish ingredient execution results."""
 
-    st2_execution_id: Optional[str] = None
-    task_id: Optional[str] = None
-    status: Optional[str] = None
+    recipe_ingredient_id: Optional[int] = None
+    execution_ref: Optional[str] = None
+    task_key: Optional[str] = None
+    execution_engine: Optional[str] = None
+    execution_target: Optional[str] = None
+    execution_payload: Optional[Dict[str, Any]] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
+    execution_status: Optional[str] = None
+    attempt: Optional[int] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
@@ -339,9 +421,14 @@ class DishIngredientResponse(BaseModel):
     id: int
     dish_id: int
     recipe_ingredient_id: Optional[int] = None
-    task_id: Optional[str] = None
-    st2_execution_id: Optional[str] = None
-    status: Optional[str] = None
+    task_key: Optional[str] = None
+    execution_engine: Optional[str] = None
+    execution_target: Optional[str] = None
+    execution_ref: Optional[str] = None
+    execution_payload: Optional[Dict[str, Any]] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
+    execution_status: Optional[str] = None
+    attempt: int
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None

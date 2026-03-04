@@ -42,7 +42,7 @@ def test_update_dish_final_status_sets_duration_and_completion(
         dish,
         req_id="REQ-7",
         processing_status="complete",
-        status="succeeded",
+        execution_status="succeeded",
         final_status=True,
     )
 
@@ -52,7 +52,7 @@ def test_update_dish_final_status_sets_duration_and_completion(
     payload = captured["json"]
     assert isinstance(payload, dict)
     assert payload["processing_status"] == "complete"
-    assert payload["status"] == "succeeded"
+    assert payload["execution_status"] == "succeeded"
     assert "completed_at" in payload
     assert payload["actual_duration_sec"] >= 10
 
@@ -65,7 +65,7 @@ def test_check_for_timeouts_hard_timeout_cancels_and_fails_dish(
         "id": 9,
         "started_at": started_at,
         "expected_duration_sec": 2,
-        "workflow_execution_id": "exec-9",
+        "execution_ref": "exec-9",
     }
 
     called: dict[str, object] = {}
@@ -88,7 +88,7 @@ def test_check_for_timeouts_hard_timeout_cancels_and_fails_dish(
     _dish, req_id, kwargs = called["update"]
     assert req_id == "REQ-9"
     assert kwargs["processing_status"] == "failed"
-    assert kwargs["status"] == "timeout"
+    assert kwargs["execution_status"] == "timeout"
     assert kwargs["final_status"] is True
 
 
@@ -98,7 +98,7 @@ def test_monitor_dishes_marks_abandoned_when_execution_missing_in_st2(
     dish = {
         "id": 15,
         "req_id": "REQ-15",
-        "workflow_execution_id": "exec-15",
+        "execution_ref": "exec-15",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -130,7 +130,7 @@ def test_monitor_dishes_marks_abandoned_when_execution_missing_in_st2(
     _updated_dish, req_id, kwargs = update_calls[0]
     assert req_id == "REQ-15"
     assert kwargs["processing_status"] == "failed"
-    assert kwargs["status"] == "abandoned"
+    assert kwargs["execution_status"] == "abandoned"
     assert kwargs["error_msg"] == "ST2 execution not found"
     assert kwargs["final_status"] is True
 
@@ -141,7 +141,7 @@ def test_monitor_dishes_terminal_success_persists_ingredients_and_completes(
     dish = {
         "id": 20,
         "req_id": "REQ-20",
-        "workflow_execution_id": "exec-20",
+        "execution_ref": "exec-20",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "started_at": None,
     }
@@ -198,17 +198,17 @@ def test_monitor_dishes_terminal_success_persists_ingredients_and_completes(
     assert len(ingredient_bulk_posts) == 1
     items = ingredient_bulk_posts[0]["items"]
     assert len(items) == 2
-    assert items[0]["task_id"] == "step1"
-    assert items[1]["task_id"] == "step2"
+    assert items[0]["task_key"] == "step1"
+    assert items[1]["task_key"] == "step2"
 
     assert len(update_calls) == 1
     _updated_dish, req_id, kwargs = update_calls[0]
     assert req_id == "REQ-20"
     assert kwargs["processing_status"] == "complete"
-    assert kwargs["status"] == "succeeded"
+    assert kwargs["execution_status"] == "succeeded"
     assert kwargs["final_status"] is True
     assert kwargs["started_at"] == "2026-02-13T10:00:01Z"
-    assert [task["task_id"] for task in kwargs["result"]] == ["step1", "step2"]
+    assert [task["task_key"] for task in kwargs["result"]] == ["step1", "step2"]
 
 
 def test_monitor_dishes_missing_execution_id_times_out_to_abandoned(
@@ -218,7 +218,7 @@ def test_monitor_dishes_missing_execution_id_times_out_to_abandoned(
     dish = {
         "id": 21,
         "req_id": "REQ-21",
-        "workflow_execution_id": None,
+        "execution_ref": None,
         "created_at": old_created_at,
         "started_at": None,
     }
@@ -252,6 +252,6 @@ def test_monitor_dishes_missing_execution_id_times_out_to_abandoned(
     _updated_dish, req_id, kwargs = update_calls[0]
     assert req_id == "REQ-21"
     assert kwargs["processing_status"] == "failed"
-    assert kwargs["status"] == "abandoned"
+    assert kwargs["execution_status"] == "abandoned"
     assert kwargs["error_msg"] == "Missing workflow execution id"
     assert kwargs["final_status"] is True

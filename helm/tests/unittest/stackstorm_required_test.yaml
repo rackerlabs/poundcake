@@ -1,0 +1,16 @@
+suite: stackstorm-required
+templates:
+  - templates/stackstorm-required.yaml
+tests:
+  - it: validates successfully with default distinct URL service ports
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when URL-addressable service ports are duplicated
+    set:
+      services.ui.port: 8000
+    asserts:
+      - failedTemplate:
+          errorMessage: "URL-addressable service ports must be unique. services.api.port and services.ui.port both use port 8000."
+        template: templates/stackstorm-required.yaml

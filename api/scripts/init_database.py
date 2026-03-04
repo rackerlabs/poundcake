@@ -81,11 +81,13 @@ async def seed_default_recipes() -> None:
 
             default_ingredients = [
                 Ingredient(
-                    task_id="log_alert",
-                    task_name="Log Alert Information",
-                    action_id=None,
-                    action_payload=None,
-                    action_parameters=None,
+                    execution_target="log_alert",
+                    task_key_template="Log Alert Information",
+                    execution_engine="native",
+                    execution_purpose="utility",
+                    execution_id=None,
+                    execution_payload=None,
+                    execution_parameters=None,
                     is_blocking=True,
                     expected_duration_sec=5,
                     timeout_duration_sec=30,
@@ -94,11 +96,13 @@ async def seed_default_recipes() -> None:
                     on_failure="continue",
                 ),
                 Ingredient(
-                    task_id="notify_team",
-                    task_name="Notify Team",
-                    action_id=None,
-                    action_payload=None,
-                    action_parameters={"to": "ops@example.com", "subject": "Alert Notification"},
+                    execution_target="notify_team",
+                    task_key_template="Notify Team",
+                    execution_engine="native",
+                    execution_purpose="comms",
+                    execution_id=None,
+                    execution_payload=None,
+                    execution_parameters={"to": "ops@example.com", "subject": "Alert Notification"},
                     is_blocking=False,
                     expected_duration_sec=10,
                     timeout_duration_sec=60,
@@ -117,12 +121,14 @@ async def seed_default_recipes() -> None:
                     ingredient_id=default_ingredients[0].id,
                     step_order=1,
                     on_success="continue",
+                    run_phase="firing",
                 ),
                 RecipeIngredient(
                     recipe_id=default_recipe.id,
                     ingredient_id=default_ingredients[1].id,
                     step_order=2,
                     on_success="continue",
+                    run_phase="both",
                 ),
             ]
 

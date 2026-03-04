@@ -37,13 +37,82 @@ API_UNAVAILABLE_SINCE: float | None = None
 LAST_SUPPRESSION_LIFECYCLE_RUN = 0.0
 
 
+def _task_execution_ref(task: dict[str, Any]) -> str | None:
+    execution_ref = task.get("id")
+    if execution_ref:
+        return str(execution_ref)
+
+    action_executions = task.get("action_executions")
+    if isinstance(action_executions, list):
+        for action_execution in action_executions:
+            if not isinstance(action_execution, dict):
+                continue
+            execution_ref = action_execution.get("id") or action_execution.get("execution_id")
+            if execution_ref:
+                return str(execution_ref)
+    return None
+
+
+def _task_key(task: dict[str, Any], fallback_key: str | None = None) -> str | None:
+    task_key = (
+        task.get("task_key")
+        or task.get("task_id")
+        or task.get("name")
+        or (task.get("context", {}).get("orquesta", {}).get("task_id"))
+        or fallback_key
+    )
+    if task_key is None:
+        return None
+    return str(task_key)
+
+
+def _normalize_tasks(tasks_payload: Any) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    if isinstance(tasks_payload, dict):
+        if isinstance(tasks_payload.get("tasks"), list):
+            tasks_payload = tasks_payload.get("tasks")
+        else:
+            for key, value in tasks_payload.items():
+                if not isinstance(value, dict):
+                    continue
+                normalized.append(
+                    {
+                        "id": _task_execution_ref(value),
+                        "task_key": _task_key(value, str(key)),
+                        "status": value.get("status") or value.get("state"),
+                        "result": value.get("result"),
+                        "start_timestamp": value.get("start_timestamp"),
+                        "end_timestamp": value.get("end_timestamp"),
+                    }
+                )
+            return normalized
+
+    if not isinstance(tasks_payload, list):
+        return normalized
+
+    for task in tasks_payload:
+        if not isinstance(task, dict):
+            continue
+        normalized.append(
+            {
+                "id": _task_execution_ref(task),
+                "task_key": _task_key(task),
+                "status": task.get("status") or task.get("state"),
+                "result": task.get("result"),
+                "start_timestamp": task.get("start_timestamp"),
+                "end_timestamp": task.get("end_timestamp"),
+            }
+        )
+    return normalized
+
+
 def update_dish(
     dish: dict[str, Any],
     req_id: str,
     processing_status: Optional[str] = None,
-    status: Optional[str] = None,
+    execution_status: Optional[str] = None,
     error_msg: Optional[str] = None,
-    workflow_execution_id: Optional[str] = None,
+    execution_ref: Optional[str] = None,
     retry_attempt: Optional[int] = None,
     clear_error: bool = False,
     final_status: bool = False,
@@ -60,14 +129,14 @@ def update_dish(
 
     if processing_status:
         payload["processing_status"] = processing_status
-    if status:
-        payload["status"] = status
+    if execution_status:
+        payload["execution_status"] = execution_status
     if clear_error:
         payload["error_message"] = None
     elif error_msg is not None:
         payload["error_message"] = error_msg
-    if workflow_execution_id is not None:
-        payload["workflow_execution_id"] = workflow_execution_id
+    if execution_ref is not None:
+        payload["execution_ref"] = execution_ref
     if retry_attempt is not None:
         payload["retry_attempt"] = retry_attempt
     if result is not None:
@@ -131,47 +200,65 @@ def _maybe_retry_missing_workflow_execution(
     retry_attempt = int(dish.get("retry_attempt") or 0)
     if retry_attempt != 0:
         return False, None
+    return False, "retry skipped: recipe-level workflow metadata no longer exists"
 
-    recipe = dish.get("recipe") or {}
-    workflow_id = recipe.get("workflow_id")
-    if not workflow_id:
-        return False, "retry skipped: recipe workflow_id is missing"
 
-    workflow_parameters = recipe.get("workflow_parameters") or {}
+def _mark_pending_ingredients_failed(dish_id: int, req_id: str, error_message: str) -> None:
+    """Backfill pending ingredient rows to failed for terminal workflow failures."""
+    try:
+        ingredients_resp = request_with_retry_sync(
+            "GET",
+            f"{API_BASE_URL}/dishes/{dish_id}/ingredients",
+            headers=get_service_headers(req_id),
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
+        if ingredients_resp.status_code != 200:
+            return
 
-    # Give pack-sync sidecars a short window to observe the workflow file.
-    time.sleep(2)
-    exec_resp = request_with_retry_sync(
-        "POST",
-        f"{API_BASE_URL}/cook/execute",
-        json={"action": workflow_id, "parameters": workflow_parameters},
-        headers=get_service_headers(req_id),
-        timeout=30,
-        retries=POLLER_RETRIES,
-    )
-    if exec_resp.status_code not in (200, 201):
-        return False, f"retry execute failed with HTTP {exec_resp.status_code}: {exec_resp.text}"
+        ingredients = ingredients_resp.json() or []
+        failed_at = datetime.now(timezone.utc).isoformat()
+        pending_statuses = {"pending", "running", "processing", "queued", None}
+        items = []
+        for ingredient in ingredients:
+            if not isinstance(ingredient, dict):
+                continue
+            if ingredient.get("execution_status") not in pending_statuses:
+                continue
+            if ingredient.get("completed_at"):
+                continue
 
-    exec_id = (exec_resp.json() or {}).get("id")
-    if not exec_id:
-        return False, "retry execute response missing execution id"
+            recipe_ingredient_id = ingredient.get("recipe_ingredient_id")
+            task_key = ingredient.get("task_key")
+            if recipe_ingredient_id is None and not task_key:
+                continue
 
-    updated = update_dish(
-        dish,
-        req_id,
-        processing_status="processing",
-        workflow_execution_id=exec_id,
-        retry_attempt=retry_attempt + 1,
-        clear_error=True,
-    )
-    if not updated:
-        return False, "failed to persist retried execution id"
+            items.append(
+                {
+                    "recipe_ingredient_id": recipe_ingredient_id,
+                    "task_key": task_key,
+                    "execution_status": "failed",
+                    "completed_at": failed_at,
+                    "error_message": error_message,
+                }
+            )
 
-    logger.warning(
-        "Retried workflow execution after missing workflow file",
-        extra={"req_id": req_id, "dish_id": dish.get("id"), "execution_id": exec_id},
-    )
-    return True, None
+        if not items:
+            return
+
+        request_with_retry_sync(
+            "POST",
+            f"{API_BASE_URL}/dishes/{dish_id}/ingredients/bulk",
+            json={"items": items},
+            headers=get_service_headers(req_id),
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to backfill pending dish ingredients after workflow failure",
+            extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
+        )
 
 
 def cancel_execution(execution_id: str, req_id: str) -> bool:
@@ -237,14 +324,14 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
             }
         )
         logger.critical("Dish exceeded safety timeout; killing execution", extra=extra)
-        exec_id = dish.get("workflow_execution_id")
+        exec_id = dish.get("execution_ref")
         if exec_id:
             cancel_execution(exec_id, req_id)
         update_dish(
             dish,
             req_id,
             processing_status="failed",
-            status="timeout",
+            execution_status="timeout",
             error_msg=f"Task killed: elapsed time {int(elapsed)}s exceeded 5x expected duration",
             final_status=True,
         )
@@ -303,7 +390,7 @@ def monitor_dishes() -> None:
 
         for dish in dishes:
             req_id = dish.get("req_id", SYSTEM_REQ_ID)
-            execution_id = dish.get("workflow_execution_id")
+            execution_id = dish.get("execution_ref")
             extra: dict[str, Any] = {"req_id": req_id}
 
             claim_resp = request_with_retry_sync(
@@ -326,7 +413,7 @@ def monitor_dishes() -> None:
                 )
                 continue
             dish = claim_resp.json()
-            execution_id = dish.get("workflow_execution_id")
+            execution_id = dish.get("execution_ref")
 
             if check_for_timeouts(dish, req_id):
                 continue
@@ -354,7 +441,7 @@ def monitor_dishes() -> None:
                             dish,
                             req_id,
                             processing_status="failed",
-                            status="abandoned",
+                            execution_status="abandoned",
                             error_msg="Missing workflow execution id",
                             final_status=True,
                         )
@@ -394,28 +481,23 @@ def monitor_dishes() -> None:
                         tasks_result = None
 
                 # If tasks lack timestamps, prefer child execution list for richer details
-                def _tasks_missing_timestamps(tasks: Any) -> bool:
-                    if not isinstance(tasks, list) or not tasks:
+                def _tasks_missing_timestamps(tasks: list[dict[str, Any]]) -> bool:
+                    if not tasks:
                         return True
                     for task in tasks:
-                        if not isinstance(task, dict):
-                            continue
                         if task.get("start_timestamp") or task.get("end_timestamp"):
                             return False
                     return True
 
-                def _sort_tasks_by_execution(tasks: Any) -> Any:
-                    if not isinstance(tasks, list):
-                        return tasks
-
+                def _sort_tasks_by_execution(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     def _key(item: Any) -> tuple[str, str]:
-                        if not isinstance(item, dict):
-                            return ("", "")
                         start_ts = item.get("start_timestamp") or item.get("end_timestamp") or ""
                         end_ts = item.get("end_timestamp") or ""
                         return (start_ts, end_ts)
 
                     return sorted(tasks, key=_key)
+
+                tasks_result = _normalize_tasks(tasks_result)
 
                 if _tasks_missing_timestamps(tasks_result):
                     try:
@@ -433,7 +515,7 @@ def monitor_dishes() -> None:
                                 [
                                     {
                                         "id": child.get("id"),
-                                        "task_id": (
+                                        "task_key": (
                                             child.get("context", {})
                                             .get("orquesta", {})
                                             .get("task_id")
@@ -444,12 +526,13 @@ def monitor_dishes() -> None:
                                         "end_timestamp": child.get("end_timestamp"),
                                     }
                                     for child in children
+                                    if isinstance(child, dict)
                                 ]
                             )
                     except Exception:
                         pass
 
-                if tasks_result is None:
+                if not tasks_result:
                     # Fallback: fetch child executions by parent id and store results
                     try:
                         children_resp = request_with_retry_sync(
@@ -466,7 +549,7 @@ def monitor_dishes() -> None:
                                 [
                                     {
                                         "id": child.get("id"),
-                                        "task_id": (
+                                        "task_key": (
                                             child.get("context", {})
                                             .get("orquesta", {})
                                             .get("task_id")
@@ -477,15 +560,16 @@ def monitor_dishes() -> None:
                                         "end_timestamp": child.get("end_timestamp"),
                                     }
                                     for child in children
+                                    if isinstance(child, dict)
                                 ]
                             )
                     except Exception:
-                        tasks_result = None
+                        tasks_result = []
 
                 tasks_result = _sort_tasks_by_execution(tasks_result)
 
                 dish_started_at = None
-                if tasks_result is not None:
+                if tasks_result:
                     # Store full tasks list for later inspection
                     dish_result = tasks_result
 
@@ -514,10 +598,10 @@ def monitor_dishes() -> None:
                             if ing_resp.status_code == 200:
                                 for ing in ing_resp.json():
                                     key = (
-                                        ing.get("task_id") or "",
-                                        ing.get("st2_execution_id"),
+                                        ing.get("task_key") or "",
+                                        ing.get("execution_ref"),
                                     )
-                                    existing_status[key] = ing.get("status")
+                                    existing_status[key] = ing.get("execution_status")
                         except Exception:
                             existing_status = {}
 
@@ -525,7 +609,7 @@ def monitor_dishes() -> None:
                             if not isinstance(task, dict):
                                 continue
                             task_status = task.get("status")
-                            cache_key = (task.get("task_id") or "", task.get("id"))
+                            cache_key = (task.get("task_key") or "", task.get("id"))
                             prev_status = existing_status.get(cache_key)
                             if prev_status != task_status:
                                 logger.debug(
@@ -533,16 +617,16 @@ def monitor_dishes() -> None:
                                     extra={
                                         "req_id": req_id,
                                         "dish_id": dish.get("id"),
-                                        "task_id": task.get("task_id"),
+                                        "task_key": task.get("task_key"),
                                         "status": task_status,
                                     },
                                 )
 
                             items.append(
                                 {
-                                    "st2_execution_id": task.get("id"),
-                                    "task_id": task.get("task_id"),
-                                    "status": task_status,
+                                    "execution_ref": task.get("id"),
+                                    "task_key": task.get("task_key"),
+                                    "execution_status": task_status,
                                     "started_at": task.get("start_timestamp")
                                     or dish.get("created_at"),
                                     "completed_at": task.get("end_timestamp"),
@@ -551,7 +635,7 @@ def monitor_dishes() -> None:
                             )
 
                         if items:
-                            request_with_retry_sync(
+                            bulk_resp = request_with_retry_sync(
                                 "POST",
                                 f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients/bulk",
                                 json={"items": items},
@@ -559,6 +643,16 @@ def monitor_dishes() -> None:
                                 timeout=10,
                                 retries=POLLER_RETRIES,
                             )
+                            if bulk_resp.status_code >= 400:
+                                logger.warning(
+                                    "Failed to persist dish ingredient execution updates",
+                                    extra={
+                                        "req_id": req_id,
+                                        "dish_id": dish.get("id"),
+                                        "status_code": bulk_resp.status_code,
+                                        "response": bulk_resp.text,
+                                    },
+                                )
                     except Exception:
                         pass
 
@@ -575,12 +669,13 @@ def monitor_dishes() -> None:
                             continue
                         if retry_error:
                             err = f"{err}; workflow file retry failed: {retry_error}"
+                        _mark_pending_ingredients_failed(dish["id"], req_id, str(err))
 
                     update_dish(
                         dish,
                         req_id,
                         processing_status=processing_status,
-                        status=st2_status,
+                        execution_status=st2_status,
                         error_msg=err,
                         final_status=True,
                         result=dish_result,
@@ -615,7 +710,7 @@ def monitor_dishes() -> None:
                     dish,
                     req_id,
                     processing_status="failed",
-                    status="abandoned",
+                    execution_status="abandoned",
                     error_msg="ST2 execution not found",
                     final_status=True,
                 )

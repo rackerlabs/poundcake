@@ -67,6 +67,63 @@ flowchart TD
     J --> K["timer: finalize + status update"]
 ```
 
+## Order Processing Status Lifecycle
+
+| From | Event | To | Notes |
+|---|---|---|---|
+| `new` | `prep-chef -> /dishes/cook/{order_id}` | `processing` | Atomic transition when dish creation is claimed. |
+| `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-catch-all, non-terminal orders. |
+| `new` or `processing` | Alertmanager sends `resolved` | `resolving` | Resolve-phase orchestration is initiated by pre-heat. |
+| `resolving` | `prep-chef -> /orders/{order_id}/resolve` | `complete` | Resolve flow finalizes order and marks inactive. |
+| `complete`/`failed`/`canceled` | Any webhook/timer follow-up | unchanged | Terminal statuses are immutable and not re-opened by side effects. |
+
+## Order Workflow Graph (States + Bakery Calls)
+
+```mermaid
+stateDiagram-v2
+    [*] --> new: firing webhook\nPOST /api/v1/webhook -> pre_heat creates order
+
+    new --> processing: prep-chef cook\nPOST /api/v1/dishes/cook/{order_id}
+    processing --> resolving: dish terminal (non-catch-all)\nPATCH /api/v1/dishes/{dish_id}
+
+    new --> resolving: resolved webhook\npre_heat transition check
+    processing --> resolving: resolved webhook\npre_heat transition check
+    resolving --> resolving: resolved webhook (idempotent)\npre_heat keeps resolving
+    resolving --> processing: re-fire while resolving\npre_heat sets processing
+
+    resolving --> complete: resolve success\nPOST /api/v1/orders/{order_id}/resolve
+    resolving --> failed: resolve blocking failure\nPOST /api/v1/orders/{order_id}/resolve
+    new --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
+    processing --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
+    resolving --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
+
+    note right of processing
+      Dish-terminal Bakery sync (_sync_bakery_for_terminal_dish):
+      - POST /api/v1/tickets (create if missing)
+      - PATCH /api/v1/tickets/{ticket_id} (reopen if confirmed_solved)
+      - POST /api/v1/tickets/{ticket_id}/comments (execution summary)
+      - GET /api/v1/operations/{operation_id} (poll loop)
+    end note
+
+    note right of resolving
+      Resolved-webhook Bakery sync (pre_heat):
+      - POST /api/v1/tickets/{ticket_id}/comments (clear note)
+      - POST /api/v1/tickets/{ticket_id}/close (if auto-remediation succeeded)
+      - GET /api/v1/operations/{operation_id} (poll loop)
+
+      Resolve-phase comms (/orders/{id}/resolve):
+      - tickets.create | tickets.update | tickets.comment | tickets.close
+      - mapped Bakery endpoints + operation polling when operation_id is returned
+    end note
+
+    note right of complete
+      Terminal order statuses:
+      complete | failed | canceled
+      - immutable in order update logic
+      - cannot transition to another terminal status
+    end note
+```
+
 ## Components
 
 - **PoundCake API**: FastAPI entry point for webhooks, recipe management, and StackStorm bridge.
@@ -75,6 +132,10 @@ flowchart TD
 - **Timer**: Monitors StackStorm workflow execution and records results.
 - **Suppression Lifecycle (via Timer)**: Finalizes ended suppression windows and creates/auto-closes summary tickets through Bakery.
 - **Dishwasher**: Periodically syncs StackStorm actions and packs into Ingredients/Recipes.
+  During `poundcake-bootstrap`, sync also loads bootstrap Bakery comms ingredients from
+  `config/bootstrap/ingredients/bakery.yaml` (runtime path `/app/bootstrap/ingredients/bakery.yaml`)
+  and bootstrap recipe catalog entries from `config/bootstrap/recipes/*.yaml`
+  (runtime directory `/app/bootstrap/recipes`).
 - **StackStorm**: Executes remediation workflows.
 - **MariaDB**: Central state store.
 
@@ -106,8 +167,11 @@ flowchart TD
 - `recipe_ingredients.step_order` -> task ordering and task key prefix (`step_{n}_...`)
 - `recipe_ingredients.depth` -> explicit stage ordering when any depth > 0
 - `recipe_ingredients.input_parameters` -> task `input`
-- `ingredients.task_id` -> task `action`
-- `ingredients.task_name` -> task key suffix
+- `ingredients.execution_target` -> task `action`
+- `ingredients.task_key_template` -> task key suffix
+- `ingredients.execution_purpose` -> execution role (`remediation|utility|comms`)
+- `ingredients.execution_id` -> template execution identifier metadata
+- `ingredients.execution_payload` -> JSON object payload template/metadata (`object | null`)
 - `ingredients.is_blocking` -> stage grouping when no explicit depth is used
 - `ingredients.retry_count`, `ingredients.retry_delay` -> task `retry`
 
