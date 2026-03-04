@@ -412,9 +412,9 @@ async def resolve_order(
                         req_id=req_id,
                         execution_payload=rendered_payload,
                         execution_parameters=params or None,
-                        retry_count=ri.ingredient.retry_count,
-                        retry_delay=ri.ingredient.retry_delay,
-                        timeout_duration_sec=ri.ingredient.timeout_duration_sec,
+                        retry_count=getattr(ri.ingredient, "retry_count", 0),
+                        retry_delay=getattr(ri.ingredient, "retry_delay", 5),
+                        timeout_duration_sec=getattr(ri.ingredient, "timeout_duration_sec", 300),
                         context={
                             "order_id": order.id,
                             "recipe_ingredient_id": ri.id,
