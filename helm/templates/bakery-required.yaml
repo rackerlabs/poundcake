@@ -6,4 +6,11 @@
 {{- if and (eq $activeProvider "rackspace_core") (not .Values.bakery.rackspaceCore.existingSecret) }}
 {{- fail "bakery.rackspaceCore.existingSecret is required when bakery.config.activeProvider=rackspace_core. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
+{{- if .Values.bakery.gateway.enabled }}
+{{- $bakeryGatewayProtocol := upper (default "HTTPS" .Values.bakery.gateway.listener.protocol) -}}
+{{- $allowInsecureBakeryHttp := .Values.bakery.gateway.allowInsecureHttp | default false -}}
+{{- if and (eq $bakeryGatewayProtocol "HTTP") (not $allowInsecureBakeryHttp) }}
+{{- fail "bakery.gateway.listener.protocol=HTTP is not allowed by default. Use HTTPS for external Bakery traffic, or set bakery.gateway.allowInsecureHttp=true only for isolated non-production environments." -}}
+{{- end }}
+{{- end }}
 {{- end }}
