@@ -5,7 +5,7 @@ This directory contains the background workers that drive execution.
 ## Services
 
 - **prep-chef**: Claims new orders and creates dishes.
-- **chef**: Claims dishes and triggers StackStorm workflows.
+- **chef**: Claims dishes and triggers workflow execution via `/api/v1/cook/execute` (`execution_engine=stackstorm`).
 - **timer**: Monitors StackStorm workflow executions and updates dish/dish_ingredients.
 - **dishwasher**: Syncs StackStorm actions/packs into Ingredients/Recipes.
 

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from api.models.models import DishIngredient, Order
+from api.services.execution_types import ExecutionResult
 
 
 class ScalarResult:
@@ -239,7 +240,15 @@ def test_resolve_order_with_valid_bakery_comms_payload_seeds_pending_step(client
     )
 
     with patch(
-        "api.api.orders._execute_bakery_target", new=AsyncMock(return_value={"status": "succeeded"})
+        "api.services.execution_orchestrator.ExecutionOrchestrator.execute",
+        new=AsyncMock(
+            return_value=ExecutionResult(
+                engine="bakery",
+                status="succeeded",
+                execution_ref="op-1",
+                raw={"status": "succeeded"},
+            )
+        ),
     ):
         response = client.post("/api/v1/orders/1/resolve")
     assert response.status_code == 200
@@ -287,7 +296,15 @@ def test_resolve_order_with_invalid_bakery_comms_payload_fails_order(client, moc
     )
 
     with patch(
-        "api.api.orders._execute_bakery_target", new=AsyncMock(return_value={"status": "succeeded"})
+        "api.services.execution_orchestrator.ExecutionOrchestrator.execute",
+        new=AsyncMock(
+            return_value=ExecutionResult(
+                engine="bakery",
+                status="succeeded",
+                execution_ref="op-2",
+                raw={"status": "succeeded"},
+            )
+        ),
     ):
         response = client.post("/api/v1/orders/1/resolve")
     assert response.status_code == 200

@@ -191,7 +191,11 @@ GROUPS: dict[str, list[Endpoint]] = {
             "Execute action/workflow",
             "POST",
             "/api/v1/cook/execute",
-            body_template={"action_ref": "core.noop", "parameters": {}},
+            body_template={
+                "execution_engine": "stackstorm",
+                "execution_target": "core.noop",
+                "execution_parameters": {},
+            },
         ),
         Endpoint("List executions", "GET", "/api/v1/cook/executions"),
         Endpoint("Get execution", "GET", "/api/v1/cook/executions/{execution_id}"),

@@ -2,11 +2,11 @@
 
 ## Summary
 
-PoundCake is a stateless FastAPI service with background workers. The API accepts webhooks, stores orders in MariaDB, and workers orchestrate StackStorm workflows per dish.
+PoundCake is a stateless FastAPI service with background workers. The API accepts webhooks, stores orders in MariaDB, and workers orchestrate ingredient execution per dish across supported engines.
 
 ## Key Services
 
-- **API**: Intake, CRUD, StackStorm bridge, and DB access.
+- **API**: Intake, CRUD, unified execution orchestration, and DB access.
 - **Prep Chef**: Converts new orders into dishes.
 - **Chef**: Claims dishes and triggers StackStorm workflows.
 - **Timer**: Monitors workflow executions and persists results.
@@ -25,7 +25,7 @@ PoundCake is a stateless FastAPI service with background workers. The API accept
 
 1. Alertmanager POSTs `/api/v1/webhook`.
 2. `prep-chef` claims orders and calls `/api/v1/dishes/cook/{order_id}`.
-3. `chef` claims dishes, registers the workflow, and executes it via `/api/v1/cook/execute`.
+3. `chef` claims dishes, registers the workflow, and executes it via `/api/v1/cook/execute` (`execution_engine=stackstorm`).
 4. `timer` polls StackStorm and updates `dishes` and `dish_ingredients`.
 5. `dishwasher` syncs StackStorm actions/packs into the database.
 

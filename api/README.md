@@ -10,11 +10,12 @@ FastAPI service exposing PoundCake endpoints.
 - `/api/v1/ingredients` - Ingredients CRUD
 - `/api/v1/dishes` - Dishes query and updates
 - `/api/v1/dishes/{dish_id}/ingredients` - Dish ingredient results
-- `/api/v1/cook/*` - StackStorm bridge
+- `/api/v1/cook/*` - Unified execution + StackStorm tooling
 
-## StackStorm
+## Execution
 
-StackStorm access is via `/api/v1/cook/*` endpoints. Use `config/st2_api_key` for auth.
+`POST /api/v1/cook/execute` is engine-agnostic and supports `stackstorm` + `bakery`.
+StackStorm action/workflow tooling remains available via `/api/v1/cook/*` endpoints.
 
 ## Environment
 

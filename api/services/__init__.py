@@ -5,7 +5,3 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 """Service layer for PoundCake business logic."""
-
-from api.services.pre_heat import pre_heat
-
-__all__ = ["pre_heat"]

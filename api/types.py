@@ -172,3 +172,15 @@ SuppressionMatcherOperator = Literal[
     "exists",
     "not_exists",
 ]
+
+# =============================================================================
+# Unified Execution Types
+# =============================================================================
+
+CanonicalExecutionStatus = Literal[
+    "queued",
+    "running",
+    "succeeded",
+    "failed",
+    "canceled",
+]
