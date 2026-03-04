@@ -32,8 +32,11 @@ This document reflects the current PoundCake API surface.
 - `PUT /prometheus/rules/{rule_name}`
 - `DELETE /prometheus/rules/{rule_name}`
 
-### Cook (StackStorm)
+### Cook (Execution + StackStorm)
 - `POST /cook/execute`
+  - request fields: `execution_engine`, `execution_target`, optional `execution_payload`, optional `execution_parameters`, `retry_count`, `retry_delay`, `timeout_duration_sec`, `context`
+  - generic execution endpoint for supported engines (`stackstorm`, `bakery`)
+  - canonical response fields: `engine`, `status`, `execution_ref`, `error_message`, `result`, `raw`, `attempts`
 - `GET /cook/executions/{execution_id}`
 - `GET /cook/executions`
 - `GET /cook/executions/{execution_id}/tasks`

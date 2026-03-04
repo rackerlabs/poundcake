@@ -82,7 +82,9 @@ def test_run_chef_executes_registered_workflow_and_patches_execution_ref(
                 },
             ),
             _Resp(200, {"workflow_id": "poundcake.wf_my_action"}),
-            _Resp(201, {"id": "st2-exec-1"}),
+            _Resp(
+                201, {"execution_ref": "st2-exec-1", "status": "running", "engine": "stackstorm"}
+            ),
             _Resp(200, {"id": 2}),
         ]
     )
@@ -103,7 +105,10 @@ def test_run_chef_executes_registered_workflow_and_patches_execution_ref(
     assert any(
         method == "POST"
         and url.endswith("/cook/execute")
-        and body == {"action": "poundcake.wf_my_action", "parameters": {}}
+        and body
+        and body.get("execution_engine") == "stackstorm"
+        and body.get("execution_target") == "poundcake.wf_my_action"
+        and body.get("execution_parameters") == {}
         for method, url, body in calls
     )
     assert any(

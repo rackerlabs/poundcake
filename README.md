@@ -1,10 +1,10 @@
 # PoundCake
 
-An auto-remediation framework that bridges Prometheus Alertmanager with StackStorm through a task-based kitchen architecture.
+An auto-remediation framework that bridges Prometheus Alertmanager with execution engines through a task-based kitchen architecture.
 
 ## Overview
 
-PoundCake receives orders from Prometheus Alertmanager and executes remediation workflows through StackStorm. The API is stateless; background workers handle scheduling, execution, and monitoring.
+PoundCake receives orders from Prometheus Alertmanager and executes remediation workflows through a unified execution orchestrator (StackStorm and Bakery). The API is stateless; background workers handle scheduling, execution, and monitoring.
 
 ## Architecture (Current)
 
@@ -126,7 +126,7 @@ stateDiagram-v2
 
 ## Components
 
-- **PoundCake API**: FastAPI entry point for webhooks, recipe management, and StackStorm bridge.
+- **PoundCake API**: FastAPI entry point for webhooks, recipe management, and unified execution orchestration.
 - **Prep Chef**: Polls for new orders, creates a Dish per order.
 - **Chef**: Claims dishes, registers workflows, executes StackStorm workflows.
 - **Timer**: Monitors StackStorm workflow execution and records results.

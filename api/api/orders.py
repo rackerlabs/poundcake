@@ -6,7 +6,6 @@
 #
 """API routes for Order management."""
 
-import hashlib
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, asc, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,14 +26,10 @@ from api.schemas.schemas import (
     OrderUpdate,
 )
 from api.schemas.query_params import OrderQueryParams, validate_query_params
-from api.services.bakery_client import (
-    close_ticket_with_key,
-    create_ticket_with_key,
-    get_operation,
-    poll_operation,
-    add_ticket_comment_with_key,
-    update_ticket_with_key,
-)
+from api.services.bakery_client import get_operation
+from api.services.execution_orchestrator import ExecutionOrchestrator, get_execution_orchestrator
+from api.services.execution_types import ExecutionContext
+from api.validation.execution import validate_runtime_execution_payload
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -43,42 +38,6 @@ logger = get_logger(__name__)
 def _is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
     normalized = (step_phase or "both").lower()
     return normalized == "both" or normalized == target_phase
-
-
-def _validate_runtime_execution_payload(
-    *,
-    execution_engine: str | None,
-    execution_purpose: str | None,
-    execution_target: str | None,
-    execution_payload: dict[str, Any] | None,
-) -> str | None:
-    """Validate engine-aware execution payload contract for runtime orchestration."""
-    if execution_payload is not None and not isinstance(execution_payload, dict):
-        return "execution_payload must be an object when provided"
-
-    if (execution_purpose or "").lower() != "comms":
-        return None
-    if (execution_engine or "").lower() != "bakery":
-        return "comms ingredients must use execution_engine='bakery'"
-
-    target = (execution_target or "").lower()
-    if target not in {"tickets.create", "tickets.update", "tickets.comment", "tickets.close"}:
-        return (
-            "bakery comms ingredient execution_target must be one of: "
-            "tickets.create, tickets.update, tickets.comment, tickets.close"
-        )
-
-    if execution_payload is None:
-        return "bakery comms ingredient requires execution_payload"
-    template = execution_payload.get("template")
-    if not isinstance(template, dict):
-        return "bakery comms ingredient execution_payload.template must be an object"
-    return None
-
-
-def _deterministic_idempotency_key(*, order_id: int, recipe_ingredient_id: int, action: str) -> str:
-    seed = f"resolve:{order_id}:{recipe_ingredient_id}:{action}"
-    return hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -110,92 +69,6 @@ def _render_resolve_payload(
     if execution_parameters:
         rendered = _deep_merge(rendered, execution_parameters)
     return rendered
-
-
-def _validate_bakery_target_payload(
-    *,
-    execution_target: str,
-    payload: dict[str, Any],
-    order: Order,
-) -> str | None:
-    target = execution_target.lower()
-    ticket_id = str(payload.get("ticket_id") or order.bakery_ticket_id or "").strip()
-
-    if target == "tickets.create":
-        if not isinstance(payload.get("title"), str) or not payload.get("title"):
-            return "tickets.create requires payload.title"
-        if not isinstance(payload.get("description"), str) or not payload.get("description"):
-            return "tickets.create requires payload.description"
-        return None
-
-    if target == "tickets.update":
-        if not ticket_id:
-            return "tickets.update requires payload.ticket_id or order.bakery_ticket_id"
-        return None
-
-    if target == "tickets.comment":
-        if not ticket_id:
-            return "tickets.comment requires payload.ticket_id or order.bakery_ticket_id"
-        if not isinstance(payload.get("comment"), str) or not payload.get("comment"):
-            return "tickets.comment requires payload.comment"
-        return None
-
-    if target == "tickets.close":
-        if not ticket_id:
-            return "tickets.close requires payload.ticket_id or order.bakery_ticket_id"
-        return None
-
-    return f"Unsupported bakery execution_target: {execution_target}"
-
-
-async def _execute_bakery_target(
-    *,
-    req_id: str,
-    order: Order,
-    recipe_ingredient_id: int,
-    execution_target: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    action = execution_target.lower()
-    idempotency_key = _deterministic_idempotency_key(
-        order_id=order.id, recipe_ingredient_id=recipe_ingredient_id, action=action
-    )
-
-    if action == "tickets.create":
-        accepted = await create_ticket_with_key(
-            req_id=req_id, payload=payload, idempotency_key=idempotency_key
-        )
-        if accepted.get("ticket_id"):
-            order.bakery_ticket_id = accepted.get("ticket_id")
-        return accepted
-
-    ticket_id = str(payload.get("ticket_id") or order.bakery_ticket_id or "")
-    if not ticket_id:
-        raise ValueError(f"{action} requires ticket_id in payload or order.bakery_ticket_id")
-
-    if action == "tickets.update":
-        return await update_ticket_with_key(
-            req_id=req_id,
-            ticket_id=ticket_id,
-            payload=payload,
-            idempotency_key=idempotency_key,
-        )
-    if action == "tickets.comment":
-        comment_payload = payload if "comment" in payload else {"comment": str(payload)}
-        return await add_ticket_comment_with_key(
-            req_id=req_id,
-            ticket_id=ticket_id,
-            payload=comment_payload,
-            idempotency_key=idempotency_key,
-        )
-    if action == "tickets.close":
-        return await close_ticket_with_key(
-            req_id=req_id,
-            ticket_id=ticket_id,
-            payload=payload,
-            idempotency_key=idempotency_key,
-        )
-    raise ValueError(f"Unsupported bakery execution_target: {execution_target}")
 
 
 @router.get("/orders", response_model=List[OrderResponse])
@@ -378,6 +251,7 @@ async def resolve_order(
     request: Request,
     order_id: int,
     db: AsyncSession = Depends(get_db),
+    orchestrator: ExecutionOrchestrator = Depends(get_execution_orchestrator),
 ):
     """Resolve-phase orchestration for an order using resolve-eligible recipe steps only."""
     req_id = request.state.req_id
@@ -481,7 +355,7 @@ async def resolve_order(
             params = dict(ri.ingredient.execution_parameters or {})
             if ri.execution_parameters_override:
                 params.update(ri.execution_parameters_override)
-            validation_error = _validate_runtime_execution_payload(
+            validation_error = validate_runtime_execution_payload(
                 execution_engine=ri.ingredient.execution_engine,
                 execution_purpose=ri.ingredient.execution_purpose,
                 execution_target=ri.ingredient.execution_target,
@@ -523,27 +397,6 @@ async def resolve_order(
                 execution_payload=ri.ingredient.execution_payload,
                 execution_parameters=params or None,
             )
-            payload_error = _validate_bakery_target_payload(
-                execution_target=ri.ingredient.execution_target,
-                payload=rendered_payload,
-                order=order,
-            )
-            if payload_error:
-                dish_ingredient.execution_payload = rendered_payload
-                dish_ingredient.execution_status = "failed"
-                dish_ingredient.error_message = payload_error
-                dish_ingredient.completed_at = datetime.now(timezone.utc)
-                if (ri.ingredient.on_failure or "stop").lower() != "continue":
-                    order.processing_status = "failed"
-                    order.is_active = False
-                    order.updated_at = now
-                    dish.processing_status = "failed"
-                    dish.execution_status = "failed"
-                    dish.error_message = payload_error
-                    dish.completed_at = now
-                    dish.updated_at = now
-                    break
-                continue
 
             dish_ingredient.execution_payload = rendered_payload
             dish_ingredient.execution_parameters = params or None
@@ -553,33 +406,37 @@ async def resolve_order(
             dish_ingredient.result = None
 
             try:
-                accepted = await _execute_bakery_target(
-                    req_id=req_id,
-                    order=order,
-                    recipe_ingredient_id=ri.id,
-                    execution_target=ri.ingredient.execution_target,
-                    payload=rendered_payload,
+                execution_result = await orchestrator.execute(
+                    ExecutionContext(
+                        engine=ri.ingredient.execution_engine,
+                        req_id=req_id,
+                        execution_payload=rendered_payload,
+                        execution_parameters=params or None,
+                        retry_count=ri.ingredient.retry_count,
+                        retry_delay=ri.ingredient.retry_delay,
+                        timeout_duration_sec=ri.ingredient.timeout_duration_sec,
+                        context={
+                            "order_id": order.id,
+                            "recipe_ingredient_id": ri.id,
+                            "bakery_ticket_id": order.bakery_ticket_id,
+                        },
+                        execution_target=ri.ingredient.execution_target,
+                    )
                 )
-                operation_id = accepted.get("operation_id")
-                dish_ingredient.execution_ref = (
-                    str(operation_id)
-                    if operation_id
-                    else str(accepted.get("request_id") or accepted.get("id") or "")
-                ) or None
-                terminal_payload: dict[str, Any] = accepted
-                if operation_id:
-                    terminal_payload = await poll_operation(str(operation_id))
-                terminal_status = str(terminal_payload.get("status") or "").lower()
-                dish_ingredient.result = terminal_payload
+                if execution_result.context_updates.get("bakery_ticket_id"):
+                    order.bakery_ticket_id = str(
+                        execution_result.context_updates["bakery_ticket_id"]
+                    )
+                dish_ingredient.execution_ref = execution_result.execution_ref
+                dish_ingredient.result = execution_result.raw or execution_result.result
                 dish_ingredient.completed_at = datetime.now(timezone.utc)
-                if terminal_status in {"succeeded", "success", "completed"}:
+                if execution_result.status == "succeeded":
                     dish_ingredient.execution_status = "succeeded"
                 else:
                     dish_ingredient.execution_status = "failed"
-                    dish_ingredient.error_message = str(
-                        terminal_payload.get("last_error")
-                        or terminal_payload.get("error")
-                        or f"Bakery operation terminal status={terminal_status or 'unknown'}"
+                    dish_ingredient.error_message = (
+                        execution_result.error_message
+                        or "Execution failed without adapter error_message"
                     )
             except Exception as exc:  # noqa: BLE001
                 dish_ingredient.execution_status = "failed"

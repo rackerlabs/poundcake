@@ -158,14 +158,37 @@ def run_chef() -> None:
                     exec_resp = request_with_retry_sync(
                         "POST",
                         f"{API_BASE_URL}/cook/execute",
-                        json={"action": workflow_id, "parameters": {}},
+                        json={
+                            "execution_engine": "stackstorm",
+                            "execution_target": workflow_id,
+                            "execution_parameters": {},
+                        },
                         headers=get_service_headers(req_id),
                         timeout=30,
                         retries=POLLER_RETRIES,
                     )
                     if exec_resp.status_code in (200, 201):
-                        st2_exec_id = exec_resp.json().get("id")
-                        break
+                        body = exec_resp.json()
+                        if body.get("status") in {"queued", "running", "succeeded"}:
+                            st2_exec_id = body.get("execution_ref")
+                            break
+                        error_text = str(body.get("error_message") or exec_resp.text)
+                        if attempt < max_attempts and _is_missing_workflow_file_response(
+                            error_text
+                        ):
+                            logger.warning(
+                                "Workflow file not yet available on StackStorm runner; retrying execution",
+                                extra={
+                                    "req_id": req_id,
+                                    "dish_id": dish_id,
+                                    "workflow_id": workflow_id,
+                                    "attempt": attempt,
+                                    "max_attempts": max_attempts,
+                                },
+                            )
+                            time.sleep(CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS)
+                            continue
+                        raise Exception(error_text)
 
                     if attempt < max_attempts and _is_missing_workflow_file_response(
                         exec_resp.text
