@@ -51,8 +51,12 @@ def upgrade() -> None:
         sa.Column("execution_id", sa.String(length=100), nullable=True),
         sa.Column("execution_payload", mysql.JSON(), nullable=True),
         sa.Column("execution_parameters", mysql.JSON(), nullable=True),
-        sa.Column("execution_engine", sa.String(length=50), nullable=False, server_default="undefined"),
-        sa.Column("execution_purpose", sa.String(length=32), nullable=False, server_default="utility"),
+        sa.Column(
+            "execution_engine", sa.String(length=50), nullable=False, server_default="undefined"
+        ),
+        sa.Column(
+            "execution_purpose", sa.String(length=32), nullable=False, server_default="utility"
+        ),
         sa.Column("is_blocking", sa.Boolean(), nullable=False),
         sa.Column("expected_duration_sec", sa.Integer(), nullable=False),
         sa.Column("timeout_duration_sec", sa.Integer(), nullable=False),
@@ -66,7 +70,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_ingredients_id"), "ingredients", ["id"], unique=False)
-    op.create_index(op.f("ix_ingredients_execution_target"), "ingredients", ["execution_target"], unique=False)
+    op.create_index(
+        op.f("ix_ingredients_execution_target"), "ingredients", ["execution_target"], unique=False
+    )
     op.create_index(
         "ux_ingredients_engine_target",
         "ingredients",
@@ -101,8 +107,7 @@ def upgrade() -> None:
     # Orders (old alerts)
     # Note: We need to use raw SQL to create the table with the generated column
     # because SQLAlchemy doesn't support GENERATED columns in create_table()
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE orders (
             id INTEGER NOT NULL AUTO_INCREMENT,
             req_id VARCHAR(100) NOT NULL,
@@ -130,8 +135,7 @@ def upgrade() -> None:
             fingerprint_when_active VARCHAR(255) GENERATED ALWAYS AS (IF(is_active = 1, fingerprint, NULL)) STORED,
             PRIMARY KEY (id)
         )
-        """
-    )
+        """)
     op.create_index(op.f("ix_orders_id"), "orders", ["id"], unique=False)
     op.create_index(op.f("ix_orders_req_id"), "orders", ["req_id"], unique=False)
     op.create_index(op.f("ix_orders_fingerprint"), "orders", ["fingerprint"], unique=False)
@@ -153,11 +157,15 @@ def upgrade() -> None:
     op.create_index(op.f("ix_orders_severity"), "orders", ["severity"], unique=False)
     op.create_index(op.f("ix_orders_instance"), "orders", ["instance"], unique=False)
     op.create_index(op.f("ix_orders_created_at"), "orders", ["created_at"], unique=False)
-    op.create_index(op.f("ix_orders_bakery_ticket_id"), "orders", ["bakery_ticket_id"], unique=False)
+    op.create_index(
+        op.f("ix_orders_bakery_ticket_id"), "orders", ["bakery_ticket_id"], unique=False
+    )
     op.create_index(
         op.f("ix_orders_bakery_operation_id"), "orders", ["bakery_operation_id"], unique=False
     )
-    op.create_index(op.f("ix_orders_bakery_ticket_state"), "orders", ["bakery_ticket_state"], unique=False)
+    op.create_index(
+        op.f("ix_orders_bakery_ticket_state"), "orders", ["bakery_ticket_state"], unique=False
+    )
     op.create_index(
         op.f("ix_orders_bakery_permanent_failure"),
         "orders",
@@ -288,7 +296,9 @@ def upgrade() -> None:
         ["starts_at"],
         unique=False,
     )
-    op.create_index("ix_alert_suppressions_ends_at", "alert_suppressions", ["ends_at"], unique=False)
+    op.create_index(
+        "ix_alert_suppressions_ends_at", "alert_suppressions", ["ends_at"], unique=False
+    )
     op.create_index(
         "ix_alert_suppressions_canceled_at",
         "alert_suppressions",

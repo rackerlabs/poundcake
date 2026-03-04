@@ -14,6 +14,7 @@ from api.types import (
     DishProcessingStatus,
     OrderProcessingStatus,
     AlertStatus,
+    CanonicalExecutionStatus,
     OnSuccessAction,
     OnFailureAction,
     SuppressionScope,
@@ -607,20 +608,44 @@ class CookResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ExecutionResponse(BaseModel):
-    """Response from StackStorm execution."""
+class ExecuteRequest(BaseModel):
+    execution_engine: str = Field(..., max_length=50)
+    execution_target: str = Field(..., max_length=255)
+    execution_payload: Optional[Dict[str, Any]] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
+    retry_count: int = Field(default=0, ge=0)
+    retry_delay: int = Field(default=0, ge=0)
+    timeout_duration_sec: int = Field(default=300, gt=0)
+    context: Dict[str, Any] = Field(default_factory=dict)
 
-    id: str  # Execution ID
-    status: str  # pending, running, succeeded, failed, etc.
-    action: Dict[str, Any]  # Action reference and details
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict
-    )  # Execution parameters (optional in ST2 responses)
+    @field_validator("execution_engine")
+    @classmethod
+    def _validate_execution_engine(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"stackstorm", "bakery"}:
+            raise ValueError("execution_engine must be one of: stackstorm, bakery")
+        return normalized
+
+    @field_validator("execution_payload", "execution_parameters")
+    @classmethod
+    def _validate_object_fields(cls, value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if value is None:
+            return value
+        if not isinstance(value, dict):
+            raise ValueError("value must be an object when provided")
+        return value
+
+
+class ExecutionEnvelopeResponse(BaseModel):
+    execution_ref: Optional[str] = None
+    engine: str
+    status: CanonicalExecutionStatus
+    error_message: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
-    start_timestamp: Optional[str] = None
-    end_timestamp: Optional[str] = None
+    raw: Optional[Dict[str, Any]] = None
+    attempts: int = 1
 
-    model_config = ConfigDict(from_attributes=True, extra="allow")  # Allow additional ST2 fields
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SessionResponse(BaseModel):

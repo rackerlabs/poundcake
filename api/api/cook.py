@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Cook router to proxy StackStorm actions through the API."""
+"""Cook router for execution orchestration and StackStorm tooling."""
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,9 @@ from typing import Dict, Any
 from api.core.logging import get_logger
 from api.core.config import get_settings
 from api.core.database import get_db
-from api.schemas.schemas import ExecutionResponse
+from api.schemas.schemas import ExecuteRequest, ExecutionEnvelopeResponse
+from api.services.execution_orchestrator import ExecutionOrchestrator, get_execution_orchestrator
+from api.services.execution_types import ExecutionContext
 from api.services.stackstorm_service import (
     StackStormActionManager,
     StackStormError,
@@ -22,79 +24,95 @@ from api.services.stackstorm_service import (
 from api.services.dishwasher_service import sync_stackstorm
 from api.services.pack_sync_service import get_pack_sync_artifact_response
 from api.api.auth import require_auth_if_enabled
+from api.validation.execution import validate_execution_request
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.post("/cook/execute", response_model=ExecutionResponse)
-async def trigger_st2_execution(
+@router.post("/cook/execute", response_model=ExecutionEnvelopeResponse)
+async def execute_ingredient(
     request: Request,
-    request_data: Dict[str, Any],
+    payload: ExecuteRequest,
     x_request_id: str = Header(None),
-    manager: StackStormActionManager = Depends(get_action_manager),
-) -> ExecutionResponse:
+    orchestrator: ExecutionOrchestrator = Depends(get_execution_orchestrator),
+) -> ExecutionEnvelopeResponse:
     """
-    Bridge endpoint for Dish Executor.
-    Proxies execution requests to StackStorm using the internal service client.
+    Generic execution endpoint for all supported execution engines.
     """
     req_id = request.state.req_id
-    action_ref = request_data.get("action")
-    parameters = request_data.get("parameters", {})
+    validation_error = validate_execution_request(
+        execution_engine=payload.execution_engine,
+        execution_target=payload.execution_target,
+        execution_payload=payload.execution_payload,
+        execution_parameters=payload.execution_parameters,
+        context=payload.context,
+    )
+    if validation_error:
+        raise HTTPException(status_code=400, detail=validation_error)
 
     logger.info(
-        "Received StackStorm execution request",
-        extra={"req_id": req_id, "action_ref": action_ref, "method": request.method},
+        "Received execution request",
+        extra={
+            "req_id": req_id,
+            "execution_engine": payload.execution_engine,
+            "execution_target": payload.execution_target,
+            "method": request.method,
+        },
     )
 
-    if not action_ref:
-        logger.warning(
-            "Missing action reference",
-            extra={"req_id": req_id, "method": request.method, "status_code": 400},
-        )
-        raise HTTPException(status_code=400, detail="Missing 'action' (action_ref) in payload")
-
     try:
-        logger.debug(
-            "Calling StackStorm API",
-            extra={
-                "req_id": req_id,
-                "action_ref": action_ref,
-                "method": request.method,
-                "params": parameters,
-            },
-        )
-
-        result = await manager._client.execute_action(
-            req_id=req_id, action_ref=action_ref, parameters=parameters
+        execution_result = await orchestrator.execute(
+            ExecutionContext(
+                engine=payload.execution_engine,
+                execution_target=payload.execution_target,
+                execution_payload=payload.execution_payload,
+                execution_parameters=payload.execution_parameters,
+                retry_count=payload.retry_count,
+                retry_delay=payload.retry_delay,
+                timeout_duration_sec=payload.timeout_duration_sec,
+                context=payload.context,
+                req_id=req_id,
+            )
         )
 
         logger.info(
-            "StackStorm execution started successfully",
+            "Execution request completed",
             extra={
                 "req_id": req_id,
-                "action_ref": action_ref,
+                "execution_engine": execution_result.engine,
+                "execution_target": payload.execution_target,
+                "execution_ref": execution_result.execution_ref,
+                "execution_status": execution_result.status,
                 "method": request.method,
                 "status_code": 200,
-                "execution_id": result.get("id"),
             },
         )
 
-        return ExecutionResponse(**result)
+        return ExecutionEnvelopeResponse(
+            execution_ref=execution_result.execution_ref,
+            engine=execution_result.engine,
+            status=execution_result.status,
+            error_message=execution_result.error_message,
+            result=execution_result.result,
+            raw=execution_result.raw,
+            attempts=execution_result.attempts,
+        )
 
     except Exception as e:
         logger.error(
-            "StackStorm execution failed",
+            "Execution request failed",
             extra={
                 "req_id": req_id,
-                "action_ref": action_ref,
+                "execution_engine": payload.execution_engine,
+                "execution_target": payload.execution_target,
                 "method": request.method,
                 "status_code": 502,
                 "error": str(e),
             },
             exc_info=True,
         )
-        raise HTTPException(status_code=502, detail=f"StackStorm Gateway Error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Execution gateway error: {str(e)}")
 
 
 @router.get("/cook/executions/{execution_id}")

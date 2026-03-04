@@ -33,8 +33,15 @@ def test_run_chef_retries_execute_when_workflow_file_missing(
             _Resp(200, [{"id": 11, "req_id": "REQ-11"}]),
             _Resp(200, {"id": 11, "req_id": "REQ-11", "recipe": {"name": "AutomatedTestRecipe-1"}}),
             _Resp(200, {"workflow_id": "poundcake.AutomatedTestRecipe-1"}),
-            _Resp(500, {"faultstring": "missing file"}, text=_missing_workflow_error()),
-            _Resp(201, {"id": "exec-11"}),
+            _Resp(
+                200,
+                {
+                    "status": "failed",
+                    "engine": "stackstorm",
+                    "error_message": _missing_workflow_error(),
+                },
+            ),
+            _Resp(201, {"execution_ref": "exec-11", "status": "running", "engine": "stackstorm"}),
             _Resp(200, {"id": 11}),
         ]
     )
@@ -61,7 +68,11 @@ def test_run_chef_retries_execute_when_workflow_file_missing(
         if method == "POST" and url.endswith("/cook/execute")
     ]
     assert len(execute_calls) == 2
-    assert execute_calls[0][2] == {"action": "poundcake.AutomatedTestRecipe-1", "parameters": {}}
+    assert execute_calls[0][2] == {
+        "execution_engine": "stackstorm",
+        "execution_target": "poundcake.AutomatedTestRecipe-1",
+        "execution_parameters": {},
+    }
 
     assert any(
         method == "PATCH" and url.endswith("/dishes/11") and body == {"execution_ref": "exec-11"}
@@ -78,7 +89,7 @@ def test_run_chef_does_not_retry_non_missing_execute_error(
             _Resp(200, [{"id": 12, "req_id": "REQ-12"}]),
             _Resp(200, {"id": 12, "req_id": "REQ-12", "recipe": {"name": "AutomatedTestRecipe-2"}}),
             _Resp(200, {"workflow_id": "poundcake.AutomatedTestRecipe-2"}),
-            _Resp(500, {"faultstring": "boom"}, text="boom"),
+            _Resp(200, {"status": "failed", "engine": "stackstorm", "error_message": "boom"}),
             _Resp(200, {"id": 12}),
         ]
     )
