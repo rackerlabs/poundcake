@@ -11,7 +11,9 @@ RUNNERS=(
   "${SCRIPT_DIR}/run_single_task_webhook_counter_increment_test"
   "${SCRIPT_DIR}/run_multiple_tasks_non_blocking_test"
   "${SCRIPT_DIR}/run_multiple_tasks_with_blocking_test"
+  "${SCRIPT_DIR}/run_host_down_expected_failure_test"
   "${SCRIPT_DIR}/run_reuse_recipe_two_webhooks_test"
+  "${SCRIPT_DIR}/run_fallback_unmatched_alert_bakery_observation_test"
   "${SCRIPT_DIR}/run_all_e2e_workflow_generation_tests"
 )
 

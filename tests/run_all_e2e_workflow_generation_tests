@@ -22,6 +22,7 @@ TEST_SCRIPTS=(
   "${SCRIPT_DIR}/run_multiple_tasks_with_blocking_test"
   "${SCRIPT_DIR}/run_host_down_expected_failure_test"
   "${SCRIPT_DIR}/run_reuse_recipe_two_webhooks_test"
+  "${SCRIPT_DIR}/run_fallback_unmatched_alert_bakery_observation_test"
 )
 
 echo "Running ${#TEST_SCRIPTS[@]} e2e workflow-generation tests..."
