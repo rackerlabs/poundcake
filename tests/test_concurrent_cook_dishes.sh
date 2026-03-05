@@ -4,7 +4,7 @@
 # | |_) / _ \| | | | '_ \ / _` | |   / _` | |/ / _ \
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
-# Test: Concurrent cook_dishes requests should create exactly one dish
+# Test: Concurrent order dispatch requests should create exactly one dish
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,8 +66,8 @@ fi
 
 log_info "Order created: ${order_id}"
 
-REQUEST_ID="${REQ_ID}-A" api_request_json POST "${API_URL}/dishes/cook/${order_id}" >/dev/null &
-REQUEST_ID="${REQ_ID}-B" api_request_json POST "${API_URL}/dishes/cook/${order_id}" >/dev/null &
+REQUEST_ID="${REQ_ID}-A" api_request_json POST "${API_URL}/orders/${order_id}/dispatch" >/dev/null &
+REQUEST_ID="${REQ_ID}-B" api_request_json POST "${API_URL}/orders/${order_id}/dispatch" >/dev/null &
 wait
 
 dishes=$(api_request_json GET "${API_URL}/dishes?order_id=${order_id}")

@@ -86,13 +86,14 @@ def _make_order(order_id: int = 1, status: str = "new") -> Order:
     )
 
 
-def _make_dish(dish_id: int = 1, status: str = "new") -> Dish:
+def _make_dish(dish_id: int = 1, status: str = "new", run_phase: str = "firing") -> Dish:
     now = datetime.now(timezone.utc)
     return Dish(
         id=dish_id,
         req_id="REQ-1",
         order_id=1,
         recipe_id=1,
+        run_phase=run_phase,
         processing_status=status,
         expected_duration_sec=10,
         actual_duration_sec=None,
@@ -143,7 +144,9 @@ def _make_recipe(recipe_id: int = 1, name: str = "group") -> Recipe:
     )
 
 
-def test_fetch_orders_returns_list(client, mock_db_session):
+def test_orders_list__when_filtered_by_processing_status__returns_matching_rows(
+    client, mock_db_session
+):
     order = _make_order()
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(all_=[order]))
 
@@ -154,14 +157,14 @@ def test_fetch_orders_returns_list(client, mock_db_session):
     assert data[0]["id"] == order.id
 
 
-def test_get_order_not_found(client, mock_db_session):
+def test_order_get__when_missing__returns_404(client, mock_db_session):
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=None))
 
     response = client.get("/api/v1/orders/999")
     assert response.status_code == 404
 
 
-def test_create_order_ignores_fingerprint_when_active_and_persists_bakery_comms(
+def test_order_create__ignores_fingerprint_when_active__persists_bakery_comms(
     client, mock_db_session
 ):
     mock_db_session.add = Mock()
@@ -197,7 +200,7 @@ def test_create_order_ignores_fingerprint_when_active_and_persists_bakery_comms(
     assert created_order.fingerprint_when_active is None
 
 
-def test_update_order_sets_is_active_false_on_terminal_status(client, mock_db_session):
+def test_order_update__when_terminal_status__sets_inactive(client, mock_db_session):
     order = _make_order(status="processing")
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
 
@@ -210,7 +213,7 @@ def test_update_order_sets_is_active_false_on_terminal_status(client, mock_db_se
     assert body["is_active"] is False
 
 
-def test_update_order_ignores_fingerprint_when_active_but_updates_bakery_comms(
+def test_order_update__ignores_fingerprint_when_active__updates_bakery_comms(
     client, mock_db_session
 ):
     order = _make_order(status="processing")
@@ -231,7 +234,7 @@ def test_update_order_ignores_fingerprint_when_active_but_updates_bakery_comms(
     assert order.fingerprint_when_active == "db-generated"
 
 
-def test_update_order_rejects_terminal_to_terminal_transition(client, mock_db_session):
+def test_order_update__terminal_to_terminal_transition__returns_409(client, mock_db_session):
     order = _make_order(status="complete")
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
 
@@ -241,7 +244,9 @@ def test_update_order_rejects_terminal_to_terminal_transition(client, mock_db_se
     assert response.status_code == 409
 
 
-def test_fetch_dishes_returns_list(client, mock_db_session):
+def test_dishes_list__when_filtered_by_processing_status__returns_matching_rows(
+    client, mock_db_session
+):
     dish = _make_dish()
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(all_=[dish]))
 
@@ -252,14 +257,14 @@ def test_fetch_dishes_returns_list(client, mock_db_session):
     assert data[0]["id"] == dish.id
 
 
-def test_claim_dish_conflict(client, mock_db_session):
+def test_dish_claim__when_not_claimable__returns_409(client, mock_db_session):
     mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=0))
 
     response = client.post("/api/v1/dishes/1/claim")
     assert response.status_code == 409
 
 
-def test_claim_dish_success(client, mock_db_session):
+def test_dish_claim__when_claimable__returns_dish(client, mock_db_session):
     dish = _make_dish(status="processing")
     update_result = SimpleNamespace(rowcount=1)
     select_result = ScalarResult(first=dish)
@@ -271,7 +276,7 @@ def test_claim_dish_success(client, mock_db_session):
     assert data["id"] == dish.id
 
 
-def test_update_dish_updates_order_when_terminal(client, mock_db_session):
+def test_dish_update__when_firing_terminal__moves_order_to_resolving(client, mock_db_session):
     dish = _make_dish(status="processing")
     order = _make_order(status="processing")
     mock_db_session.execute = AsyncMock(
@@ -284,7 +289,7 @@ def test_update_dish_updates_order_when_terminal(client, mock_db_session):
     assert order.is_active is True
 
 
-def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
+def test_dish_update__catch_all_recipe_terminal__keeps_order_active(client, mock_db_session):
     dish = _make_dish(status="processing")
     dish.recipe = _make_recipe(name="fallback-recipe")
     order = _make_order(status="processing")
@@ -306,9 +311,12 @@ def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
     assert order.is_active is True
 
 
-def test_update_dish_terminal_does_not_reactivate_canceled_order(client, mock_db_session):
+@pytest.mark.parametrize("terminal_status", ["canceled", "failed"])
+def test_update_dish_terminal_does_not_reactivate_terminal_order(
+    client, mock_db_session, terminal_status: str
+):
     dish = _make_dish(status="processing")
-    order = _make_order(status="canceled")
+    order = _make_order(status=terminal_status)
     order.is_active = False
     mock_db_session.execute = AsyncMock(
         side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
@@ -317,45 +325,61 @@ def test_update_dish_terminal_does_not_reactivate_canceled_order(client, mock_db
     response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
 
     assert response.status_code == 200
-    assert order.processing_status == "canceled"
+    assert order.processing_status == terminal_status
     assert order.is_active is False
 
 
-def test_update_dish_terminal_does_not_reactivate_failed_order(client, mock_db_session):
-    dish = _make_dish(status="processing")
-    order = _make_order(status="failed")
-    order.is_active = False
-    mock_db_session.execute = AsyncMock(
-        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
-    )
-
-    response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
-
-    assert response.status_code == 200
-    assert order.processing_status == "failed"
-    assert order.is_active is False
-
-
-def test_cook_dishes_without_recipe_keeps_order_active(client, mock_db_session):
+def test_order_dispatch__without_matching_recipe__returns_skipped(client, mock_db_session):
     order = _make_order(status="new")
     mock_db_session.execute = AsyncMock(
         side_effect=[ScalarResult(first=order), ScalarResult(first=None)]
     )
 
     with patch(
-        "api.api.dishes.get_settings",
+        "api.api.orders.get_settings",
         return_value=SimpleNamespace(catch_all_recipe_name=""),
     ):
-        response = client.post("/api/v1/dishes/cook/1")
+        response = client.post("/api/v1/orders/1/dispatch")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "ignored"
-    assert order.processing_status == "processing"
-    assert order.is_active is True
+    assert body["status"] == "skipped"
 
 
-def test_get_order_timeline(client, mock_db_session):
+def test_order_dispatch__without_group_recipe__uses_fallback_recipe(client, mock_db_session):
+    order = _make_order(status="new")
+    fallback_recipe = SimpleNamespace(id=22, name="fallback-recipe", recipe_ingredients=[])
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+            ScalarResult(first=None),  # group recipe miss
+            ScalarResult(first=fallback_recipe),  # fallback recipe hit
+            ScalarResult(first=None),  # active dish lookup for phase
+            ScalarResult(all_=[]),  # existing dish ingredients
+        ]
+    )
+
+    with (
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        ),
+        patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
+        patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=15)),
+    ):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "dispatched"
+    assert body["run_phase"] == "firing"
+    assert body["recipe_id"] == 22
+    assert body["recipe_name"] == "fallback-recipe"
+    ensure_fallback.assert_awaited_once()
+
+
+def test_order_timeline_get__returns_events(client, mock_db_session):
     order = _make_order(status="processing")
     order.bakery_ticket_id = "ticket-1"
     order.bakery_operation_id = "op-1"

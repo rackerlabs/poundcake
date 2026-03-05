@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from api.models.models import DishIngredient, Order
-from api.services.execution_types import ExecutionResult
 
 
 class ScalarResult:
@@ -89,7 +88,7 @@ def _make_resolving_order(order_id: int = 1) -> Order:
     )
 
 
-def test_create_ingredient_accepts_object_execution_payload(client, mock_db_session):
+def test_ingredient_create__with_object_execution_payload__accepts(client, mock_db_session):
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=None))
     mock_db_session.add = Mock()
 
@@ -117,7 +116,7 @@ def test_create_ingredient_accepts_object_execution_payload(client, mock_db_sess
     assert body["execution_payload"] == {"template": {"foo": "bar"}, "context": {"a": 1}}
 
 
-def test_create_ingredient_rejects_string_execution_payload_with_422(client, mock_db_session):
+def test_ingredient_create__with_string_execution_payload__returns_422(client, mock_db_session):
     payload = {
         "execution_target": "core.local",
         "task_key_template": "core.local",
@@ -159,7 +158,7 @@ def test_create_ingredient_persists_is_default_true(client, mock_db_session):
     assert body["is_default"] is True
 
 
-def test_create_ingredient_accepts_deprecated_aliases_and_returns_canonical_fields(
+def test_ingredient_create__with_deprecated_aliases__returns_canonical_fields(
     client, mock_db_session
 ):
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=None))
@@ -194,13 +193,13 @@ def test_create_ingredient_accepts_deprecated_aliases_and_returns_canonical_fiel
     assert body["ingredient_kind"] == "utility"
 
 
-def test_update_ingredient_rejects_array_execution_payload_with_422(client, mock_db_session):
+def test_ingredient_update__with_array_execution_payload__returns_422(client, mock_db_session):
     payload = {"execution_payload": ["bad"]}
     response = client.put("/api/v1/ingredients/1", json=payload)
     assert response.status_code == 422
 
 
-def test_create_ingredient_allows_same_target_for_different_engines(client, mock_db_session):
+def test_ingredient_create__same_target_different_engines__allowed(client, mock_db_session):
     existing = SimpleNamespace(id=9)
     mock_db_session.execute = AsyncMock(
         side_effect=[
@@ -241,9 +240,8 @@ def test_create_ingredient_allows_same_target_for_different_engines(client, mock
     assert response.status_code == 400
 
 
-def test_resolve_order_with_valid_bakery_comms_payload_seeds_pending_step(client, mock_db_session):
+def test_order_dispatch__resolving_phase__seeds_phase_ingredients(client, mock_db_session):
     order = _make_resolving_order()
-    order.bakery_ticket_id = "ticket-1"
     ingredient = SimpleNamespace(
         task_key_template="comment_ticket",
         execution_engine="bakery",
@@ -260,7 +258,7 @@ def test_resolve_order_with_valid_bakery_comms_payload_seeds_pending_step(client
         execution_parameters_override={"context": {"order_id": 1}},
         ingredient=ingredient,
     )
-    recipe = SimpleNamespace(id=9, recipe_ingredients=[recipe_ingredient])
+    recipe = SimpleNamespace(id=9, name="group", recipe_ingredients=[recipe_ingredient])
 
     mock_db_session.execute = AsyncMock(
         side_effect=[
@@ -272,117 +270,26 @@ def test_resolve_order_with_valid_bakery_comms_payload_seeds_pending_step(client
         ]
     )
 
-    with patch(
-        "api.services.execution_orchestrator.ExecutionOrchestrator.execute",
-        new=AsyncMock(
-            return_value=ExecutionResult(
-                engine="bakery",
-                status="succeeded",
-                execution_ref="op-1",
-                raw={"status": "succeeded"},
-            )
-        ),
-    ):
-        response = client.post("/api/v1/orders/1/resolve")
+    response = client.post("/api/v1/orders/1/dispatch")
     assert response.status_code == 200
-    assert response.json()["processing_status"] == "complete"
+    body = response.json()
+    assert body["status"] == "dispatched"
+    assert body["run_phase"] == "resolving"
 
     added_rows = [call.args[0] for call in mock_db_session.add.call_args_list]
     dish_ingredients = [row for row in added_rows if isinstance(row, DishIngredient)]
     assert len(dish_ingredients) == 1
-    assert dish_ingredients[0].execution_status == "succeeded"
-    assert dish_ingredients[0].execution_payload == {
-        "comment": "resolved",
+    assert dish_ingredients[0].execution_status == "pending"
+    assert dish_ingredients[0].execution_parameters == {
         "operation": "ticket_comment",
         "visibility": "internal",
         "context": {"order_id": 1},
     }
 
 
-def test_resolve_order_with_invalid_bakery_comms_payload_fails_order(client, mock_db_session):
+def test_order_dispatch__when_not_dispatchable__returns_409(client, mock_db_session):
     order = _make_resolving_order()
-    ingredient = SimpleNamespace(
-        task_key_template="close_ticket",
-        execution_engine="bakery",
-        execution_purpose="comms",
-        execution_target="core",
-        execution_payload={"context": {"missing_template": True}},
-        execution_parameters={"operation": "ticket_close"},
-        on_failure="stop",
-    )
-    recipe_ingredient = SimpleNamespace(
-        id=13,
-        step_order=1,
-        run_phase="resolving",
-        execution_parameters_override=None,
-        ingredient=ingredient,
-    )
-    recipe = SimpleNamespace(id=10, recipe_ingredients=[recipe_ingredient])
-
-    mock_db_session.execute = AsyncMock(
-        side_effect=[
-            ScalarResult(first=order),  # order
-            ScalarResult(first=recipe),  # recipe
-            ScalarResult(first=None),  # dish lookup
-            ScalarResult(scalar=10),  # expected duration
-            ScalarResult(all_=[]),  # existing dish ingredients
-        ]
-    )
-
-    with patch(
-        "api.services.execution_orchestrator.ExecutionOrchestrator.execute",
-        new=AsyncMock(
-            return_value=ExecutionResult(
-                engine="bakery",
-                status="succeeded",
-                execution_ref="op-2",
-                raw={"status": "succeeded"},
-            )
-        ),
-    ):
-        response = client.post("/api/v1/orders/1/resolve")
-    assert response.status_code == 200
-    assert response.json()["processing_status"] == "failed"
-
-    added_rows = [call.args[0] for call in mock_db_session.add.call_args_list]
-    dish_ingredients = [row for row in added_rows if isinstance(row, DishIngredient)]
-    assert len(dish_ingredients) == 1
-    assert dish_ingredients[0].execution_status == "failed"
-    assert "execution_payload.template" in str(dish_ingredients[0].error_message)
-
-
-def test_resolve_order_with_invalid_payload_and_on_failure_continue_keeps_order_complete(
-    client, mock_db_session
-):
-    order = _make_resolving_order()
-    ingredient = SimpleNamespace(
-        task_key_template="comment_ticket",
-        execution_engine="bakery",
-        execution_purpose="comms",
-        execution_target="core",
-        execution_payload={"context": {"invalid": True}},
-        execution_parameters={"operation": "ticket_comment"},
-        on_failure="continue",
-    )
-    recipe_ingredient = SimpleNamespace(
-        id=14,
-        step_order=1,
-        run_phase="resolving",
-        execution_parameters_override=None,
-        ingredient=ingredient,
-    )
-    recipe = SimpleNamespace(id=11, recipe_ingredients=[recipe_ingredient])
-
-    mock_db_session.execute = AsyncMock(
-        side_effect=[
-            ScalarResult(first=order),
-            ScalarResult(first=recipe),
-            ScalarResult(first=None),
-            ScalarResult(scalar=10),
-            ScalarResult(all_=[]),
-        ]
-    )
-
-    response = client.post("/api/v1/orders/1/resolve")
-    assert response.status_code == 200
-    assert response.json()["processing_status"] == "complete"
+    order.processing_status = "processing"
+    mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
+    response = client.post("/api/v1/orders/1/dispatch")
+    assert response.status_code == 409

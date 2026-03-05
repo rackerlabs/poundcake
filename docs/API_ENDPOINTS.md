@@ -44,13 +44,7 @@ This document reflects the current PoundCake API surface.
 - `DELETE /cook/executions/{execution_id}` (delete record)
 - `POST /cook/workflows/register`
 - `POST /cook/sync`
-- `GET /cook/actions`
-- `GET /cook/actions/{action_ref:path}`
 - `GET /cook/packs` (canonical pack-sync tar.gz endpoint)
-- `GET /cook/packs/catalog` (StackStorm pack catalog passthrough)
-
-### Internal Compatibility
-- `GET /internal/stackstorm/pack.tgz` (deprecated compatibility alias; use `/cook/packs`)
 
 ### Recipes
 - `POST /recipes/`
@@ -100,10 +94,10 @@ Bootstrap catalog contract:
 - `POST /orders`
 - `GET /orders/{order_id}`
 - `GET /orders/{order_id}/timeline`
+- `POST /orders/{order_id}/dispatch`
 - `PUT /orders/{order_id}`
 
 ### Dishes
-- `POST /dishes/cook/{order_id}`
 - `GET /dishes`
 - `POST /dishes/{dish_id}/claim`
 - `PUT /dishes/{dish_id}`

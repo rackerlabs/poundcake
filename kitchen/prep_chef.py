@@ -5,7 +5,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Prep Chef: Polls for new orders and triggers the /dishes/cook API"""
+"""Prep Chef: Polls for dispatchable orders and triggers unified order dispatch."""
 
 import os
 import time
@@ -90,22 +90,13 @@ def prep_loop() -> None:
                 )
 
                 start_time = time.time()
-                if processing_status == "resolving":
-                    cook_resp = request_with_retry_sync(
-                        "POST",
-                        f"{API_URL}/orders/{order_id}/resolve",
-                        headers=headers,
-                        timeout=15,
-                        retries=POLLER_RETRIES,
-                    )
-                else:
-                    cook_resp = request_with_retry_sync(
-                        "POST",
-                        f"{API_URL}/dishes/cook/{order_id}",
-                        headers=headers,
-                        timeout=15,
-                        retries=POLLER_RETRIES,
-                    )
+                cook_resp = request_with_retry_sync(
+                    "POST",
+                    f"{API_URL}/orders/{order_id}/dispatch",
+                    headers=headers,
+                    timeout=15,
+                    retries=POLLER_RETRIES,
+                )
                 latency_ms = int((time.time() - start_time) * 1000)
 
                 if cook_resp.status_code in [200, 201]:

@@ -182,6 +182,7 @@ def upgrade() -> None:
         sa.Column("execution_ref", sa.String(length=100), nullable=True),
         sa.Column("order_id", sa.Integer(), nullable=True),
         sa.Column("recipe_id", sa.Integer(), nullable=False),
+        sa.Column("run_phase", sa.String(length=16), nullable=False, server_default="firing"),
         sa.Column("processing_status", sa.String(length=50), nullable=False),
         sa.Column("execution_status", sa.String(length=50), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
@@ -208,6 +209,7 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_dishes_processing_status"), "dishes", ["processing_status"], unique=False
     )
+    op.create_index(op.f("ix_dishes_run_phase"), "dishes", ["run_phase"], unique=False)
 
     # Dish Ingredients (per-task executions)
     op.create_table(
@@ -515,6 +517,7 @@ def downgrade() -> None:
     op.drop_index("ix_dish_ingredients_dish_id", table_name="dish_ingredients")
     op.drop_table("dish_ingredients")
 
+    op.drop_index(op.f("ix_dishes_run_phase"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_processing_status"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_execution_ref"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_req_id"), table_name="dishes")

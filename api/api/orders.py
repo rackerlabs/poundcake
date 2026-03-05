@@ -7,69 +7,32 @@
 """API routes for Order management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, asc, desc, func
+from sqlalchemy import select, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-from typing import Any, List
+from typing import List
 from datetime import datetime, timezone
 
 from api.core.database import get_db
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
-from api.models.models import Dish, DishIngredient, Order, Recipe, RecipeIngredient, Ingredient
+from api.models.models import Dish, DishIngredient, Order, Recipe, RecipeIngredient
 from api.schemas.schemas import (
     IncidentTimelineEvent,
     IncidentTimelineResponse,
     OrderCreate,
+    OrderDispatchResponse,
     OrderResponse,
     OrderUpdate,
 )
 from api.schemas.query_params import OrderQueryParams, validate_query_params
 from api.services.bakery_client import get_operation
-from api.services.execution_orchestrator import ExecutionOrchestrator, get_execution_orchestrator
-from api.services.execution_types import ExecutionContext
 from api.services.fallback_recipe import ensure_fallback_recipe
-from api.validation.execution import validate_runtime_execution_payload
+from api.services.dish_planner import expected_duration_for_phase, seed_dish_ingredients_for_phase
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-
-def _is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
-    normalized = (step_phase or "both").lower()
-    return normalized == "both" or normalized == target_phase
-
-
-def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(base)
-    for key, value in overlay.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _deep_merge(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
-
-
-def _render_resolve_payload(
-    *,
-    execution_payload: dict[str, Any] | None,
-    execution_parameters: dict[str, Any] | None,
-) -> dict[str, Any]:
-    payload = execution_payload or {}
-    template = payload.get("template")
-    if not isinstance(template, dict):
-        return {}
-    rendered = dict(template)
-    context = payload.get("context")
-    if isinstance(context, dict):
-        rendered["context"] = _deep_merge(
-            rendered.get("context") if isinstance(rendered.get("context"), dict) else {},
-            context,
-        )
-    if execution_parameters:
-        rendered = _deep_merge(rendered, execution_parameters)
-    return rendered
 
 
 @router.get("/orders", response_model=List[OrderResponse])
@@ -247,30 +210,33 @@ async def update_order(
     return order
 
 
-@router.post("/orders/{order_id}/resolve", response_model=OrderResponse)
-async def resolve_order(
+@router.post("/orders/{order_id}/dispatch", response_model=OrderDispatchResponse)
+async def dispatch_order(
     request: Request,
     order_id: int,
     db: AsyncSession = Depends(get_db),
-    orchestrator: ExecutionOrchestrator = Depends(get_execution_orchestrator),
-):
-    """Resolve-phase orchestration for an order using resolve-eligible recipe steps only."""
+) -> OrderDispatchResponse:
+    """Create/seed a phase-scoped dish for a dispatchable order."""
     req_id = request.state.req_id
     settings = get_settings()
     now = datetime.now(timezone.utc)
 
+    response: OrderDispatchResponse | None = None
     async with db.begin():
-        order_result = await db.execute(select(Order).where(Order.id == order_id).with_for_update())
-        order = order_result.scalars().first()
+        result = await db.execute(select(Order).where(Order.id == order_id).with_for_update())
+        order = result.scalars().first()
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        if order.processing_status == "complete":
-            return order
-        if order.processing_status != "resolving":
+        run_phase: str
+        if order.processing_status == "new":
+            run_phase = "firing"
+        elif order.processing_status == "resolving":
+            run_phase = "resolving"
+        else:
             raise HTTPException(
                 status_code=409,
-                detail=f"Order must be in resolving status (current={order.processing_status})",
+                detail=f"Order is not dispatchable (status={order.processing_status})",
             )
 
         recipe_result = await db.execute(
@@ -295,188 +261,81 @@ async def resolve_order(
                     .with_for_update()
                 )
                 recipe = fallback_result.unique().scalars().first()
+
         if not recipe:
-            raise HTTPException(status_code=404, detail="No recipe available for resolve flow")
-
-        dish_result = await db.execute(
-            select(Dish)
-            .where(Dish.order_id == order.id)
-            .order_by(Dish.created_at.desc())
-            .with_for_update()
-        )
-        dish = dish_result.scalars().first()
-
-        if dish is None:
-            expected_result = await db.execute(
-                select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
-                .select_from(RecipeIngredient)
-                .join(Ingredient, RecipeIngredient.ingredient_id == Ingredient.id)
-                .where(
-                    RecipeIngredient.recipe_id == recipe.id,
-                    RecipeIngredient.run_phase.in_(("resolving", "both")),
-                )
-            )
-            expected_duration_sec = expected_result.scalar() or 0
-
-            dish = Dish(
-                req_id=order.req_id,
+            if run_phase == "firing":
+                order.processing_status = "processing"
+                order.is_active = True
+            else:
+                order.processing_status = "failed"
+                order.is_active = False
+            order.updated_at = now
+            response = OrderDispatchResponse(
+                status="skipped",
                 order_id=order.id,
-                recipe_id=recipe.id,
-                processing_status="complete",
-                execution_status="succeeded",
-                started_at=now,
-                completed_at=now,
-                expected_duration_sec=expected_duration_sec,
-                actual_duration_sec=0,
+                reason=f"No recipe for {order.alert_group_name}",
             )
-            db.add(dish)
-            await db.flush()
+        else:
+            if run_phase == "firing":
+                order.processing_status = "processing"
+                order.updated_at = now
 
-        existing_result = await db.execute(
-            select(DishIngredient)
-            .where(DishIngredient.dish_id == dish.id, DishIngredient.deleted.is_(False))
-            .with_for_update()
-        )
-        existing_by_recipe_ingredient_id = {
-            row.recipe_ingredient_id: row
-            for row in existing_result.scalars().all()
-            if row.recipe_ingredient_id is not None
-        }
-
-        resolve_steps = sorted(recipe.recipe_ingredients, key=lambda item: item.step_order)
-        for ri in resolve_steps:
-            if ri.ingredient is None:
-                continue
-            if not _is_phase_eligible(ri.run_phase, "resolving"):
-                continue
-            if (ri.ingredient.execution_purpose or "").lower() != "comms":
-                continue
-
-            task_suffix = (ri.ingredient.task_key_template or "task").replace(".", "_")
-            task_key = f"step_{ri.step_order}_{task_suffix}"
-            params = dict(ri.ingredient.execution_parameters or {})
-            if ri.execution_parameters_override:
-                params.update(ri.execution_parameters_override)
-            validation_error = validate_runtime_execution_payload(
-                execution_engine=ri.ingredient.execution_engine,
-                execution_purpose=ri.ingredient.execution_purpose,
-                execution_target=ri.ingredient.execution_target,
-                execution_payload=ri.ingredient.execution_payload,
-                execution_parameters=params or None,
-            )
-
-            dish_ingredient = existing_by_recipe_ingredient_id.get(ri.id)
-            if dish_ingredient is None:
-                dish_ingredient = DishIngredient(
-                    dish_id=dish.id,
-                    recipe_ingredient_id=ri.id,
-                    task_key=task_key,
-                    execution_engine=ri.ingredient.execution_engine,
-                    execution_target=ri.ingredient.execution_target,
-                    execution_status="pending",
-                    execution_parameters=params or None,
+            dish_result = await db.execute(
+                select(Dish)
+                .where(
+                    Dish.order_id == order.id,
+                    Dish.run_phase == run_phase,
+                    Dish.processing_status.in_(("new", "processing", "finalizing")),
                 )
-                db.add(dish_ingredient)
+                .order_by(Dish.created_at.desc())
+                .with_for_update()
+            )
+            dish = dish_result.scalars().first()
+            if dish is None:
+                expected_duration_sec = await expected_duration_for_phase(
+                    db, recipe_id=recipe.id, phase=run_phase
+                )
+                dish = Dish(
+                    req_id=order.req_id,
+                    order_id=order.id,
+                    recipe_id=recipe.id,
+                    run_phase=run_phase,
+                    processing_status="new",
+                    expected_duration_sec=expected_duration_sec,
+                )
+                db.add(dish)
                 await db.flush()
 
-            if validation_error:
-                dish_ingredient.execution_payload = ri.ingredient.execution_payload
-                dish_ingredient.execution_status = "failed"
-                dish_ingredient.error_message = validation_error
-                dish_ingredient.completed_at = now
-                if (ri.ingredient.on_failure or "stop").lower() != "continue":
-                    order.processing_status = "failed"
-                    order.is_active = False
-                    order.updated_at = now
-                    dish.processing_status = "failed"
-                    dish.execution_status = "failed"
-                    dish.error_message = validation_error
-                    dish.completed_at = now
-                    dish.updated_at = now
-                    break
-                continue
+            existing_result = await db.execute(
+                select(DishIngredient)
+                .where(DishIngredient.dish_id == dish.id, DishIngredient.deleted.is_(False))
+                .with_for_update()
+            )
+            existing_by_recipe_ingredient_id = {
+                row.recipe_ingredient_id: row
+                for row in existing_result.scalars().all()
+                if row.recipe_ingredient_id is not None
+            }
+            for row in seed_dish_ingredients_for_phase(
+                dish_id=dish.id,
+                recipe=recipe,
+                phase=run_phase,
+                existing_by_recipe_ingredient_id=existing_by_recipe_ingredient_id,
+            ):
+                db.add(row)
 
-            rendered_payload = _render_resolve_payload(
-                execution_payload=ri.ingredient.execution_payload,
-                execution_parameters=params or None,
+            response = OrderDispatchResponse(
+                status="dispatched",
+                order_id=order.id,
+                dish_id=dish.id,
+                run_phase=run_phase,
+                recipe_id=recipe.id,
+                recipe_name=recipe.name,
             )
 
-            dish_ingredient.execution_payload = rendered_payload
-            dish_ingredient.execution_parameters = params or None
-            dish_ingredient.execution_status = "running"
-            dish_ingredient.started_at = datetime.now(timezone.utc)
-            dish_ingredient.error_message = None
-            dish_ingredient.result = None
-
-            try:
-                execution_result = await orchestrator.execute(
-                    ExecutionContext(
-                        engine=ri.ingredient.execution_engine,
-                        req_id=req_id,
-                        execution_payload=rendered_payload,
-                        execution_parameters=params or None,
-                        retry_count=getattr(ri.ingredient, "retry_count", 0),
-                        retry_delay=getattr(ri.ingredient, "retry_delay", 5),
-                        timeout_duration_sec=getattr(ri.ingredient, "timeout_duration_sec", 300),
-                        context={
-                            "order_id": order.id,
-                            "recipe_ingredient_id": ri.id,
-                            "bakery_ticket_id": order.bakery_ticket_id,
-                        },
-                        execution_target=ri.ingredient.execution_target,
-                    )
-                )
-                if execution_result.context_updates.get("bakery_ticket_id"):
-                    order.bakery_ticket_id = str(
-                        execution_result.context_updates["bakery_ticket_id"]
-                    )
-                dish_ingredient.execution_ref = execution_result.execution_ref
-                dish_ingredient.result = execution_result.raw or execution_result.result
-                dish_ingredient.completed_at = datetime.now(timezone.utc)
-                if execution_result.status == "succeeded":
-                    dish_ingredient.execution_status = "succeeded"
-                else:
-                    dish_ingredient.execution_status = "failed"
-                    dish_ingredient.error_message = (
-                        execution_result.error_message
-                        or "Execution failed without adapter error_message"
-                    )
-            except Exception as exc:  # noqa: BLE001
-                dish_ingredient.execution_status = "failed"
-                dish_ingredient.error_message = str(exc)
-                dish_ingredient.completed_at = datetime.now(timezone.utc)
-
-            if (dish_ingredient.execution_status or "").lower() != "succeeded":
-                if (ri.ingredient.on_failure or "stop").lower() != "continue":
-                    order.processing_status = "failed"
-                    order.is_active = False
-                    order.updated_at = now
-                    dish.processing_status = "failed"
-                    dish.execution_status = "failed"
-                    dish.error_message = dish_ingredient.error_message
-                    dish.completed_at = now
-                    dish.updated_at = now
-                    break
-
-        if order.processing_status != "failed":
-            order.processing_status = "complete"
-            order.is_active = False
-            dish.processing_status = "complete"
-            dish.execution_status = "succeeded"
-            dish.completed_at = now
-            order.updated_at = now
-            dish.updated_at = now
-
-    await db.refresh(order)
-    logger.info(
-        "Order resolve flow completed",
-        extra={
-            "req_id": req_id,
-            "order_id": order_id,
-            "processing_status": order.processing_status,
-        },
-    )
-    return order
+    if response is None:
+        raise HTTPException(status_code=500, detail="Dispatch failed")
+    return response
 
 
 @router.get("/orders/{order_id}/timeline", response_model=IncidentTimelineResponse)

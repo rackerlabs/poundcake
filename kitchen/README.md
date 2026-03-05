@@ -12,7 +12,7 @@ This directory contains the background workers that drive execution.
 ## Flow (High Level)
 
 1. Alertmanager posts `/api/v1/webhook`.
-2. `prep-chef` polls `/api/v1/orders?processing_status=new` and calls `/api/v1/dishes/cook/{order_id}`.
+2. `prep-chef` polls `/api/v1/orders?processing_status=new` and calls `/api/v1/orders/{order_id}/dispatch`.
 3. `chef` claims dishes via `/api/v1/dishes/{dish_id}/claim` and executes via `/api/v1/cook/execute`.
 4. `timer` polls `/api/v1/dishes?processing_status=processing` and writes results to `/api/v1/dishes/{dish_id}` and `/api/v1/dishes/{dish_id}/ingredients/bulk`.
 

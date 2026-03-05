@@ -4,26 +4,28 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-"""Chef: Polls for pending Dish tasks and executes workflows via StackStorm"""
+"""Chef: Polls for pending dishes and dispatches phase-scoped execution."""
+
+from __future__ import annotations
 
 import os
 import time
+from datetime import datetime, timezone
+from typing import Any
+
 from api.core.http_client import request_with_retry_sync
 
-from api.core.logging import setup_logging, get_logger
 from api.core.config import get_settings
-from kitchen.service_helpers import wait_for_api, get_service_headers
+from api.core.logging import get_logger, setup_logging
+from kitchen.service_helpers import get_service_headers, wait_for_api
 
-# Initialize logging with standardized configuration
 setup_logging()
 logger = get_logger(__name__)
 
-# Config
 POUNDCAKE_API_URL = os.getenv("POUNDCAKE_API_URL", "http://poundcake:8080").rstrip("/")
 API_BASE_URL = f"{POUNDCAKE_API_URL}/api/v1"
 POLL_INTERVAL = int(os.getenv("CHEF_POLL_INTERVAL", "5"))
 
-# System request ID for polling operations
 SYSTEM_REQ_ID = "SYSTEM-CHEF"
 POLLER_RETRIES = get_settings().poller_http_retries
 CHEF_PATCH_RETRIES = get_settings().chef_patch_retries
@@ -33,6 +35,7 @@ CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS = max(
     0.1, get_settings().chef_execute_missing_workflow_retry_backoff_seconds
 )
 MISSING_WORKFLOW_PATH_FRAGMENT = "/opt/stackstorm/packs/poundcake/actions/workflows/"
+PENDING_STATUSES = {"pending", "queued", "processing", "running", None}
 
 
 def _is_missing_workflow_file_response(response_text: str | None) -> bool:
@@ -44,8 +47,252 @@ def _is_missing_workflow_file_response(response_text: str | None) -> bool:
     )
 
 
+def _filter_stackstorm_recipe(
+    recipe: dict[str, Any], recipe_ingredient_ids: set[int]
+) -> dict[str, Any]:
+    recipe_ingredients = recipe.get("recipe_ingredients")
+    if not isinstance(recipe_ingredients, list):
+        return recipe
+
+    filtered_steps: list[dict[str, Any]] = []
+    for item in recipe_ingredients:
+        if not isinstance(item, dict):
+            continue
+        ingredient = item.get("ingredient")
+        if not isinstance(ingredient, dict):
+            continue
+        if (ingredient.get("execution_engine") or "").strip().lower() != "stackstorm":
+            continue
+
+        ri_id = item.get("id")
+        if isinstance(ri_id, int) and ri_id in recipe_ingredient_ids:
+            filtered_steps.append(item)
+
+    filtered = dict(recipe)
+    filtered["recipe_ingredients"] = filtered_steps
+    return filtered
+
+
+def _fetch_dish_ingredients(dish_id: int, req_id: str) -> list[dict[str, Any]]:
+    response = request_with_retry_sync(
+        "GET",
+        f"{API_BASE_URL}/dishes/{dish_id}/ingredients",
+        headers=get_service_headers(req_id),
+        timeout=10,
+        retries=POLLER_RETRIES,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to fetch dish ingredients: {response.text}")
+    payload = response.json()
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def _upsert_dish_ingredient(dish_id: int, req_id: str, item: dict[str, Any]) -> None:
+    request_with_retry_sync(
+        "POST",
+        f"{API_BASE_URL}/dishes/{dish_id}/ingredients/bulk",
+        json={"items": [item]},
+        headers=get_service_headers(req_id),
+        timeout=10,
+        retries=POLLER_RETRIES,
+    )
+
+
+def _execute_bakery_steps(
+    *,
+    dish: dict[str, Any],
+    req_id: str,
+    ingredients: list[dict[str, Any]],
+) -> tuple[bool, str | None]:
+    recipe = dish.get("recipe") if isinstance(dish.get("recipe"), dict) else {}
+    ri_defs = (
+        recipe.get("recipe_ingredients")
+        if isinstance(recipe.get("recipe_ingredients"), list)
+        else []
+    )
+    on_failure_by_ri_id: dict[int, str] = {}
+    for ri in ri_defs:
+        if not isinstance(ri, dict):
+            continue
+        ingredient = ri.get("ingredient") if isinstance(ri.get("ingredient"), dict) else {}
+        ri_id = ri.get("id")
+        if isinstance(ri_id, int):
+            on_failure_by_ri_id[ri_id] = str(ingredient.get("on_failure") or "stop").lower()
+
+    dish_id = int(dish.get("id"))
+    order_id = dish.get("order_id")
+    for item in ingredients:
+        if (item.get("execution_engine") or "").strip().lower() != "bakery":
+            continue
+        if item.get("execution_status") not in PENDING_STATUSES:
+            continue
+
+        recipe_ingredient_id = item.get("recipe_ingredient_id")
+        now = datetime.now(timezone.utc).isoformat()
+        _upsert_dish_ingredient(
+            dish_id,
+            req_id,
+            {
+                "recipe_ingredient_id": recipe_ingredient_id,
+                "task_key": item.get("task_key"),
+                "execution_status": "running",
+                "started_at": now,
+                "execution_engine": "bakery",
+                "execution_target": item.get("execution_target"),
+            },
+        )
+
+        exec_resp = request_with_retry_sync(
+            "POST",
+            f"{API_BASE_URL}/cook/execute",
+            json={
+                "execution_engine": "bakery",
+                "execution_target": item.get("execution_target"),
+                "execution_payload": item.get("execution_payload") or {},
+                "execution_parameters": item.get("execution_parameters") or {},
+                "context": {
+                    "order_id": order_id,
+                    "recipe_ingredient_id": recipe_ingredient_id,
+                },
+            },
+            headers=get_service_headers(req_id),
+            timeout=30,
+            retries=POLLER_RETRIES,
+        )
+
+        success = False
+        error_message = None
+        execution_ref = None
+        result_payload: dict[str, Any] | None = None
+        if exec_resp.status_code in (200, 201):
+            body = exec_resp.json()
+            status = str(body.get("status") or "")
+            execution_ref = body.get("execution_ref")
+            result_payload = (
+                body.get("raw") if isinstance(body.get("raw"), dict) else body.get("result")
+            )
+            success = status == "succeeded"
+            if not success:
+                error_message = str(body.get("error_message") or "Bakery execution failed")
+        else:
+            error_message = str(exec_resp.text)
+
+        _upsert_dish_ingredient(
+            dish_id,
+            req_id,
+            {
+                "recipe_ingredient_id": recipe_ingredient_id,
+                "task_key": item.get("task_key"),
+                "execution_status": "succeeded" if success else "failed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "execution_ref": execution_ref,
+                "result": result_payload,
+                "error_message": error_message,
+                "execution_engine": "bakery",
+                "execution_target": item.get("execution_target"),
+            },
+        )
+
+        if not success and on_failure_by_ri_id.get(recipe_ingredient_id, "stop") != "continue":
+            return False, error_message
+
+    return True, None
+
+
+def _finalize_dish(dish_id: int, req_id: str, *, success: bool, error: str | None = None) -> None:
+    request_with_retry_sync(
+        "PATCH",
+        f"{API_BASE_URL}/dishes/{dish_id}",
+        json={
+            "processing_status": "complete" if success else "failed",
+            "execution_status": "succeeded" if success else "failed",
+            "error_message": None if success else (error or "Dish execution failed"),
+        },
+        headers=get_service_headers(req_id),
+        timeout=10,
+        retries=CHEF_PATCH_RETRIES,
+        retry_backoff_seconds=CHEF_PATCH_RETRY_BACKOFF_SECONDS,
+    )
+
+
+def _start_stackstorm_workflow(
+    *,
+    dish_id: int,
+    req_id: str,
+    recipe: dict[str, Any],
+    stackstorm_ingredient_rows: list[dict[str, Any]],
+) -> None:
+    recipe_ingredient_ids = {
+        int(item["recipe_ingredient_id"])
+        for item in stackstorm_ingredient_rows
+        if isinstance(item.get("recipe_ingredient_id"), int)
+    }
+    filtered_recipe = _filter_stackstorm_recipe(recipe, recipe_ingredient_ids)
+
+    reg_resp = request_with_retry_sync(
+        "POST",
+        f"{API_BASE_URL}/cook/workflows/register",
+        json=filtered_recipe,
+        headers=get_service_headers(req_id),
+        timeout=30,
+        retries=POLLER_RETRIES,
+    )
+    if reg_resp.status_code not in (200, 201):
+        raise RuntimeError(reg_resp.text)
+    workflow_id = reg_resp.json().get("workflow_id")
+
+    st2_exec_id = None
+    max_attempts = 1 + CHEF_EXECUTE_MISSING_WORKFLOW_RETRIES
+    for attempt in range(1, max_attempts + 1):
+        exec_resp = request_with_retry_sync(
+            "POST",
+            f"{API_BASE_URL}/cook/execute",
+            json={
+                "execution_engine": "stackstorm",
+                "execution_target": workflow_id,
+                "execution_parameters": {},
+            },
+            headers=get_service_headers(req_id),
+            timeout=30,
+            retries=POLLER_RETRIES,
+        )
+        if exec_resp.status_code in (200, 201):
+            body = exec_resp.json()
+            if body.get("status") in {"queued", "running", "succeeded"}:
+                st2_exec_id = body.get("execution_ref")
+                break
+            error_text = str(body.get("error_message") or exec_resp.text)
+            if attempt < max_attempts and _is_missing_workflow_file_response(error_text):
+                time.sleep(CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS)
+                continue
+            raise RuntimeError(error_text)
+
+        if attempt < max_attempts and _is_missing_workflow_file_response(exec_resp.text):
+            time.sleep(CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS)
+            continue
+
+        raise RuntimeError(exec_resp.text)
+
+    if not st2_exec_id:
+        raise RuntimeError("StackStorm execution did not return an execution id after retries")
+
+    patch_resp = request_with_retry_sync(
+        "PATCH",
+        f"{API_BASE_URL}/dishes/{dish_id}",
+        json={"execution_ref": st2_exec_id},
+        headers=get_service_headers(req_id),
+        timeout=10,
+        retries=CHEF_PATCH_RETRIES,
+        retry_backoff_seconds=CHEF_PATCH_RETRY_BACKOFF_SECONDS,
+    )
+    if patch_resp.status_code not in (200, 201):
+        raise RuntimeError(f"Failed to persist workflow execution id: {patch_resp.text}")
+
+
 def run_chef() -> None:
-    """Main chef loop - polls for dishes and executes workflows."""
+    """Main chef loop - polls for new dishes and dispatches stage execution."""
     wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger)
 
     logger.info(
@@ -56,7 +303,6 @@ def run_chef() -> None:
 
     while True:
         try:
-            # Fetch next 'new' dish
             start_time = time.time()
             resp = request_with_retry_sync(
                 "GET",
@@ -97,7 +343,6 @@ def run_chef() -> None:
             dish_id = dish.get("id")
             req_id = dish.get("req_id") or "UNKNOWN"
 
-            # Step 1: claim dish atomically
             claim_resp = request_with_retry_sync(
                 "POST",
                 f"{API_BASE_URL}/dishes/{dish_id}/claim",
@@ -121,143 +366,56 @@ def run_chef() -> None:
                 continue
 
             dish = claim_resp.json()
-            recipe = dish.get("recipe") or {}
-            try:
-                reg_resp = request_with_retry_sync(
-                    "POST",
-                    f"{API_BASE_URL}/cook/workflows/register",
-                    json=recipe,
-                    headers=get_service_headers(req_id),
-                    timeout=30,
-                    retries=POLLER_RETRIES,
-                )
-                if reg_resp.status_code not in (200, 201):
-                    raise Exception(reg_resp.text)
-                workflow_id = reg_resp.json().get("workflow_id")
-            except Exception as e:
-                logger.error(
-                    "Failed to register workflow",
-                    extra={"req_id": req_id, "dish_id": dish_id, "error": str(e)},
-                )
-                request_with_retry_sync(
-                    "PATCH",
-                    f"{API_BASE_URL}/dishes/{dish_id}",
-                    json={"processing_status": "failed", "error_message": str(e)},
-                    headers=get_service_headers(req_id),
-                    timeout=10,
-                    retries=POLLER_RETRIES,
-                )
-                time.sleep(POLL_INTERVAL)
-                continue
+            dish_id = int(dish.get("id"))
+            ingredients = _fetch_dish_ingredients(dish_id, req_id)
+            stackstorm_pending = [
+                item
+                for item in ingredients
+                if (item.get("execution_engine") or "").strip().lower() == "stackstorm"
+                and item.get("execution_status") in PENDING_STATUSES
+            ]
+            bakery_pending = [
+                item
+                for item in ingredients
+                if (item.get("execution_engine") or "").strip().lower() == "bakery"
+                and item.get("execution_status") in PENDING_STATUSES
+            ]
 
-            # Execute workflow
-            try:
-                st2_exec_id = None
-                max_attempts = 1 + CHEF_EXECUTE_MISSING_WORKFLOW_RETRIES
-                for attempt in range(1, max_attempts + 1):
-                    exec_resp = request_with_retry_sync(
-                        "POST",
-                        f"{API_BASE_URL}/cook/execute",
-                        json={
-                            "execution_engine": "stackstorm",
-                            "execution_target": workflow_id,
-                            "execution_parameters": {},
-                        },
-                        headers=get_service_headers(req_id),
-                        timeout=30,
-                        retries=POLLER_RETRIES,
+            if stackstorm_pending:
+                try:
+                    recipe = dish.get("recipe") if isinstance(dish.get("recipe"), dict) else {}
+                    _start_stackstorm_workflow(
+                        dish_id=dish_id,
+                        req_id=req_id,
+                        recipe=recipe,
+                        stackstorm_ingredient_rows=stackstorm_pending,
                     )
-                    if exec_resp.status_code in (200, 201):
-                        body = exec_resp.json()
-                        if body.get("status") in {"queued", "running", "succeeded"}:
-                            st2_exec_id = body.get("execution_ref")
-                            break
-                        error_text = str(body.get("error_message") or exec_resp.text)
-                        if attempt < max_attempts and _is_missing_workflow_file_response(
-                            error_text
-                        ):
-                            logger.warning(
-                                "Workflow file not yet available on StackStorm runner; retrying execution",
-                                extra={
-                                    "req_id": req_id,
-                                    "dish_id": dish_id,
-                                    "workflow_id": workflow_id,
-                                    "attempt": attempt,
-                                    "max_attempts": max_attempts,
-                                },
-                            )
-                            time.sleep(CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS)
-                            continue
-                        raise Exception(error_text)
-
-                    if attempt < max_attempts and _is_missing_workflow_file_response(
-                        exec_resp.text
-                    ):
-                        logger.warning(
-                            "Workflow file not yet available on StackStorm runner; retrying execution",
-                            extra={
-                                "req_id": req_id,
-                                "dish_id": dish_id,
-                                "workflow_id": workflow_id,
-                                "attempt": attempt,
-                                "max_attempts": max_attempts,
-                            },
-                        )
-                        time.sleep(CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS)
-                        continue
-
-                    raise Exception(exec_resp.text)
-
-                if not st2_exec_id:
-                    raise Exception(
-                        "StackStorm execution did not return an execution id after retries"
-                    )
-
-                patch_resp = request_with_retry_sync(
-                    "PATCH",
-                    f"{API_BASE_URL}/dishes/{dish_id}",
-                    json={"execution_ref": st2_exec_id},
-                    headers=get_service_headers(req_id),
-                    timeout=10,
-                    retries=CHEF_PATCH_RETRIES,
-                    retry_backoff_seconds=CHEF_PATCH_RETRY_BACKOFF_SECONDS,
-                )
-                if patch_resp.status_code not in (200, 201):
-                    logger.error(
-                        "Failed to persist workflow execution id",
+                    logger.info(
+                        "StackStorm workflow execution started",
                         extra={
                             "req_id": req_id,
                             "dish_id": dish_id,
-                            "status_code": patch_resp.status_code,
-                            "response": patch_resp.text,
+                            "run_phase": dish.get("run_phase"),
                         },
                     )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "Workflow execution failed",
+                        extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
+                    )
+                    _finalize_dish(dish_id, req_id, success=False, error=str(exc))
+                continue
 
-                logger.info(
-                    "Workflow execution started",
-                    extra={
-                        "req_id": req_id,
-                        "dish_id": dish_id,
-                        "workflow_id": workflow_id,
-                        "execution_id": st2_exec_id,
-                    },
+            if bakery_pending:
+                ok, err = _execute_bakery_steps(
+                    dish=dish, req_id=req_id, ingredients=bakery_pending
                 )
+                _finalize_dish(dish_id, req_id, success=ok, error=err)
+                continue
 
-            except Exception as e:
-                logger.error(
-                    "Workflow execution failed",
-                    extra={"req_id": req_id, "dish_id": dish_id, "error": str(e)},
-                )
-                request_with_retry_sync(
-                    "PATCH",
-                    f"{API_BASE_URL}/dishes/{dish_id}",
-                    json={"processing_status": "failed", "error_message": str(e)},
-                    headers=get_service_headers(req_id),
-                    timeout=10,
-                    retries=POLLER_RETRIES,
-                )
+            _finalize_dish(dish_id, req_id, success=True)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             if api_unavailable_since is None:
                 api_unavailable_since = time.time()
                 logger.error(
