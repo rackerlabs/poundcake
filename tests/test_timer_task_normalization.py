@@ -19,7 +19,7 @@ class _Resp:
         return self._json_data
 
 
-def test_monitor_dishes_normalizes_task_name_and_action_execution_id(
+def test_monitor_dishes__task_payload_with_name_and_action_executions__normalizes_task_key_and_execution_ref(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dish = {
@@ -58,6 +58,7 @@ def test_monitor_dishes_normalizes_task_name_and_action_execution_id(
             _Resp(200, tasks),  # execution tasks
             _Resp(200, []),  # existing dish ingredients
             _Resp(200, {"updated": 1}),  # bulk ingredient write
+            _Resp(200, []),  # bakery-stage ingredient fetch (no bakery rows)
         ]
     )
 

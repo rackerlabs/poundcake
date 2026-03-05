@@ -23,7 +23,7 @@ class _Resp:
             raise RuntimeError(f"http {self.status_code}")
 
 
-def test_update_dish_final_status_sets_duration_and_completion(
+def test_update_dish__final_status__sets_duration_and_completion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     started_at = (datetime.now(timezone.utc) - timedelta(seconds=12)).isoformat()
@@ -57,7 +57,7 @@ def test_update_dish_final_status_sets_duration_and_completion(
     assert payload["actual_duration_sec"] >= 10
 
 
-def test_check_for_timeouts_hard_timeout_cancels_and_fails_dish(
+def test_check_for_timeouts__hard_timeout__cancels_and_fails_dish(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     started_at = (datetime.now(timezone.utc) - timedelta(seconds=20)).isoformat()
@@ -92,7 +92,7 @@ def test_check_for_timeouts_hard_timeout_cancels_and_fails_dish(
     assert kwargs["final_status"] is True
 
 
-def test_monitor_dishes_marks_abandoned_when_execution_missing_in_st2(
+def test_monitor_dishes__missing_st2_execution__marks_abandoned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dish = {
@@ -135,7 +135,7 @@ def test_monitor_dishes_marks_abandoned_when_execution_missing_in_st2(
     assert kwargs["final_status"] is True
 
 
-def test_monitor_dishes_terminal_success_persists_ingredients_and_completes(
+def test_monitor_dishes__terminal_success__persists_ingredients_and_completes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dish = {
@@ -180,6 +180,7 @@ def test_monitor_dishes_terminal_success_persists_ingredients_and_completes(
             _Resp(200, {"status": "succeeded", "result": {"tasks": tasks}}),  # execution
             _Resp(200, []),  # existing dish ingredients
             _Resp(200, {"ok": True}),  # bulk ingredient write
+            _Resp(200, []),  # bakery-stage ingredient fetch (no bakery rows)
         ]
     )
 
@@ -211,7 +212,7 @@ def test_monitor_dishes_terminal_success_persists_ingredients_and_completes(
     assert [task["task_key"] for task in kwargs["result"]] == ["step1", "step2"]
 
 
-def test_monitor_dishes_missing_execution_id_times_out_to_abandoned(
+def test_monitor_dishes__missing_execution_id_after_timeout__marks_abandoned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     old_created_at = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
@@ -234,6 +235,16 @@ def test_monitor_dishes_missing_execution_id_times_out_to_abandoned(
             _Resp(200, [dish]),  # processing dishes
             _Resp(200, []),  # finalizing dishes
             _Resp(200, dish),  # finalize-claim
+            _Resp(
+                200,
+                [
+                    {
+                        "task_key": "step1",
+                        "execution_engine": "stackstorm",
+                        "execution_status": "pending",
+                    }
+                ],
+            ),  # ingredients include stackstorm, so missing execution id timeout path applies
         ]
     )
 

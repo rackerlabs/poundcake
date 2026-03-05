@@ -26,7 +26,7 @@ sequenceDiagram
 
     Note over DB, PC: Phase 2: Dispatching (prep-chef)
     PC->>API: GET /api/v1/orders?processing_status=new
-    PC->>API: POST /api/v1/dishes/cook/{order_id}
+    PC->>API: POST /api/v1/orders/{order_id}/dispatch
     API->>DB: Create Dish for the Recipe
     API->>DB: Update Order (processing_status: processing)
 
@@ -51,6 +51,49 @@ sequenceDiagram
     API->>DB: Upsert Ingredients/Recipes
 ```
 
+## Unified Dispatch Order Diagram
+
+```mermaid
+flowchart TD
+  A["Alertmanager webhook (firing)"] --> B["API pre_heat upserts Order<br/>processing_status=new"]
+  B --> C["prep-chef polls Orders(new,resolving)"]
+  C --> D["POST /api/v1/orders/{order_id}/dispatch"]
+
+  D --> E{"order.processing_status"}
+  E -->|new| F["Dispatch run_phase=firing"]
+  E -->|resolving| G["Dispatch run_phase=resolving"]
+  E -->|other| H["409 not dispatchable"]
+
+  F --> I["Create/reuse firing Dish<br/>seed one canonical dish_ingredients set<br/>(run_phase in firing,both)"]
+  G --> J["Create/reuse resolving Dish<br/>seed one canonical dish_ingredients set<br/>(run_phase in resolving,both)"]
+
+  I --> K["Dish status=new"]
+  J --> K
+
+  K --> L["chef claims dish -> processing"]
+  L --> M["chef loads dish_ingredients"]
+  M --> N{"stackstorm pending rows?"}
+
+  N -->|yes| O["Filter recipe to stackstorm rows<br/>POST /cook/workflows/register<br/>POST /cook/execute (stackstorm)<br/>PATCH dish.execution_ref"]
+  N -->|no| P{"bakery pending rows?"}
+
+  O --> Q["timer polls /cook/executions*"]
+  Q --> R["POST /dishes/{id}/ingredients/bulk<br/>upsert stackstorm task status/result"]
+  R --> P
+
+  P -->|yes| S["Execute bakery rows via /cook/execute (per row)<br/>upsert each dish_ingredient in place"]
+  P -->|no| T["Finalize dish"]
+
+  S --> T
+
+  T --> U{"dish.run_phase"}
+  U -->|firing| V["Dish terminal -> order moves to resolving"]
+  U -->|resolving| W["Dish terminal -> order complete/failed"]
+
+  X["Alertmanager webhook (resolved)"] --> Y["pre_heat sets order.processing_status=resolving"]
+  Y --> C
+```
+
 ## Concurrency Guarantees (Locks and Claims)
 
 ```mermaid
@@ -71,10 +114,15 @@ flowchart TD
 
 | From | Event | To | Notes |
 |---|---|---|---|
+<<<<<<< Updated upstream
 | `new` | `prep-chef -> /dishes/cook/{order_id}` | `processing` | Atomic transition when dish creation is claimed. |
 | `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-fallback-recipe, non-terminal orders. |
+=======
+| `new` | `prep-chef -> /orders/{order_id}/dispatch` | `processing` | Atomic transition when dish creation is claimed. |
+| `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-catch-all, non-terminal orders. |
+>>>>>>> Stashed changes
 | `new` or `processing` | Alertmanager sends `resolved` | `resolving` | Resolve-phase orchestration is initiated by pre-heat. |
-| `resolving` | `prep-chef -> /orders/{order_id}/resolve` | `complete` | Resolve flow finalizes order and marks inactive. |
+| `resolving` | `prep-chef -> /orders/{order_id}/dispatch` | `complete` | Resolve flow finalizes order and marks inactive. |
 | `complete`/`failed`/`canceled` | Any webhook/timer follow-up | unchanged | Terminal statuses are immutable and not re-opened by side effects. |
 
 ## Order Workflow Graph (States + Bakery Calls)
@@ -83,16 +131,21 @@ flowchart TD
 stateDiagram-v2
     [*] --> new: firing webhook\nPOST /api/v1/webhook -> pre_heat creates order
 
+<<<<<<< Updated upstream
     new --> processing: prep-chef cook\nPOST /api/v1/dishes/cook/{order_id}
     processing --> resolving: dish terminal (non-fallback-recipe)\nPATCH /api/v1/dishes/{dish_id}
+=======
+    new --> processing: prep-chef cook\nPOST /api/v1/orders/{order_id}/dispatch
+    processing --> resolving: dish terminal (non-catch-all)\nPATCH /api/v1/dishes/{dish_id}
+>>>>>>> Stashed changes
 
     new --> resolving: resolved webhook\npre_heat transition check
     processing --> resolving: resolved webhook\npre_heat transition check
     resolving --> resolving: resolved webhook (idempotent)\npre_heat keeps resolving
     resolving --> processing: re-fire while resolving\npre_heat sets processing
 
-    resolving --> complete: resolve success\nPOST /api/v1/orders/{order_id}/resolve
-    resolving --> failed: resolve blocking failure\nPOST /api/v1/orders/{order_id}/resolve
+    resolving --> complete: resolve success\nPOST /api/v1/orders/{order_id}/dispatch
+    resolving --> failed: resolve blocking failure\nPOST /api/v1/orders/{order_id}/dispatch
     new --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
     processing --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
     resolving --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
@@ -111,8 +164,13 @@ stateDiagram-v2
       - POST /api/v1/tickets/{ticket_id}/close (if auto-remediation succeeded)
       - GET /api/v1/operations/{operation_id} (poll loop)
 
+<<<<<<< Updated upstream
       Resolve-phase comms (/orders/{id}/resolve):
       - target: core|jira + execution_parameters.operation: ticket_create|ticket_update|ticket_comment|ticket_close
+=======
+      Resolve-phase dispatch (/orders/{id}/dispatch):
+      - tickets.create | tickets.update | tickets.comment | tickets.close
+>>>>>>> Stashed changes
       - mapped Bakery endpoints + operation polling when operation_id is returned
     end note
 
@@ -458,8 +516,6 @@ POUNDCAKE_AUTH_ENABLED=true
 POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
 # StackStorm packs are served by API endpoint /api/v1/cook/packs
 # and synchronized into StackStorm pods by the pack-sync sidecar.
-# Legacy compatibility endpoint /api/v1/internal/stackstorm/pack.tgz remains
-# temporarily available and will be removed after a migration window.
 ```
 
 `config/st2_api_key` is created by `st2client` during bootstrap.

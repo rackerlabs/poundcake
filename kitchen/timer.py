@@ -261,6 +261,134 @@ def _mark_pending_ingredients_failed(dish_id: int, req_id: str, error_message: s
         )
 
 
+def _execute_pending_bakery_ingredients(
+    dish: dict[str, Any], req_id: str
+) -> tuple[bool, str | None, bool]:
+    """Execute pending Bakery ingredients for a dish and persist per-step state."""
+    dish_id = dish.get("id")
+    if not dish_id:
+        return True, None, False
+    try:
+        ingredients_resp = request_with_retry_sync(
+            "GET",
+            f"{API_BASE_URL}/dishes/{dish_id}/ingredients",
+            headers=get_service_headers(req_id),
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
+        if ingredients_resp.status_code != 200:
+            return False, f"Failed to fetch dish ingredients: {ingredients_resp.text}", False
+        ingredients = ingredients_resp.json() or []
+        pending_bakery = [
+            item
+            for item in ingredients
+            if isinstance(item, dict)
+            and (item.get("execution_engine") or "").strip().lower() == "bakery"
+            and item.get("execution_status") in {"pending", "queued", "processing", None}
+        ]
+        if not pending_bakery:
+            return True, None, False
+
+        on_failure_by_ri_id: dict[int, str] = {}
+        recipe = dish.get("recipe")
+        if isinstance(recipe, dict):
+            ri_items = recipe.get("recipe_ingredients")
+            if isinstance(ri_items, list):
+                for ri in ri_items:
+                    if not isinstance(ri, dict):
+                        continue
+                    ri_id = ri.get("id")
+                    ingredient = ri.get("ingredient")
+                    if not isinstance(ingredient, dict) or not isinstance(ri_id, int):
+                        continue
+                    on_failure_by_ri_id[ri_id] = str(ingredient.get("on_failure") or "stop").lower()
+
+        for item in pending_bakery:
+            recipe_ingredient_id = item.get("recipe_ingredient_id")
+            task_key = item.get("task_key")
+            start_ts = datetime.now(timezone.utc).isoformat()
+            request_with_retry_sync(
+                "POST",
+                f"{API_BASE_URL}/dishes/{dish_id}/ingredients/bulk",
+                json={
+                    "items": [
+                        {
+                            "recipe_ingredient_id": recipe_ingredient_id,
+                            "task_key": task_key,
+                            "execution_engine": "bakery",
+                            "execution_target": item.get("execution_target"),
+                            "execution_status": "running",
+                            "started_at": start_ts,
+                        }
+                    ]
+                },
+                headers=get_service_headers(req_id),
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
+            exec_resp = request_with_retry_sync(
+                "POST",
+                f"{API_BASE_URL}/cook/execute",
+                json={
+                    "execution_engine": "bakery",
+                    "execution_target": item.get("execution_target"),
+                    "execution_payload": item.get("execution_payload") or {},
+                    "execution_parameters": item.get("execution_parameters") or {},
+                    "context": {
+                        "order_id": dish.get("order_id"),
+                        "recipe_ingredient_id": recipe_ingredient_id,
+                    },
+                },
+                headers=get_service_headers(req_id),
+                timeout=30,
+                retries=POLLER_RETRIES,
+            )
+
+            success = False
+            error_message = None
+            execution_ref = None
+            result_payload = None
+            if exec_resp.status_code in (200, 201):
+                body = exec_resp.json()
+                success = str(body.get("status") or "") == "succeeded"
+                execution_ref = body.get("execution_ref")
+                result_payload = body.get("raw") or body.get("result")
+                if not success:
+                    error_message = str(body.get("error_message") or "Bakery execution failed")
+            else:
+                error_message = str(exec_resp.text)
+
+            request_with_retry_sync(
+                "POST",
+                f"{API_BASE_URL}/dishes/{dish_id}/ingredients/bulk",
+                json={
+                    "items": [
+                        {
+                            "recipe_ingredient_id": recipe_ingredient_id,
+                            "task_key": task_key,
+                            "execution_engine": "bakery",
+                            "execution_target": item.get("execution_target"),
+                            "execution_ref": execution_ref,
+                            "execution_status": "succeeded" if success else "failed",
+                            "completed_at": datetime.now(timezone.utc).isoformat(),
+                            "result": result_payload if isinstance(result_payload, dict) else None,
+                            "error_message": error_message,
+                        }
+                    ]
+                },
+                headers=get_service_headers(req_id),
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
+
+            if not success and on_failure_by_ri_id.get(recipe_ingredient_id, "stop") != "continue":
+                return False, error_message, True
+
+        return True, None, True
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc), True
+
+
 def cancel_execution(execution_id: str, req_id: str) -> bool:
     """Instructs API to stop an execution."""
     try:
@@ -419,6 +547,35 @@ def monitor_dishes() -> None:
                 continue
 
             if not execution_id:
+                ingredients_resp = request_with_retry_sync(
+                    "GET",
+                    f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients",
+                    headers=get_service_headers(req_id),
+                    timeout=10,
+                    retries=POLLER_RETRIES,
+                )
+                ingredients_payload = (
+                    ingredients_resp.json()
+                    if ingredients_resp.status_code == 200
+                    and isinstance(ingredients_resp.json(), list)
+                    else []
+                )
+                has_stackstorm_ingredients = any(
+                    isinstance(item, dict)
+                    and (item.get("execution_engine") or "").strip().lower() == "stackstorm"
+                    for item in ingredients_payload
+                )
+                if not has_stackstorm_ingredients:
+                    bakery_ok, bakery_err, _ = _execute_pending_bakery_ingredients(dish, req_id)
+                    update_dish(
+                        dish,
+                        req_id,
+                        processing_status="complete" if bakery_ok else "failed",
+                        execution_status="succeeded" if bakery_ok else "failed",
+                        error_msg=bakery_err,
+                        final_status=True,
+                    )
+                    continue
                 start_str = dish.get("started_at") or dish.get("created_at")
                 if start_str:
                     dt_obj = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
@@ -670,6 +827,13 @@ def monitor_dishes() -> None:
                         if retry_error:
                             err = f"{err}; workflow file retry failed: {retry_error}"
                         _mark_pending_ingredients_failed(dish["id"], req_id, str(err))
+                    elif st2_status == "succeeded":
+                        bakery_ok, bakery_err, had_bakery = _execute_pending_bakery_ingredients(
+                            dish, req_id
+                        )
+                        if had_bakery and not bakery_ok:
+                            processing_status = "failed"
+                            err = bakery_err or "Bakery stage failed"
 
                     update_dish(
                         dish,
