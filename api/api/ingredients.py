@@ -71,6 +71,7 @@ async def create_ingredient(
         execution_id=ingredient.execution_id,
         execution_payload=ingredient.execution_payload,
         execution_parameters=ingredient.execution_parameters,
+        is_default=ingredient.is_default,
         execution_engine=ingredient.execution_engine,
         execution_purpose=ingredient.execution_purpose,
         is_blocking=ingredient.is_blocking,

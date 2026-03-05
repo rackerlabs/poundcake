@@ -32,14 +32,17 @@ def test_load_bootstrap_ingredient_catalog_accepts_valid_yaml(
 apiVersion: poundcake/v1
 kind: IngredientCatalog
 ingredients:
-  - execution_target: tickets.create
-    task_key_template: create_ticket
+  - execution_target: core
+    task_key_template: core
     execution_engine: bakery
     execution_purpose: comms
     execution_payload:
       template:
-        title: hello
-        description: world
+        context:
+          source: test
+    execution_parameters:
+      operation: ticket_update
+    is_default: true
     expected_duration_sec: 30
     timeout_duration_sec: 120
 """.strip(),
@@ -49,8 +52,9 @@ ingredients:
     items, errors = load_bootstrap_ingredient_catalog(str(catalog))
     assert errors == []
     assert len(items) == 1
-    assert items[0]["execution_target"] == "tickets.create"
+    assert items[0]["execution_target"] == "core"
     assert items[0]["execution_engine"] == "bakery"
+    assert items[0]["is_default"] is True
 
 
 def test_load_bootstrap_ingredient_catalog_rejects_noncanonical_target(
@@ -88,26 +92,32 @@ async def test_upsert_bootstrap_bakery_ingredients_creates_and_updates(tmp_path)
 apiVersion: poundcake/v1
 kind: IngredientCatalog
 ingredients:
-  - execution_target: tickets.create
-    task_key_template: create_ticket
+  - execution_target: core
+    task_key_template: core
     execution_engine: bakery
     execution_purpose: comms
     execution_payload:
       template:
-        title: hello
-        description: world
+        context:
+          source: test
+    execution_parameters:
+      operation: ticket_update
+    is_default: true
     expected_duration_sec: 30
     timeout_duration_sec: 120
     retry_count: 1
     retry_delay: 5
     on_failure: continue
-  - execution_target: tickets.comment
-    task_key_template: comment_ticket
+  - execution_target: jira
+    task_key_template: jira
     execution_engine: bakery
     execution_purpose: comms
     execution_payload:
       template:
-        comment: ping
+        context:
+          source: test
+    execution_parameters:
+      operation: ticket_comment
     expected_duration_sec: 10
     timeout_duration_sec: 60
     retry_count: 0
@@ -118,13 +128,14 @@ ingredients:
     )
 
     existing = SimpleNamespace(
-        execution_target="tickets.comment",
-        task_key_template="comment_ticket_old",
+        execution_target="jira",
+        task_key_template="jira_old",
         execution_engine="bakery",
         execution_purpose="comms",
         execution_id=None,
-        execution_payload={"template": {"comment": "old"}},
+        execution_payload={"template": {"context": {"source": "old"}}},
         execution_parameters=None,
+        is_default=False,
         is_blocking=True,
         expected_duration_sec=5,
         timeout_duration_sec=30,
@@ -150,8 +161,8 @@ ingredients:
         call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], Ingredient)
     ]
     assert len(created_rows) == 1
-    assert created_rows[0].execution_target == "tickets.create"
-    assert existing.task_key_template == "comment_ticket"
-    assert existing.execution_payload == {"template": {"comment": "ping"}}
+    assert created_rows[0].execution_target == "core"
+    assert existing.task_key_template == "jira"
+    assert existing.execution_payload == {"template": {"context": {"source": "test"}}}
     assert existing.deleted is False
     assert existing.deleted_at is None

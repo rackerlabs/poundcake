@@ -36,7 +36,7 @@ stateDiagram-v2
     [*] --> new: firing webhook\nPOST /api/v1/webhook -> pre_heat creates order
 
     new --> processing: prep-chef cook\nPOST /api/v1/dishes/cook/{order_id}
-    processing --> resolving: dish terminal (non-catch-all)\nPATCH /api/v1/dishes/{dish_id}
+    processing --> resolving: dish terminal (non-fallback-recipe)\nPATCH /api/v1/dishes/{dish_id}
 
     new --> resolving: resolved webhook\npre_heat transition check
     processing --> resolving: resolved webhook\npre_heat transition check
@@ -64,7 +64,8 @@ stateDiagram-v2
       - GET /api/v1/operations/{operation_id} (poll loop)
 
       Resolve-phase comms (/orders/{id}/resolve):
-      - tickets.create | tickets.update | tickets.comment | tickets.close
+      - target: core|jira + execution_parameters.operation:
+        ticket_create | ticket_update | ticket_comment | ticket_close
       - mapped Bakery endpoints + operation polling when operation_id is returned
     end note
 

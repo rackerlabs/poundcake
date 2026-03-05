@@ -286,7 +286,7 @@ def test_update_dish_updates_order_when_terminal(client, mock_db_session):
 
 def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
     dish = _make_dish(status="processing")
-    dish.recipe = _make_recipe(name="catch-all")
+    dish.recipe = _make_recipe(name="fallback-recipe")
     order = _make_order(status="processing")
     mock_db_session.execute = AsyncMock(
         side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
@@ -295,7 +295,7 @@ def test_update_dish_catch_all_keeps_order_active(client, mock_db_session):
     with (
         patch(
             "api.api.dishes.get_settings",
-            return_value=SimpleNamespace(catch_all_recipe_name="catch-all"),
+            return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
         ),
         patch("api.api.dishes._sync_bakery_for_terminal_dish", new=AsyncMock()),
     ):

@@ -6,6 +6,7 @@ from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON
 def test_model_defaults_and_constraints_align_with_alembic_contract():
     assert Ingredient.__table__.c.execution_engine.default.arg == "undefined"
     assert Ingredient.__table__.c.execution_purpose.default.arg == "utility"
+    assert Ingredient.__table__.c.is_default.default.arg is False
     assert Ingredient.__table__.c.execution_target.unique is None
     assert isinstance(Ingredient.__table__.c.execution_payload.type, MYSQL_JSON)
     assert any(
@@ -24,6 +25,7 @@ def test_schema_defaults_execution_engine_are_undefined():
     )
     assert ingredient.execution_engine == "undefined"
     assert ingredient.execution_purpose == "utility"
+    assert ingredient.is_default is False
 
     recipe = RecipeCreate(
         name="recipe-default-source-type",

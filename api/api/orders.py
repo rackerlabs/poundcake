@@ -29,6 +29,7 @@ from api.schemas.query_params import OrderQueryParams, validate_query_params
 from api.services.bakery_client import get_operation
 from api.services.execution_orchestrator import ExecutionOrchestrator, get_execution_orchestrator
 from api.services.execution_types import ExecutionContext
+from api.services.fallback_recipe import ensure_fallback_recipe
 from api.validation.execution import validate_runtime_execution_payload
 
 router = APIRouter()
@@ -282,6 +283,7 @@ async def resolve_order(
         if not recipe:
             catch_all_name = (settings.catch_all_recipe_name or "").strip()
             if catch_all_name:
+                await ensure_fallback_recipe(db, req_id=req_id)
                 fallback_result = await db.execute(
                     select(Recipe)
                     .options(
@@ -360,6 +362,7 @@ async def resolve_order(
                 execution_purpose=ri.ingredient.execution_purpose,
                 execution_target=ri.ingredient.execution_target,
                 execution_payload=ri.ingredient.execution_payload,
+                execution_parameters=params or None,
             )
 
             dish_ingredient = existing_by_recipe_ingredient_id.get(ri.id)

@@ -87,6 +87,11 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
             },
         )(),
     )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "ensure_fallback_recipe",
+        AsyncMock(return_value=None),
+    )
 
     marker = tmp_path / "bootstrap.done"
     monkeypatch.setattr(dishwasher_service, "BOOTSTRAP_DONE_FILE", str(marker))

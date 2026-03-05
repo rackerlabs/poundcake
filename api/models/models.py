@@ -127,6 +127,7 @@ class Ingredient(Base):
     execution_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     execution_payload: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     execution_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     is_blocking: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_duration_sec: Mapped[int] = mapped_column(Integer, nullable=False)

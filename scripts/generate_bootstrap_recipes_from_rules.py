@@ -44,7 +44,7 @@ def render_recipe_payload(group_name: str) -> dict:
             "recipe_ingredients": [
                 {
                     "execution_engine": "bakery",
-                    "execution_target": "tickets.create",
+                    "execution_target": "core",
                     "step_order": 1,
                     "run_phase": "resolving",
                     "on_success": "continue",

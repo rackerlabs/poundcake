@@ -995,7 +995,7 @@ poundcakeApi:
   readiness:
     initialDelaySeconds: 5
   ticketing:
-    catchAllRecipeName: "catch-all"
+    catchAllRecipeName: "fallback-recipe"
     rackspaceConfirmedSolvedStatus: "confirmed solved"
 
 secrets:

@@ -98,6 +98,7 @@ def test_create_ingredient_accepts_object_execution_payload(client, mock_db_sess
         ingredient.id = 77
         ingredient.created_at = now
         ingredient.updated_at = now
+        ingredient.is_default = False
         ingredient.deleted = False
         ingredient.deleted_at = None
 
@@ -128,6 +129,36 @@ def test_create_ingredient_rejects_string_execution_payload_with_422(client, moc
     assert response.status_code == 422
 
 
+def test_create_ingredient_persists_is_default_true(client, mock_db_session):
+    mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=None))
+    mock_db_session.add = Mock()
+
+    async def _refresh(ingredient):
+        now = datetime.now(timezone.utc)
+        ingredient.id = 90
+        ingredient.created_at = now
+        ingredient.updated_at = now
+        ingredient.deleted = False
+        ingredient.deleted_at = None
+
+    mock_db_session.refresh = AsyncMock(side_effect=_refresh)
+
+    payload = {
+        "execution_target": "core.default",
+        "task_key_template": "core.default",
+        "execution_engine": "bakery",
+        "execution_purpose": "comms",
+        "execution_payload": {"template": {"context": {"source": "test"}}},
+        "execution_parameters": {"operation": "ticket_update"},
+        "is_default": True,
+        "expected_duration_sec": 30,
+    }
+    response = client.post("/api/v1/ingredients/", json=payload)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["is_default"] is True
+
+
 def test_create_ingredient_accepts_deprecated_aliases_and_returns_canonical_fields(
     client, mock_db_session
 ):
@@ -139,6 +170,7 @@ def test_create_ingredient_accepts_deprecated_aliases_and_returns_canonical_fiel
         ingredient.id = 88
         ingredient.created_at = now
         ingredient.updated_at = now
+        ingredient.is_default = False
         ingredient.deleted = False
         ingredient.deleted_at = None
 
@@ -184,6 +216,7 @@ def test_create_ingredient_allows_same_target_for_different_engines(client, mock
         ingredient.id = 89
         ingredient.created_at = now
         ingredient.updated_at = now
+        ingredient.is_default = False
         ingredient.deleted = False
         ingredient.deleted_at = None
 
@@ -215,9 +248,9 @@ def test_resolve_order_with_valid_bakery_comms_payload_seeds_pending_step(client
         task_key_template="comment_ticket",
         execution_engine="bakery",
         execution_purpose="comms",
-        execution_target="tickets.comment",
+        execution_target="core",
         execution_payload={"template": {"comment": "resolved"}},
-        execution_parameters={"visibility": "internal"},
+        execution_parameters={"operation": "ticket_comment", "visibility": "internal"},
         on_failure="stop",
     )
     recipe_ingredient = SimpleNamespace(
@@ -260,6 +293,7 @@ def test_resolve_order_with_valid_bakery_comms_payload_seeds_pending_step(client
     assert dish_ingredients[0].execution_status == "succeeded"
     assert dish_ingredients[0].execution_payload == {
         "comment": "resolved",
+        "operation": "ticket_comment",
         "visibility": "internal",
         "context": {"order_id": 1},
     }
@@ -271,9 +305,9 @@ def test_resolve_order_with_invalid_bakery_comms_payload_fails_order(client, moc
         task_key_template="close_ticket",
         execution_engine="bakery",
         execution_purpose="comms",
-        execution_target="tickets.close",
+        execution_target="core",
         execution_payload={"context": {"missing_template": True}},
-        execution_parameters=None,
+        execution_parameters={"operation": "ticket_close"},
         on_failure="stop",
     )
     recipe_ingredient = SimpleNamespace(
@@ -325,9 +359,9 @@ def test_resolve_order_with_invalid_payload_and_on_failure_continue_keeps_order_
         task_key_template="comment_ticket",
         execution_engine="bakery",
         execution_purpose="comms",
-        execution_target="tickets.comment",
+        execution_target="core",
         execution_payload={"context": {"invalid": True}},
-        execution_parameters=None,
+        execution_parameters={"operation": "ticket_comment"},
         on_failure="continue",
     )
     recipe_ingredient = SimpleNamespace(

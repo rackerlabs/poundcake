@@ -15,7 +15,8 @@ STACKSTORM_PAYLOAD=$(jq -n '{
 
 BAKERY_PAYLOAD=$(jq -n '{
   execution_engine: "bakery",
-  execution_target: "tickets.create",
+  execution_target: "core",
+  execution_parameters: {operation: "ticket_create"},
   execution_payload: {title: "mixed", description: "mixed"}
 }')
 

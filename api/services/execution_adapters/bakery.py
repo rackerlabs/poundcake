@@ -45,6 +45,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
 
     def validate(self, ctx: ExecutionContext) -> str | None:
         payload = ctx.execution_payload if isinstance(ctx.execution_payload, dict) else {}
+        parameters = ctx.execution_parameters if isinstance(ctx.execution_parameters, dict) else {}
         ticket_id = str(
             payload.get("ticket_id")
             or ctx.context.get("ticket_id")
@@ -54,17 +55,20 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         return validate_bakery_target_payload(
             execution_target=ctx.execution_target,
             payload=payload,
+            execution_parameters=parameters,
             bakery_ticket_id=ticket_id or None,
         )
 
     async def execute_once(self, ctx: ExecutionContext) -> ExecutionResult:
         payload = ctx.execution_payload if isinstance(ctx.execution_payload, dict) else {}
-        action = (ctx.execution_target or "").strip().lower()
+        target = (ctx.execution_target or "").strip().lower()
+        parameters = ctx.execution_parameters if isinstance(ctx.execution_parameters, dict) else {}
+        operation = str(parameters.get("operation") or "").strip().lower()
 
         order_id = _coerce_optional_int(ctx.context.get("order_id"))
         recipe_ingredient_id = _coerce_optional_int(ctx.context.get("recipe_ingredient_id"))
         idem_key = _deterministic_idempotency_key(
-            order_id=order_id, recipe_ingredient_id=recipe_ingredient_id, action=action
+            order_id=order_id, recipe_ingredient_id=recipe_ingredient_id, action=operation or target
         )
 
         ticket_id = str(
@@ -77,7 +81,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         try:
             accepted: dict[str, Any]
             context_updates: dict[str, Any] = {}
-            if action == "tickets.create":
+            if operation == "ticket_create":
                 accepted = await create_ticket_with_key(
                     req_id=ctx.req_id,
                     payload=payload,
@@ -87,14 +91,14 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                 if created_ticket_id:
                     context_updates["bakery_ticket_id"] = created_ticket_id
                     ticket_id = created_ticket_id
-            elif action == "tickets.update":
+            elif operation == "ticket_update":
                 accepted = await update_ticket_with_key(
                     req_id=ctx.req_id,
                     ticket_id=ticket_id,
                     payload=payload,
                     idempotency_key=idem_key,
                 )
-            elif action == "tickets.comment":
+            elif operation == "ticket_comment":
                 comment_payload = payload if "comment" in payload else {"comment": str(payload)}
                 accepted = await add_ticket_comment_with_key(
                     req_id=ctx.req_id,
@@ -102,7 +106,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                     payload=comment_payload,
                     idempotency_key=idem_key,
                 )
-            elif action == "tickets.close":
+            elif operation == "ticket_close":
                 accepted = await close_ticket_with_key(
                     req_id=ctx.req_id,
                     ticket_id=ticket_id,
@@ -113,7 +117,11 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                 return ExecutionResult(
                     engine=self.engine,
                     status="failed",
-                    error_message=f"Unsupported bakery execution_target: {ctx.execution_target}",
+                    error_message=(
+                        "Unsupported bakery operation. "
+                        "Expected execution_parameters.operation to be one of: "
+                        "ticket_create, ticket_update, ticket_comment, ticket_close"
+                    ),
                     retryable=False,
                 )
 

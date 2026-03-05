@@ -39,6 +39,7 @@ from api.schemas.schemas import (
     DishIngredientResponse,
 )
 from api.schemas.query_params import DishQueryParams, validate_query_params
+from api.services.fallback_recipe import ensure_fallback_recipe
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -334,6 +335,7 @@ async def cook_dishes(
         if not recipe:
             catch_all_name = (settings.catch_all_recipe_name or "").strip()
             if catch_all_name:
+                await ensure_fallback_recipe(db, req_id=req_id)
                 fallback_result = await db.execute(
                     select(Recipe)
                     .options(
@@ -823,10 +825,10 @@ async def update_dish(
             order = result.scalars().first()
             if order and order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
                 if is_catch_all:
-                    # Keep catch-all orders active so resolved alerts can close/reopen the same ticket.
+                    # Keep fallback-recipe orders active so resolved alerts can close/reopen tickets.
                     order.updated_at = datetime.now(timezone.utc)
                     logger.info(
-                        "Keeping catch-all order active after dish terminal status",
+                        "Keeping fallback-recipe order active after dish terminal status",
                         extra={
                             "req_id": req_id,
                             "order_id": order.id,

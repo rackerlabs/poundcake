@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # API dependency set
 FROM python-builder-base AS api-deps
-COPY requirements-prod.txt /build/requirements-prod.txt
-RUN pip install --no-cache-dir -r /build/requirements-prod.txt
+COPY requirements.txt /build/requirements.txt
+RUN pip install --no-cache-dir -r /build/requirements.txt
 
 # Bakery dependency set
 FROM python-builder-base AS bakery-deps

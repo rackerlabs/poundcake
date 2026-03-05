@@ -9,7 +9,10 @@ require_cmd curl
 
 REQUEST_PAYLOAD=$(jq -n '{
   execution_engine: "bakery",
-  execution_target: "tickets.create",
+  execution_target: "core",
+  execution_parameters: {
+    operation: "ticket_create"
+  },
   execution_payload: {
     title: "Codex shell contract test",
     description: "Validate unified execute response envelope"

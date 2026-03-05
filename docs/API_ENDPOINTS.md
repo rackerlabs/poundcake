@@ -74,7 +74,9 @@ This document reflects the current PoundCake API surface.
 Ingredient payload contract:
 - `execution_payload` is `object | null`
 - when `execution_engine=bakery` and `execution_purpose=comms`, `execution_payload.template` must be an object
-- canonical Bakery comms `execution_target` values are: `tickets.create`, `tickets.update`, `tickets.comment`, `tickets.close`
+- canonical Bakery comms `execution_target` values are: `core`, `jira`
+- Bakery comms requires `execution_parameters.operation` in:
+  `ticket_create`, `ticket_update`, `ticket_comment`, `ticket_close`
 - `execution_id` and `execution_purpose` are canonical fields
 - `action_id` and `ingredient_kind` are accepted/returned as deprecated aliases
 

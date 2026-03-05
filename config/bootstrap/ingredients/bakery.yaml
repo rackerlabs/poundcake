@@ -1,69 +1,17 @@
 apiVersion: poundcake/v1
 kind: IngredientCatalog
 ingredients:
-  - execution_target: tickets.create
-    task_key_template: create_ticket
-    execution_engine: bakery
-    execution_purpose: comms
-    execution_payload:
-      template:
-        title: "{{ alertname | default('PoundCake Alert') }}"
-        description: "{{ summary | default('Alert triggered') }}"
-        context:
-          source: poundcake
-    execution_parameters: {}
-    is_blocking: false
-    expected_duration_sec: 15
-    timeout_duration_sec: 120
-    retry_count: 1
-    retry_delay: 5
-    on_failure: continue
-
-  - execution_target: tickets.update
-    task_key_template: update_ticket
+  - execution_target: core
+    task_key_template: core
     execution_engine: bakery
     execution_purpose: comms
     execution_payload:
       template:
         context:
           source: poundcake
-    execution_parameters: {}
-    is_blocking: false
-    expected_duration_sec: 15
-    timeout_duration_sec: 120
-    retry_count: 1
-    retry_delay: 5
-    on_failure: continue
-
-  - execution_target: tickets.comment
-    task_key_template: comment_ticket
-    execution_engine: bakery
-    execution_purpose: comms
-    execution_payload:
-      template:
-        comment: "Order transitioned to resolving"
-        visibility: internal
-        context:
-          source: poundcake
-    execution_parameters: {}
-    is_blocking: false
-    expected_duration_sec: 15
-    timeout_duration_sec: 120
-    retry_count: 1
-    retry_delay: 5
-    on_failure: continue
-
-  - execution_target: tickets.close
-    task_key_template: close_ticket
-    execution_engine: bakery
-    execution_purpose: comms
-    execution_payload:
-      template:
-        state: closed
-        resolution_notes: "Resolved by PoundCake automation"
-        context:
-          source: poundcake
-    execution_parameters: {}
+    execution_parameters:
+      operation: ticket_update
+    is_default: true
     is_blocking: false
     expected_duration_sec: 15
     timeout_duration_sec: 120

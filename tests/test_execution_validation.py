@@ -30,7 +30,8 @@ def test_validate_runtime_execution_payload_requires_bakery_comms_template():
     error = validate_runtime_execution_payload(
         execution_engine="bakery",
         execution_purpose="comms",
-        execution_target="tickets.comment",
+        execution_target="core",
         execution_payload={"context": {"x": 1}},
+        execution_parameters={"operation": "ticket_comment"},
     )
     assert "execution_payload.template must be an object" in str(error)

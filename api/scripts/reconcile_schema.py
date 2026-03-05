@@ -127,6 +127,14 @@ def reconcile_schema() -> None:
 
             _apply_table_reconciliation(conn, "orders", orders_ddl)
 
+            ingredients_ddl: list[str] = []
+            if not _column_exists(conn, "ingredients", "is_default"):
+                ingredients_ddl.append(
+                    "ALTER TABLE ingredients ADD COLUMN is_default BOOLEAN NOT NULL DEFAULT 0"
+                )
+
+            _apply_table_reconciliation(conn, "ingredients", ingredients_ddl)
+
             suppression_ddl: list[str] = []
             if not _column_exists(conn, "suppression_summaries", "total_cleared"):
                 suppression_ddl.append(
