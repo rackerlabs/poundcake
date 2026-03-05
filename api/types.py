@@ -121,6 +121,11 @@ RunPhase = Literal[
     "both",
 ]
 
+DishRunPhase = Literal[
+    "firing",
+    "resolving",
+]
+
 ExecutionPurpose = Literal[
     "remediation",
     "comms",

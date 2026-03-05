@@ -177,6 +177,7 @@ class Dish(Base):
 
     order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"), nullable=True)
     recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), nullable=False)
+    run_phase: Mapped[str] = mapped_column(String(16), default="firing", nullable=False, index=True)
 
     processing_status: Mapped[str] = mapped_column(
         String(50), default="new", nullable=False, index=True

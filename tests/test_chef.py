@@ -32,6 +32,18 @@ def test_run_chef_register_failure_marks_dish_failed(
                     "recipe": {"id": 10, "source_type": "github", "workflow_parameters": {}},
                 },
             ),
+            _Resp(
+                200,
+                [
+                    {
+                        "recipe_ingredient_id": 1,
+                        "task_key": "step_1_ping",
+                        "execution_engine": "stackstorm",
+                        "execution_target": "linux.ping",
+                        "execution_status": "pending",
+                    }
+                ],
+            ),
             _Resp(500, {"detail": "register failed"}, text="register failed"),
             _Resp(200, {"ok": True}),
         ]
@@ -78,8 +90,29 @@ def test_run_chef_executes_registered_workflow_and_patches_execution_ref(
                         "source_type": "stackstorm",
                         "workflow_id": "wf.my_action",
                         "workflow_parameters": {"foo": "bar"},
+                        "recipe_ingredients": [
+                            {
+                                "id": 10,
+                                "ingredient": {
+                                    "execution_engine": "stackstorm",
+                                    "execution_target": "linux.ping",
+                                },
+                            }
+                        ],
                     },
                 },
+            ),
+            _Resp(
+                200,
+                [
+                    {
+                        "recipe_ingredient_id": 10,
+                        "task_key": "step_1_linux_ping",
+                        "execution_engine": "stackstorm",
+                        "execution_target": "linux.ping",
+                        "execution_status": "pending",
+                    }
+                ],
             ),
             _Resp(200, {"workflow_id": "poundcake.wf_my_action"}),
             _Resp(

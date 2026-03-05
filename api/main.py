@@ -29,7 +29,6 @@ from api.api.settings import router as settings_router
 from api.api.ingredients import router as ingredients_router
 from api.api.webhook import router as webhook_router
 from api.api.suppressions import router as suppressions_router
-from api.api.internal_stackstorm import router as internal_stackstorm_router
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -100,7 +99,6 @@ app.include_router(dishes_router, prefix="/api/v1", tags=["executor"])
 app.include_router(webhook_router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(orders_router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(suppressions_router, prefix="/api/v1", tags=["ingestion"])
-app.include_router(internal_stackstorm_router, prefix="/api/v1", tags=["internal"])
 
 
 @app.get("/")

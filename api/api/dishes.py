@@ -23,7 +23,7 @@ from api.core.statuses import (
     ORDER_TERMINAL_PROCESSING_STATUSES,
     can_transition_to_resolving,
 )
-from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient, Ingredient
+from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient
 from api.services.bakery_client import (
     add_ticket_comment,
     create_ticket,
@@ -33,7 +33,6 @@ from api.services.bakery_client import (
 from api.schemas.schemas import (
     DishResponse,
     DishUpdate,
-    CookResponse,
     DishDetailResponse,
     DishIngredientBulkUpsert,
     DishIngredientResponse,
@@ -249,195 +248,6 @@ async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSes
 def _rowcount(result: object) -> int:
     """Get affected row count from SQLAlchemy DML result."""
     return int(getattr(cast(Any, result), "rowcount", 0) or 0)
-
-
-def _is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
-    normalized = (step_phase or "both").lower()
-    if normalized == "both":
-        return True
-    return normalized == target_phase
-
-
-def _build_step_task_key(ri: RecipeIngredient) -> str:
-    task_suffix = ((ri.ingredient.task_key_template if ri.ingredient else None) or "task").replace(
-        ".", "_"
-    )
-    return f"step_{ri.step_order}_{task_suffix}"
-
-
-def _build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
-    base = dict((ri.ingredient.execution_parameters if ri.ingredient else None) or {})
-    if ri.execution_parameters_override:
-        base.update(ri.execution_parameters_override)
-    return base or None
-
-
-def _seed_dish_ingredients_for_phase(
-    *,
-    dish_id: int,
-    recipe: Recipe,
-    phase: str,
-    existing_by_recipe_ingredient_id: dict[int, DishIngredient] | None = None,
-) -> list[DishIngredient]:
-    existing = existing_by_recipe_ingredient_id or {}
-    seeded: list[DishIngredient] = []
-    for ri in recipe.recipe_ingredients:
-        if ri.ingredient is None:
-            continue
-        if not _is_phase_eligible(ri.run_phase, phase):
-            continue
-        if ri.id in existing:
-            continue
-
-        seeded.append(
-            DishIngredient(
-                dish_id=dish_id,
-                recipe_ingredient_id=ri.id,
-                task_key=_build_step_task_key(ri),
-                execution_engine=ri.ingredient.execution_engine,
-                execution_target=ri.ingredient.execution_target,
-                execution_payload=ri.ingredient.execution_payload,
-                execution_parameters=_build_step_parameters(ri),
-                execution_status="pending",
-            )
-        )
-    return seeded
-
-
-@router.post("/dishes/cook/{order_id}", response_model=CookResponse)
-async def cook_dishes(
-    request: Request, order_id: int, db: AsyncSession = Depends(get_db)
-) -> CookResponse:
-    """Creates a Dish execution from an Order/Recipe."""
-    req_id = request.state.req_id
-    settings = get_settings()
-
-    logger.info("Starting cook", extra={"req_id": req_id, "order_id": order_id})
-
-    new_dish: Dish | None = None
-    async with db.begin():
-        result = await db.execute(select(Order).where(Order.id == order_id).with_for_update())
-        order = result.scalars().first()
-        if not order:
-            logger.warning("Order not found", extra={"req_id": req_id, "order_id": order_id})
-            raise HTTPException(status_code=404, detail="Order not found")
-
-        result = await db.execute(
-            select(Recipe)
-            .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-            .where(Recipe.name == order.alert_group_name, Recipe.enabled.is_(True))
-            .with_for_update()
-        )
-        recipe = result.unique().scalars().first()
-        used_fallback = False
-
-        if not recipe:
-            catch_all_name = (settings.catch_all_recipe_name or "").strip()
-            if catch_all_name:
-                fallback_result = await db.execute(
-                    select(Recipe)
-                    .options(
-                        joinedload(Recipe.recipe_ingredients).joinedload(
-                            RecipeIngredient.ingredient
-                        )
-                    )
-                    .where(Recipe.name == catch_all_name, Recipe.enabled.is_(True))
-                    .with_for_update()
-                )
-                recipe = fallback_result.unique().scalars().first()
-                used_fallback = recipe is not None
-
-        if not recipe:
-            if order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
-                # Keep order active until Alertmanager sends a resolved event.
-                order.processing_status = "processing"
-                order.is_active = True
-                order.updated_at = datetime.now(timezone.utc)
-            logger.error(
-                "No recipe found; order remains active pending alert resolution",
-                extra={
-                    "req_id": req_id,
-                    "order_id": order_id,
-                    "group_name": order.alert_group_name,
-                },
-            )
-            return CookResponse(status="ignored", reason=f"No recipe for {order.alert_group_name}")
-
-        result = await db.execute(
-            select(Dish).where(Dish.order_id == order.id).order_by(Dish.created_at.desc())
-        )
-        existing_dish = result.scalars().first()
-
-        now = datetime.now(timezone.utc)
-        update_result = await db.execute(
-            update(Order)
-            .where(Order.id == order.id, Order.processing_status == "new")
-            .values(processing_status="processing", updated_at=now)
-        )
-
-        if _rowcount(update_result) == 0:
-            reason = f"Order not new (status={order.processing_status})"
-            if existing_dish:
-                reason = "Order already has a dish or is being processed"
-            return CookResponse(
-                status="skipped",
-                dishes_created=0,
-                recipe_id=recipe.id,
-                recipe_name=recipe.name,
-                reason=reason,
-            )
-
-        expected_result = await db.execute(
-            select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
-            .select_from(RecipeIngredient)
-            .join(Ingredient, RecipeIngredient.ingredient_id == Ingredient.id)
-            .where(
-                RecipeIngredient.recipe_id == recipe.id,
-                RecipeIngredient.run_phase.in_(("firing", "both")),
-            )
-        )
-        expected_duration_sec = expected_result.scalar() or 0
-
-        new_dish = Dish(
-            req_id=order.req_id,
-            order_id=order.id,
-            recipe_id=recipe.id,
-            processing_status="new",
-            expected_duration_sec=expected_duration_sec,
-        )
-        db.add(new_dish)
-        await db.flush()
-        for row in _seed_dish_ingredients_for_phase(
-            dish_id=new_dish.id, recipe=recipe, phase="firing"
-        ):
-            db.add(row)
-        # Refresh inside transaction for consistency
-        await db.refresh(new_dish)
-
-    if not new_dish:
-        raise HTTPException(status_code=500, detail="Dish creation failed")
-
-    logger.info(
-        "Dish created successfully",
-        extra={
-            "req_id": req_id,
-            "order_id": order_id,
-            "recipe_id": recipe.id,
-            "dish_id": new_dish.id,
-        },
-    )
-
-    return CookResponse(
-        status="cooked",
-        dishes_created=1,
-        recipe_id=recipe.id,
-        recipe_name=recipe.name,
-        reason=(
-            f"Fallback recipe '{recipe.name}' selected for unmatched group {order.alert_group_name}"
-            if used_fallback
-            else None
-        ),
-    )
 
 
 @router.get("/dishes", response_model=List[DishDetailResponse])
@@ -822,24 +632,32 @@ async def update_dish(
             )
             order = result.scalars().first()
             if order and order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
-                if is_catch_all:
-                    # Keep catch-all orders active so resolved alerts can close/reopen the same ticket.
-                    order.updated_at = datetime.now(timezone.utc)
-                    logger.info(
-                        "Keeping catch-all order active after dish terminal status",
-                        extra={
-                            "req_id": req_id,
-                            "order_id": order.id,
-                            "dish_id": dish.id,
-                            "dish_status": dish.processing_status,
-                        },
+                is_resolve_phase_dish = (dish.run_phase or "").lower() == "resolving"
+                if is_resolve_phase_dish:
+                    order.processing_status = (
+                        "complete" if dish.processing_status == "complete" else "failed"
                     )
-                else:
-                    # Advance to resolve-phase orchestration once firing workflow is terminal.
-                    if can_transition_to_resolving(order.processing_status, "dish_terminal"):
-                        order.processing_status = "resolving"
-                    order.is_active = True
+                    order.is_active = False
                     order.updated_at = datetime.now(timezone.utc)
+                else:
+                    if is_catch_all:
+                        # Keep catch-all orders active so resolved alerts can close/reopen the same ticket.
+                        order.updated_at = datetime.now(timezone.utc)
+                        logger.info(
+                            "Keeping catch-all order active after dish terminal status",
+                            extra={
+                                "req_id": req_id,
+                                "order_id": order.id,
+                                "dish_id": dish.id,
+                                "dish_status": dish.processing_status,
+                            },
+                        )
+                    else:
+                        # Advance to resolve-phase orchestration once firing workflow is terminal.
+                        if can_transition_to_resolving(order.processing_status, "dish_terminal"):
+                            order.processing_status = "resolving"
+                        order.is_active = True
+                        order.updated_at = datetime.now(timezone.utc)
 
     if dish is None:
         raise HTTPException(status_code=500, detail="Dish update failed")

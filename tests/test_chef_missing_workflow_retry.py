@@ -32,6 +32,18 @@ def test_run_chef_retries_execute_when_workflow_file_missing(
         [
             _Resp(200, [{"id": 11, "req_id": "REQ-11"}]),
             _Resp(200, {"id": 11, "req_id": "REQ-11", "recipe": {"name": "AutomatedTestRecipe-1"}}),
+            _Resp(
+                200,
+                [
+                    {
+                        "recipe_ingredient_id": 1,
+                        "task_key": "step_1_task",
+                        "execution_engine": "stackstorm",
+                        "execution_target": "poundcake.AutomatedTestRecipe-1",
+                        "execution_status": "pending",
+                    }
+                ],
+            ),
             _Resp(200, {"workflow_id": "poundcake.AutomatedTestRecipe-1"}),
             _Resp(
                 200,
@@ -88,6 +100,18 @@ def test_run_chef_does_not_retry_non_missing_execute_error(
         [
             _Resp(200, [{"id": 12, "req_id": "REQ-12"}]),
             _Resp(200, {"id": 12, "req_id": "REQ-12", "recipe": {"name": "AutomatedTestRecipe-2"}}),
+            _Resp(
+                200,
+                [
+                    {
+                        "recipe_ingredient_id": 1,
+                        "task_key": "step_1_task",
+                        "execution_engine": "stackstorm",
+                        "execution_target": "poundcake.AutomatedTestRecipe-2",
+                        "execution_status": "pending",
+                    }
+                ],
+            ),
             _Resp(200, {"workflow_id": "poundcake.AutomatedTestRecipe-2"}),
             _Resp(200, {"status": "failed", "engine": "stackstorm", "error_message": "boom"}),
             _Resp(200, {"id": 12}),

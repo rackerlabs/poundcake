@@ -79,13 +79,14 @@ def _make_order(order_id: int = 1, status: str = "processing") -> Order:
     )
 
 
-def _make_dish(dish_id: int = 1, status: str = "processing") -> Dish:
+def _make_dish(dish_id: int = 1, status: str = "processing", run_phase: str = "firing") -> Dish:
     now = datetime.now(timezone.utc)
     return Dish(
         id=dish_id,
         req_id="REQ-1",
         order_id=1,
         recipe_id=1,
+        run_phase=run_phase,
         processing_status=status,
         execution_status="running",
         started_at=now,

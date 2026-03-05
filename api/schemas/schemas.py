@@ -21,6 +21,7 @@ from api.types import (
     SuppressionStatus,
     SuppressionMatcherOperator,
     RunPhase,
+    DishRunPhase,
     ExecutionPurpose,
 )
 
@@ -275,6 +276,7 @@ class DishBase(BaseModel):
 
     req_id: str = Field(..., max_length=100)
     processing_status: DishProcessingStatus = Field(default="new")
+    run_phase: DishRunPhase = Field(default="firing")
 
 
 class DishUpdate(BaseModel):
@@ -290,6 +292,7 @@ class DishUpdate(BaseModel):
     result: Optional[Any] = None
     error_message: Optional[str] = None
     retry_attempt: Optional[int] = None
+    run_phase: Optional[DishRunPhase] = None
 
 
 class DishResponse(DishBase):
@@ -596,11 +599,13 @@ class WebhookResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CookResponse(BaseModel):
-    """Response from cook dishes endpoint."""
+class OrderDispatchResponse(BaseModel):
+    """Response from order dispatch endpoint."""
 
-    status: str  # cooked, ignored
-    dishes_created: Optional[int] = None
+    status: str  # dispatched, skipped
+    order_id: int
+    dish_id: Optional[int] = None
+    run_phase: Optional[DishRunPhase] = None
     recipe_id: Optional[int] = None
     recipe_name: Optional[str] = None
     reason: Optional[str] = None

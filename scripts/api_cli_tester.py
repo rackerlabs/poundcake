@@ -65,7 +65,7 @@ GROUPS: dict[str, list[Endpoint]] = {
         ),
     ],
     "Dishes": [
-        Endpoint("Cook dishes for order", "POST", "/api/v1/dishes/cook/{order_id}"),
+        Endpoint("Dispatch order phase", "POST", "/api/v1/orders/{order_id}/dispatch"),
         Endpoint("List dishes", "GET", "/api/v1/dishes", default_query={"limit": 50, "offset": 0}),
         Endpoint("Claim dish", "POST", "/api/v1/dishes/{dish_id}/claim"),
         Endpoint(
@@ -215,8 +215,6 @@ GROUPS: dict[str, list[Endpoint]] = {
             },
         ),
         Endpoint("Sync from StackStorm", "POST", "/api/v1/cook/sync"),
-        Endpoint("List actions", "GET", "/api/v1/cook/actions"),
-        Endpoint("Get action by ref", "GET", "/api/v1/cook/actions/{action_ref}"),
         Endpoint("List packs", "GET", "/api/v1/cook/packs"),
     ],
     "Prometheus": [
