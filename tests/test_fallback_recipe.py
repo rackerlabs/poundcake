@@ -64,6 +64,7 @@ async def test_ensure_fallback_recipe_recovers_from_duplicate_core_ingredient_in
             _ScalarResult(first=None),  # first ingredient lookup
             _ScalarResult(first=existing_ingredient),  # retry ingredient lookup after conflict
             _ScalarResult(first=existing_recipe),  # recipe lookup
+            _ScalarResult(first=existing_step),  # recipe step lookup
         ]
     )
     db.add = Mock()
