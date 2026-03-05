@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from api.core.config import get_settings
 from api.core.logging import get_logger
@@ -91,6 +92,7 @@ async def ensure_fallback_recipe(
 
     recipe_result = await db.execute(
         select(Recipe)
+        .options(joinedload(Recipe.recipe_ingredients))
         .where(Recipe.name == recipe_name)
         .with_for_update()
     )
@@ -120,13 +122,7 @@ async def ensure_fallback_recipe(
         if changed:
             recipe.updated_at = now
 
-    step_result = await db.execute(
-        select(RecipeIngredient)
-        .where(RecipeIngredient.recipe_id == recipe.id, RecipeIngredient.step_order == 1)
-        .with_for_update()
-    )
-    step_scalars = await _await_if_needed(step_result.scalars())
-    existing_step = await _await_if_needed(step_scalars.first())
+    existing_step = next((ri for ri in recipe.recipe_ingredients if ri.step_order == 1), None)
     if existing_step is None:
         db.add(
             RecipeIngredient(
