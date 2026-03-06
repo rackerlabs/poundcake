@@ -283,7 +283,7 @@ spec:
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               gate_wait_for_tcp "{{ include "poundcake.bakeryDbHost" . }}" "3306" "bakery-db-init-db-port" "tcp {{ include "poundcake.bakeryDbHost" . }}:3306"
         - name: run-db-init
-          image: "{{ .Values.bakery.image.repository }}:{{ .Values.bakery.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "poundcake.bakeryImageRef" . | quote }}
           imagePullPolicy: {{ .Values.bakery.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}

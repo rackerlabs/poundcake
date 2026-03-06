@@ -229,6 +229,8 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `POUNDCAKE_IMAGE_DIGEST` | `""` | Conditionally required | PoundCake image digest (`sha256:...`) | Set when not using tag pin; preferred for immutable deploys |
 | `POUNDCAKE_UI_IMAGE_REPO` | `""` (helper sets fork path) | Optional | UI image repository override (`uiImage.repository`) | Set for fork/private UI image repo |
 | `POUNDCAKE_BAKERY_IMAGE_REPO` | `""` (helper sets fork path) | Optional | Bakery image repository override (`bakery.image.repository`) | Set for fork/private Bakery image repo |
+| `POUNDCAKE_BAKERY_IMAGE_TAG` | `""` (helper defaults from `POUNDCAKE_IMAGE_TAG`) | Optional | Bakery image tag (`bakery.image.tag`) | Used when Bakery digest unset |
+| `POUNDCAKE_BAKERY_IMAGE_DIGEST` | `""` | Optional | Bakery image digest (`sha256:...`) | Overrides Bakery tag; if unset, `POUNDCAKE_IMAGE_DIGEST` is used |
 | `POUNDCAKE_STACKSTORM_IMAGE_REPO` | `stackstorm/st2` | Optional | StackStorm image repository | Set when using custom/private StackStorm image |
 | `POUNDCAKE_STACKSTORM_IMAGE_TAG` | `3.9.0` | Optional | StackStorm image tag | Pin custom StackStorm version |
 | `POUNDCAKE_RELEASE_NAME` | `poundcake` | Optional | Helm release name | Change for parallel installs |
@@ -249,6 +251,7 @@ Important clarifications:
 - `HELM_REGISTRY_PASSWORD` must have `read:packages` for private GHCR pulls.
 - `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true` injects pull secret into PoundCake workloads.
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true` requires namespace and secret create/apply RBAC.
+- Bakery image precedence is `POUNDCAKE_BAKERY_IMAGE_DIGEST` -> `POUNDCAKE_BAKERY_IMAGE_TAG` -> chart defaults, with `POUNDCAKE_IMAGE_DIGEST` used when Bakery digest is unset.
 
 ### 5.2) Chart Pull-Secret Values (Canonical vs Legacy)
 
@@ -287,6 +290,7 @@ export HELM_REGISTRY_PASSWORD="<github-token-with-read:packages>"
 # export POUNDCAKE_IMAGE_REPO="ghcr.io/<owner>/poundcake"
 # export POUNDCAKE_IMAGE_TAG="release-20260221-1200"
 # export POUNDCAKE_IMAGE_DIGEST="sha256:<64-hex>"
+# export POUNDCAKE_BAKERY_IMAGE_DIGEST="sha256:<64-hex>"
 # export POUNDCAKE_NAMESPACE="rackspace"
 
 ./install/install-poundcake-helm.sh

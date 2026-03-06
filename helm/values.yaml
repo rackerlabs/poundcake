@@ -756,6 +756,8 @@ bakery:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: IfNotPresent
     tag: "2.0.103"
+    # Optional immutable image digest (sha256:...); overrides tag when set.
+    digest: ""
 
   # Service configuration
   service:

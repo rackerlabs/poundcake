@@ -273,6 +273,7 @@ stackstormImage:
 ```
 
 Use immutable image pins for PoundCake releases. Set either a fixed tag or digest (`repository@sha256:...`) and avoid mutable `latest` in production installs.
+Bakery image refs follow digest-first precedence as well: `bakery.image.digest` (or installer `POUNDCAKE_BAKERY_IMAGE_DIGEST` / `POUNDCAKE_IMAGE_DIGEST` fallback) overrides `bakery.image.tag`.
 
 #### Persistence Configuration
 

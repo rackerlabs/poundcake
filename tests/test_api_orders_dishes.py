@@ -289,6 +289,43 @@ def test_dish_update__when_firing_terminal__moves_order_to_resolving(client, moc
     assert order.is_active is True
 
 
+@pytest.mark.parametrize("dish_terminal_status", ["complete", "failed", "canceled"])
+def test_dish_update__firing_terminal__keeps_order_non_terminal_until_resolve_phase(
+    client, mock_db_session, dish_terminal_status: str
+):
+    dish = _make_dish(status="processing", run_phase="firing")
+    order = _make_order(status="processing")
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    response = client.put("/api/v1/dishes/1", json={"processing_status": dish_terminal_status})
+
+    assert response.status_code == 200
+    assert order.processing_status == "resolving"
+    assert order.is_active is True
+
+
+@pytest.mark.parametrize(
+    ("dish_terminal_status", "expected_order_status"),
+    [("complete", "complete"), ("failed", "failed"), ("canceled", "failed")],
+)
+def test_dish_update__resolving_terminal__sets_order_terminal(
+    client, mock_db_session, dish_terminal_status: str, expected_order_status: str
+):
+    dish = _make_dish(status="processing", run_phase="resolving")
+    order = _make_order(status="resolving")
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    response = client.put("/api/v1/dishes/1", json={"processing_status": dish_terminal_status})
+
+    assert response.status_code == 200
+    assert order.processing_status == expected_order_status
+    assert order.is_active is False
+
+
 def test_dish_update__catch_all_recipe_terminal__keeps_order_active(client, mock_db_session):
     dish = _make_dish(status="processing")
     dish.recipe = _make_recipe(name="fallback-recipe")
@@ -377,6 +414,32 @@ def test_order_dispatch__without_group_recipe__uses_fallback_recipe(client, mock
     assert body["recipe_id"] == 22
     assert body["recipe_name"] == "fallback-recipe"
     ensure_fallback.assert_awaited_once()
+
+
+def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_status_regression(
+    client, mock_db_session
+):
+    order = _make_order(status="resolving")
+    recipe = SimpleNamespace(id=12, name="group", recipe_ingredients=[])
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+            ScalarResult(first=recipe),  # recipe hit
+            ScalarResult(first=None),  # active dish lookup for phase
+            ScalarResult(all_=[]),  # existing dish ingredients
+        ]
+    )
+
+    with patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=30)):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "dispatched"
+    assert body["run_phase"] == "resolving"
+    assert order.processing_status == "resolving"
+    assert order.is_active is True
 
 
 def test_order_timeline_get__returns_events(client, mock_db_session):

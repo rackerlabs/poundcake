@@ -24,6 +24,7 @@ UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
 UI_IMAGE_TAG="${POUNDCAKE_UI_IMAGE_TAG:-}"
 BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-}"
 BAKERY_IMAGE_TAG="${POUNDCAKE_BAKERY_IMAGE_TAG:-${POUNDCAKE_IMAGE_TAG:-}}"
+BAKERY_IMAGE_DIGEST="${POUNDCAKE_BAKERY_IMAGE_DIGEST:-}"
 REMOTE_BAKERY_ENABLED="${POUNDCAKE_REMOTE_BAKERY_ENABLED:-}"
 REMOTE_BAKERY_URL="${POUNDCAKE_REMOTE_BAKERY_URL:-}"
 REMOTE_BAKERY_AUTH_MODE="${POUNDCAKE_REMOTE_BAKERY_AUTH_MODE:-hmac}"
@@ -151,6 +152,9 @@ Environment overrides:
   POUNDCAKE_IMAGE_REPO             (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake)
   POUNDCAKE_IMAGE_TAG              (optional; required when digest unset)
   POUNDCAKE_IMAGE_DIGEST           (optional; sha256:...; required when tag unset)
+  POUNDCAKE_BAKERY_IMAGE_REPO      (optional; sets bakery.image.repository)
+  POUNDCAKE_BAKERY_IMAGE_TAG       (optional; sets bakery.image.tag when digest unset)
+  POUNDCAKE_BAKERY_IMAGE_DIGEST    (optional; sha256:...; sets bakery.image.digest)
   POUNDCAKE_UI_IMAGE_REPO          (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake-ui; sets uiImage.repository)
   POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
   POUNDCAKE_REMOTE_BAKERY_ENABLED  (optional; defaults to auto based on discovered/explicit Bakery URL)
@@ -847,6 +851,15 @@ validate_image_pin_input() {
     log_error "POUNDCAKE_IMAGE_DIGEST must match sha256:<64-hex>."
     exit 1
   fi
+  if [[ -n "${BAKERY_IMAGE_TAG}" && -n "${BAKERY_IMAGE_DIGEST}" ]] \
+    && [[ "${BAKERY_IMAGE_TAG}" != "${POUNDCAKE_IMAGE_TAG}" || -z "${POUNDCAKE_IMAGE_TAG}" ]]; then
+    log_error "Set only one of POUNDCAKE_BAKERY_IMAGE_TAG or POUNDCAKE_BAKERY_IMAGE_DIGEST."
+    exit 1
+  fi
+  if [[ -n "${BAKERY_IMAGE_DIGEST}" ]] && [[ ! "${BAKERY_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    log_error "POUNDCAKE_BAKERY_IMAGE_DIGEST must match sha256:<64-hex>."
+    exit 1
+  fi
   if [[ "${INSTALL_PROFILE}" == "bakery" && -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
     return
   fi
@@ -1194,6 +1207,8 @@ else
   INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.digest=")
 fi
 
+EFFECTIVE_BAKERY_IMAGE_DIGEST="${BAKERY_IMAGE_DIGEST:-${POUNDCAKE_IMAGE_DIGEST:-}}"
+
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.pullSecrets[0]=${IMAGE_PULL_SECRET_NAME}")
   INSTALLER_SET_ARGS+=(--set-string "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
@@ -1208,7 +1223,11 @@ fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "bakery.image.repository=${BAKERY_IMAGE_REPO}")
 fi
-if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
+if [[ -n "${EFFECTIVE_BAKERY_IMAGE_DIGEST}" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.image.digest=${EFFECTIVE_BAKERY_IMAGE_DIGEST}")
+  INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=")
+elif [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
+  INSTALLER_SET_ARGS+=(--set-string "bakery.image.digest=")
   INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=${BAKERY_IMAGE_TAG}")
 fi
 COMMON_HELM_ARGS=(
@@ -1357,7 +1376,13 @@ fi
 if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
   log_info "Bakery image repo override: ${BAKERY_IMAGE_REPO}"
 fi
-if [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
+if [[ -n "${EFFECTIVE_BAKERY_IMAGE_DIGEST}" ]]; then
+  if [[ -n "${BAKERY_IMAGE_DIGEST}" ]]; then
+    log_info "Bakery image digest override: ${BAKERY_IMAGE_DIGEST}"
+  else
+    log_info "Bakery image digest override: ${POUNDCAKE_IMAGE_DIGEST} (from POUNDCAKE_IMAGE_DIGEST)"
+  fi
+elif [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
   log_info "Bakery image tag override: ${BAKERY_IMAGE_TAG}"
 fi
 log_info "Bakery client enabled: ${RESOLVED_BAKERY_CLIENT_ENABLED}"

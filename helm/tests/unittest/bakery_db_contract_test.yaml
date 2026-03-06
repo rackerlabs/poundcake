@@ -124,3 +124,70 @@ tests:
       - failedTemplate:
           errorMessage: "bakery.database.createServer=true requires mariadbOperator.enabled=true"
         template: templates/bakery-worker-deployment.yaml
+
+  - it: uses bakery image digest and falls back to global digest when bakery digest is unset
+    set:
+      poundcake.enabled: true
+      bakery.enabled: true
+      bakery.database.createServer: true
+      bakery.image.repository: ghcr.io/example/poundcake-bakery
+      bakery.image.tag: ""
+      poundcakeImage.digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake-bakery@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        template: templates/bakery-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake-bakery@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        template: templates/bakery-worker-deployment.yaml
+      - equal:
+          path: spec.template.spec.initContainers[2].image
+          value: ghcr.io/example/poundcake-bakery@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        template: templates/stackstorm-startup-order-jobs.yaml
+        documentIndex: 3
+
+  - it: uses digest image reference in bakery-only init job
+    set:
+      poundcake.enabled: false
+      bakery.enabled: true
+      bakery.database.createServer: true
+      bakery.image.repository: ghcr.io/example/poundcake-bakery
+      bakery.image.tag: ""
+      poundcakeImage.digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake-bakery@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        template: templates/bakery-init-job.yaml
+
+  - it: bakery digest overrides global digest
+    set:
+      poundcake.enabled: true
+      bakery.enabled: true
+      bakery.database.createServer: true
+      bakery.image.repository: ghcr.io/example/poundcake-bakery
+      bakery.image.tag: ""
+      poundcakeImage.digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      bakery.image.digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake-bakery@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+        template: templates/bakery-deployment.yaml
+
+  - it: falls back to chart appVersion when bakery tag and digests are unset
+    set:
+      poundcake.enabled: true
+      bakery.enabled: true
+      bakery.database.createServer: true
+      bakery.image.repository: ghcr.io/example/poundcake-bakery
+      bakery.image.tag: ""
+      bakery.image.digest: ""
+      poundcakeImage.digest: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/example/poundcake-bakery:2.0.103
+        template: templates/bakery-deployment.yaml
