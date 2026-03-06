@@ -316,13 +316,43 @@ async def dispatch_order(
                 for row in existing_result.scalars().all()
                 if row.recipe_ingredient_id is not None
             }
-            for row in seed_dish_ingredients_for_phase(
+
+            seeded_rows = seed_dish_ingredients_for_phase(
                 dish_id=dish.id,
                 recipe=recipe,
                 phase=run_phase,
                 existing_by_recipe_ingredient_id=existing_by_recipe_ingredient_id,
-            ):
+            )
+            for row in seeded_rows:
                 db.add(row)
+                if row.recipe_ingredient_id is not None:
+                    existing_by_recipe_ingredient_id[row.recipe_ingredient_id] = row
+
+            if run_phase == "resolving" and not seeded_rows:
+                catch_all_name = (settings.catch_all_recipe_name or "").strip()
+                if catch_all_name:
+                    await ensure_fallback_recipe(db, req_id=req_id)
+                    fallback_result = await db.execute(
+                        select(Recipe)
+                        .options(
+                            joinedload(Recipe.recipe_ingredients).joinedload(
+                                RecipeIngredient.ingredient
+                            )
+                        )
+                        .where(Recipe.name == catch_all_name, Recipe.enabled.is_(True))
+                        .with_for_update()
+                    )
+                    fallback_recipe = fallback_result.unique().scalars().first()
+                    if fallback_recipe is not None:
+                        for row in seed_dish_ingredients_for_phase(
+                            dish_id=dish.id,
+                            recipe=fallback_recipe,
+                            phase=run_phase,
+                            existing_by_recipe_ingredient_id=existing_by_recipe_ingredient_id,
+                        ):
+                            db.add(row)
+                            if row.recipe_ingredient_id is not None:
+                                existing_by_recipe_ingredient_id[row.recipe_ingredient_id] = row
 
             response = OrderDispatchResponse(
                 status="dispatched",

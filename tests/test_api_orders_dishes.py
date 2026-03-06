@@ -144,6 +144,34 @@ def _make_recipe(recipe_id: int = 1, name: str = "group") -> Recipe:
     )
 
 
+def _make_recipe_step(
+    *,
+    ri_id: int,
+    ingredient_id: int,
+    run_phase: str = "both",
+    step_order: int = 1,
+    engine: str = "stackstorm",
+    purpose: str = "remediation",
+):
+    ingredient = SimpleNamespace(
+        id=ingredient_id,
+        execution_engine=engine,
+        execution_purpose=purpose,
+        execution_target="core.local" if engine == "stackstorm" else "core",
+        task_key_template="local" if engine == "stackstorm" else "core",
+        execution_payload=None,
+        execution_parameters={},
+    )
+    return SimpleNamespace(
+        id=ri_id,
+        ingredient_id=ingredient_id,
+        ingredient=ingredient,
+        step_order=step_order,
+        run_phase=run_phase,
+        execution_parameters_override=None,
+    )
+
+
 def test_orders_list__when_filtered_by_processing_status__returns_matching_rows(
     client, mock_db_session
 ):
@@ -431,7 +459,12 @@ def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_stat
         ]
     )
 
-    with patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=30)):
+    with (
+        patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=30)),
+        patch(
+            "api.api.orders.get_settings", return_value=SimpleNamespace(catch_all_recipe_name="")
+        ),
+    ):
         response = client.post("/api/v1/orders/1/dispatch")
 
     assert response.status_code == 200
@@ -440,6 +473,112 @@ def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_stat
     assert body["run_phase"] == "resolving"
     assert order.processing_status == "resolving"
     assert order.is_active is True
+
+
+def test_order_dispatch__resolving_stackstorm_only_recipe__injects_fallback_bakery_comms(
+    client, mock_db_session
+):
+    order = _make_order(status="resolving")
+    group_recipe = SimpleNamespace(
+        id=12,
+        name="group",
+        recipe_ingredients=[
+            _make_recipe_step(ri_id=101, ingredient_id=201, run_phase="both", engine="stackstorm")
+        ],
+    )
+    fallback_recipe = SimpleNamespace(
+        id=22,
+        name="fallback-recipe",
+        recipe_ingredients=[
+            _make_recipe_step(
+                ri_id=301,
+                ingredient_id=401,
+                run_phase="resolving",
+                engine="bakery",
+                purpose="comms",
+            )
+        ],
+    )
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+            ScalarResult(first=group_recipe),  # group recipe hit
+            ScalarResult(first=None),  # active dish lookup for phase
+            ScalarResult(all_=[]),  # existing dish ingredients
+            ScalarResult(first=fallback_recipe),  # fallback recipe hit
+        ]
+    )
+
+    with (
+        patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=30)),
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        ),
+        patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
+    ):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "dispatched"
+    assert body["run_phase"] == "resolving"
+    added = [call.args[0] for call in mock_db_session.add.call_args_list]
+    seeded = [row for row in added if isinstance(row, DishIngredient)]
+    assert len(seeded) == 1
+    assert seeded[0].execution_engine == "bakery"
+    assert seeded[0].recipe_ingredient_id == 301
+    ensure_fallback.assert_awaited_once()
+
+
+def test_order_dispatch__resolving_with_recipe_bakery_comms__does_not_inject_fallback(
+    client, mock_db_session
+):
+    order = _make_order(status="resolving")
+    recipe = SimpleNamespace(
+        id=12,
+        name="group",
+        recipe_ingredients=[
+            _make_recipe_step(
+                ri_id=101,
+                ingredient_id=201,
+                run_phase="both",
+                engine="bakery",
+                purpose="comms",
+            )
+        ],
+    )
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+            ScalarResult(first=recipe),  # group recipe hit
+            ScalarResult(first=None),  # active dish lookup for phase
+            ScalarResult(all_=[]),  # existing dish ingredients
+        ]
+    )
+
+    with (
+        patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=30)),
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        ),
+        patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
+    ):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "dispatched"
+    assert body["run_phase"] == "resolving"
+    added = [call.args[0] for call in mock_db_session.add.call_args_list]
+    seeded = [row for row in added if isinstance(row, DishIngredient)]
+    assert len(seeded) == 1
+    assert seeded[0].execution_engine == "bakery"
+    assert seeded[0].recipe_ingredient_id == 101
+    ensure_fallback.assert_not_called()
 
 
 def test_order_timeline_get__returns_events(client, mock_db_session):

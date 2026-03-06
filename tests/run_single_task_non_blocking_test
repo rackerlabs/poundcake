@@ -22,4 +22,4 @@ run_step "create recipe" env IS_BLOCKING=false "${SCRIPT_DIR}/test_create_recipe
 run_step "post webhook" "${SCRIPT_DIR}/test_post_webhook.sh"
 run_step "wait for order" "${SCRIPT_DIR}/test_wait_for_order.sh"
 run_step "wait for dishes" "${SCRIPT_DIR}/test_wait_for_dishes.sh"
-run_step "assert dish count" env EXPECTED_COUNT=1 "${SCRIPT_DIR}/test_assert_dish_count.sh"
+run_step "assert resolving dish bakery-only" "${SCRIPT_DIR}/test_assert_resolving_dish_bakery_only.sh"

@@ -42,15 +42,15 @@ flowchart TD
   E -->|resolving| G["Dispatch run_phase=resolving"]
   E -->|other| H["409 not dispatchable"]
 
-  F --> I["Create/reuse firing Dish<br/>seed one canonical dish_ingredients set<br/>(run_phase in firing,both)"]
-  G --> J["Create/reuse resolving Dish<br/>seed one canonical dish_ingredients set<br/>(run_phase in resolving,both)"]
+  F --> I["Create/reuse firing Dish<br/>seed phase-eligible dish_ingredients<br/>(can include StackStorm + Bakery comms)"]
+  G --> J["Create/reuse resolving Dish<br/>seed Bakery comms only<br/>(inject fallback comms if recipe has none)"]
 
   I --> K["Dish status=new"]
   J --> K
 
   K --> L["chef claims dish -> processing"]
   L --> M["chef loads dish_ingredients"]
-  M --> N{"stackstorm pending rows?"}
+  M --> N{"stackstorm pending rows? (firing only)"}
 
   N -->|yes| O["Filter recipe to stackstorm rows<br/>POST /cook/workflows/register<br/>POST /cook/execute (stackstorm)<br/>PATCH dish.execution_ref"]
   N -->|no| P{"bakery pending rows?"}
@@ -107,7 +107,8 @@ stateDiagram-v2
       - GET /api/v1/operations/{operation_id} (poll loop)
 
       Resolve-phase dispatch (/orders/{id}/dispatch):
-      - tickets.create | tickets.update | tickets.comment | tickets.close
+      - comms-only Bakery ingredients execute in resolving
+      - if recipe has no resolving comms ingredient, fallback comms is injected
       - mapped Bakery endpoints + operation polling when operation_id is returned
     end note
 
