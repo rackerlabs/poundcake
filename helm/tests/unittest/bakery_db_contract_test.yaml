@@ -189,5 +189,5 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/example/poundcake-bakery:2.0.103
+          value: ghcr.io/example/poundcake-bakery:0.1.0
         template: templates/bakery-deployment.yaml

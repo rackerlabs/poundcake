@@ -655,8 +655,8 @@ For production, consider using external secret managers:
 - And other StackStorm components
 
 #### Reduced StackStorm Profile (Default)
-- Enabled by default: `mongodb`, `rabbitmq`, `redis`, `auth`, `api`, `actionrunner`, `rulesengine`, `workflowengine`, `scheduler`, `garbagecollector`
-- Disabled by default: `notifier`, `timersengine`, `sensorcontainer`, `register`, `stream`, `web`, `client`
+- Enabled by default: `mongodb`, `rabbitmq`, `redis`, `auth`, `api`, `actionrunner`, `rulesengine`, `workflowengine`, `scheduler`, `garbagecollector`, `client`
+- Disabled by default: `notifier`, `timersengine`, `sensorcontainer`, `register`, `stream`, `web`
 - Effects of reduced defaults:
 - No sensor-driven triggers
 - No timer engine processing
@@ -677,8 +677,6 @@ stackstormServices:
   stream:
     enabled: true
   web:
-    enabled: true
-  client:
     enabled: true
 ```
 

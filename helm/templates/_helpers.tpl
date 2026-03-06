@@ -366,7 +366,7 @@ storageClassName: {{ $root.Values.persistence.storageClassName | quote }}
   "register" false
   "stream" false
   "web" false
-  "client" false
+  "client" true
 -}}
 {{- if hasKey $services $name -}}
 {{- $serviceCfg := index $services $name | default dict -}}

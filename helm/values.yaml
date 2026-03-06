@@ -754,8 +754,8 @@ bakery:
   # Bakery image configuration
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
-    pullPolicy: IfNotPresent
-    tag: "2.0.103"
+    pullPolicy: Always
+    tag: "0.1.0"
     # Optional immutable image digest (sha256:...); overrides tag when set.
     digest: ""
 
@@ -928,7 +928,7 @@ bakery:
 
 poundcakeImage:
   repository: ghcr.io/rackerlabs/poundcake
-  tag: "2.0.103"
+  tag: "0.1.0"
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
   pullPolicy: Always
@@ -944,8 +944,8 @@ poundcakeImage:
 
 uiImage:
   repository: ghcr.io/rackerlabs/poundcake-ui
-  tag: "2.0.103"
-  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+  pullPolicy: Always
   containerPort: 8080
   runtimeWritablePaths:
     enabled: true
@@ -1051,7 +1051,7 @@ stackstormComponents:
   web:
     enabled: false
   client:
-    enabled: false
+    enabled: true
 
 stackstormServices:
   mongodb:
@@ -1087,7 +1087,7 @@ stackstormServices:
   web:
     enabled: false
   client:
-    enabled: false
+    enabled: true
 
 intervals:
   chef: "5"

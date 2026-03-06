@@ -519,7 +519,7 @@ POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
 # and synchronized into StackStorm pods by the pack-sync sidecar.
 ```
 
-`config/st2_api_key` is created by `st2client` during bootstrap.
+`config/st2_api_key` is created during StackStorm bootstrap and projected into `stackstorm-client` for `st2api` interactions.
 
 ## API/Bakery Database Separation
 
