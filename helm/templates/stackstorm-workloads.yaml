@@ -1218,7 +1218,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       initContainers:
-        - name: wait-stage7
+        - name: wait-stage4
           image: {{ .Values.images.busybox }}
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
@@ -1227,8 +1227,7 @@ spec:
             - -ec
             - |
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
-              gate_wait_for_true_file "/app/config/stackstorm_bootstrap_ready" "wait-stage7-bootstrap" "marker stackstorm_bootstrap_ready"
-              gate_wait_for_nonempty_file "/app/config/st2_api_key" "wait-stage7-apikey" "st2 api key material"
+              gate_wait_for_true_file "/app/config/stackstorm_controlplane_ready" "wait-stage4-controlplane" "marker stackstorm_controlplane_ready"
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -1241,6 +1240,15 @@ spec:
           envFrom:
             - secretRef:
                 name: stackstorm-secrets
+          env:
+            - name: ST2_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stackstorm-apikeys
+                  key: st2_api_key
+                  optional: true
+            - name: ST2_API_KEY_FILE
+              value: /app/config/st2_api_key
           command: ["/bin/bash", "/st2-entrypoint.sh"]
           args: ["sh", "-c", "echo 'stackstorm-client ready' && tail -f /dev/null"]
           volumeMounts:

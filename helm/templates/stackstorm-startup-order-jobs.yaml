@@ -449,7 +449,7 @@ spec:
               PARALLEL_ENABLED="{{ ternary "true" "false" .Values.startupHooks.parallelWait.enabled }}"
               FAIL_FAST="{{ ternary "true" "false" .Values.startupHooks.parallelWait.failFast }}"
               WAIT_TIMEOUT="{{ .Values.startupHooks.parallelWait.timeout }}"
-              deployments="deployment/stackstorm-actionrunner deployment/stackstorm-rulesengine deployment/stackstorm-workflowengine deployment/stackstorm-scheduler deployment/stackstorm-garbagecollector{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "notifier")) "true" }} deployment/stackstorm-notifier{{- end }}{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "timersengine")) "true" }} deployment/stackstorm-timersengine{{- end }}"
+              deployments="deployment/stackstorm-actionrunner deployment/stackstorm-rulesengine deployment/stackstorm-workflowengine deployment/stackstorm-scheduler deployment/stackstorm-garbagecollector{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "client")) "true" }} deployment/stackstorm-client{{- end }}{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "notifier")) "true" }} deployment/stackstorm-notifier{{- end }}{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "timersengine")) "true" }} deployment/stackstorm-timersengine{{- end }}"
 
               wait_for_deployment() {
                 target="$1"

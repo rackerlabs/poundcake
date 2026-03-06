@@ -47,7 +47,7 @@
         },
         "tag": {
           "type": "string",
-          "default": "2.0.98"
+          "default": "0.1.0"
         },
         "digest": {
           "type": "string",
@@ -135,7 +135,7 @@
         },
         "tag": {
           "type": "string",
-          "default": "2.0.98"
+          "default": "0.1.0"
         },
         "pullPolicy": {
           "type": "string",
@@ -164,6 +164,20 @@
               "properties": {
                 "drop": { "type": "array", "items": { "type": "string" } }
               }
+            }
+          }
+        }
+      }
+    },
+    "bakery": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "default": "0.1.0"
             }
           }
         }

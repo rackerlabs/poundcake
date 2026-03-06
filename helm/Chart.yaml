@@ -14,7 +14,7 @@ version: 0.2.7
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: "2.0.103"
+appVersion: "0.1.0"
 maintainers:
   - name: Jake Briggs
 keywords:

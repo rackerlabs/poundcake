@@ -20,16 +20,19 @@ poundcake:
 poundcakeImage:
   repository: ghcr.io/rackerlabs/poundcake
   tag: latest
+  pullPolicy: Always
 
 uiImage:
   repository: ghcr.io/rackerlabs/poundcake-ui
   tag: latest
+  pullPolicy: Always
 
 bakery:
   enabled: false
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     tag: latest
+    pullPolicy: Always
   config:
     # Keep true during validation windows to avoid creating external tickets.
     ticketingDryRun: true
