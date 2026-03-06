@@ -373,7 +373,7 @@ Installer flags:
 - Use `--update-bakery-secret` to rotate/update an existing Bakery Rackspace Core secret
 - Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
 - Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
-- For repeatable Bakery deploys, pin `POUNDCAKE_BAKERY_IMAGE_TAG` and ensure image pull auth is configured (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET` or existing pull secret via `POUNDCAKE_IMAGE_PULL_SECRET_NAME`)
+- For repeatable Bakery deploys, prefer `POUNDCAKE_BAKERY_IMAGE_DIGEST` (or `POUNDCAKE_IMAGE_DIGEST` fallback) and ensure image pull auth is configured (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET` or existing pull secret via `POUNDCAKE_IMAGE_PULL_SECRET_NAME`)
 
 Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
 
@@ -405,6 +405,7 @@ Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
 - Ensure image pin is explicit via either:
   - `POUNDCAKE_IMAGE_REPO:POUNDCAKE_IMAGE_TAG`, or
   - `POUNDCAKE_IMAGE_REPO@POUNDCAKE_IMAGE_DIGEST`
+- Bakery precedence is `POUNDCAKE_BAKERY_IMAGE_DIGEST` -> `POUNDCAKE_BAKERY_IMAGE_TAG` -> chart defaults, with `POUNDCAKE_IMAGE_DIGEST` used when Bakery digest is unset.
 - Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
 - Ensure PAT has `read:packages` and package visibility grants access
 - Verify pull secret is on a PoundCake pod:

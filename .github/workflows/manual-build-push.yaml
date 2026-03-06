@@ -59,7 +59,9 @@ jobs:
           context: .
           target: api-runtime
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_tag }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha,scope=poundcake-api
           cache-to: type=gha,mode=max,scope=poundcake-api
           platforms: linux/amd64
@@ -71,7 +73,9 @@ jobs:
           context: .
           file: ./ui/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:${{ steps.tags.outputs.sha_tag }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:${{ steps.tags.outputs.sha_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:latest
           cache-from: type=gha,scope=poundcake-ui
           cache-to: type=gha,mode=max,scope=poundcake-ui
           platforms: linux/amd64
@@ -83,7 +87,9 @@ jobs:
           context: .
           target: bakery-runtime
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-bakery:${{ steps.tags.outputs.sha_tag }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-bakery:${{ steps.tags.outputs.sha_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-bakery:latest
           cache-from: type=gha,scope=poundcake-bakery
           cache-to: type=gha,mode=max,scope=poundcake-bakery
           platforms: linux/amd64

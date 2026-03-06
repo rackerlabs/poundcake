@@ -299,6 +299,61 @@ assert_contains "--set bakery.database.createServer=true" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.image.repository=example.registry.local/poundcake-bakery" "${TMP_DIR}/helm.log"
 assert_contains "--set-string bakery.image.tag=env-bakery-tag" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.image.digest=" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery digest precedence over tag..."
+BAKERY_DIGEST_OUT="${TMP_DIR}/bakery-digest.out"
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  env \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_BAKERY_IMAGE_REPO="example.registry.local/poundcake-bakery" \
+  POUNDCAKE_BAKERY_IMAGE_TAG="env-bakery-tag" \
+  POUNDCAKE_BAKERY_IMAGE_DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight >"${BAKERY_DIGEST_OUT}" 2>&1; then
+  fail "expected bakery digest+tag conflict to fail"
+fi
+assert_contains "Set only one of POUNDCAKE_BAKERY_IMAGE_TAG or POUNDCAKE_BAKERY_IMAGE_DIGEST." "${BAKERY_DIGEST_OUT}"
+
+echo "Validating global digest fallback for Bakery image..."
+BAKERY_GLOBAL_DIGEST_OUT="${TMP_DIR}/bakery-global-digest.out"
+run_with_mocks "${BAKERY_GLOBAL_DIGEST_OUT}" \
+  env \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_IMAGE_DIGEST="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight
+
+assert_contains "--set-string bakery.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.image.tag=" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery digest overrides global digest..."
+BAKERY_BOTH_DIGESTS_OUT="${TMP_DIR}/bakery-both-digests.out"
+run_with_mocks "${BAKERY_BOTH_DIGESTS_OUT}" \
+  env \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_IMAGE_DIGEST="sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" \
+  POUNDCAKE_BAKERY_IMAGE_DIGEST="sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight
+
+assert_contains "--set-string bakery.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" "${TMP_DIR}/helm.log"
 
 echo "Validating Bakery installer with no forwarded args..."
 BAKERY_NOARGS_OUT="${TMP_DIR}/bakery-noargs.out"

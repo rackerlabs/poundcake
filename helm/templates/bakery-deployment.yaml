@@ -57,7 +57,7 @@ spec:
         - name: bakery
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.bakery.image.repository }}:{{ .Values.bakery.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "poundcake.bakeryImageRef" . | quote }}
           imagePullPolicy: {{ .Values.bakery.image.pullPolicy }}
           ports:
             - name: http
