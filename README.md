@@ -64,15 +64,15 @@ flowchart TD
   E -->|resolving| G["Dispatch run_phase=resolving"]
   E -->|other| H["409 not dispatchable"]
 
-  F --> I["Create/reuse firing Dish<br/>seed one canonical dish_ingredients set<br/>(run_phase in firing,both)"]
-  G --> J["Create/reuse resolving Dish<br/>seed one canonical dish_ingredients set<br/>(run_phase in resolving,both)"]
+  F --> I["Create/reuse firing Dish<br/>seed phase-eligible dish_ingredients<br/>(can include StackStorm + Bakery comms)"]
+  G --> J["Create/reuse resolving Dish<br/>seed Bakery comms only<br/>(inject fallback comms if recipe has none)"]
 
   I --> K["Dish status=new"]
   J --> K
 
   K --> L["chef claims dish -> processing"]
   L --> M["chef loads dish_ingredients"]
-  M --> N{"stackstorm pending rows?"}
+  M --> N{"stackstorm pending rows? (firing only)"}
 
   N -->|yes| O["Filter recipe to stackstorm rows<br/>POST /cook/workflows/register<br/>POST /cook/execute (stackstorm)<br/>PATCH dish.execution_ref"]
   N -->|no| P{"bakery pending rows?"}
@@ -114,15 +114,10 @@ flowchart TD
 
 | From | Event | To | Notes |
 |---|---|---|---|
-<<<<<<< Updated upstream
-| `new` | `prep-chef -> /dishes/cook/{order_id}` | `processing` | Atomic transition when dish creation is claimed. |
-| `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-fallback-recipe, non-terminal orders. |
-=======
 | `new` | `prep-chef -> /orders/{order_id}/dispatch` | `processing` | Atomic transition when dish creation is claimed. |
 | `processing` | Dish reaches terminal (`complete/failed/...`) | `resolving` | Triggered by dish update path for non-catch-all, non-terminal orders. |
->>>>>>> Stashed changes
 | `new` or `processing` | Alertmanager sends `resolved` | `resolving` | Resolve-phase orchestration is initiated by pre-heat. |
-| `resolving` | `prep-chef -> /orders/{order_id}/dispatch` | `complete` | Resolve flow finalizes order and marks inactive. |
+| `resolving` | `prep-chef -> /orders/{order_id}/dispatch` | `complete` | Resolve flow is comms-only (Bakery); StackStorm rows are not seeded in resolving. |
 | `complete`/`failed`/`canceled` | Any webhook/timer follow-up | unchanged | Terminal statuses are immutable and not re-opened by side effects. |
 
 ## Order Workflow Graph (States + Bakery Calls)
@@ -131,13 +126,8 @@ flowchart TD
 stateDiagram-v2
     [*] --> new: firing webhook\nPOST /api/v1/webhook -> pre_heat creates order
 
-<<<<<<< Updated upstream
-    new --> processing: prep-chef cook\nPOST /api/v1/dishes/cook/{order_id}
-    processing --> resolving: dish terminal (non-fallback-recipe)\nPATCH /api/v1/dishes/{dish_id}
-=======
     new --> processing: prep-chef cook\nPOST /api/v1/orders/{order_id}/dispatch
     processing --> resolving: dish terminal (non-catch-all)\nPATCH /api/v1/dishes/{dish_id}
->>>>>>> Stashed changes
 
     new --> resolving: resolved webhook\npre_heat transition check
     processing --> resolving: resolved webhook\npre_heat transition check
@@ -164,13 +154,9 @@ stateDiagram-v2
       - POST /api/v1/tickets/{ticket_id}/close (if auto-remediation succeeded)
       - GET /api/v1/operations/{operation_id} (poll loop)
 
-<<<<<<< Updated upstream
-      Resolve-phase comms (/orders/{id}/resolve):
-      - target: core|jira + execution_parameters.operation: ticket_create|ticket_update|ticket_comment|ticket_close
-=======
       Resolve-phase dispatch (/orders/{id}/dispatch):
-      - tickets.create | tickets.update | tickets.comment | tickets.close
->>>>>>> Stashed changes
+      - comms-only Bakery ingredients execute in resolving
+      - if recipe has no resolving comms ingredient, fallback comms is injected
       - mapped Bakery endpoints + operation polling when operation_id is returned
     end note
 

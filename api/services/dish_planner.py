@@ -15,6 +15,16 @@ def is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
     return normalized == "both" or normalized == target_phase
 
 
+def is_resolving_ingredient_eligible(ri: RecipeIngredient) -> bool:
+    """Resolving phase only executes Bakery comms ingredients."""
+    ingredient = ri.ingredient
+    if ingredient is None:
+        return False
+    if (ingredient.execution_engine or "").strip().lower() != "bakery":
+        return False
+    return (ingredient.execution_purpose or "").strip().lower() == "comms"
+
+
 def build_step_task_key(ri: RecipeIngredient) -> str:
     task_suffix = ((ri.ingredient.task_key_template if ri.ingredient else None) or "task").replace(
         ".", "_"
@@ -30,7 +40,7 @@ def build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
 
 
 async def expected_duration_for_phase(db: AsyncSession, *, recipe_id: int, phase: str) -> int:
-    result = await db.execute(
+    query = (
         select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
         .select_from(RecipeIngredient)
         .join(Ingredient, RecipeIngredient.ingredient_id == Ingredient.id)
@@ -39,6 +49,12 @@ async def expected_duration_for_phase(db: AsyncSession, *, recipe_id: int, phase
             RecipeIngredient.run_phase.in_((phase, "both")),
         )
     )
+    if (phase or "").lower() == "resolving":
+        query = query.where(
+            Ingredient.execution_engine == "bakery",
+            Ingredient.execution_purpose == "comms",
+        )
+    result = await db.execute(query)
     return int(result.scalar() or 0)
 
 
@@ -55,6 +71,8 @@ def seed_dish_ingredients_for_phase(
         if ri.ingredient is None:
             continue
         if not is_phase_eligible(ri.run_phase, phase):
+            continue
+        if (phase or "").lower() == "resolving" and not is_resolving_ingredient_eligible(ri):
             continue
         if ri.id in existing:
             continue
