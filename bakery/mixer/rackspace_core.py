@@ -28,6 +28,231 @@ class RackspaceCoreMixer(BaseMixer):
         self.verify_ssl = settings.rackspace_core_verify_ssl
         self._auth_token: Optional[str] = None
 
+    @staticmethod
+    def _coerce_int(value: Any) -> int | None:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if text.isdigit():
+                return int(text)
+        return None
+
+    @staticmethod
+    def _normalize_text(value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def _extract_result_rows(self, result: Any) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        if not isinstance(result, list):
+            return rows
+        for item in result:
+            if not isinstance(item, dict):
+                continue
+            inner = item.get("result", item)
+            if isinstance(inner, dict):
+                rows.append(inner)
+            elif isinstance(inner, list):
+                for row in inner:
+                    if isinstance(row, dict):
+                        rows.append(row)
+        return rows
+
+    def _flatten_value_rows(self, value: Any) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, dict):
+                if "id" in node and "name" in node:
+                    rows.append(node)
+                for nested in node.values():
+                    _walk(nested)
+            elif isinstance(node, list):
+                for nested in node:
+                    _walk(nested)
+
+        _walk(value)
+
+        deduped: List[Dict[str, Any]] = []
+        seen: set[tuple[int, str]] = set()
+        for row in rows:
+            row_id = self._coerce_int(row.get("id"))
+            row_name = self._normalize_text(row.get("name"))
+            if row_id is None or not row_name:
+                continue
+            key = (row_id, row_name.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append({"id": row_id, "name": row_name})
+        return deduped
+
+    def _pick_named_value_id(self, rows: List[Dict[str, Any]], desired: Any) -> int | None:
+        desired_id = self._coerce_int(desired)
+        if desired_id is not None:
+            return desired_id
+
+        desired_name = self._normalize_text(desired)
+        if not desired_name:
+            return None
+        desired_key = desired_name.casefold()
+
+        for row in rows:
+            row_name = self._normalize_text(row.get("name"))
+            if row_name.casefold() == desired_key:
+                row_id = self._coerce_int(row.get("id"))
+                if row_id is not None:
+                    return row_id
+        return None
+
+    async def _resolve_queue_id(self, queue: Any) -> int | None:
+        queue_id = self._coerce_int(queue)
+        if queue_id is not None:
+            return queue_id
+
+        queue_name = self._normalize_text(queue)
+        if not queue_name:
+            return None
+
+        lookup_variants = [
+            ["name", "=", queue_name],
+            ["name", "LIKE", f"%{queue_name}%"],
+        ]
+        for condition in lookup_variants:
+            query_set = [
+                {
+                    "class": "Ticket.Queue",
+                    "load_arg": {
+                        "class": "Ticket.QueueWhere",
+                        "values": [condition],
+                    },
+                    "attributes": ["id", "name"],
+                }
+            ]
+            result = await self._execute_query(query_set)
+            rows = self._extract_result_rows(result)
+            if not rows:
+                continue
+
+            queue_key = queue_name.casefold()
+            for row in rows:
+                row_name = self._normalize_text(row.get("name"))
+                if row_name.casefold() == queue_key:
+                    match_id = self._coerce_int(row.get("id"))
+                    if match_id is not None:
+                        return match_id
+
+            first_id = self._coerce_int(rows[0].get("id"))
+            if first_id is not None:
+                return first_id
+
+        return None
+
+    async def _load_queue_taxonomy(self, queue_id: int) -> Dict[str, List[Dict[str, Any]]]:
+        query_set = [
+            {
+                "class": "Ticket.Queue",
+                "load_arg": queue_id,
+                "attributes": ["id", "name", "subcategories", "sources", "severities"],
+            }
+        ]
+        result = await self._execute_query(query_set)
+        rows = self._extract_result_rows(result)
+        if not rows:
+            return {"subcategories": [], "sources": [], "severities": []}
+        queue_row = rows[0]
+        return {
+            "subcategories": self._flatten_value_rows(queue_row.get("subcategories")),
+            "sources": self._flatten_value_rows(queue_row.get("sources")),
+            "severities": self._flatten_value_rows(queue_row.get("severities")),
+        }
+
+    @staticmethod
+    def _normalize_source_name(source: Any) -> str:
+        source_text = str(source or "").strip()
+        if not source_text:
+            return "RunBook"
+        if source_text.casefold() in {"poundcake", "poundcake-codex", "bakery", "automation"}:
+            return "RunBook"
+        return source_text
+
+    @staticmethod
+    def _normalize_severity_name(severity: Any) -> str:
+        severity_text = str(severity or "").strip()
+        if not severity_text:
+            return "Standard"
+        mapped = {
+            "info": "Standard",
+            "low": "Standard",
+            "normal": "Standard",
+            "standard": "Standard",
+            "warning": "Urgent",
+            "high": "Urgent",
+            "urgent": "Urgent",
+            "critical": "Emergency",
+            "emergency": "Emergency",
+        }
+        return mapped.get(severity_text.casefold(), severity_text)
+
+    @staticmethod
+    def _normalize_status_name(status_value: Any) -> str:
+        raw = str(status_value or "").strip().replace("_", " ")
+        if not raw:
+            return "Solved"
+        lowered = raw.casefold()
+        if lowered in {"confirm solved", "confirmed solved"}:
+            return "Confirm Solved"
+        if lowered == "solved":
+            return "Solved"
+        if lowered == "closed":
+            return "Closed"
+        return " ".join(part.capitalize() for part in raw.split())
+
+    async def _resolve_create_classification_ids(
+        self,
+        *,
+        queue: Any,
+        subcategory: Any,
+        source: Any,
+        severity: Any,
+    ) -> tuple[int, int, int, int] | None:
+        queue_id = await self._resolve_queue_id(queue)
+        if queue_id is None:
+            return None
+
+        taxonomy = await self._load_queue_taxonomy(queue_id)
+        subcategory_rows = taxonomy.get("subcategories", [])
+        source_rows = taxonomy.get("sources", [])
+        severity_rows = taxonomy.get("severities", [])
+
+        subcategory_id = self._pick_named_value_id(subcategory_rows, subcategory)
+        if subcategory_id is None:
+            subcategory_id = self._pick_named_value_id(
+                subcategory_rows, settings.rackspace_core_default_subcategory
+            )
+        if subcategory_id is None and subcategory_rows:
+            subcategory_id = self._coerce_int(subcategory_rows[0].get("id"))
+
+        source_id = self._pick_named_value_id(source_rows, self._normalize_source_name(source))
+        if source_id is None:
+            source_id = self._pick_named_value_id(source_rows, "RunBook")
+        if source_id is None and source_rows:
+            source_id = self._coerce_int(source_rows[0].get("id"))
+
+        severity_id = self._pick_named_value_id(
+            severity_rows, self._normalize_severity_name(severity)
+        )
+        if severity_id is None:
+            severity_id = self._pick_named_value_id(severity_rows, "Standard")
+        if severity_id is None and severity_rows:
+            severity_id = self._coerce_int(severity_rows[0].get("id"))
+
+        if queue_id is None or subcategory_id is None or source_id is None or severity_id is None:
+            return None
+        return queue_id, subcategory_id, source_id, severity_id
+
     async def process_request(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process Rackspace Core ticket request.
@@ -149,8 +374,8 @@ class RackspaceCoreMixer(BaseMixer):
             - body: Ticket body/description
 
         Optional data fields:
-            - source: Ticket source (default "Bakery")
-            - severity: Ticket severity (default "Normal")
+            - source: Ticket source name (for example "RunBook")
+            - severity: Ticket severity name (for example "Standard", "Urgent")
         """
         account_number = data.get("account_number")
         queue = data.get("queue")
@@ -167,16 +392,31 @@ class RackspaceCoreMixer(BaseMixer):
                 ),
             }
 
-        source = data.get("source", "Bakery")
-        severity = data.get("severity", "Normal")
+        source = data.get("source")
+        severity = data.get("severity")
         has_bbcode = bool(data.get("has_bbcode", True))
+        classification_ids = await self._resolve_create_classification_ids(
+            queue=queue,
+            subcategory=subcategory,
+            source=source,
+            severity=severity,
+        )
+        if classification_ids is None:
+            return {
+                "success": False,
+                "error": (
+                    "Unable to resolve Rackspace Core queue/subcategory/source/severity IDs "
+                    "from provided values."
+                ),
+            }
+        queue_id, subcategory_id, source_id, severity_id = classification_ids
 
         query_set = [
             {
                 "class": "Account.Account",
                 "load_arg": str(account_number),
                 "method": "addTicket",
-                "args": [queue, subcategory, source, severity, subject, body],
+                "args": [queue_id, subcategory_id, source_id, severity_id, subject, body],
                 "keyword_args": {
                     "has_bbcode": has_bbcode,
                 },
@@ -201,12 +441,18 @@ class RackspaceCoreMixer(BaseMixer):
                         result_obj.get("number")
                         or result_obj.get("ticket_number")
                         or result_obj.get("id")
+                        or result_obj.get("load_value")
                         or ""
                     )
                 elif result_obj:
                     ticket_number = str(result_obj)
                 else:
-                    ticket_number = str(first.get("ticket_number") or first.get("id") or "")
+                    ticket_number = str(
+                        first.get("ticket_number")
+                        or first.get("id")
+                        or first.get("load_value")
+                        or ""
+                    )
 
         return {
             "success": True,
@@ -273,19 +519,31 @@ class RackspaceCoreMixer(BaseMixer):
                 "error": "ticket_number required for close",
             }
 
-        status_value = data.get("status", "Solved")
+        status_value = self._normalize_status_name(data.get("status", "Solved"))
 
         query_set = [
             {
                 "class": "Ticket.Ticket",
                 "load_arg": str(ticket_number),
-                "set_attribute": {
-                    "status": status_value,
-                },
+                "method": "setStatusByName",
+                "args": [status_value],
             }
         ]
 
-        result = await self._execute_query(query_set)
+        try:
+            result = await self._execute_query(query_set)
+        except httpx.HTTPStatusError:
+            # Compatibility fallback for environments that still permit direct status mutation.
+            fallback_query_set = [
+                {
+                    "class": "Ticket.Ticket",
+                    "load_arg": str(ticket_number),
+                    "set_attribute": {
+                        "status": status_value,
+                    },
+                }
+            ]
+            result = await self._execute_query(fallback_query_set)
 
         return {
             "success": True,
@@ -370,7 +628,6 @@ class RackspaceCoreMixer(BaseMixer):
                 {
                     "class": "Ticket.Ticket",
                     "load_arg": str(ticket_number),
-                    "action": "attributes",
                     "attributes": attributes,
                 }
             ]
