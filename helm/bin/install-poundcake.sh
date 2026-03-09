@@ -79,6 +79,7 @@ EXTRA_ARGS=()
 OVERRIDE_ARGS=()
 DISCOVERED_BAKERY_URL=""
 DISCOVERED_SHARED_DB_HOST=""
+DISCOVERED_BAKERY_AUTH_SECRET=""
 RESOLVED_BAKERY_URL=""
 RESOLVED_BAKERY_CLIENT_ENABLED="false"
 RESOLVED_DATABASE_MODE="embedded"
@@ -132,7 +133,7 @@ Installer options:
   --remote-bakery-enabled <bool>     Enable/disable PoundCake Bakery client
   --remote-bakery-url <url>          Remote Bakery base URL for PoundCake comms
   --remote-bakery-auth-mode <mode>   Remote Bakery client auth mode (default: hmac)
-  --remote-bakery-auth-secret <name> Existing secret name for remote Bakery client auth keys
+  --remote-bakery-auth-secret <name> Existing secret name for remote Bakery client auth keys (auto-discovered for colocated Bakery)
   --shared-db-mode <auto|on|off>     Shared MariaDB mode selection (default: auto)
   --shared-db-server-name <name>     Shared MariaDB server/service name for PoundCake DB resources
 
@@ -160,7 +161,7 @@ Environment overrides:
   POUNDCAKE_REMOTE_BAKERY_ENABLED  (optional; defaults to auto based on discovered/explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_URL      (optional; explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
-  POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (optional existing secret for remote Bakery HMAC keys)
+  POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (required for external remote Bakery HMAC unless auto-discovered)
   POUNDCAKE_SHARED_DB_MODE         (default: auto; valid: auto, on, off)
   POUNDCAKE_SHARED_DB_SERVER_NAME  (optional; shared DB server/service name)
   POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
@@ -577,6 +578,7 @@ normalize_mode_or_empty() {
 discover_colocated_bakery() {
   DISCOVERED_BAKERY_URL=""
   DISCOVERED_SHARED_DB_HOST=""
+  DISCOVERED_BAKERY_AUTH_SECRET=""
 
   if [[ -n "${REMOTE_BAKERY_URL}" ]]; then
     log_info "Skipping Bakery auto-discovery because remote Bakery URL was provided explicitly."
@@ -589,6 +591,7 @@ discover_colocated_bakery() {
   local service_port=""
   local deployment_name=""
   local deployment_env=""
+  local deployment_secret_refs=""
 
   while IFS= read -r service_name; do
     [[ -n "${service_name}" ]] || continue
@@ -637,7 +640,15 @@ discover_colocated_bakery() {
       kubectl -n "${NAMESPACE}" get deployment "${deployment_name}" \
         -o jsonpath='{range .spec.template.spec.containers[*]}{range .env[*]}{.name}={.value}{"\n"}{end}{end}' 2>/dev/null || true
     )"
+    deployment_secret_refs="$(
+      kubectl -n "${NAMESPACE}" get deployment "${deployment_name}" \
+        -o jsonpath='{range .spec.template.spec.containers[*]}{range .env[*]}{.name}={.valueFrom.secretKeyRef.name}{"\n"}{end}{end}' 2>/dev/null || true
+    )"
     DISCOVERED_SHARED_DB_HOST="$(echo "${deployment_env}" | awk -F= '$1=="DATABASE_HOST" && length($2) > 0 { print $2; exit }')"
+    DISCOVERED_BAKERY_AUTH_SECRET="$(echo "${deployment_secret_refs}" | awk -F= '$1=="BAKERY_HMAC_ACTIVE_KEY_ID" && length($2) > 0 { print $2; exit }')"
+    if [[ -z "${DISCOVERED_BAKERY_AUTH_SECRET}" ]]; then
+      DISCOVERED_BAKERY_AUTH_SECRET="${deployment_name}-secret"
+    fi
   fi
 
   if [[ -n "${DISCOVERED_BAKERY_URL}" ]]; then
@@ -646,9 +657,12 @@ discover_colocated_bakery() {
   if [[ -n "${DISCOVERED_SHARED_DB_HOST}" ]]; then
     log_info "Discovered shared DB server name from Bakery deployment: ${DISCOVERED_SHARED_DB_HOST}"
   fi
+  if [[ -n "${DISCOVERED_BAKERY_AUTH_SECRET}" ]]; then
+    log_info "Discovered Bakery auth secret from Bakery deployment: ${DISCOVERED_BAKERY_AUTH_SECRET}"
+  fi
 
-  if [[ -z "${DISCOVERED_BAKERY_URL}" || -z "${DISCOVERED_SHARED_DB_HOST}" ]]; then
-    log_warn "Bakery discovery is partial (URL='${DISCOVERED_BAKERY_URL:-<none>}', DB host='${DISCOVERED_SHARED_DB_HOST:-<none>}')."
+  if [[ -z "${DISCOVERED_BAKERY_URL}" || -z "${DISCOVERED_SHARED_DB_HOST}" || -z "${DISCOVERED_BAKERY_AUTH_SECRET}" ]]; then
+    log_warn "Bakery discovery is partial (URL='${DISCOVERED_BAKERY_URL:-<none>}', DB host='${DISCOVERED_SHARED_DB_HOST:-<none>}', auth secret='${DISCOVERED_BAKERY_AUTH_SECRET:-<none>}')."
   fi
 }
 
@@ -706,6 +720,40 @@ resolve_runtime_modes() {
       RESOLVED_DATABASE_MODE="embedded"
       ;;
   esac
+}
+
+ensure_remote_bakery_auth_secret() {
+  local auth_mode=""
+  auth_mode="$(echo "${REMOTE_BAKERY_AUTH_MODE}" | tr '[:upper:]' '[:lower:]')"
+
+  if [[ "${RESOLVED_BAKERY_CLIENT_ENABLED}" != "true" ]]; then
+    return 0
+  fi
+
+  if [[ "${auth_mode}" != "hmac" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" && -n "${DISCOVERED_BAKERY_AUTH_SECRET}" ]]; then
+    REMOTE_BAKERY_AUTH_SECRET="${DISCOVERED_BAKERY_AUTH_SECRET}"
+    log_info "Resolved remote Bakery HMAC auth secret from discovered Bakery deployment: ${REMOTE_BAKERY_AUTH_SECRET}"
+  fi
+
+  if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
+    log_error "Bakery client auth mode is 'hmac' but no auth secret was resolved."
+    if [[ -n "${REMOTE_BAKERY_URL}" && -z "${DISCOVERED_BAKERY_URL}" ]]; then
+      log_error "Provide --remote-bakery-auth-secret (or POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET) for external Bakery endpoints."
+    else
+      log_error "Run install/install-bakery-helm.sh first so auth secret discovery succeeds, or provide --remote-bakery-auth-secret explicitly."
+    fi
+    exit 1
+  fi
+
+  if ! kubectl -n "${NAMESPACE}" get secret "${REMOTE_BAKERY_AUTH_SECRET}" >/dev/null 2>&1; then
+    log_error "Resolved Bakery auth secret '${REMOTE_BAKERY_AUTH_SECRET}' was not found in namespace '${NAMESPACE}'."
+    log_error "Run install/install-bakery-helm.sh to provision Bakery auth secrets, or provide --remote-bakery-auth-secret pointing to an existing secret."
+    exit 1
+  fi
 }
 
 get_chart_version_from_file() {
@@ -1153,6 +1201,7 @@ log_info "Resolved override file argument count: ${#OVERRIDE_ARGS[@]}"
 log_phase "bakery and shared-db discovery"
 discover_colocated_bakery
 resolve_runtime_modes
+ensure_remote_bakery_auth_secret
 
 if [[ "${ROTATE_SECRETS}" == "true" ]]; then
   log_phase "secret rotation"

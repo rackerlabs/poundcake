@@ -5,10 +5,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 POUNDCAKE_INSTALLER="${SCRIPT_DIR}/install-poundcake.sh"
 NAMESPACE="${POUNDCAKE_NAMESPACE:-rackspace}"
+RELEASE_NAME="${POUNDCAKE_RELEASE_NAME:-bakery}"
 BAKERY_RACKSPACE_SECRET_NAME="${POUNDCAKE_BAKERY_RACKSPACE_SECRET_NAME:-bakery-rackspace-core}"
 BAKERY_RACKSPACE_URL="${POUNDCAKE_BAKERY_RACKSPACE_URL:-}"
 BAKERY_RACKSPACE_USERNAME="${POUNDCAKE_BAKERY_RACKSPACE_USERNAME:-}"
 BAKERY_RACKSPACE_PASSWORD="${POUNDCAKE_BAKERY_RACKSPACE_PASSWORD:-}"
+BAKERY_AUTH_SECRET_NAME="${POUNDCAKE_BAKERY_AUTH_SECRET_NAME:-}"
+BAKERY_HMAC_ACTIVE_KEY_ID="${POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY_ID:-}"
+BAKERY_HMAC_ACTIVE_KEY="${POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY:-}"
+BAKERY_HMAC_NEXT_KEY_ID="${POUNDCAKE_BAKERY_HMAC_NEXT_KEY_ID:-}"
+BAKERY_HMAC_NEXT_KEY="${POUNDCAKE_BAKERY_HMAC_NEXT_KEY:-}"
 UPDATE_BAKERY_SECRET="${POUNDCAKE_UPDATE_BAKERY_SECRET:-false}"
 FORWARD_ARGS=()
 
@@ -48,15 +54,67 @@ Bakery secret options:
   --bakery-rackspace-url <url>            Rackspace Core URL for secret creation/update
   --bakery-rackspace-username <username>  Rackspace Core username for secret creation/update
   --bakery-rackspace-password <password>  Rackspace Core password for secret creation/update
+  --bakery-auth-secret-name <name>        Secret name for Bakery HMAC auth keys (default: release-derived)
   --update-bakery-secret                  Update existing secret (prompts for missing values)
 
 Behavior:
   - If the secret exists, installer uses it and does not prompt.
   - If the secret is missing, installer creates it (prompts for missing values).
   - Existing secret is only updated when --update-bakery-secret is provided.
+  - Bakery HMAC auth secret is auto-created when missing and wired to both Bakery API auth and PoundCake Bakery client auth values.
 
 All remaining args are forwarded to install-poundcake.sh.
 USAGE_EOF
+}
+
+default_bakery_auth_secret_name() {
+  local release_name="$1"
+  local fullname=""
+  local bakery_name=""
+  local secret_name=""
+
+  if [[ "${release_name}" == *"poundcake"* ]]; then
+    fullname="${release_name}"
+  else
+    fullname="${release_name}-poundcake"
+  fi
+  bakery_name="${fullname}-bakery"
+  bakery_name="${bakery_name:0:63}"
+  bakery_name="${bakery_name%-}"
+
+  secret_name="${bakery_name}-secret"
+  secret_name="${secret_name:0:63}"
+  secret_name="${secret_name%-}"
+  echo "${secret_name}"
+}
+
+generate_hmac_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+  if command -v od >/dev/null 2>&1; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+    return
+  fi
+  log_error "Cannot generate Bakery HMAC key (missing openssl and od)."
+  exit 1
+}
+
+read_secret_literal() {
+  local secret_name="$1"
+  local key_name="$2"
+  local encoded=""
+
+  encoded="$(
+    kubectl -n "${NAMESPACE}" get secret "${secret_name}" \
+      -o jsonpath="{.data['${key_name}']}" 2>/dev/null || true
+  )"
+  if [[ -z "${encoded}" ]]; then
+    echo ""
+    return
+  fi
+  printf '%s' "${encoded}" | base64 --decode 2>/dev/null || true
 }
 
 prompt_for_missing_bakery_credentials() {
@@ -131,6 +189,69 @@ ensure_bakery_secret() {
     --from-literal=rackspace-core-url="${BAKERY_RACKSPACE_URL}" \
     --from-literal=rackspace-core-username="${BAKERY_RACKSPACE_USERNAME}" \
     --from-literal=rackspace-core-password="${BAKERY_RACKSPACE_PASSWORD}" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+}
+
+ensure_bakery_auth_secret() {
+  local secret_exists="false"
+  local provided_values="false"
+  local existing_active_id=""
+  local existing_active_key=""
+  local existing_next_id=""
+  local existing_next_key=""
+  local active_id=""
+  local active_key=""
+  local next_id=""
+  local next_key=""
+
+  if [[ -z "${BAKERY_AUTH_SECRET_NAME}" ]]; then
+    BAKERY_AUTH_SECRET_NAME="$(default_bakery_auth_secret_name "${RELEASE_NAME}")"
+  fi
+
+  if [[ -n "${BAKERY_HMAC_ACTIVE_KEY_ID}" || -n "${BAKERY_HMAC_ACTIVE_KEY}" || -n "${BAKERY_HMAC_NEXT_KEY_ID}" || -n "${BAKERY_HMAC_NEXT_KEY}" ]]; then
+    provided_values="true"
+  fi
+
+  if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+    log_info "Namespace '${NAMESPACE}' does not exist; creating it for Bakery auth secret setup..."
+    kubectl create namespace "${NAMESPACE}" >/dev/null
+  fi
+
+  if kubectl -n "${NAMESPACE}" get secret "${BAKERY_AUTH_SECRET_NAME}" >/dev/null 2>&1; then
+    secret_exists="true"
+    existing_active_id="$(read_secret_literal "${BAKERY_AUTH_SECRET_NAME}" "active-key-id")"
+    existing_active_key="$(read_secret_literal "${BAKERY_AUTH_SECRET_NAME}" "active-key")"
+    existing_next_id="$(read_secret_literal "${BAKERY_AUTH_SECRET_NAME}" "next-key-id")"
+    existing_next_key="$(read_secret_literal "${BAKERY_AUTH_SECRET_NAME}" "next-key")"
+  fi
+
+  if [[ "${secret_exists}" == "true" && "${provided_values}" != "true" && -n "${existing_active_id}" && -n "${existing_active_key}" ]]; then
+    log_info "Using existing Bakery HMAC auth secret '${BAKERY_AUTH_SECRET_NAME}' in namespace '${NAMESPACE}'."
+    return
+  fi
+
+  active_id="${BAKERY_HMAC_ACTIVE_KEY_ID:-${existing_active_id:-active}}"
+  active_key="${BAKERY_HMAC_ACTIVE_KEY:-${existing_active_key:-}}"
+  next_id="${BAKERY_HMAC_NEXT_KEY_ID:-${existing_next_id:-}}"
+  next_key="${BAKERY_HMAC_NEXT_KEY:-${existing_next_key:-}}"
+
+  if [[ -z "${active_key}" ]]; then
+    active_key="$(generate_hmac_key)"
+  fi
+
+  if [[ -n "${next_key}" && -z "${next_id}" ]]; then
+    next_id="next"
+  fi
+  if [[ -n "${next_id}" && -z "${next_key}" ]]; then
+    next_key="$(generate_hmac_key)"
+  fi
+
+  log_info "Creating/updating Bakery HMAC auth secret '${BAKERY_AUTH_SECRET_NAME}' in namespace '${NAMESPACE}'."
+  kubectl -n "${NAMESPACE}" create secret generic "${BAKERY_AUTH_SECRET_NAME}" \
+    --from-literal=active-key-id="${active_id}" \
+    --from-literal=active-key="${active_key}" \
+    --from-literal=next-key-id="${next_id}" \
+    --from-literal=next-key="${next_key}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 }
 
@@ -226,6 +347,14 @@ parse_args() {
         BAKERY_RACKSPACE_PASSWORD="${1#*=}"
         shift
         ;;
+      --bakery-auth-secret-name)
+        BAKERY_AUTH_SECRET_NAME="$2"
+        shift 2
+        ;;
+      --bakery-auth-secret-name=*)
+        BAKERY_AUTH_SECRET_NAME="${1#*=}"
+        shift
+        ;;
       --update-bakery-secret)
         UPDATE_BAKERY_SECRET="true"
         shift
@@ -279,17 +408,20 @@ else
 fi
 
 ensure_bakery_secret
+ensure_bakery_auth_secret
 
 INSTALL_CMD=(
   env
   POUNDCAKE_INSTALL_PROFILE=bakery
-  POUNDCAKE_RELEASE_NAME="${POUNDCAKE_RELEASE_NAME:-bakery}"
+  POUNDCAKE_RELEASE_NAME="${RELEASE_NAME}"
   "${POUNDCAKE_INSTALLER}"
   --set poundcake.enabled=false
   --set bakery.enabled=true
   --set bakery.worker.enabled=true
   --set bakery.database.createServer=true
   --set-string "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}"
+  --set-string "bakery.auth.existingSecret=${BAKERY_AUTH_SECRET_NAME}"
+  --set-string "bakery.client.auth.existingSecret=${BAKERY_AUTH_SECRET_NAME}"
 )
 if (( ${#FORWARD_ARGS[@]} > 0 )); then
   INSTALL_CMD+=("${FORWARD_ARGS[@]}")

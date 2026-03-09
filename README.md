@@ -354,9 +354,12 @@ Installer flags:
 - `--skip-preflight` skips dependency and cluster connectivity checks
 - `--rotate-secrets` deletes known chart-managed secrets before install
 - `--remote-bakery-url` configures PoundCake to use an external/co-located Bakery endpoint
+- `--remote-bakery-auth-secret` sets the PoundCake Bakery HMAC client secret for external Bakery endpoints
 - `--shared-db-mode <auto|on|off>` and `--shared-db-server-name` control shared MariaDB mode for PoundCake
 - Bakery installer verifies `bakery-rackspace-core` by default and prompts for Rackspace Core credentials only when secret creation/update is required
 - Use `--update-bakery-secret` to rotate/update an existing Bakery Rackspace Core secret
+- Bakery installer also creates/reuses a Bakery HMAC auth secret and wires it into Bakery API/client auth values
+- PoundCake installer auto-discovers the colocated Bakery HMAC secret; external remote Bakery requires an explicit `--remote-bakery-auth-secret`
 - Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
 - Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
 - For repeatable Bakery deploys, prefer `POUNDCAKE_BAKERY_IMAGE_DIGEST` (or `POUNDCAKE_IMAGE_DIGEST` fallback) and ensure image pull auth is configured (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET` or existing pull secret via `POUNDCAKE_IMAGE_PULL_SECRET_NAME`)
