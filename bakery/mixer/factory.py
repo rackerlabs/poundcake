@@ -8,6 +8,8 @@ from bakery.mixer.jira import JiraMixer
 from bakery.mixer.github import GitHubMixer
 from bakery.mixer.pagerduty import PagerDutyMixer
 from bakery.mixer.rackspace_core import RackspaceCoreMixer
+from bakery.mixer.teams import TeamsMixer
+from bakery.mixer.discord import DiscordMixer
 
 # Registry of available mixers
 MIXER_REGISTRY: Dict[str, Type[BaseMixer]] = {
@@ -16,6 +18,8 @@ MIXER_REGISTRY: Dict[str, Type[BaseMixer]] = {
     "github": GitHubMixer,
     "pagerduty": PagerDutyMixer,
     "rackspace_core": RackspaceCoreMixer,
+    "teams": TeamsMixer,
+    "discord": DiscordMixer,
 }
 
 

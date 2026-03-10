@@ -13,7 +13,13 @@ DISH_TERMINAL_PROCESSING_STATUSES = {"complete", "failed", "abandoned", "timeout
 
 ORDER_TERMINAL_PROCESSING_STATUSES = {"complete", "failed", "canceled"}
 
-ORDER_RESOLVING_TRANSITIONABLE_STATUSES = {"new", "processing", "resolving"}
+ORDER_RESOLVING_TRANSITIONABLE_STATUSES = {
+    "new",
+    "processing",
+    "waiting_clear",
+    "escalation",
+    "resolving",
+}
 
 
 def normalize_status(status: str | None) -> str:
@@ -32,7 +38,7 @@ def can_transition_to_resolving(current_status: str | None, source_event: str) -
 
     Supported source events:
     - `dish_terminal`: only `processing -> resolving`
-    - `alert_resolved`: `new|processing|resolving -> resolving`
+    - `alert_resolved`: `new|processing|waiting_clear|escalation|resolving -> resolving`
     """
     normalized = normalize_status(current_status)
     if normalized in ORDER_TERMINAL_PROCESSING_STATUSES:

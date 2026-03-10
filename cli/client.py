@@ -73,6 +73,62 @@ class PoundCakeClient:
             return cast(dict[str, Any], payload)
         raise ValueError("Unexpected order response format")
 
+    def get_order_timeline(self, order_id: int) -> dict[str, Any]:
+        payload = self._request("GET", f"/api/v1/orders/{order_id}/timeline")
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected order timeline response format")
+
+    # Ingredient management
+    def list_ingredients(self) -> list[dict[str, Any]]:
+        payload = self._request("GET", "/api/v1/ingredients/?limit=500")
+        if isinstance(payload, list):
+            return cast(list[dict[str, Any]], payload)
+        raise ValueError("Unexpected ingredients response format")
+
+    def get_ingredient(self, ingredient_id: int) -> dict[str, Any]:
+        payload = self._request("GET", f"/api/v1/ingredients/{ingredient_id}")
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected ingredient response format")
+
+    def create_ingredient(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._request("POST", "/api/v1/ingredients/", json=payload)
+        if isinstance(response, dict):
+            return cast(dict[str, Any], response)
+        raise ValueError("Unexpected create ingredient response format")
+
+    def update_ingredient(self, ingredient_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._request("PUT", f"/api/v1/ingredients/{ingredient_id}", json=payload)
+        if isinstance(response, dict):
+            return cast(dict[str, Any], response)
+        raise ValueError("Unexpected update ingredient response format")
+
+    # Recipe management
+    def list_recipes(self) -> list[dict[str, Any]]:
+        payload = self._request("GET", "/api/v1/recipes/?limit=500")
+        if isinstance(payload, list):
+            return cast(list[dict[str, Any]], payload)
+        raise ValueError("Unexpected recipes response format")
+
+    def get_recipe(self, recipe_id: int) -> dict[str, Any]:
+        payload = self._request("GET", f"/api/v1/recipes/{recipe_id}")
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        raise ValueError("Unexpected recipe response format")
+
+    def create_recipe(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._request("POST", "/api/v1/recipes/", json=payload)
+        if isinstance(response, dict):
+            return cast(dict[str, Any], response)
+        raise ValueError("Unexpected create recipe response format")
+
+    def update_recipe(self, recipe_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._request("PUT", f"/api/v1/recipes/{recipe_id}", json=payload)
+        if isinstance(response, dict):
+            return cast(dict[str, Any], response)
+        raise ValueError("Unexpected update recipe response format")
+
     # Prometheus rule management
     def list_rules(self) -> list[dict[str, Any]]:
         """List all Prometheus rules."""

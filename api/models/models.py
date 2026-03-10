@@ -61,6 +61,8 @@ class RecipeIngredient(Base):
     )
     # Controls when this step is eligible to run in the order lifecycle.
     run_phase: Mapped[str] = mapped_column(String(16), default="both", nullable=False)
+    # Optional lifecycle condition gate for the step.
+    run_condition: Mapped[str] = mapped_column(String(40), default="always", nullable=False)
 
     recipe: Mapped["Recipe"] = relationship(back_populates="recipe_ingredients")
     ingredient: Mapped["Ingredient"] = relationship()
@@ -79,6 +81,7 @@ class Recipe(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    clear_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -114,12 +117,17 @@ class Ingredient(Base):
     __tablename__ = "ingredients"
     __table_args__ = (
         UniqueConstraint(
-            "execution_engine", "execution_target", name="ux_ingredients_engine_target"
+            "execution_engine",
+            "execution_target",
+            "destination_target",
+            "task_key_template",
+            name="ux_ingredients_engine_target",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     execution_target: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    destination_target: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     task_key_template: Mapped[str] = mapped_column(String(255), nullable=False)
     execution_engine: Mapped[str] = mapped_column(String(50), default="undefined", nullable=False)
     execution_purpose: Mapped[str] = mapped_column(String(32), default="utility", nullable=False)
@@ -230,6 +238,7 @@ class DishIngredient(Base):
     task_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     execution_engine: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     execution_target: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    destination_target: Mapped[str | None] = mapped_column(String(255), nullable=True)
     execution_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     execution_payload: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     execution_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
@@ -270,6 +279,17 @@ class Order(Base):
         String(50), default="new", nullable=False, index=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    remediation_outcome: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, index=True
+    )
+    clear_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    clear_deadline_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    clear_timed_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    auto_close_eligible: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
 
     alert_group_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     severity: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
@@ -304,6 +324,43 @@ class Order(Base):
     )
 
     dishes: Mapped[list["Dish"]] = relationship("Dish", back_populates="order")
+    communications: Mapped[list["OrderCommunication"]] = relationship(
+        "OrderCommunication",
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrderCommunication(Base):
+    """Tracked external communication handle for an order destination route."""
+
+    __tablename__ = "order_communications"
+    __table_args__ = (
+        UniqueConstraint(
+            "order_id",
+            "execution_target",
+            "destination_target",
+            name="ux_order_communications_route",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    execution_target: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    destination_target: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    bakery_ticket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    bakery_operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    lifecycle_state: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    remote_state: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    writable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    reopenable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+    order: Mapped["Order"] = relationship("Order", back_populates="communications")
 
 
 class AlertSuppression(Base):

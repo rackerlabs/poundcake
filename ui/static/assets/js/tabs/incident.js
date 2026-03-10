@@ -71,6 +71,10 @@ function renderOrderSummary(order) {
   appendLabeledValue(container, "Group", order.alert_group_name || "-");
   appendLabeledValue(container, "Processing", order.processing_status || "-");
   appendLabeledValue(container, "Alert Status", order.alert_status || "-");
+  appendLabeledValue(container, "Remediation", order.remediation_outcome || "-");
+  appendLabeledValue(container, "Auto Close Eligible", String(Boolean(order.auto_close_eligible)));
+  appendLabeledValue(container, "Clear Deadline", formatDate(order.clear_deadline_at));
+  appendLabeledValue(container, "Timed Out At", formatDate(order.clear_timed_out_at));
   appendLabeledValue(container, "Started", formatDate(order.starts_at));
   appendLabeledValue(container, "Created", formatDate(order.created_at));
 
@@ -108,11 +112,37 @@ function renderBakerySummary(events) {
     const card = eventCard(eventItem);
     const ticket = eventItem.correlation_ids?.bakery_ticket_id;
     const operation = eventItem.correlation_ids?.bakery_operation_id;
+    const route = [
+      eventItem.correlation_ids?.execution_target,
+      eventItem.correlation_ids?.destination_target,
+    ]
+      .filter(Boolean)
+      .join(" / ");
 
     const extra = el("div", { className: "inline-actions" });
-    extra.appendChild(el("span", { text: `Ticket: ${ticket || "-"}` }));
+    extra.appendChild(el("span", { text: `Route: ${route || "-"}` }));
+    card.appendChild(extra);
+
+    const extraRoute = el("div", { className: "inline-actions" });
+    extraRoute.appendChild(
+      el("span", {
+        text: `Remote: ${eventItem.correlation_ids?.remote_state || eventItem.status || "-"}`,
+      }),
+    );
+    card.appendChild(extraRoute);
+
+    const extraWritable = el("div", { className: "inline-actions" });
+    extraWritable.appendChild(
+      el("span", {
+        text: `Writable: ${String(eventItem.details?.writable ?? "-")} | Reopenable: ${String(eventItem.details?.reopenable ?? "-")}`,
+      }),
+    );
+    card.appendChild(extraWritable);
+
+    const extraTicket = el("div", { className: "inline-actions" });
+    extraTicket.appendChild(el("span", { text: `Ticket: ${ticket || "-"}` }));
     if (ticket) {
-      extra.appendChild(el("button", {
+      extraTicket.appendChild(el("button", {
         className: "btn small ghost",
         text: "Copy",
         on: { click: () => copyText(ticket) },
@@ -129,7 +159,7 @@ function renderBakerySummary(events) {
       }));
     }
 
-    card.appendChild(extra);
+    card.appendChild(extraTicket);
     card.appendChild(extra2);
     container.appendChild(card);
   });

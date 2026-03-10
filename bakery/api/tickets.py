@@ -169,6 +169,18 @@ def _context_maps(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, An
     return context_map, labels_map, annotations_map
 
 
+def _requested_provider_type(payload: dict[str, Any]) -> str:
+    context_map, _, _ = _context_maps(payload)
+    provider = _stringify(
+        _first_non_empty(
+            payload.get("provider_type"),
+            context_map.get("provider_type"),
+            context_map.get("execution_target"),
+        )
+    )
+    return str(provider or settings.active_provider or "rackspace_core").strip().lower()
+
+
 def _lookup_payload_value(payload: dict[str, Any], keys: list[str]) -> str | None:
     context_map, labels_map, annotations_map = _context_maps(payload)
     for key in keys:
@@ -359,7 +371,7 @@ def _build_provider_find_payload(
     if provider_ticket_id is None:
         raise ValueError("Provider ticket id is not available yet for this ticket")
 
-    provider = settings.active_provider
+    provider = str(ticket.provider_type or settings.active_provider or "").strip().lower()
     if provider == "rackspace_core":
         return {"ticket_number": provider_ticket_id}
     if provider == "servicenow":
@@ -474,7 +486,7 @@ async def create_ticket(
 
     ticket = Ticket(
         internal_ticket_id=internal_ticket_id,
-        provider_type=settings.active_provider,
+        provider_type=_requested_provider_type(request_payload),
         state="queued",
         created_at=now,
         updated_at=now,
@@ -692,13 +704,14 @@ async def find_ticket(ticket_id: str, db: Session = Depends(get_db)) -> TicketRe
             last_sync_operation=sync_op,
         )
 
-    mixer = get_mixer(settings.active_provider)
+    provider = str(ticket.provider_type or settings.active_provider or "").strip().lower()
+    mixer = get_mixer(provider)
     provider_response = await mixer.process_request("search", search_payload)
     if not isinstance(provider_response, dict):
         provider_response = {"success": False, "error": "Provider returned non-dict response"}
 
     matched_ticket = _select_provider_ticket(
-        settings.active_provider,
+        provider,
         ticket.provider_ticket_id,
         provider_response,
     )

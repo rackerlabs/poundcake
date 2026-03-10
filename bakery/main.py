@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, Response
 import structlog
 
 from bakery import __version__
+from bakery.api.communications import router as communications_router
 from bakery.config import settings
 from bakery.api.health import router as health_router
 from bakery.api.mixers import router as mixers_router
@@ -73,10 +74,16 @@ tags_metadata = [
         "description": "Health check and readiness probes.",
     },
     {
+        "name": "communications",
+        "description": (
+            "Submit and query provider-agnostic communications. "
+            "Mutating endpoints return operation handles and are processed asynchronously."
+        ),
+    },
+    {
         "name": "tickets",
         "description": (
-            "Submit and query logical tickets and ticket operations. "
-            "Mutating endpoints return operation handles and are processed asynchronously."
+            "Legacy ticket-shaped compatibility routes for communication operations."
         ),
     },
     {
@@ -95,13 +102,13 @@ app = FastAPI(
     description=(
         "PoundCake ticketing system integration service.\n\n"
         "Bakery acts as a translation layer between the PoundCake API and "
-        "external ticketing systems (ServiceNow, Jira, GitHub Issues, "
-        "PagerDuty, Rackspace Core). It receives generic ticket requests, "
+        "external communication systems (ServiceNow, Jira, GitHub Issues, "
+        "PagerDuty, Rackspace Core, Teams, Discord). It receives generic communication requests, "
         "queues operations, and processes them asynchronously via worker(s).\n\n"
         "## Request Flow\n\n"
-        "1. `POST /api/v1/tickets` - Submit create request (returns 202 with UUID handles)\n"
-        "2. `GET /api/v1/operations/{operation_id}` - Poll operation status\n"
-        "3. `GET /api/v1/tickets/{ticket_id}` - Read logical ticket state\n"
+        "1. `POST /api/v1/communications` - Submit open request (returns 202 with UUID handles)\n"
+        "2. `GET /api/v1/communications/operations/{operation_id}` - Poll operation status\n"
+        "3. `GET /api/v1/communications/{communication_id}` - Read logical communication state\n"
     ),
     version=__version__,
     lifespan=lifespan,
@@ -144,6 +151,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 # Include routers
 app.include_router(health_router, prefix=settings.api_prefix, tags=["health"])
+app.include_router(communications_router, prefix=settings.api_prefix, tags=["communications"])
 app.include_router(tickets_router, prefix=settings.api_prefix, tags=["tickets"])
 app.include_router(mixers_router, prefix=settings.api_prefix, tags=["mixers"])
 

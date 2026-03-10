@@ -22,7 +22,9 @@ from api.types import (
     SuppressionMatcherOperator,
     RunPhase,
     DishRunPhase,
+    RunCondition,
     ExecutionPurpose,
+    RemediationOutcome,
 )
 
 # =============================================================================
@@ -63,6 +65,7 @@ class IngredientBase(BaseModel):
     """Base schema for Ingredient creation/updates."""
 
     execution_target: str = Field(..., max_length=100)
+    destination_target: Optional[str] = Field(default="", max_length=255)
     task_key_template: str = Field(..., max_length=255)
 
     execution_id: Optional[str] = Field(None, max_length=100)
@@ -128,6 +131,7 @@ class IngredientUpdate(BaseModel):
     """Schema for updating an ingredient (all fields optional)."""
 
     execution_target: Optional[str] = Field(None, max_length=100)
+    destination_target: Optional[str] = Field(None, max_length=255)
     task_key_template: Optional[str] = Field(None, max_length=255)
     execution_id: Optional[str] = Field(None, max_length=100)
     action_id: Optional[str] = Field(
@@ -209,6 +213,7 @@ class RecipeIngredientBase(BaseModel):
     depth: int = Field(default=0, ge=0)
     execution_parameters_override: Optional[Dict[str, Any]] = None
     run_phase: RunPhase = Field(default="both")
+    run_condition: RunCondition = Field(default="always")
 
 
 class RecipeIngredientCreate(RecipeIngredientBase):
@@ -234,6 +239,7 @@ class RecipeBase(BaseModel):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     enabled: bool = True
+    clear_timeout_sec: Optional[int] = Field(default=None, gt=0)
 
 
 class RecipeCreate(RecipeBase):
@@ -248,6 +254,7 @@ class RecipeUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     enabled: Optional[bool] = None
+    clear_timeout_sec: Optional[int] = Field(default=None, gt=0)
 
 
 class RecipeResponse(RecipeBase):
@@ -345,6 +352,11 @@ class OrderBase(BaseModel):
     bakery_last_error: Optional[str] = None
     bakery_comms_id: Optional[str] = Field(None, max_length=36)
     fingerprint_when_active: Optional[str] = Field(None, max_length=255)
+    remediation_outcome: RemediationOutcome = "pending"
+    clear_timeout_sec: Optional[int] = Field(default=None, ge=1)
+    clear_deadline_at: Optional[datetime] = None
+    clear_timed_out_at: Optional[datetime] = None
+    auto_close_eligible: bool = False
 
 
 class OrderCreate(OrderBase):
@@ -372,6 +384,11 @@ class OrderUpdate(BaseModel):
     bakery_permanent_failure: Optional[bool] = None
     bakery_last_error: Optional[str] = None
     fingerprint_when_active: Optional[str] = Field(None, max_length=255)
+    remediation_outcome: Optional[RemediationOutcome] = None
+    clear_timeout_sec: Optional[int] = Field(default=None, ge=1)
+    clear_deadline_at: Optional[datetime] = None
+    clear_timed_out_at: Optional[datetime] = None
+    auto_close_eligible: Optional[bool] = None
 
 
 class OrderResponse(OrderBase):
@@ -386,6 +403,7 @@ class OrderResponse(OrderBase):
     annotations: Optional[Dict[str, Any]] = None
     raw_data: Optional[Dict[str, Any]] = None
     ends_at: Optional[datetime] = None
+    communications: List["OrderCommunicationResponse"] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -400,6 +418,7 @@ class DishIngredientUpsert(BaseModel):
     task_key: Optional[str] = None
     execution_engine: Optional[str] = None
     execution_target: Optional[str] = None
+    destination_target: Optional[str] = None
     execution_payload: Optional[Dict[str, Any]] = None
     execution_parameters: Optional[Dict[str, Any]] = None
     execution_status: Optional[str] = None
@@ -430,6 +449,7 @@ class DishIngredientResponse(BaseModel):
     task_key: Optional[str] = None
     execution_engine: Optional[str] = None
     execution_target: Optional[str] = None
+    destination_target: Optional[str] = None
     execution_ref: Optional[str] = None
     execution_payload: Optional[Dict[str, Any]] = None
     execution_parameters: Optional[Dict[str, Any]] = None
@@ -452,6 +472,27 @@ class OrderDetailResponse(OrderResponse):
     """Schema for detailed order responses (includes dishes)."""
 
     dishes: List[DishResponse] = []
+
+
+class OrderCommunicationBase(BaseModel):
+    execution_target: str = Field(..., max_length=100)
+    destination_target: str = Field(default="", max_length=255)
+    bakery_ticket_id: Optional[str] = Field(default=None, max_length=36)
+    bakery_operation_id: Optional[str] = Field(default=None, max_length=36)
+    lifecycle_state: str = Field(default="pending", max_length=32)
+    remote_state: Optional[str] = Field(default=None, max_length=64)
+    writable: bool = True
+    reopenable: bool = False
+    last_error: Optional[str] = None
+
+
+class OrderCommunicationResponse(OrderCommunicationBase):
+    id: int
+    order_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IncidentTimelineEvent(BaseModel):
@@ -581,6 +622,11 @@ class BakeryOperationRecord(BaseModel):
     ticket_id: Optional[str] = None
     operation_id: Optional[str] = None
     status: Optional[str] = None
+    execution_target: Optional[str] = None
+    destination_target: Optional[str] = None
+    remote_state: Optional[str] = None
+    writable: Optional[bool] = None
+    reopenable: Optional[bool] = None
     updated_at: Optional[datetime] = None
     details: Optional[Dict[str, Any]] = None
 

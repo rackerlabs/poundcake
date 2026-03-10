@@ -64,6 +64,35 @@ function recipeIngredientRow(item = null, disabled = false) {
   onSuccess.value = item?.on_success || "continue";
   onSuccess.disabled = disabled;
 
+  const runPhase = el(
+    "select",
+    {},
+    [
+      el("option", { attrs: { value: "firing" }, text: "firing" }),
+      el("option", { attrs: { value: "escalation" }, text: "escalation" }),
+      el("option", { attrs: { value: "resolving" }, text: "resolving" }),
+      el("option", { attrs: { value: "both" }, text: "both" }),
+    ],
+  );
+  runPhase.value = item?.run_phase || "both";
+  runPhase.disabled = disabled;
+
+  const runCondition = el(
+    "select",
+    {},
+    [
+      el("option", { attrs: { value: "always" }, text: "always" }),
+      el("option", { attrs: { value: "remediation_failed" }, text: "remediation_failed" }),
+      el("option", { attrs: { value: "clear_timeout_expired" }, text: "clear_timeout_expired" }),
+      el("option", { attrs: { value: "resolved_after_success" }, text: "resolved_after_success" }),
+      el("option", { attrs: { value: "resolved_after_failure" }, text: "resolved_after_failure" }),
+      el("option", { attrs: { value: "resolved_after_no_remediation" }, text: "resolved_after_no_remediation" }),
+      el("option", { attrs: { value: "resolved_after_timeout" }, text: "resolved_after_timeout" }),
+    ],
+  );
+  runCondition.value = item?.run_condition || "always";
+  runCondition.disabled = disabled;
+
   const advanced = el("div", { className: "inline-actions" });
   const parallelInput = el("input", {
     attrs: {
@@ -115,6 +144,8 @@ function recipeIngredientRow(item = null, disabled = false) {
   wrapper.appendChild(ingredientSelect);
   wrapper.appendChild(stepOrder);
   wrapper.appendChild(onSuccess);
+  wrapper.appendChild(runPhase);
+  wrapper.appendChild(runCondition);
   wrapper.appendChild(advanced);
   wrapper.appendChild(remove);
 
@@ -128,12 +159,14 @@ function gatherRecipeIngredients() {
   );
 
   return rows.map((row) => {
-    const [ingredientSelect, stepOrder, onSuccess, advanced] = row.children;
+    const [ingredientSelect, stepOrder, onSuccess, runPhase, runCondition, advanced] = row.children;
     const [parallelInput, depthInput, paramsInput] = advanced.querySelectorAll("input");
     return {
       ingredient_id: asInt(ingredientSelect.value, 0),
       step_order: asInt(stepOrder.value, 1),
       on_success: onSuccess.value || "continue",
+      run_phase: runPhase.value || "both",
+      run_condition: runCondition.value || "always",
       parallel_group: asInt(parallelInput.value, 0),
       depth: asInt(depthInput.value, 0),
       execution_parameters_override: parseOptionalJson(
@@ -151,6 +184,7 @@ function resetRecipeForm() {
   $("#recipe-name").disabled = false;
   $("#recipe-description").value = "";
   $("#recipe-enabled").value = "true";
+  $("#recipe-clear-timeout").value = "";
   $("#recipe-source-type").value = "undefined";
   $("#recipe-workflow-id").value = "";
   $("#recipe-workflow-payload").value = "";
@@ -167,6 +201,7 @@ function fillRecipeForm(recipe) {
   $("#recipe-name").disabled = true;
   $("#recipe-description").value = recipe.description || "";
   $("#recipe-enabled").value = String(Boolean(recipe.enabled));
+  $("#recipe-clear-timeout").value = recipe.clear_timeout_sec || "";
   $("#recipe-source-type").value = "undefined";
   $("#recipe-workflow-id").value = "";
   $("#recipe-workflow-payload").value = "";
@@ -200,6 +235,7 @@ function renderRecipeDetail(recipe) {
   appendLabeledValue(detail, "ID", recipe.id);
   appendLabeledValue(detail, "Name", recipe.name);
   appendLabeledValue(detail, "Enabled", String(Boolean(recipe.enabled)));
+  appendLabeledValue(detail, "Clear Timeout", recipe.clear_timeout_sec || "-");
   appendLabeledValue(
     detail,
     "Ingredient Links",
@@ -227,7 +263,7 @@ function renderRecipeDetail(recipe) {
             el("div", { text: `#${item.step_order} ${ingredientName}` }),
             el("div", {
               className: "muted",
-              text: `on_success=${item.on_success} parallel=${item.parallel_group} depth=${item.depth}`,
+              text: `phase=${item.run_phase || "both"} condition=${item.run_condition || "always"} on_success=${item.on_success} parallel=${item.parallel_group} depth=${item.depth}`,
             }),
           ]),
         );
@@ -342,6 +378,7 @@ async function saveRecipe(event) {
     name,
     description: ($("#recipe-description")?.value || "").trim() || null,
     enabled: ($("#recipe-enabled")?.value || "true") === "true",
+    clear_timeout_sec: asInt($("#recipe-clear-timeout")?.value, 0) || null,
   };
 
   if (!editingRecipeId) {

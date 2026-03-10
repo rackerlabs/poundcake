@@ -138,6 +138,10 @@
                   </select>
                 </div>
                 <div class="form-field">
+                  <label for="recipe-clear-timeout">Clear Timeout (sec)</label>
+                  <input id="recipe-clear-timeout" type="number" min="1" placeholder="Optional">
+                </div>
+                <div class="form-field">
                   <label for="recipe-workflow-id">Workflow ID (optional)</label>
                   <input id="recipe-workflow-id" type="text">
                 </div>
@@ -205,8 +209,12 @@
             <form id="ingredient-form">
               <div class="form-grid">
                 <div class="form-field">
-                  <label for="ingredient-task-id">Task ID</label>
+                  <label for="ingredient-task-id">Execution Target</label>
                   <input id="ingredient-task-id" type="text" required>
+                </div>
+                <div class="form-field">
+                  <label for="ingredient-destination-target">Destination Target</label>
+                  <input id="ingredient-destination-target" type="text" placeholder="queue/project/channel/thread">
                 </div>
                 <div class="form-field">
                   <label for="ingredient-task-name">Task Name</label>
@@ -287,8 +295,8 @@
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Task ID</th>
-                <th>Task Name</th>
+                <th>Route</th>
+                <th>Task Key</th>
                 <th>Execution ID</th>
                 <th>Blocking</th>
                 <th>Expected/Timeout</th>
@@ -317,7 +325,7 @@
             <div id="incident-order-summary"></div>
           </article>
           <article class="card">
-            <h3>Bakery</h3>
+            <h3>Communications</h3>
             <div id="incident-bakery-summary"></div>
           </article>
         </div>
@@ -428,7 +436,7 @@
       </section>
 
       <section id="tab-ticketing" class="panel" aria-labelledby="ticketing-title">
-        <h2 class="section-title" id="ticketing-title">Ticketing / Bakery</h2>
+        <h2 class="section-title" id="ticketing-title">Communications / Bakery</h2>
 
         <div class="filter-bar">
           <label for="ticketing-status-filter" class="muted">Status</label>
@@ -448,6 +456,7 @@
               <tr>
                 <th>Source</th>
                 <th>Reference</th>
+                <th>Route</th>
                 <th>Ticket ID</th>
                 <th>Operation ID</th>
                 <th>Status</th>

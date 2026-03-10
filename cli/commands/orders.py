@@ -24,7 +24,9 @@ def orders() -> None:
 @click.option(
     "--processing-status",
     "-s",
-    type=click.Choice(["new", "processing", "complete", "failed", "canceled"]),
+    type=click.Choice(
+        ["new", "processing", "waiting_clear", "escalation", "resolving", "complete", "failed", "canceled"]
+    ),
     help="Filter by processing status",
 )
 @click.option(
@@ -77,10 +79,28 @@ def get(ctx: click.Context, order_id: int) -> None:
 
 
 @orders.command()
+@click.argument("order_id", type=int)
+@click.pass_context
+def timeline(ctx: click.Context, order_id: int) -> None:
+    """Get incident timeline details for an order."""
+    client: PoundCakeClient = ctx.obj["client"]
+    format: str = ctx.obj["format"]
+
+    try:
+        payload = client.get_order_timeline(order_id)
+        print_output(payload, format)
+    except Exception as e:
+        print_error(f"Failed to get order timeline: {e}")
+        raise click.Abort()
+
+
+@orders.command()
 @click.option(
     "--processing-status",
     "-s",
-    type=click.Choice(["new", "processing", "complete", "failed", "canceled"]),
+    type=click.Choice(
+        ["new", "processing", "waiting_clear", "escalation", "resolving", "complete", "failed", "canceled"]
+    ),
     help="Filter by processing status",
 )
 @click.option(

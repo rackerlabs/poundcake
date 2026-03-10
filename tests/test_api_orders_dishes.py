@@ -53,6 +53,8 @@ def mock_db_session():
     with patch("api.core.database.SessionLocal") as mock_session:
         mock_db = AsyncMock()
         mock_db.begin = Mock(return_value=_BeginContext())
+        mock_db.add = Mock(return_value=None)
+        mock_db.execute = AsyncMock(return_value=ScalarResult(first=None, all_=[]))
         mock_db.refresh = AsyncMock(return_value=None)
         mock_db.flush = AsyncMock(return_value=None)
         mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
@@ -62,13 +64,18 @@ def mock_db_session():
 
 def _make_order(order_id: int = 1, status: str = "new") -> Order:
     now = datetime.now(timezone.utc)
-    return Order(
+    order = Order(
         id=order_id,
         req_id="REQ-1",
         fingerprint="fp-1",
         alert_status="firing",
         processing_status=status,
         is_active=True,
+        remediation_outcome="pending",
+        clear_timeout_sec=None,
+        clear_deadline_at=None,
+        clear_timed_out_at=None,
+        auto_close_eligible=False,
         alert_group_name="group",
         severity="high",
         instance="host1",
@@ -84,6 +91,8 @@ def _make_order(order_id: int = 1, status: str = "new") -> Order:
         created_at=now,
         updated_at=now,
     )
+    order.communications = []
+    return order
 
 
 def _make_dish(dish_id: int = 1, status: str = "new", run_phase: str = "firing") -> Dish:
@@ -116,6 +125,7 @@ def _make_dish_ingredient(ingredient_id: int = 1) -> DishIngredient:
         dish_id=1,
         recipe_ingredient_id=None,
         execution_target="core.local",
+        destination_target="",
         execution_ref="st2-1",
         execution_status="succeeded",
         started_at=now,
@@ -137,6 +147,7 @@ def _make_recipe(recipe_id: int = 1, name: str = "group") -> Recipe:
         name=name,
         description=None,
         enabled=True,
+        clear_timeout_sec=None,
         created_at=now,
         updated_at=now,
         deleted=False,
@@ -157,7 +168,8 @@ def _make_recipe_step(
         id=ingredient_id,
         execution_engine=engine,
         execution_purpose=purpose,
-        execution_target="core.local" if engine == "stackstorm" else "core",
+        execution_target="core.local" if engine == "stackstorm" else "rackspace_core",
+        destination_target="",
         task_key_template="local" if engine == "stackstorm" else "core",
         execution_payload=None,
         execution_parameters={},
@@ -304,7 +316,7 @@ def test_dish_claim__when_claimable__returns_dish(client, mock_db_session):
     assert data["id"] == dish.id
 
 
-def test_dish_update__when_firing_terminal__moves_order_to_resolving(client, mock_db_session):
+def test_dish_update__when_firing_complete__moves_order_to_waiting_clear(client, mock_db_session):
     dish = _make_dish(status="processing")
     order = _make_order(status="processing")
     mock_db_session.execute = AsyncMock(
@@ -313,13 +325,27 @@ def test_dish_update__when_firing_terminal__moves_order_to_resolving(client, moc
 
     response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
     assert response.status_code == 200
-    assert order.processing_status == "resolving"
+    assert order.processing_status == "waiting_clear"
     assert order.is_active is True
+    assert order.remediation_outcome == "succeeded"
+    assert order.auto_close_eligible is True
 
 
-@pytest.mark.parametrize("dish_terminal_status", ["complete", "failed", "canceled"])
-def test_dish_update__firing_terminal__keeps_order_non_terminal_until_resolve_phase(
-    client, mock_db_session, dish_terminal_status: str
+@pytest.mark.parametrize(
+    ("dish_terminal_status", "expected_order_status", "expected_outcome", "expected_auto_close"),
+    [
+        ("complete", "waiting_clear", "succeeded", True),
+        ("failed", "escalation", "failed", False),
+        ("canceled", "escalation", "failed", False),
+    ],
+)
+def test_dish_update__firing_terminal__transitions_to_waiting_clear_or_escalation(
+    client,
+    mock_db_session,
+    dish_terminal_status: str,
+    expected_order_status: str,
+    expected_outcome: str,
+    expected_auto_close: bool,
 ):
     dish = _make_dish(status="processing", run_phase="firing")
     order = _make_order(status="processing")
@@ -330,8 +356,10 @@ def test_dish_update__firing_terminal__keeps_order_non_terminal_until_resolve_ph
     response = client.put("/api/v1/dishes/1", json={"processing_status": dish_terminal_status})
 
     assert response.status_code == 200
-    assert order.processing_status == "resolving"
+    assert order.processing_status == expected_order_status
     assert order.is_active is True
+    assert order.remediation_outcome == expected_outcome
+    assert order.auto_close_eligible is expected_auto_close
 
 
 @pytest.mark.parametrize(
@@ -358,6 +386,7 @@ def test_dish_update__catch_all_recipe_terminal__keeps_order_active(client, mock
     dish = _make_dish(status="processing")
     dish.recipe = _make_recipe(name="fallback-recipe")
     order = _make_order(status="processing")
+    order.remediation_outcome = "none"
     mock_db_session.execute = AsyncMock(
         side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
     )
@@ -372,8 +401,9 @@ def test_dish_update__catch_all_recipe_terminal__keeps_order_active(client, mock
         response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
 
     assert response.status_code == 200
-    assert order.processing_status == "processing"
+    assert order.processing_status == "waiting_clear"
     assert order.is_active is True
+    assert order.auto_close_eligible is False
 
 
 @pytest.mark.parametrize("terminal_status", ["canceled", "failed"])
@@ -475,7 +505,7 @@ def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_stat
     assert order.is_active is True
 
 
-def test_order_dispatch__resolving_stackstorm_only_recipe__injects_fallback_bakery_comms(
+def test_order_dispatch__resolving_stackstorm_only_recipe__does_not_inject_fallback_bakery_comms(
     client, mock_db_session
 ):
     order = _make_order(status="resolving")
@@ -486,19 +516,6 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__injects_fallback_bake
             _make_recipe_step(ri_id=101, ingredient_id=201, run_phase="both", engine="stackstorm")
         ],
     )
-    fallback_recipe = SimpleNamespace(
-        id=22,
-        name="fallback-recipe",
-        recipe_ingredients=[
-            _make_recipe_step(
-                ri_id=301,
-                ingredient_id=401,
-                run_phase="resolving",
-                engine="bakery",
-                purpose="comms",
-            )
-        ],
-    )
 
     mock_db_session.execute = AsyncMock(
         side_effect=[
@@ -506,7 +523,6 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__injects_fallback_bake
             ScalarResult(first=group_recipe),  # group recipe hit
             ScalarResult(first=None),  # active dish lookup for phase
             ScalarResult(all_=[]),  # existing dish ingredients
-            ScalarResult(first=fallback_recipe),  # fallback recipe hit
         ]
     )
 
@@ -526,10 +542,8 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__injects_fallback_bake
     assert body["run_phase"] == "resolving"
     added = [call.args[0] for call in mock_db_session.add.call_args_list]
     seeded = [row for row in added if isinstance(row, DishIngredient)]
-    assert len(seeded) == 1
-    assert seeded[0].execution_engine == "bakery"
-    assert seeded[0].recipe_ingredient_id == 301
-    ensure_fallback.assert_awaited_once()
+    assert seeded == []
+    ensure_fallback.assert_not_called()
 
 
 def test_order_dispatch__resolving_with_recipe_bakery_comms__does_not_inject_fallback(

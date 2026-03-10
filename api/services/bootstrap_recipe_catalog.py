@@ -12,12 +12,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.logging import get_logger
 from api.models.models import Ingredient, Recipe, RecipeIngredient
+from api.services.communications import (
+    RUN_CONDITIONS,
+    RUN_PHASES,
+    normalize_destination_target,
+    normalize_destination_type,
+    normalize_run_condition,
+)
 
 logger = get_logger(__name__)
 
 CATALOG_API_VERSION = "poundcake/v1"
 CATALOG_KIND = "RecipeCatalogEntry"
-VALID_RUN_PHASES = {"firing", "resolving", "both"}
+VALID_RUN_PHASES = RUN_PHASES
 VALID_ON_SUCCESS = {"continue", "stop"}
 
 
@@ -75,6 +82,15 @@ def _load_recipe_entry(path: Path) -> tuple[dict[str, Any], list[str]]:
     enabled = recipe.get("enabled", True)
     if not isinstance(enabled, bool):
         errors.append(f"{path.name}: recipe.enabled must be a boolean")
+    clear_timeout_sec = recipe.get("clear_timeout_sec")
+    if clear_timeout_sec is not None:
+        try:
+            clear_timeout_sec = int(clear_timeout_sec)
+        except Exception:  # noqa: BLE001
+            errors.append(f"{path.name}: recipe.clear_timeout_sec must be an integer when provided")
+        else:
+            if clear_timeout_sec < 1:
+                errors.append(f"{path.name}: recipe.clear_timeout_sec must be >= 1")
 
     step_entries = recipe.get("recipe_ingredients", [])
     if not isinstance(step_entries, list) or len(step_entries) == 0:
@@ -98,6 +114,7 @@ def _load_recipe_entry(path: Path) -> tuple[dict[str, Any], list[str]]:
         "name": name,
         "description": description,
         "enabled": enabled,
+        "clear_timeout_sec": clear_timeout_sec,
         "recipe_ingredients": recipe_ingredients,
     }, []
 
@@ -109,10 +126,18 @@ def _validate_recipe_step(
 ) -> tuple[dict[str, Any], str | None]:
     engine = entry.get("execution_engine")
     target = entry.get("execution_target")
+    destination_target = normalize_destination_target(entry.get("destination_target"))
+    task_key_template = entry.get("task_key_template")
     if not isinstance(engine, str) or not engine:
         return {}, f"{filename}: recipe_ingredients[{idx}].execution_engine is required"
     if not isinstance(target, str) or not target:
         return {}, f"{filename}: recipe_ingredients[{idx}].execution_target is required"
+    if engine == "bakery":
+        target = normalize_destination_type(target)
+    if task_key_template is not None and (
+        not isinstance(task_key_template, str) or not task_key_template
+    ):
+        return {}, f"{filename}: recipe_ingredients[{idx}].task_key_template must be a string"
 
     try:
         step_order = int(entry.get("step_order", 1))
@@ -151,15 +176,25 @@ def _validate_recipe_step(
             f"{filename}: recipe_ingredients[{idx}].execution_parameters_override must be "
             "an object when provided",
         )
+    run_condition = normalize_run_condition(entry.get("run_condition"))
+    if run_condition not in RUN_CONDITIONS:
+        return (
+            {},
+            f"{filename}: recipe_ingredients[{idx}].run_condition must be one of: "
+            f"{', '.join(sorted(RUN_CONDITIONS))}",
+        )
 
     return {
         "execution_engine": engine,
         "execution_target": target,
+        "destination_target": destination_target,
+        "task_key_template": task_key_template,
         "step_order": step_order,
         "on_success": on_success,
         "parallel_group": parallel_group,
         "depth": depth,
         "run_phase": run_phase,
+        "run_condition": run_condition,
         "execution_parameters_override": override,
     }, None
 
@@ -183,25 +218,54 @@ async def upsert_bootstrap_recipe_catalog(
         for step in recipe["recipe_ingredients"]:
             refs.add((step["execution_engine"], step["execution_target"]))
 
-    ingredient_map: dict[tuple[str, str], Ingredient] = {}
+    ingredient_map: dict[tuple[str, str, str, str], Ingredient] = {}
+    ingredient_candidates: dict[tuple[str, str], list[Ingredient]] = {}
     if refs:
         result = await db.execute(
             select(Ingredient).where(
                 tuple_(Ingredient.execution_engine, Ingredient.execution_target).in_(list(refs))
             )
         )
-        ingredient_map = {
-            (row.execution_engine, row.execution_target): row for row in result.scalars().all()
-        }
+        for row in result.scalars().all():
+            exact_key = (
+                row.execution_engine,
+                row.execution_target,
+                normalize_destination_target(getattr(row, "destination_target", "")),
+                getattr(row, "task_key_template", "") or "",
+            )
+            ingredient_map[exact_key] = row
+            ingredient_candidates.setdefault((row.execution_engine, row.execution_target), []).append(row)
 
     # Any missing ingredient reference is a hard per-entry validation failure.
     valid_recipes: list[dict[str, Any]] = []
     for recipe in recipes:
         missing_refs: list[str] = []
         for step in recipe["recipe_ingredients"]:
-            key = (step["execution_engine"], step["execution_target"])
-            if key not in ingredient_map:
-                missing_refs.append(f"{key[0]}:{key[1]}")
+            exact_key = (
+                step["execution_engine"],
+                step["execution_target"],
+                step["destination_target"],
+                step["task_key_template"] or "",
+            )
+            ingredient = None
+            if step["task_key_template"] is not None:
+                ingredient = ingredient_map.get(exact_key)
+            else:
+                candidates = ingredient_candidates.get(
+                    (step["execution_engine"], step["execution_target"]),
+                    [],
+                )
+                if len(candidates) == 1:
+                    ingredient = candidates[0]
+                elif len(candidates) > 1:
+                    missing_refs.append(
+                        f"{step['execution_engine']}:{step['execution_target']} (ambiguous; add task_key_template)"
+                    )
+                    continue
+            if ingredient is None:
+                missing_refs.append(f"{step['execution_engine']}:{step['execution_target']}")
+                continue
+            step["resolved_ingredient_id"] = ingredient.id
         if missing_refs:
             load_errors.append(
                 f"recipe '{recipe['name']}': missing ingredient refs: {', '.join(sorted(missing_refs))}"
@@ -225,6 +289,7 @@ async def upsert_bootstrap_recipe_catalog(
                 name=recipe_name,
                 description=payload["description"],
                 enabled=payload["enabled"],
+                clear_timeout_sec=payload["clear_timeout_sec"],
                 deleted=False,
                 deleted_at=None,
                 updated_at=now,
@@ -240,6 +305,9 @@ async def upsert_bootstrap_recipe_catalog(
             if recipe.enabled != payload["enabled"]:
                 recipe.enabled = payload["enabled"]
                 changed = True
+            if recipe.clear_timeout_sec != payload["clear_timeout_sec"]:
+                recipe.clear_timeout_sec = payload["clear_timeout_sec"]
+                changed = True
             if recipe.deleted is True or recipe.deleted_at is not None:
                 recipe.deleted = False
                 recipe.deleted_at = None
@@ -252,18 +320,17 @@ async def upsert_bootstrap_recipe_catalog(
 
         await db.execute(delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id))
         for step in sorted(payload["recipe_ingredients"], key=lambda s: s["step_order"]):
-            key = (step["execution_engine"], step["execution_target"])
-            ingredient = ingredient_map[key]
             db.add(
                 RecipeIngredient(
                     recipe_id=recipe.id,
-                    ingredient_id=ingredient.id,
+                    ingredient_id=step["resolved_ingredient_id"],
                     step_order=step["step_order"],
                     on_success=step["on_success"],
                     parallel_group=step["parallel_group"],
                     depth=step["depth"],
                     execution_parameters_override=step["execution_parameters_override"],
                     run_phase=step["run_phase"],
+                    run_condition=step["run_condition"],
                 )
             )
 

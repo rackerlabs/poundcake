@@ -1,4 +1,4 @@
-"""Bakery client for PoundCake ticket operations."""
+"""Bakery client for PoundCake communication operations."""
 
 from __future__ import annotations
 
@@ -103,6 +103,152 @@ async def _request(
     return response.json()
 
 
+def _as_ticket_accepted(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    communication_id = str(normalized.get("communication_id") or "").strip()
+    if communication_id:
+        normalized.setdefault("ticket_id", communication_id)
+    return normalized
+
+
+def _as_ticket_resource(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    communication_id = str(normalized.get("communication_id") or "").strip()
+    provider_reference_id = str(normalized.get("provider_reference_id") or "").strip()
+    if communication_id:
+        normalized.setdefault("ticket_id", communication_id)
+    if provider_reference_id:
+        normalized.setdefault("provider_ticket_id", provider_reference_id)
+    if "communication_data" in normalized and "ticket_data" not in normalized:
+        normalized["ticket_data"] = normalized["communication_data"]
+    return normalized
+
+
+def _as_ticket_operation(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    communication_id = str(normalized.get("communication_id") or "").strip()
+    if communication_id:
+        normalized.setdefault("ticket_id", communication_id)
+    return normalized
+
+
+async def open_communication(req_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return await open_communication_with_key(req_id=req_id, payload=payload, idempotency_key=None)
+
+
+async def open_communication_with_key(
+    req_id: str, payload: dict[str, Any], idempotency_key: str | None
+) -> dict[str, Any]:
+    return await _request(
+        "open",
+        "POST",
+        "/api/v1/communications",
+        payload=payload,
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "open"),
+    )
+
+
+async def close_communication(
+    req_id: str, communication_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    return await close_communication_with_key(
+        req_id=req_id,
+        communication_id=communication_id,
+        payload=payload,
+        idempotency_key=None,
+    )
+
+
+async def close_communication_with_key(
+    req_id: str,
+    communication_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None,
+) -> dict[str, Any]:
+    return await _request(
+        "close",
+        "POST",
+        f"/api/v1/communications/{communication_id}/close",
+        payload=payload,
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "close"),
+    )
+
+
+async def update_communication(
+    req_id: str, communication_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    return await update_communication_with_key(
+        req_id=req_id,
+        communication_id=communication_id,
+        payload=payload,
+        idempotency_key=None,
+    )
+
+
+async def update_communication_with_key(
+    req_id: str,
+    communication_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None,
+) -> dict[str, Any]:
+    return await _request(
+        "update",
+        "PATCH",
+        f"/api/v1/communications/{communication_id}",
+        payload=payload,
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "update"),
+    )
+
+
+async def notify_communication(
+    req_id: str, communication_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    return await notify_communication_with_key(
+        req_id=req_id,
+        communication_id=communication_id,
+        payload=payload,
+        idempotency_key=None,
+    )
+
+
+async def notify_communication_with_key(
+    req_id: str,
+    communication_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None,
+) -> dict[str, Any]:
+    notify_payload = dict(payload)
+    if "message" not in notify_payload and "comment" in notify_payload:
+        notify_payload["message"] = notify_payload["comment"]
+    return await _request(
+        "notify",
+        "POST",
+        f"/api/v1/communications/{communication_id}/notifications",
+        payload=notify_payload,
+        idempotency_key=idempotency_key or build_idempotency_key(req_id, "notify"),
+    )
+
+
+async def get_communication(communication_id: str) -> dict[str, Any]:
+    return await _request("get_communication", "GET", f"/api/v1/communications/{communication_id}")
+
+
+async def sync_communication(communication_id: str) -> dict[str, Any]:
+    return await _request(
+        "sync_communication",
+        "POST",
+        f"/api/v1/communications/{communication_id}/sync",
+    )
+
+
+async def get_communication_operation(operation_id: str) -> dict[str, Any]:
+    return await _request(
+        "get_communication_operation",
+        "GET",
+        f"/api/v1/communications/operations/{operation_id}",
+    )
+
+
 async def create_ticket(req_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     return await create_ticket_with_key(req_id=req_id, payload=payload, idempotency_key=None)
 
@@ -110,12 +256,12 @@ async def create_ticket(req_id: str, payload: dict[str, Any]) -> dict[str, Any]:
 async def create_ticket_with_key(
     req_id: str, payload: dict[str, Any], idempotency_key: str | None
 ) -> dict[str, Any]:
-    return await _request(
-        "create",
-        "POST",
-        "/api/v1/tickets",
-        payload=payload,
-        idempotency_key=idempotency_key or build_idempotency_key(req_id, "create"),
+    return _as_ticket_accepted(
+        await open_communication_with_key(
+            req_id=req_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
     )
 
 
@@ -128,12 +274,13 @@ async def close_ticket(req_id: str, ticket_id: str, payload: dict[str, Any]) -> 
 async def close_ticket_with_key(
     req_id: str, ticket_id: str, payload: dict[str, Any], idempotency_key: str | None
 ) -> dict[str, Any]:
-    return await _request(
-        "close",
-        "POST",
-        f"/api/v1/tickets/{ticket_id}/close",
-        payload=payload,
-        idempotency_key=idempotency_key or build_idempotency_key(req_id, "close"),
+    return _as_ticket_accepted(
+        await close_communication_with_key(
+            req_id=req_id,
+            communication_id=ticket_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
     )
 
 
@@ -146,12 +293,13 @@ async def update_ticket(req_id: str, ticket_id: str, payload: dict[str, Any]) ->
 async def update_ticket_with_key(
     req_id: str, ticket_id: str, payload: dict[str, Any], idempotency_key: str | None
 ) -> dict[str, Any]:
-    return await _request(
-        "update",
-        "PATCH",
-        f"/api/v1/tickets/{ticket_id}",
-        payload=payload,
-        idempotency_key=idempotency_key or build_idempotency_key(req_id, "update"),
+    return _as_ticket_accepted(
+        await update_communication_with_key(
+            req_id=req_id,
+            communication_id=ticket_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
     )
 
 
@@ -167,25 +315,26 @@ async def add_ticket_comment_with_key(
     payload: dict[str, Any],
     idempotency_key: str | None,
 ) -> dict[str, Any]:
-    return await _request(
-        "comment",
-        "POST",
-        f"/api/v1/tickets/{ticket_id}/comments",
-        payload=payload,
-        idempotency_key=idempotency_key or build_idempotency_key(req_id, "comment"),
+    return _as_ticket_accepted(
+        await notify_communication_with_key(
+            req_id=req_id,
+            communication_id=ticket_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
     )
 
 
 async def get_operation(operation_id: str) -> dict[str, Any]:
-    return await _request("get_operation", "GET", f"/api/v1/operations/{operation_id}")
+    return _as_ticket_operation(await get_communication_operation(operation_id))
 
 
 async def get_ticket(ticket_id: str) -> dict[str, Any]:
-    return await _request("get_ticket", "GET", f"/api/v1/tickets/{ticket_id}")
+    return _as_ticket_resource(await get_communication(ticket_id))
 
 
 async def find_ticket(ticket_id: str) -> dict[str, Any]:
-    return await _request("find_ticket", "POST", f"/api/v1/tickets/{ticket_id}/find")
+    return _as_ticket_resource(await sync_communication(ticket_id))
 
 
 async def poll_operation(operation_id: str) -> dict[str, Any]:

@@ -68,6 +68,10 @@ class Settings:
         # PagerDuty
         self.pagerduty_api_key: Optional[str] = os.getenv("PAGERDUTY_API_KEY")
 
+        # Teams / Discord
+        self.teams_webhook_url: Optional[str] = os.getenv("TEAMS_WEBHOOK_URL")
+        self.discord_webhook_url: Optional[str] = os.getenv("DISCORD_WEBHOOK_URL")
+
         # Rackspace Core
         self.rackspace_core_url: Optional[str] = os.getenv(
             "RACKSPACE_CORE_URL", "https://ws.core.rackspace.com"

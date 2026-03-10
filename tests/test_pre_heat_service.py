@@ -218,7 +218,7 @@ async def test_pre_heat_resolved_updates_latest_inactive_unresolved_order():
 
 
 @pytest.mark.asyncio
-async def test_pre_heat_resolved_with_failed_order_leaves_ticket_open():
+async def test_pre_heat_resolved_with_failed_order_keeps_order_terminal():
     existing = _make_order(status="failed")
     existing.bakery_ticket_id = "ticket-1"
     db = AsyncMock()
@@ -237,26 +237,19 @@ async def test_pre_heat_resolved_with_failed_order_leaves_ticket_open():
         ]
     }
 
-    with (
-        patch("api.services.pre_heat.settings.bakery_enabled", True),
-        patch(
-            "api.services.pre_heat.find_first_matching_suppression",
-            new=AsyncMock(return_value=None),
-        ),
-        patch("api.services.pre_heat.add_ticket_comment", new=AsyncMock()) as add_comment,
-        patch("api.services.pre_heat.close_ticket", new=AsyncMock()) as close_ticket,
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
     ):
         result = await pre_heat(payload, db=db, req_id="REQ-1")
 
     assert result["status"] == "resolved"
-    add_comment.assert_awaited_once()
-    close_ticket.assert_not_awaited()
     assert existing.processing_status == "failed"
     assert existing.is_active is False
 
 
 @pytest.mark.asyncio
-async def test_pre_heat_resolved_with_complete_order_auto_closes_ticket():
+async def test_pre_heat_resolved_with_complete_order_keeps_order_terminal():
     existing = _make_order(status="complete")
     existing.is_active = False
     existing.bakery_ticket_id = "ticket-1"
@@ -282,34 +275,19 @@ async def test_pre_heat_resolved_with_complete_order_auto_closes_ticket():
         ]
     }
 
-    with (
-        patch("api.services.pre_heat.settings.bakery_enabled", True),
-        patch(
-            "api.services.pre_heat.find_first_matching_suppression",
-            new=AsyncMock(return_value=None),
-        ),
-        patch("api.services.pre_heat.add_ticket_comment", new=AsyncMock()) as add_comment,
-        patch(
-            "api.services.pre_heat.close_ticket",
-            new=AsyncMock(return_value={"operation_id": "op-1"}),
-        ) as close_ticket,
-        patch(
-            "api.services.pre_heat.poll_operation",
-            new=AsyncMock(return_value={"status": "succeeded"}),
-        ) as poll_operation,
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
     ):
         result = await pre_heat(payload, db=db, req_id="REQ-1")
 
     assert result["status"] == "resolved"
-    add_comment.assert_awaited_once()
-    close_ticket.assert_awaited_once()
-    poll_operation.assert_awaited_once()
     assert existing.processing_status == "complete"
     assert existing.is_active is False
 
 
 @pytest.mark.asyncio
-async def test_pre_heat_resolved_keeps_processing_when_clear_note_fails():
+async def test_pre_heat_resolved_processing_order_moves_to_resolving():
     existing = _make_order(status="processing")
     existing.bakery_ticket_id = "ticket-1"
     db = AsyncMock()
@@ -331,14 +309,9 @@ async def test_pre_heat_resolved_keeps_processing_when_clear_note_fails():
     }
 
     with (
-        patch("api.services.pre_heat.settings.bakery_enabled", True),
         patch(
             "api.services.pre_heat.find_first_matching_suppression",
             new=AsyncMock(return_value=None),
-        ),
-        patch(
-            "api.services.pre_heat.add_ticket_comment",
-            new=AsyncMock(side_effect=RuntimeError("comment failed")),
         ),
     ):
         result = await pre_heat(payload, db=db, req_id="REQ-1")
@@ -419,16 +392,10 @@ async def test_pre_heat_firing_suppressed_does_not_create_order():
 
 
 @pytest.mark.asyncio
-async def test_pre_heat_firing_reuses_previous_confirmed_solved_ticket():
-    previous = _make_order(status="complete")
-    previous.is_active = False
-    previous.bakery_ticket_id = "ticket-123"
-    previous.bakery_ticket_state = "confirmed_solved"
-    previous.bakery_permanent_failure = False
-
+async def test_pre_heat_firing_does_not_copy_previous_ticket_state():
     db = AsyncMock()
     db.begin = Mock(return_value=DummyBegin())
-    db.execute = AsyncMock(side_effect=[ScalarResult(first=None), ScalarResult(first=previous)])
+    db.execute = AsyncMock(return_value=ScalarResult(first=None))
     created: list[Order] = []
 
     def _add(order: Order) -> None:
@@ -452,16 +419,45 @@ async def test_pre_heat_firing_reuses_previous_confirmed_solved_ticket():
         ]
     }
 
-    with (
-        patch("api.services.pre_heat.settings.bakery_enabled", True),
-        patch(
-            "api.services.pre_heat.find_first_matching_suppression",
-            new=AsyncMock(return_value=None),
-        ),
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
     ):
         result = await pre_heat(payload, db=db, req_id="REQ-NEW")
 
     assert result["status"] == "created"
     assert result["order_id"] == 456
-    assert created[0].bakery_ticket_id == "ticket-123"
-    assert created[0].bakery_ticket_state == "confirmed_solved"
+    assert created[0].bakery_ticket_id is None
+    assert created[0].bakery_ticket_state is None
+    assert created[0].remediation_outcome == "pending"
+
+
+@pytest.mark.asyncio
+async def test_pre_heat_firing_reopens_resolving_order_for_redispatch():
+    existing = _make_order(status="resolving")
+    existing.alert_status = "resolved"
+    existing.ends_at = datetime.now(timezone.utc)
+
+    db = AsyncMock()
+    db.begin = Mock(return_value=DummyBegin())
+    db.execute = AsyncMock(return_value=ScalarResult(first=existing))
+
+    payload = {
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {"alertname": "CPUHigh", "instance": "host1"},
+                "annotations": {},
+                "fingerprint": "fp-1",
+            }
+        ]
+    }
+
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await pre_heat(payload, db=db, req_id="REQ-REDISPATCH")
+
+    assert result["status"] == "counter_incremented"
+    assert db.execute.await_count == 2

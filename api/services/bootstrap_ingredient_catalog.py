@@ -12,15 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.logging import get_logger
 from api.models.models import Ingredient
+from api.services.communications import (
+    DESTINATION_TYPES,
+    normalize_communication_operation,
+    normalize_destination_target,
+    normalize_destination_type,
+)
 
 logger = get_logger(__name__)
 
 CATALOG_API_VERSION = "poundcake/v1"
 CATALOG_KIND = "IngredientCatalog"
-CANONICAL_BAKERY_TARGETS = {
-    "core",
-    "jira",
-}
+CANONICAL_BAKERY_TARGETS = DESTINATION_TYPES
 LEGACY_BAKERY_TARGETS = {"tickets.create", "tickets.update", "tickets.comment", "tickets.close"}
 
 
@@ -67,12 +70,13 @@ def load_bootstrap_ingredient_catalog(
 
 
 def _validate_catalog_entry(entry: dict[str, Any], idx: int) -> tuple[dict[str, Any], str | None]:
-    target = entry.get("execution_target")
-    if not isinstance(target, str) or not target:
+    target = normalize_destination_type(entry.get("execution_target"))
+    if not target:
         return {}, f"ingredients[{idx}].execution_target is required"
     if target not in CANONICAL_BAKERY_TARGETS:
         allowed = ", ".join(sorted(CANONICAL_BAKERY_TARGETS))
         return {}, f"ingredients[{idx}].execution_target must be one of: {allowed}"
+    destination_target = normalize_destination_target(entry.get("destination_target"))
 
     engine = entry.get("execution_engine")
     if engine != "bakery":
@@ -96,11 +100,12 @@ def _validate_catalog_entry(entry: dict[str, Any], idx: int) -> tuple[dict[str, 
     execution_parameters = entry.get("execution_parameters")
     if execution_parameters is not None and not isinstance(execution_parameters, dict):
         return {}, f"ingredients[{idx}].execution_parameters must be an object when provided"
-    operation = str((execution_parameters or {}).get("operation") or "").strip().lower()
-    if operation not in {"ticket_create", "ticket_update", "ticket_comment", "ticket_close"}:
+    operation = normalize_communication_operation((execution_parameters or {}).get("operation"))
+    if operation not in {"open", "notify", "update", "close"}:
         return (
             {},
             f"ingredients[{idx}].execution_parameters.operation must be one of: "
+            "open, notify, update, close, "
             "ticket_create, ticket_update, ticket_comment, ticket_close",
         )
 
@@ -110,6 +115,7 @@ def _validate_catalog_entry(entry: dict[str, Any], idx: int) -> tuple[dict[str, 
 
     payload = {
         "execution_target": target,
+        "destination_target": destination_target,
         "task_key_template": task_key_template,
         "execution_engine": "bakery",
         "execution_purpose": "comms",
@@ -158,14 +164,25 @@ async def upsert_bootstrap_bakery_ingredients(
             ),
         )
     )
-    existing_by_target = {row.execution_target: row for row in result.scalars().all()}
+    existing_by_target = {
+        (
+            row.execution_target,
+            normalize_destination_target(getattr(row, "destination_target", "")),
+            getattr(row, "task_key_template", "") or "",
+        ): row
+        for row in result.scalars().all()
+    }
 
     created = 0
     updated = 0
     skipped = 0
     for payload in payloads:
-        target = payload["execution_target"]
-        ingredient = existing_by_target.get(target)
+        target_key = (
+            payload["execution_target"],
+            payload["destination_target"],
+            payload["task_key_template"],
+        )
+        ingredient = existing_by_target.get(target_key)
 
         if ingredient is None:
             ingredient = Ingredient(**payload, deleted=False, deleted_at=None, updated_at=now)
@@ -190,14 +207,14 @@ async def upsert_bootstrap_bakery_ingredients(
 
     # Hard-cut cleanup: soft-delete legacy bootstrap-managed tickets.* targets.
     for target in sorted(LEGACY_BAKERY_TARGETS):
-        legacy = existing_by_target.get(target)
-        if legacy is None:
-            continue
-        if legacy.deleted is False or legacy.deleted_at is None:
-            legacy.deleted = True
-            legacy.deleted_at = now
-            legacy.updated_at = now
-            updated += 1
+        for key, legacy in existing_by_target.items():
+            if key[0] != target:
+                continue
+            if legacy.deleted is False or legacy.deleted_at is None:
+                legacy.deleted = True
+                legacy.deleted_at = now
+                legacy.updated_at = now
+                updated += 1
 
     await db.commit()
     return {

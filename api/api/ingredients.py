@@ -43,6 +43,8 @@ async def create_ingredient(
     result = await db.execute(
         select(Ingredient).where(
             Ingredient.execution_target == ingredient.execution_target,
+            Ingredient.destination_target == (ingredient.destination_target or ""),
+            Ingredient.task_key_template == ingredient.task_key_template,
             Ingredient.execution_engine == ingredient.execution_engine,
         )
     )
@@ -60,13 +62,15 @@ async def create_ingredient(
             status_code=400,
             detail=(
                 "Ingredient with execution_target "
-                f"'{ingredient.execution_target}' already exists for engine "
+                f"'{ingredient.execution_target}' and task_key_template "
+                f"'{ingredient.task_key_template}' already exists for engine "
                 f"'{ingredient.execution_engine}'"
             ),
         )
 
     db_ingredient = Ingredient(
         execution_target=ingredient.execution_target,
+        destination_target=ingredient.destination_target or "",
         task_key_template=ingredient.task_key_template,
         execution_id=ingredient.execution_id,
         execution_payload=ingredient.execution_payload,
@@ -191,6 +195,8 @@ async def update_ingredient(
             raise HTTPException(status_code=404, detail="Ingredient not found")
 
         update_data = payload.dict(exclude_unset=True)
+        if "destination_target" in update_data and update_data["destination_target"] is None:
+            update_data["destination_target"] = ""
         for key, value in update_data.items():
             setattr(ingredient, key, value)
 

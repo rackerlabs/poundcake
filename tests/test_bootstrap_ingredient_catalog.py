@@ -52,7 +52,7 @@ ingredients:
     items, errors = load_bootstrap_ingredient_catalog(str(catalog))
     assert errors == []
     assert len(items) == 1
-    assert items[0]["execution_target"] == "core"
+    assert items[0]["execution_target"] == "rackspace_core"
     assert items[0]["execution_engine"] == "bakery"
     assert items[0]["is_default"] is True
 
@@ -129,7 +129,8 @@ ingredients:
 
     existing = SimpleNamespace(
         execution_target="jira",
-        task_key_template="jira_old",
+        destination_target="",
+        task_key_template="jira",
         execution_engine="bakery",
         execution_purpose="comms",
         execution_id=None,
@@ -161,8 +162,7 @@ ingredients:
         call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], Ingredient)
     ]
     assert len(created_rows) == 1
-    assert created_rows[0].execution_target == "core"
-    assert existing.task_key_template == "jira"
+    assert created_rows[0].execution_target == "rackspace_core"
     assert existing.execution_payload == {"template": {"context": {"source": "test"}}}
     assert existing.deleted is False
     assert existing.deleted_at is None

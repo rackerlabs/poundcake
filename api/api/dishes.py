@@ -6,7 +6,6 @@
 #
 """API routes for Dish (execution) management."""
 
-import json
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, update, func, asc, desc, and_, or_, case
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -15,21 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, List, cast
 from datetime import datetime, timezone, timedelta
 
-from api.core.database import get_db
 from api.core.config import get_settings
+from api.core.database import get_db
 from api.core.logging import get_logger
 from api.core.statuses import (
     DISH_TERMINAL_PROCESSING_STATUSES,
     ORDER_TERMINAL_PROCESSING_STATUSES,
-    can_transition_to_resolving,
 )
 from api.models.models import Order, Dish, Recipe, RecipeIngredient, DishIngredient
-from api.services.bakery_client import (
-    add_ticket_comment,
-    create_ticket,
-    poll_operation,
-    update_ticket,
-)
 from api.schemas.schemas import (
     DishResponse,
     DishUpdate,
@@ -41,208 +33,11 @@ from api.schemas.query_params import DishQueryParams, validate_query_params
 
 router = APIRouter()
 logger = get_logger(__name__)
-TERMINAL_TICKET_STATES = {"closed", "terminal"}
 
 
-def _resolved_ticket_state() -> str:
-    settings = get_settings()
-    if settings.bakery_active_provider.lower() == "rackspace_core":
-        return (
-            (settings.bakery_rackspace_confirmed_solved_status or "confirmed solved")
-            .lower()
-            .replace(" ", "_")
-        )
-    return "closed"
-
-
-def _reopen_payload() -> dict[str, Any]:
-    settings = get_settings()
-    if settings.bakery_active_provider.lower() == "rackspace_core":
-        return {"context": {"attributes": {"status": "New"}}}
-    return {"state": "open"}
-
-
-def _build_execution_summary(dish: Dish, ingredients: list[DishIngredient]) -> str:
-    payload: dict[str, Any] = {
-        "dish_id": dish.id,
-        "dish_processing_status": dish.processing_status,
-        "dish_execution_status": dish.execution_status,
-        "execution_ref": dish.execution_ref,
-        "error_message": dish.error_message,
-        "result": dish.result,
-        "ingredients": [],
-    }
-    for item in ingredients:
-        payload["ingredients"].append(
-            {
-                "id": item.id,
-                "task_key": item.task_key,
-                "execution_engine": item.execution_engine,
-                "execution_target": item.execution_target,
-                "execution_ref": item.execution_ref,
-                "status": item.execution_status,
-                "started_at": item.started_at.isoformat() if item.started_at else None,
-                "completed_at": item.completed_at.isoformat() if item.completed_at else None,
-                "error_message": item.error_message,
-                "result": item.result,
-            }
-        )
-    return json.dumps(payload, ensure_ascii=True, default=str)
-
-
-async def _poll_and_apply_operation(
-    *,
-    req_id: str,
-    order: Order,
-    operation_id: str | None,
-    success_state: str,
-) -> None:
-    if not operation_id:
-        return
-    try:
-        op_payload = await poll_operation(operation_id)
-    except TimeoutError:
-        logger.info(
-            "Bakery operation still in progress",
-            extra={"req_id": req_id, "order_id": order.id, "operation_id": operation_id},
-        )
-        return
-
-    status = str(op_payload.get("status") or "")
-    if status == "dead_letter":
-        order.bakery_ticket_state = "dead_letter"
-        order.bakery_permanent_failure = True
-        order.bakery_last_error = str(op_payload.get("last_error") or "dead_letter")
-        return
-    if status == "succeeded":
-        order.bakery_ticket_state = success_state
-        order.bakery_permanent_failure = False
-        order.bakery_last_error = None
-
-
-async def _ensure_order_ticket(
-    *,
-    req_id: str,
-    order: Order,
-    dish: Dish,
-    execution_summary: str,
-) -> None:
-    existing_state = (order.bakery_ticket_state or "").lower()
-    if order.bakery_ticket_id and existing_state in TERMINAL_TICKET_STATES:
-        order.bakery_ticket_id = None
-        order.bakery_operation_id = None
-        order.bakery_ticket_state = None
-
-    if order.bakery_ticket_id and existing_state == "confirmed_solved":
-        accepted = await update_ticket(
-            req_id=req_id,
-            ticket_id=order.bakery_ticket_id,
-            payload=_reopen_payload(),
-        )
-        order.bakery_operation_id = accepted.get("operation_id")
-        await _poll_and_apply_operation(
-            req_id=req_id,
-            order=order,
-            operation_id=order.bakery_operation_id,
-            success_state="open",
-        )
-        await add_ticket_comment(
-            req_id=req_id,
-            ticket_id=order.bakery_ticket_id,
-            comment=f"Alert re-fired for fingerprint {order.fingerprint}; reopening incident thread.",
-        )
-
-    if order.bakery_ticket_id:
-        return
-
-    create_payload = {
-        "title": f"[{order.severity or 'unknown'}] {order.alert_group_name}",
-        "description": (
-            f"Order {order.id} completed remediation processing for req_id={order.req_id}\n"
-            f"Dish {dish.id} status={dish.execution_status or dish.processing_status}\n"
-            "Execution output:\n"
-            f"{execution_summary}"
-        ),
-        "severity": order.severity or "unknown",
-        "source": "poundcake",
-        "context": {
-            "labels": order.labels or {},
-            "annotations": order.annotations or {},
-            "req_id": order.req_id,
-        },
-    }
-    accepted = await create_ticket(req_id=req_id, payload=create_payload)
-    order.bakery_ticket_id = accepted.get("ticket_id")
-    order.bakery_operation_id = accepted.get("operation_id")
-    await _poll_and_apply_operation(
-        req_id=req_id,
-        order=order,
-        operation_id=order.bakery_operation_id,
-        success_state="open",
-    )
-
-
-async def _sync_bakery_for_terminal_dish(req_id: str, dish_id: int, db: AsyncSession) -> None:
-    """Synchronize Bakery tickets for terminal dish states."""
-    settings = get_settings()
-    if not settings.bakery_enabled:
-        return
-
-    result = await db.execute(
-        select(Dish).options(joinedload(Dish.recipe)).where(Dish.id == dish_id)
-    )
-    dish = result.scalars().first()
-    if not dish or not dish.order_id or dish.processing_status not in {"failed", "complete"}:
-        return
-
-    result = await db.execute(select(Order).where(Order.id == dish.order_id).with_for_update())
-    order = result.scalars().first()
-    if not order:
-        return
-    if order.bakery_permanent_failure:
-        return
-
-    ingredient_result = await db.execute(
-        select(DishIngredient)
-        .where(DishIngredient.dish_id == dish.id, DishIngredient.deleted.is_(False))
-        .order_by(DishIngredient.created_at.asc())
-    )
-    ingredients = ingredient_result.scalars().all()
-    execution_summary = _build_execution_summary(dish, ingredients)
-
-    try:
-        await _ensure_order_ticket(
-            req_id=req_id,
-            order=order,
-            dish=dish,
-            execution_summary=execution_summary,
-        )
-        if order.bakery_permanent_failure or not order.bakery_ticket_id:
-            await db.commit()
-            return
-
-        await add_ticket_comment(
-            req_id=req_id,
-            ticket_id=order.bakery_ticket_id,
-            comment=(
-                f"Order {order.id} remediation terminal status: {dish.processing_status}\n"
-                f"Execution payload:\n{execution_summary}"
-            ),
-        )
-
-        if order.bakery_ticket_state is None:
-            order.bakery_ticket_state = "open"
-            order.bakery_permanent_failure = False
-            order.bakery_last_error = None
-
-        await db.commit()
-    except Exception as exc:  # noqa: BLE001
-        order.bakery_last_error = str(exc)
-        await db.commit()
-        logger.error(
-            "Failed Bakery synchronization",
-            extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
-        )
+async def _sync_bakery_for_terminal_dish(*_args: Any, **_kwargs: Any) -> None:
+    """Deprecated compatibility shim; terminal Bakery sync is now recipe-driven."""
+    return None
 
 
 def _rowcount(result: object) -> int:
@@ -331,7 +126,11 @@ async def claim_dish(
         update_result = await db.execute(
             update(Dish)
             .where(Dish.id == dish_id, Dish.processing_status == "new")
-            .values(processing_status="processing", started_at=now)
+            .values(
+                processing_status="processing",
+                started_at=func.coalesce(Dish.started_at, now),
+                updated_at=now,
+            )
         )
 
         if _rowcount(update_result) == 0:
@@ -471,6 +270,7 @@ async def upsert_dish_ingredients(
                 "task_key": task_key,
                 "execution_engine": item.execution_engine,
                 "execution_target": item.execution_target,
+                "destination_target": item.destination_target,
                 "execution_ref": execution_ref,
                 "execution_payload": item.execution_payload,
                 "execution_parameters": item.execution_parameters,
@@ -494,6 +294,9 @@ async def upsert_dish_ingredients(
                 ),
                 "execution_target": func.coalesce(
                     DishIngredient.execution_target, insert_stmt.inserted.execution_target
+                ),
+                "destination_target": func.coalesce(
+                    DishIngredient.destination_target, insert_stmt.inserted.destination_target
                 ),
                 "execution_ref": insert_stmt.inserted.execution_ref,
                 "execution_payload": func.coalesce(
@@ -579,12 +382,10 @@ async def update_dish(
 ):
     """Updates dish status and execution info from chef/timer."""
     req_id = request.state.req_id
-    settings = get_settings()
 
     logger.info("Updating dish", extra={"req_id": req_id, "dish_id": dish_id})
 
     dish: Dish | None = None
-    previous_processing_status: str | None = None
     async with db.begin():
         result = await db.execute(
             select(Dish)
@@ -596,7 +397,6 @@ async def update_dish(
         if not dish:
             logger.warning("Dish not found", extra={"req_id": req_id, "dish_id": dish_id})
             raise HTTPException(status_code=404, detail="Dish not found")
-        previous_processing_status = dish.processing_status
 
         update_data = payload.model_dump(exclude_unset=True)
         if (
@@ -621,52 +421,49 @@ async def update_dish(
         dish.updated_at = datetime.now(timezone.utc)
 
         if dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES and dish.order_id:
-            catch_all_name = (settings.catch_all_recipe_name or "").strip().lower()
-            is_catch_all = bool(
-                catch_all_name
-                and dish.recipe
-                and (dish.recipe.name or "").strip().lower() == catch_all_name
-            )
             result = await db.execute(
                 select(Order).where(Order.id == dish.order_id).with_for_update()
             )
             order = result.scalars().first()
             if order and order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
-                is_resolve_phase_dish = (dish.run_phase or "").lower() == "resolving"
-                if is_resolve_phase_dish:
+                current_phase = (dish.run_phase or "").lower()
+                now = datetime.now(timezone.utc)
+                if current_phase == "resolving":
                     order.processing_status = (
                         "complete" if dish.processing_status == "complete" else "failed"
                     )
                     order.is_active = False
-                    order.updated_at = datetime.now(timezone.utc)
+                elif current_phase == "escalation":
+                    order.processing_status = "waiting_clear"
+                    order.is_active = True
                 else:
-                    if is_catch_all:
-                        # Keep catch-all orders active so resolved alerts can close/reopen the same ticket.
-                        order.updated_at = datetime.now(timezone.utc)
-                        logger.info(
-                            "Keeping catch-all order active after dish terminal status",
-                            extra={
-                                "req_id": req_id,
-                                "order_id": order.id,
-                                "dish_id": dish.id,
-                                "dish_status": dish.processing_status,
-                            },
-                        )
-                    else:
-                        # Advance to resolve-phase orchestration once firing workflow is terminal.
-                        if can_transition_to_resolving(order.processing_status, "dish_terminal"):
-                            order.processing_status = "resolving"
+                    if (order.remediation_outcome or "").lower() == "none":
+                        order.processing_status = "waiting_clear"
+                        order.auto_close_eligible = False
+                        order.clear_deadline_at = None
                         order.is_active = True
-                        order.updated_at = datetime.now(timezone.utc)
+                    elif dish.processing_status == "complete":
+                        order.remediation_outcome = "succeeded"
+                        order.processing_status = "waiting_clear"
+                        if order.clear_timeout_sec is None and dish.recipe is not None:
+                            order.clear_timeout_sec = dish.recipe.clear_timeout_sec
+                        if order.clear_timeout_sec and order.clear_deadline_at is None:
+                            order.clear_deadline_at = now + timedelta(
+                                seconds=int(order.clear_timeout_sec)
+                            )
+                        order.auto_close_eligible = True
+                        order.is_active = True
+                    else:
+                        order.remediation_outcome = "failed"
+                        order.processing_status = "escalation"
+                        order.auto_close_eligible = False
+                        order.clear_deadline_at = None
+                        order.is_active = True
+                order.updated_at = now
 
     if dish is None:
         raise HTTPException(status_code=500, detail="Dish update failed")
     await db.refresh(dish)
-    if (
-        previous_processing_status not in DISH_TERMINAL_PROCESSING_STATUSES
-        and dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES
-    ):
-        await _sync_bakery_for_terminal_dish(req_id=req_id, dish_id=dish.id, db=db)
 
     logger.info(
         "Dish updated successfully",

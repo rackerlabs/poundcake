@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TicketCreateRequest(BaseModel):
@@ -97,6 +97,89 @@ class TicketOperationListResponse(BaseModel):
 
     ticket_id: str
     operations: List[TicketOperationResponse]
+    count: int
+
+
+class CommunicationOpenRequest(TicketCreateRequest):
+    """Open a new logical communication."""
+
+
+class CommunicationUpdateRequest(TicketUpdateRequest):
+    """Update a logical communication."""
+
+
+class CommunicationNotifyRequest(BaseModel):
+    """Send a message/notification to an existing communication."""
+
+    message: Optional[str] = Field(default=None, min_length=1)
+    comment: Optional[str] = Field(default=None, min_length=1)
+    visibility: Optional[str] = Field(default=None, max_length=50)
+    context: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _coalesce_message_and_comment(self) -> "CommunicationNotifyRequest":
+        if self.message is None and self.comment is not None:
+            self.message = self.comment
+        if self.comment is None and self.message is not None:
+            self.comment = self.message
+        if self.message is None:
+            raise ValueError("message is required")
+        return self
+
+
+class CommunicationCloseRequest(TicketCloseRequest):
+    """Close a logical communication."""
+
+
+class CommunicationAcceptedResponse(BaseModel):
+    """Accepted async communication operation response."""
+
+    communication_id: str
+    operation_id: str
+    action: str
+    status: str
+    created_at: datetime
+
+
+class CommunicationResponse(BaseModel):
+    """Logical communication status."""
+
+    communication_id: str
+    provider_type: str
+    provider_reference_id: Optional[str] = None
+    state: str
+    latest_error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    data_source: str = "local_cache"
+    communication_data: Optional[Dict[str, Any]] = None
+    last_sync_operation_id: Optional[str] = None
+    last_sync_at: Optional[datetime] = None
+
+
+class CommunicationOperationResponse(BaseModel):
+    """Detailed communication operation state."""
+
+    operation_id: str
+    communication_id: str
+    action: str
+    status: str
+    attempt_count: int
+    max_attempts: int
+    next_attempt_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    provider_response: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CommunicationOperationListResponse(BaseModel):
+    """List of operations for a communication."""
+
+    communication_id: str
+    operations: List[CommunicationOperationResponse]
     count: int
 
 

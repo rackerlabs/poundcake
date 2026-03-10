@@ -52,6 +52,7 @@ async def create_recipe(
             name=recipe.name,
             description=recipe.description,
             enabled=recipe.enabled,
+            clear_timeout_sec=recipe.clear_timeout_sec,
         )
         db.add(db_recipe)
         await db.flush()
@@ -77,6 +78,7 @@ async def create_recipe(
                 depth=ri.depth,
                 execution_parameters_override=ri.execution_parameters_override,
                 run_phase=ri.run_phase,
+                run_condition=ri.run_condition,
             )
             db.add(db_recipe_ingredient)
 

@@ -37,6 +37,7 @@ function resetForm() {
   editingIngredientId = null;
   $("#ingredient-form-title").textContent = "Create Ingredient";
   $("#ingredient-task-id").value = "";
+  $("#ingredient-destination-target").value = "";
   $("#ingredient-task-name").value = "";
   $("#ingredient-action-id").value = "";
   $("#ingredient-source-type").value = "undefined";
@@ -55,6 +56,7 @@ function loadFormFromIngredient(ingredient) {
   editingIngredientId = ingredient.id;
   $("#ingredient-form-title").textContent = `Edit Ingredient #${ingredient.id}`;
   $("#ingredient-task-id").value = ingredient.execution_target || "";
+  $("#ingredient-destination-target").value = ingredient.destination_target || "";
   $("#ingredient-task-name").value = ingredient.task_key_template || "";
   $("#ingredient-action-id").value = ingredient.execution_id || ingredient.action_id || "";
   $("#ingredient-source-type").value = ingredient.execution_engine || "undefined";
@@ -77,6 +79,7 @@ function loadFormFromIngredient(ingredient) {
 function payloadFromForm() {
   return {
     execution_target: ($("#ingredient-task-id")?.value || "").trim(),
+    destination_target: ($("#ingredient-destination-target")?.value || "").trim(),
     task_key_template: ($("#ingredient-task-name")?.value || "").trim(),
     execution_id: ($("#ingredient-action-id")?.value || "").trim() || null,
     execution_payload: parseOptionalJson(
@@ -112,6 +115,7 @@ function renderIngredientDetail(ingredient) {
   detail.className = "details-panel";
   appendLabeledValue(detail, "ID", ingredient.id);
   appendLabeledValue(detail, "Execution Target", ingredient.execution_target);
+  appendLabeledValue(detail, "Destination Target", ingredient.destination_target || "-");
   appendLabeledValue(detail, "Task Key Template", ingredient.task_key_template);
   appendLabeledValue(
     detail,
@@ -149,7 +153,13 @@ function ingredientRow(ingredient) {
   const tr = el("tr");
 
   tr.appendChild(el("td", { text: ingredient.id }));
-  tr.appendChild(el("td", { text: ingredient.execution_target }));
+  tr.appendChild(
+    el("td", {
+      text: ingredient.destination_target
+        ? `${ingredient.execution_target} (${ingredient.destination_target})`
+        : ingredient.execution_target,
+    }),
+  );
   tr.appendChild(el("td", { text: ingredient.task_key_template }));
   tr.appendChild(el("td", { text: ingredient.execution_id || ingredient.action_id || "-" }));
   tr.appendChild(el("td", { text: String(Boolean(ingredient.is_blocking)) }));

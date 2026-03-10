@@ -6,6 +6,6 @@
 #
 """CLI command modules."""
 
-from . import orders, rules
+from . import ingredients, orders, recipes, rules
 
-__all__ = ["orders", "rules"]
+__all__ = ["ingredients", "orders", "recipes", "rules"]

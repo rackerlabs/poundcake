@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from api.services.communications import (
+    DESTINATION_TYPES,
+    TICKET_CAPABLE_DESTINATION_TYPES,
+    normalize_communication_operation,
+    normalize_destination_type,
+)
 from api.services.execution_types import SUPPORTED_EXECUTION_ENGINES
 
 
@@ -56,42 +62,46 @@ def validate_bakery_target_payload(
     execution_parameters: dict[str, Any] | None = None,
     bakery_ticket_id: str | None = None,
 ) -> str | None:
-    target = execution_target.lower()
+    target = normalize_destination_type(execution_target)
     ticket_id = str(payload.get("ticket_id") or bakery_ticket_id or "").strip()
     params = execution_parameters if isinstance(execution_parameters, dict) else {}
-    operation = str(params.get("operation") or "").strip().lower()
+    operation = normalize_communication_operation(params.get("operation"))
 
-    if target not in {"core", "jira"}:
-        return "bakery execution_target must be one of: core, jira"
+    if target not in DESTINATION_TYPES:
+        return "bakery execution_target must be one of: " + ", ".join(sorted(DESTINATION_TYPES))
 
-    if operation not in {"ticket_create", "ticket_update", "ticket_comment", "ticket_close"}:
+    if operation not in {"open", "notify", "update", "close"}:
         return (
             "bakery execution_parameters.operation must be one of: "
+            "open, notify, update, close, "
             "ticket_create, ticket_update, ticket_comment, ticket_close"
         )
 
-    if operation == "ticket_create":
-        if not isinstance(payload.get("title"), str) or not payload.get("title"):
-            return "ticket_create requires payload.title"
-        if not isinstance(payload.get("description"), str) or not payload.get("description"):
-            return "ticket_create requires payload.description"
+    if operation == "open":
+        if target in TICKET_CAPABLE_DESTINATION_TYPES:
+            if not isinstance(payload.get("title"), str) or not payload.get("title"):
+                return "open requires payload.title for ticket-capable destinations"
+            if not isinstance(payload.get("description"), str) or not payload.get("description"):
+                return "open requires payload.description for ticket-capable destinations"
+        elif not any(
+            isinstance(payload.get(key), str) and str(payload.get(key)).strip()
+            for key in ("message", "comment", "description", "title")
+        ):
+            return "open requires a message-style payload for chat destinations"
         return None
 
-    if operation == "ticket_update":
-        if not ticket_id:
-            return "ticket_update requires payload.ticket_id or bakery_ticket_id"
+    if operation == "update":
         return None
 
-    if operation == "ticket_comment":
-        if not ticket_id:
-            return "ticket_comment requires payload.ticket_id or bakery_ticket_id"
-        if not isinstance(payload.get("comment"), str) or not payload.get("comment"):
-            return "ticket_comment requires payload.comment"
+    if operation == "notify":
+        if not any(
+            isinstance(payload.get(key), str) and str(payload.get(key)).strip()
+            for key in ("comment", "message", "description", "title")
+        ):
+            return "notify requires payload.comment, payload.message, payload.description, or payload.title"
         return None
 
-    if operation == "ticket_close":
-        if not ticket_id:
-            return "ticket_close requires payload.ticket_id or bakery_ticket_id"
+    if operation == "close":
         return None
 
     return None
@@ -151,20 +161,20 @@ def validate_runtime_execution_payload(
     if normalize_execution_engine(execution_engine) != "bakery":
         return "comms ingredients must use execution_engine='bakery'"
 
-    target = (execution_target or "").lower()
-    if target not in {"core", "jira"}:
-        return "bakery comms ingredient execution_target must be one of: " "core, jira"
+    target = normalize_destination_type(execution_target)
+    if target not in DESTINATION_TYPES:
+        return "bakery comms ingredient execution_target must be one of: " + ", ".join(
+            sorted(DESTINATION_TYPES)
+        )
     params = execution_parameters if isinstance(execution_parameters, dict) else {}
-    operation = str(params.get("operation") or "").strip().lower()
-    if operation not in {"ticket_create", "ticket_update", "ticket_comment", "ticket_close"}:
+    operation = normalize_communication_operation(params.get("operation"))
+    if operation not in {"open", "notify", "update", "close"}:
         return (
             "bakery comms ingredient execution_parameters.operation must be one of: "
+            "open, notify, update, close, "
             "ticket_create, ticket_update, ticket_comment, ticket_close"
         )
 
     if execution_payload is None:
         return "bakery comms ingredient requires execution_payload"
-    template = execution_payload.get("template")
-    if not isinstance(template, dict):
-        return "bakery comms ingredient execution_payload.template must be an object"
     return None

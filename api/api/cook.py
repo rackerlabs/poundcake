@@ -15,6 +15,8 @@ from api.core.database import get_db
 from api.schemas.schemas import ExecuteRequest, ExecutionEnvelopeResponse
 from api.services.execution_orchestrator import ExecutionOrchestrator, get_execution_orchestrator
 from api.services.execution_types import ExecutionContext
+from api.services.communications import normalize_communication_operation, normalize_destination_target
+from api.services.order_communications import apply_execution_result, prepare_communication_context
 from api.services.stackstorm_service import (
     StackStormActionManager,
     StackStormError,
@@ -35,6 +37,7 @@ async def execute_ingredient(
     request: Request,
     payload: ExecuteRequest,
     x_request_id: str = Header(None),
+    db: AsyncSession = Depends(get_db),
     orchestrator: ExecutionOrchestrator = Depends(get_execution_orchestrator),
 ) -> ExecutionEnvelopeResponse:
     """
@@ -62,19 +65,78 @@ async def execute_ingredient(
     )
 
     try:
+        execution_payload = (
+            dict(payload.execution_payload) if isinstance(payload.execution_payload, dict) else {}
+        )
+        execution_parameters = (
+            dict(payload.execution_parameters)
+            if isinstance(payload.execution_parameters, dict)
+            else {}
+        )
+        context = dict(payload.context) if isinstance(payload.context, dict) else {}
+
+        order_id_raw = context.get("order_id")
+        order_id = int(order_id_raw) if isinstance(order_id_raw, int) or str(order_id_raw).isdigit() else None
+        destination_target = normalize_destination_target(
+            context.get("destination_target")
+            or ((execution_payload.get("context") or {}).get("destination_target"))
+        )
+        operation = normalize_communication_operation(execution_parameters.get("operation"))
+
+        if payload.execution_engine == "bakery" and order_id is not None:
+            async with db.begin():
+                _, communication = await prepare_communication_context(
+                    db,
+                    order_id=order_id,
+                    execution_target=payload.execution_target,
+                    destination_target=destination_target,
+                    operation=operation,
+                )
+                if communication.bakery_ticket_id:
+                    context["bakery_ticket_id"] = communication.bakery_ticket_id
+                    context["ticket_id"] = communication.bakery_ticket_id
+                context["destination_target"] = destination_target
+                context["communication_reuse_mode"] = (
+                    "reopen" if communication.reopenable else "reuse"
+                )
+
+            payload_context = (
+                dict(execution_payload.get("context"))
+                if isinstance(execution_payload.get("context"), dict)
+                else {}
+            )
+            payload_context["provider_type"] = payload.execution_target
+            payload_context["destination_target"] = destination_target
+            execution_payload["context"] = payload_context
+
         execution_result = await orchestrator.execute(
             ExecutionContext(
                 engine=payload.execution_engine,
                 execution_target=payload.execution_target,
-                execution_payload=payload.execution_payload,
-                execution_parameters=payload.execution_parameters,
+                execution_payload=execution_payload,
+                execution_parameters=execution_parameters,
                 retry_count=payload.retry_count,
                 retry_delay=payload.retry_delay,
                 timeout_duration_sec=payload.timeout_duration_sec,
-                context=payload.context,
+                context=context,
                 req_id=req_id,
             )
         )
+
+        if payload.execution_engine == "bakery" and order_id is not None:
+            async with db.begin():
+                await apply_execution_result(
+                    db,
+                    order_id=order_id,
+                    execution_target=payload.execution_target,
+                    destination_target=destination_target,
+                    operation=operation,
+                    execution_ref=execution_result.execution_ref,
+                    status=execution_result.status,
+                    result_payload=execution_result.raw or execution_result.result,
+                    context_updates=execution_result.context_updates,
+                    error_message=execution_result.error_message,
+                )
 
         logger.info(
             "Execution request completed",

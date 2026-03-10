@@ -26,7 +26,7 @@ def test_validate_execution_request_accepts_valid_stackstorm_payload():
     assert error is None
 
 
-def test_validate_runtime_execution_payload_requires_bakery_comms_template():
+def test_validate_runtime_execution_payload_accepts_non_template_bakery_payloads():
     error = validate_runtime_execution_payload(
         execution_engine="bakery",
         execution_purpose="comms",
@@ -34,4 +34,4 @@ def test_validate_runtime_execution_payload_requires_bakery_comms_template():
         execution_payload={"context": {"x": 1}},
         execution_parameters={"operation": "ticket_comment"},
     )
-    assert "execution_payload.template must be an object" in str(error)
+    assert error is None

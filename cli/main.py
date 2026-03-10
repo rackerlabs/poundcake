@@ -17,7 +17,7 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cli.client import PoundCakeClient
-from cli.commands import orders, rules
+from cli.commands import ingredients, orders, recipes, rules
 
 
 @click.group()
@@ -64,6 +64,8 @@ def cli(
 
 # Register subcommands
 cli.add_command(orders.orders)
+cli.add_command(ingredients.ingredients)
+cli.add_command(recipes.recipes)
 cli.add_command(rules.rules)
 
 

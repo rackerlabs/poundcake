@@ -1,6 +1,6 @@
 # Bakery
 
-Bakery is PoundCake's ticketing system integration microservice. It is an async ticket broker between PoundCake and external ticketing systems and exposes Bakery-owned UUIDs (not provider-native ticket numbers) to callers.
+Bakery is PoundCake's communication integration microservice. It is an async broker between PoundCake and external ticketing or messaging systems and exposes Bakery-owned UUID handles (not provider-native IDs) to callers.
 
 ## Supported Ticketing Systems
 
@@ -17,7 +17,7 @@ Bakery is PoundCake's ticketing system integration microservice. It is an async 
 ```
 PoundCake API
      |
-     | POST /api/v1/tickets
+     | POST /api/v1/communications
      v
   ┌──────────┐    ┌──────────────────┐    ┌──────────────────┐
   │  Bakery   │───>│  Mixer Factory   │───>│  ServiceNow      │
@@ -35,11 +35,11 @@ PoundCake API
 
 ### Request Flow
 
-1. PoundCake sends an authenticated `POST /api/v1/tickets` (create) and receives `ticket_id` + `operation_id` immediately (`202 Accepted`).
+1. PoundCake sends an authenticated `POST /api/v1/communications` (`open`) and receives `communication_id` + `operation_id` immediately (`202 Accepted`).
 2. Bakery persists operation state to MariaDB and returns without waiting on provider completion.
-3. Bakery worker(s) claim queued operations, execute provider calls, and update operation/ticket state with retries + dead-letter behavior.
-4. PoundCake polls `GET /api/v1/operations/{operation_id}` until terminal, then reads `GET /api/v1/tickets/{ticket_id}` as needed.
-5. Call `POST /api/v1/tickets/{ticket_id}/find` to refresh ticket information from provider (or local cache in dry-run mode).
+3. Bakery worker(s) claim queued operations, execute provider calls, and update operation/communication state with retries + dead-letter behavior.
+4. PoundCake polls `GET /api/v1/communications/operations/{operation_id}` until terminal, then reads `GET /api/v1/communications/{communication_id}` as needed.
+5. Call `POST /api/v1/communications/{communication_id}/sync` to refresh communication information from the provider (or local cache in dry-run mode).
 
 ### Mixers
 
@@ -58,7 +58,7 @@ Bakery uses mixers as the single provider abstraction layer.
 
 | Table | Purpose |
 |-------|---------|
-| `tickets` | Logical ticket records keyed by Bakery UUID |
+| `tickets` | Logical communication records keyed by Bakery UUID |
 | `ticket_operations` | Async operation queue + execution status |
 | `idempotency_keys` | Idempotent replay mapping for mutation requests |
 | `ticket_requests` | Legacy table retained physically for cleanup migration |
@@ -75,7 +75,24 @@ All endpoints are prefixed with `/api/v1`.
 |--------|------|-------------|
 | `GET` | `/api/v1/health` | Health check with database connectivity status |
 
+### Communications
+
+Preferred provider-agnostic API:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/communications` | Queue open operation; returns `communication_id` + `operation_id` |
+| `PATCH` | `/api/v1/communications/{communication_id}` | Queue update operation |
+| `POST` | `/api/v1/communications/{communication_id}/notifications` | Queue notify/message operation |
+| `POST` | `/api/v1/communications/{communication_id}/close` | Queue close operation |
+| `GET` | `/api/v1/communications/{communication_id}` | Get logical communication state |
+| `POST` | `/api/v1/communications/{communication_id}/sync` | Refresh communication details from provider |
+| `GET` | `/api/v1/communications/{communication_id}/operations` | Get operation history |
+| `GET` | `/api/v1/communications/operations/{operation_id}` | Get operation status/details |
+
 ### Tickets
+
+Legacy compatibility API backed by the same logical communication records:
 
 | Method | Path | Description |
 |--------|------|-------------|

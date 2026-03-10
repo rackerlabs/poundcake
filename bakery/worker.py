@@ -62,6 +62,7 @@ def _build_provider_payload(
     ticket: Ticket,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    provider = str(ticket.provider_type or settings.active_provider or "").strip().lower()
     context = payload.get("context") or {}
     provider_payload = dict(context)
 
@@ -81,7 +82,7 @@ def _build_provider_payload(
             provider_payload.setdefault("source", payload.get("source"))
 
         # Provider-specific label/annotation mappings for generic PoundCake requests.
-        if settings.active_provider == "servicenow":
+        if provider == "servicenow":
             urgency = _first_non_empty(
                 provider_payload.get("urgency"),
                 provider_payload.get("serviceNowUrgency"),
@@ -100,7 +101,7 @@ def _build_provider_payload(
             if impact is not None:
                 provider_payload.setdefault("impact", str(impact))
 
-        if settings.active_provider == "jira":
+        if provider == "jira":
             project_key = _first_non_empty(
                 provider_payload.get("project_key"),
                 provider_payload.get("jiraProjectKey"),
@@ -119,7 +120,7 @@ def _build_provider_payload(
             if issue_type is not None:
                 provider_payload.setdefault("issue_type", str(issue_type))
 
-        if settings.active_provider == "github":
+        if provider == "github":
             owner = _first_non_empty(
                 provider_payload.get("owner"),
                 provider_payload.get("githubOwner"),
@@ -158,7 +159,7 @@ def _build_provider_payload(
                 if parsed:
                     provider_payload["assignees"] = parsed
 
-        if settings.active_provider == "pagerduty":
+        if provider == "pagerduty":
             service_id = _first_non_empty(
                 provider_payload.get("service_id"),
                 provider_payload.get("pagerDutyServiceId"),
@@ -187,7 +188,7 @@ def _build_provider_payload(
                 provider_payload.setdefault("urgency", str(urgency))
 
         # Rackspace Core expects account_number/queue/subcategory/subject/body.
-        if settings.active_provider == "rackspace_core":
+        if provider == "rackspace_core":
             account_number = (
                 provider_payload.get("account_number")
                 or provider_payload.get("accountNumber")
@@ -232,10 +233,23 @@ def _build_provider_payload(
                 provider_payload.setdefault(
                     "subcategory", settings.rackspace_core_default_subcategory
                 )
+        if provider in {"teams", "discord"}:
+            provider_payload.setdefault(
+                "message",
+                _first_non_empty(
+                    payload.get("message"),
+                    payload.get("comment"),
+                    payload.get("description"),
+                    payload.get("title"),
+                )
+                or "PoundCake communication update.",
+            )
         return provider_payload
 
     if ticket.provider_ticket_id:
         provider_payload.setdefault("ticket_id", ticket.provider_ticket_id)
+    elif provider in {"teams", "discord"}:
+        provider_payload.setdefault("ticket_id", ticket.internal_ticket_id)
     elif settings.ticketing_dry_run:
         # In dry-run mode we never require a provider-issued ID to proceed.
         provider_payload.setdefault("ticket_id", f"dryrun-{ticket.internal_ticket_id}")
@@ -243,6 +257,18 @@ def _build_provider_payload(
         raise ValueError("Provider ticket id is not available yet for this ticket")
 
     if action == "update":
+        if provider in {"teams", "discord"}:
+            provider_payload.setdefault(
+                "message",
+                _first_non_empty(
+                    payload.get("message"),
+                    payload.get("comment"),
+                    payload.get("description"),
+                    payload.get("title"),
+                )
+                or "PoundCake communication update.",
+            )
+            return provider_payload
         updates = provider_payload.get("updates")
         if not updates:
             updates = {}
@@ -251,18 +277,43 @@ def _build_provider_payload(
                     updates[field] = payload.get(field)
             if updates:
                 provider_payload["updates"] = updates
-        if settings.active_provider == "rackspace_core" and updates:
+        if provider == "rackspace_core" and updates:
             provider_payload.setdefault("attributes", updates)
         return provider_payload
 
     if action == "comment":
+        if provider in {"teams", "discord"}:
+            provider_payload.setdefault(
+                "message",
+                _first_non_empty(
+                    payload.get("comment"),
+                    payload.get("message"),
+                    payload.get("description"),
+                    payload.get("title"),
+                )
+                or "PoundCake communication update.",
+            )
+            return provider_payload
         provider_payload.setdefault("comment", payload.get("comment", ""))
         if payload.get("visibility") is not None:
             provider_payload.setdefault("visibility", payload.get("visibility"))
         return provider_payload
 
     if action == "close":
-        if settings.active_provider == "rackspace_core":
+        if provider in {"teams", "discord"}:
+            provider_payload.setdefault(
+                "message",
+                _first_non_empty(
+                    payload.get("message"),
+                    payload.get("comment"),
+                    payload.get("resolution_notes"),
+                    payload.get("description"),
+                    payload.get("title"),
+                )
+                or "PoundCake communication closed.",
+            )
+            return provider_payload
+        if provider == "rackspace_core":
             status_hint = _first_non_empty(
                 provider_payload.get("status"),
                 payload.get("state"),
@@ -355,6 +406,11 @@ def _preflight_missing_fields(provider: str, action: str, payload: dict[str, Any
             return missing("ticket_id", "from_email", "comment")
         return []
 
+    if provider in {"teams", "discord"}:
+        if action in {"create", "update", "close", "comment"}:
+            return missing("message")
+        return []
+
     return []
 
 
@@ -427,7 +483,7 @@ def _persist_success(operation_id: str, result: dict[str, Any]) -> None:
             ticket.provider_ticket_id = str(external_ticket_id)
             ticket.state = "open"
         elif operation.action == "close":
-            if settings.active_provider == "rackspace_core":
+            if (ticket.provider_type or settings.active_provider) == "rackspace_core":
                 requested_state = str((operation.request_payload or {}).get("state") or "").lower()
                 if requested_state.replace(" ", "_") == "confirmed_solved":
                     ticket.state = "confirmed_solved"
@@ -541,7 +597,7 @@ def _build_dry_run_result(
         "ticket_id": simulated_ticket_id,
         "data": {
             "dry_run": True,
-            "provider": settings.active_provider,
+            "provider": ticket.provider_type or settings.active_provider,
             "action": operation.action,
             "operation_id": operation.operation_id,
             "payload": payload,
@@ -552,19 +608,20 @@ def _build_dry_run_result(
 def _process_operation(operation: TicketOperation) -> None:
     started = time.monotonic()
     ticket = _load_ticket(operation.internal_ticket_id)
+    provider = str(ticket.provider_type or settings.active_provider or "").strip().lower()
     payload = _build_provider_payload(operation.action, ticket, operation.request_payload)
     _persist_normalized_payload(operation.operation_id, payload)
-    missing = _preflight_missing_fields(settings.active_provider, operation.action, payload)
+    missing = _preflight_missing_fields(provider, operation.action, payload)
     if missing:
         error = (
-            f"{settings.active_provider} {operation.action} missing required fields: "
+            f"{provider} {operation.action} missing required fields: "
             + ", ".join(missing)
         )
         logger.error(
             "Provider preflight validation failed",
             operation_id=operation.operation_id,
             ticket_id=operation.internal_ticket_id,
-            provider=settings.active_provider,
+            provider=provider,
             action=operation.action,
             missing_fields=missing,
         )
@@ -576,11 +633,11 @@ def _process_operation(operation: TicketOperation) -> None:
             "Dry-run enabled; skipping provider call",
             operation_id=operation.operation_id,
             action=operation.action,
-            provider=settings.active_provider,
+            provider=provider,
         )
         result = _build_dry_run_result(operation, ticket, payload)
     else:
-        mixer = get_mixer(settings.active_provider)
+        mixer = get_mixer(provider)
         result = asyncio.run(mixer.process_request(operation.action, payload))
     BAKERY_OPERATION_LATENCY_SECONDS.labels(action=operation.action).observe(
         max(time.monotonic() - started, 0.0)

@@ -19,8 +19,10 @@ function renderDetails(index) {
 
 function rowNode(item, index) {
   const tr = el("tr");
+  const route = [item.execution_target, item.destination_target].filter(Boolean).join(" / ");
   tr.appendChild(el("td", { text: item.source || "-" }));
   tr.appendChild(el("td", { text: item.reference_id || "-" }));
+  tr.appendChild(el("td", { text: route || "-" }));
   tr.appendChild(el("td", { text: item.ticket_id || "-" }));
   tr.appendChild(el("td", { text: item.operation_id || "-" }));
   tr.appendChild(el("td", {}, [
@@ -64,7 +66,7 @@ export async function load() {
 
   if (!data.length) {
     const tr = el("tr");
-    tr.appendChild(el("td", { attrs: { colspan: "7" }, className: "empty", text: "No Bakery records found" }));
+    tr.appendChild(el("td", { attrs: { colspan: "8" }, className: "empty", text: "No Bakery records found" }));
     body.appendChild(tr);
     renderDetails(-1);
     return;

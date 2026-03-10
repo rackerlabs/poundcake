@@ -125,12 +125,19 @@ recipe:
         encoding="utf-8",
     )
 
-    ingredient = SimpleNamespace(id=41, execution_engine="bakery", execution_target="core")
+    ingredient = SimpleNamespace(
+        id=41,
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        task_key_template="fallback",
+        destination_target="",
+    )
     existing_recipe = SimpleNamespace(
         id=7,
         name="node-a",
         description="old",
         enabled=False,
+        clear_timeout_sec=None,
         deleted=True,
         deleted_at="2026-01-01",
         updated_at=None,

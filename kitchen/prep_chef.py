@@ -9,6 +9,7 @@
 
 import os
 import time
+from datetime import datetime, timezone
 from api.core.http_client import request_with_retry_sync
 
 from api.core.logging import setup_logging, get_logger
@@ -41,7 +42,7 @@ def prep_loop() -> None:
     while True:
         try:
             orders = []
-            for status in ("new", "resolving"):
+            for status in ("new", "escalation", "resolving", "waiting_clear"):
                 start_time = time.time()
                 resp = request_with_retry_sync(
                     "GET",
@@ -80,6 +81,26 @@ def prep_loop() -> None:
                 req_id = order.get("req_id", "UNKNOWN")
                 order_id = order.get("id")
                 processing_status = order.get("processing_status")
+                if processing_status == "waiting_clear":
+                    clear_deadline_at = order.get("clear_deadline_at")
+                    clear_timed_out_at = order.get("clear_timed_out_at")
+                    alert_status = str(order.get("alert_status") or "").lower()
+                    if alert_status == "resolved":
+                        continue
+                    if clear_timed_out_at:
+                        continue
+                    if not clear_deadline_at:
+                        continue
+                    try:
+                        deadline = datetime.fromisoformat(
+                            str(clear_deadline_at).replace("Z", "+00:00")
+                        )
+                    except ValueError:
+                        continue
+                    if deadline.tzinfo is None:
+                        deadline = deadline.replace(tzinfo=timezone.utc)
+                    if deadline > datetime.now(timezone.utc):
+                        continue
 
                 # Pass the original Request ID to the next hop
                 headers = _service_headers(req_id)

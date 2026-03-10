@@ -148,3 +148,115 @@ def test_run_chef_executes_registered_workflow_and_patches_execution_ref(
         method == "PATCH" and url.endswith("/dishes/2") and body == {"execution_ref": "st2-exec-1"}
         for method, url, body in calls
     )
+
+
+def test_run_chef_executes_bakery_segment_before_starting_stackstorm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str, dict | None]] = []
+    steps = iter(
+        [
+            _Resp(200, [{"id": 3, "req_id": "REQ-3"}]),
+            _Resp(
+                200,
+                {
+                    "id": 3,
+                    "req_id": "REQ-3",
+                    "order_id": 42,
+                    "run_phase": "firing",
+                    "recipe": {
+                        "id": 12,
+                        "recipe_ingredients": [
+                            {
+                                "id": 11,
+                                "step_order": 1,
+                                "ingredient": {
+                                    "execution_engine": "bakery",
+                                    "execution_target": "rackspace_core",
+                                    "on_failure": "stop",
+                                },
+                            },
+                            {
+                                "id": 12,
+                                "step_order": 2,
+                                "ingredient": {
+                                    "execution_engine": "stackstorm",
+                                    "execution_target": "linux.ping",
+                                    "on_failure": "stop",
+                                },
+                            },
+                        ],
+                    },
+                },
+            ),
+            _Resp(
+                200,
+                [
+                    {
+                        "recipe_ingredient_id": 11,
+                        "task_key": "step_1_open",
+                        "execution_engine": "bakery",
+                        "execution_target": "rackspace_core",
+                        "execution_payload": {"title": "open", "description": "desc"},
+                        "execution_parameters": {"operation": "open"},
+                        "execution_status": "pending",
+                    },
+                    {
+                        "recipe_ingredient_id": 12,
+                        "task_key": "step_2_ping",
+                        "execution_engine": "stackstorm",
+                        "execution_target": "linux.ping",
+                        "execution_status": "pending",
+                    },
+                ],
+            ),
+            _Resp(200, {"ok": True}),
+            _Resp(200, {"status": "succeeded", "execution_ref": "bakery-op", "raw": {}}),
+            _Resp(200, {"ok": True}),
+            _Resp(
+                200,
+                [
+                    {
+                        "recipe_ingredient_id": 11,
+                        "task_key": "step_1_open",
+                        "execution_engine": "bakery",
+                        "execution_target": "rackspace_core",
+                        "execution_status": "succeeded",
+                    },
+                    {
+                        "recipe_ingredient_id": 12,
+                        "task_key": "step_2_ping",
+                        "execution_engine": "stackstorm",
+                        "execution_target": "linux.ping",
+                        "execution_status": "pending",
+                    },
+                ],
+            ),
+            _Resp(200, {"workflow_id": "poundcake.wf_ping"}),
+            _Resp(
+                201, {"execution_ref": "st2-exec-3", "status": "running", "engine": "stackstorm"}
+            ),
+            _Resp(200, {"id": 3}),
+        ]
+    )
+
+    def _request(method: str, url: str, **kwargs):
+        calls.append((method, url, kwargs.get("json")))
+        try:
+            return next(steps)
+        except StopIteration:
+            raise SystemExit
+
+    monkeypatch.setattr(chef, "wait_for_api", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(chef, "request_with_retry_sync", _request)
+
+    with pytest.raises(SystemExit):
+        chef.run_chef()
+
+    execute_calls = [
+        body
+        for method, url, body in calls
+        if method == "POST" and url.endswith("/cook/execute") and isinstance(body, dict)
+    ]
+    assert execute_calls[0]["execution_engine"] == "bakery"
+    assert execute_calls[1]["execution_engine"] == "stackstorm"

@@ -212,6 +212,110 @@ def test_monitor_dishes__terminal_success__persists_ingredients_and_completes(
     assert [task["task_key"] for task in kwargs["result"]] == ["step1", "step2"]
 
 
+def test_monitor_dishes__terminal_success_requeues_when_more_segments_remain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dish = {
+        "id": 22,
+        "req_id": "REQ-22",
+        "execution_ref": "exec-22",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": None,
+        "recipe": {
+            "recipe_ingredients": [
+                {"id": 1, "step_order": 1},
+                {"id": 2, "step_order": 2},
+            ]
+        },
+    }
+    claimed_dish = {**dish}
+    patch_calls: list[dict] = []
+    update_calls: list[tuple[dict, str, dict]] = []
+
+    def _update(d: dict, req_id: str, **kwargs) -> bool:
+        update_calls.append((d, req_id, kwargs))
+        return True
+
+    steps = iter(
+        [
+            _Resp(200, [dish]),
+            _Resp(200, []),
+            _Resp(200, claimed_dish),
+            _Resp(
+                200,
+                {
+                    "status": "succeeded",
+                    "result": {
+                        "tasks": [
+                            {
+                                "id": "task-1",
+                                "task_id": "step_1_ping",
+                                "status": "succeeded",
+                                "result": {"stdout": "ok"},
+                                "start_timestamp": "2026-02-13T10:00:01Z",
+                                "end_timestamp": "2026-02-13T10:00:02Z",
+                            }
+                        ]
+                    },
+                },
+            ),
+            _Resp(200, []),
+            _Resp(200, {"ok": True}),
+            _Resp(
+                200,
+                [
+                    {
+                        "recipe_ingredient_id": 1,
+                        "task_key": "step_1_ping",
+                        "execution_engine": "stackstorm",
+                        "execution_status": "succeeded",
+                    },
+                    {
+                        "recipe_ingredient_id": 2,
+                        "task_key": "step_2_update",
+                        "execution_engine": "bakery",
+                        "execution_status": "pending",
+                    },
+                ],
+            ),
+            _Resp(200, {"id": 22}),
+        ]
+    )
+
+    def _request(method: str, url: str, **kwargs):
+        if method == "PATCH" and str(url).endswith("/dishes/22"):
+            patch_calls.append(kwargs.get("json") or {})
+        return next(steps)
+
+    monkeypatch.setattr(timer, "update_dish", _update)
+    monkeypatch.setattr(timer, "request_with_retry_sync", _request)
+    monkeypatch.setattr(timer, "check_for_timeouts", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(timer, "API_UNAVAILABLE_SINCE", None)
+
+    timer.monitor_dishes()
+
+    assert update_calls == []
+    assert patch_calls == [
+        {
+            "processing_status": "new",
+            "execution_status": None,
+            "execution_ref": None,
+            "error_message": None,
+            "result": [
+                {
+                    "id": "task-1",
+                    "task_key": "step_1_ping",
+                    "status": "succeeded",
+                    "result": {"stdout": "ok"},
+                    "start_timestamp": "2026-02-13T10:00:01Z",
+                    "end_timestamp": "2026-02-13T10:00:02Z",
+                }
+            ],
+            "started_at": "2026-02-13T10:00:01Z",
+        }
+    ]
+
+
 def test_monitor_dishes__missing_execution_id_after_timeout__marks_abandoned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

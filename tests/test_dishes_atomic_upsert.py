@@ -55,13 +55,18 @@ def mock_db_session():
 
 def _make_order(order_id: int = 1, status: str = "processing") -> Order:
     now = datetime.now(timezone.utc)
-    return Order(
+    order = Order(
         id=order_id,
         req_id="REQ-1",
         fingerprint="fp-1",
         alert_status="firing",
         processing_status=status,
         is_active=True,
+        remediation_outcome="pending",
+        clear_timeout_sec=None,
+        clear_deadline_at=None,
+        clear_timed_out_at=None,
+        auto_close_eligible=False,
         alert_group_name="group",
         severity="warning",
         instance="localhost",
@@ -77,6 +82,8 @@ def _make_order(order_id: int = 1, status: str = "processing") -> Order:
         created_at=now,
         updated_at=now,
     )
+    order.communications = []
+    return order
 
 
 def _make_dish(dish_id: int = 1, status: str = "processing", run_phase: str = "firing") -> Dish:
@@ -101,7 +108,7 @@ def _make_dish(dish_id: int = 1, status: str = "processing", run_phase: str = "f
     )
 
 
-def test_terminal_dish_sets_order_to_resolving(client, mock_db_session):
+def test_terminal_dish_sets_order_to_waiting_clear(client, mock_db_session):
     dish = _make_dish()
     order = _make_order(status="processing")
     mock_db_session.execute = AsyncMock(
@@ -112,8 +119,10 @@ def test_terminal_dish_sets_order_to_resolving(client, mock_db_session):
         response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
 
     assert response.status_code == 200
-    assert order.processing_status == "resolving"
+    assert order.processing_status == "waiting_clear"
     assert order.is_active is True
+    assert order.remediation_outcome == "succeeded"
+    assert order.auto_close_eligible is True
 
 
 def test_bulk_upsert_dedupes_by_step_identity(client, mock_db_session):
@@ -132,6 +141,7 @@ def test_bulk_upsert_dedupes_by_step_identity(client, mock_db_session):
                 task_key="i_task_key",
                 execution_engine="i_execution_engine",
                 execution_target="i_execution_target",
+                destination_target="i_destination_target",
                 execution_ref="i_execution_ref",
                 execution_payload={"key": "i_execution_payload"},
                 execution_parameters="i_execution_parameters",
@@ -199,6 +209,7 @@ def test_bulk_upsert_unknown_task_uses_step_identity_fallback(client, mock_db_se
                 task_key="i_task_key",
                 execution_engine="i_execution_engine",
                 execution_target="i_execution_target",
+                destination_target="i_destination_target",
                 execution_ref="i_execution_ref",
                 execution_payload={"key": "i_execution_payload"},
                 execution_parameters="i_execution_parameters",

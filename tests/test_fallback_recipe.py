@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from api.models.models import Ingredient, RecipeIngredient
 from api.services.fallback_recipe import ensure_fallback_recipe
 
 
@@ -19,9 +20,6 @@ class _ScalarResult:
     def first(self):
         return self._first
 
-    def unique(self):
-        return self
-
 
 class _NestedContext:
     async def __aenter__(self):
@@ -31,56 +29,62 @@ class _NestedContext:
         return None
 
 
-class _RecipeWithoutLazyIngredients:
-    def __init__(self, *, recipe_id: int, name: str):
-        self.id = recipe_id
-        self.name = name
-        self.enabled = True
-        self.deleted = False
-        self.deleted_at = None
-        self.updated_at = None
-
-    @property
-    def recipe_ingredients(self):
-        raise AssertionError(
-            "ensure_fallback_recipe should not lazy-load recipe.recipe_ingredients"
-        )
-
-
 @pytest.mark.asyncio
-async def test_ensure_fallback_recipe_recovers_from_duplicate_core_ingredient_insert():
-    existing_ingredient = SimpleNamespace(
+async def test_ensure_fallback_recipe_recovers_from_duplicate_managed_ingredient_insert():
+    existing_open = Ingredient(
         id=5,
         execution_engine="bakery",
-        execution_target="core",
+        execution_target="rackspace_core",
+        destination_target="",
+        task_key_template="fallback_open",
+        execution_purpose="utility",
+        execution_payload={},
+        execution_parameters={"operation": "open"},
         is_default=False,
+        is_blocking=False,
+        expected_duration_sec=15,
+        timeout_duration_sec=120,
+        retry_count=0,
+        retry_delay=0,
+        on_failure="stop",
         deleted=False,
-        deleted_at=None,
-        updated_at=None,
     )
-    existing_step = SimpleNamespace(
-        ingredient_id=5,
-        step_order=1,
-        run_phase="resolving",
-        on_success="continue",
+    existing_update = Ingredient(
+        id=6,
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        destination_target="",
+        task_key_template="fallback_update",
+        execution_purpose="utility",
+        execution_payload={},
+        execution_parameters={"operation": "update"},
+        is_default=False,
+        is_blocking=False,
+        expected_duration_sec=15,
+        timeout_duration_sec=120,
+        retry_count=0,
+        retry_delay=0,
+        on_failure="stop",
+        deleted=False,
     )
-    existing_recipe = SimpleNamespace(
+    recipe = Mock(
         id=10,
         name="fallback-recipe",
         enabled=True,
+        description="old",
         deleted=False,
         deleted_at=None,
         updated_at=None,
-        recipe_ingredients=[existing_step],
     )
 
     db = AsyncMock()
     db.execute = AsyncMock(
         side_effect=[
-            _ScalarResult(first=None),  # first ingredient lookup
-            _ScalarResult(first=existing_ingredient),  # retry ingredient lookup after conflict
-            _ScalarResult(first=existing_recipe),  # recipe lookup
-            _ScalarResult(first=existing_step),  # existing first step lookup
+            _ScalarResult(first=None),
+            _ScalarResult(first=existing_open),
+            _ScalarResult(first=existing_update),
+            _ScalarResult(first=recipe),
+            _ScalarResult(first=None),
         ]
     )
     db.add = Mock()
@@ -89,52 +93,95 @@ async def test_ensure_fallback_recipe_recovers_from_duplicate_core_ingredient_in
 
     with patch(
         "api.services.fallback_recipe.get_settings",
-        return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        return_value=SimpleNamespace(
+            catch_all_recipe_name="fallback-recipe",
+            bakery_active_provider="rackspace_core",
+        ),
     ):
-        recipe = await ensure_fallback_recipe(db, req_id="REQ-RACE")
+        result = await ensure_fallback_recipe(db, req_id="REQ-RACE")
 
-    assert recipe is existing_recipe
-    assert existing_ingredient.is_default is True
+    assert result is recipe
+    assert existing_open.is_default is True
+    assert existing_open.execution_purpose == "comms"
+    assert existing_update.is_default is True
+    assert existing_update.execution_purpose == "comms"
 
 
 @pytest.mark.asyncio
-async def test_ensure_fallback_recipe_uses_explicit_step_query_not_relationship_lazy_load():
-    existing_ingredient = SimpleNamespace(
+async def test_ensure_fallback_recipe_builds_firing_open_and_resolving_update_steps():
+    open_ingredient = Ingredient(
         id=7,
         execution_engine="bakery",
-        execution_target="core",
+        execution_target="rackspace_core",
+        destination_target="",
+        task_key_template="fallback_open",
+        execution_purpose="comms",
+        execution_payload={},
+        execution_parameters={"operation": "open"},
         is_default=True,
+        is_blocking=False,
+        expected_duration_sec=15,
+        timeout_duration_sec=120,
+        retry_count=1,
+        retry_delay=5,
+        on_failure="continue",
+        deleted=False,
+    )
+    update_ingredient = Ingredient(
+        id=8,
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        destination_target="",
+        task_key_template="fallback_update",
+        execution_purpose="comms",
+        execution_payload={},
+        execution_parameters={"operation": "update"},
+        is_default=True,
+        is_blocking=False,
+        expected_duration_sec=15,
+        timeout_duration_sec=120,
+        retry_count=1,
+        retry_delay=5,
+        on_failure="continue",
+        deleted=False,
+    )
+    recipe = SimpleNamespace(
+        id=22,
+        name="fallback-recipe",
+        enabled=True,
+        description="old",
         deleted=False,
         deleted_at=None,
         updated_at=None,
     )
-    existing_recipe = _RecipeWithoutLazyIngredients(recipe_id=22, name="fallback-recipe")
-    existing_step = SimpleNamespace(
-        ingredient_id=999,
-        step_order=1,
-        run_phase="firing",
-        on_success="stop",
-    )
+    added: list[object] = []
 
     db = AsyncMock()
     db.execute = AsyncMock(
         side_effect=[
-            _ScalarResult(first=existing_ingredient),  # ingredient lookup
-            _ScalarResult(first=existing_recipe),  # recipe lookup
-            _ScalarResult(first=existing_step),  # explicit first-step lookup
+            _ScalarResult(first=open_ingredient),
+            _ScalarResult(first=update_ingredient),
+            _ScalarResult(first=recipe),
+            _ScalarResult(first=None),
         ]
     )
-    db.add = Mock()
+    db.add = Mock(side_effect=added.append)
     db.begin_nested = Mock(return_value=_NestedContext())
     db.flush = AsyncMock()
 
     with patch(
         "api.services.fallback_recipe.get_settings",
-        return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        return_value=SimpleNamespace(
+            catch_all_recipe_name="fallback-recipe",
+            bakery_active_provider="rackspace_core",
+        ),
     ):
-        recipe = await ensure_fallback_recipe(db, req_id="REQ-NO-LAZY")
+        result = await ensure_fallback_recipe(db, req_id="REQ-FALLBACK")
 
-    assert recipe is existing_recipe
-    assert existing_step.ingredient_id == existing_ingredient.id
-    assert existing_step.run_phase == "resolving"
-    assert existing_step.on_success == "continue"
+    assert result is recipe
+    steps = [item for item in added if isinstance(item, RecipeIngredient)]
+    assert len(steps) == 2
+    assert [(step.step_order, step.run_phase, step.run_condition) for step in steps] == [
+        (1, "firing", "always"),
+        (2, "resolving", "resolved_after_no_remediation"),
+    ]

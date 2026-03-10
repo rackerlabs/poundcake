@@ -34,6 +34,8 @@ DishProcessingStatus = Literal[
 OrderProcessingStatus = Literal[
     "new",
     "processing",
+    "waiting_clear",
+    "escalation",
     "resolving",
     "complete",
     "failed",
@@ -117,19 +119,38 @@ OnFailureAction = Literal[
 
 RunPhase = Literal[
     "firing",
+    "escalation",
     "resolving",
     "both",
 ]
 
 DishRunPhase = Literal[
     "firing",
+    "escalation",
     "resolving",
+]
+
+RunCondition = Literal[
+    "always",
+    "remediation_failed",
+    "clear_timeout_expired",
+    "resolved_after_success",
+    "resolved_after_failure",
+    "resolved_after_no_remediation",
+    "resolved_after_timeout",
 ]
 
 ExecutionPurpose = Literal[
     "remediation",
     "comms",
     "utility",
+]
+
+RemediationOutcome = Literal[
+    "pending",
+    "succeeded",
+    "failed",
+    "none",
 ]
 
 # Backward-compatible alias.

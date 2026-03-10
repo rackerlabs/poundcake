@@ -101,10 +101,10 @@ def test_cook_execute_validation_error_returns_400():
         "/api/v1/cook/execute",
         json={
             "execution_engine": "bakery",
-            "execution_target": "core",
+            "execution_target": "not-a-route",
             "execution_payload": {"comment": "ok"},
             "execution_parameters": {"operation": "ticket_comment"},
         },
     )
     assert response.status_code == 400
-    assert "ticket_id" in response.json()["detail"]
+    assert "execution_target" in response.json()["detail"]

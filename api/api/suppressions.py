@@ -14,6 +14,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from api.core.database import get_db
 from api.core.logging import get_logger
@@ -419,31 +420,71 @@ async def get_bakery_ticketing_history(
             )
         )
 
-    order_query = select(Order).where(
-        or_(Order.bakery_ticket_id.is_not(None), Order.bakery_operation_id.is_not(None))
+    order_query = (
+        select(Order)
+        .options(joinedload(Order.communications))
+        .where(
+            or_(
+                Order.bakery_ticket_id.is_not(None),
+                Order.bakery_operation_id.is_not(None),
+                Order.communications.any(),
+            )
+        )
     )
     if params.status:
-        order_query = order_query.where(Order.processing_status == params.status)
+        order_query = order_query.where(
+            or_(Order.processing_status == params.status, Order.bakery_ticket_state == params.status)
+        )
     order_result = await db.execute(
         order_query.order_by(Order.updated_at.desc()).limit(params.limit)
     )
-    for order in order_result.scalars().all():
-        rows.append(
-            BakeryOperationRecord(
-                source="order",
-                reference_id=str(order.id),
-                ticket_id=order.bakery_ticket_id,
-                operation_id=order.bakery_operation_id,
-                status=order.bakery_ticket_state or order.processing_status,
-                updated_at=order.updated_at,
-                details={
-                    "alert_group_name": order.alert_group_name,
-                    "req_id": order.req_id,
-                    "permanent_failure": order.bakery_permanent_failure,
-                    "last_error": order.bakery_last_error,
-                },
+    for order in order_result.unique().scalars().all():
+        if order.communications:
+            for communication in order.communications:
+                if params.status and params.status not in {
+                    communication.lifecycle_state or "",
+                    communication.remote_state or "",
+                    order.processing_status or "",
+                }:
+                    continue
+                rows.append(
+                    BakeryOperationRecord(
+                        source="order",
+                        reference_id=str(order.id),
+                        ticket_id=communication.bakery_ticket_id,
+                        operation_id=communication.bakery_operation_id,
+                        status=communication.lifecycle_state or communication.remote_state,
+                        execution_target=communication.execution_target,
+                        destination_target=communication.destination_target,
+                        remote_state=communication.remote_state,
+                        writable=communication.writable,
+                        reopenable=communication.reopenable,
+                        updated_at=communication.updated_at,
+                        details={
+                            "alert_group_name": order.alert_group_name,
+                            "req_id": order.req_id,
+                            "last_error": communication.last_error,
+                            "order_processing_status": order.processing_status,
+                        },
+                    )
+                )
+        elif order.bakery_ticket_id or order.bakery_operation_id:
+            rows.append(
+                BakeryOperationRecord(
+                    source="order",
+                    reference_id=str(order.id),
+                    ticket_id=order.bakery_ticket_id,
+                    operation_id=order.bakery_operation_id,
+                    status=order.bakery_ticket_state or order.processing_status,
+                    updated_at=order.updated_at,
+                    details={
+                        "alert_group_name": order.alert_group_name,
+                        "req_id": order.req_id,
+                        "permanent_failure": order.bakery_permanent_failure,
+                        "last_error": order.bakery_last_error,
+                    },
+                )
             )
-        )
 
     rows.sort(
         key=lambda item: item.updated_at or datetime(1970, 1, 1, tzinfo=timezone.utc),

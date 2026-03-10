@@ -111,7 +111,10 @@ class OrderQueryParams(BaseModel):
 
     processing_status: Optional[OrderProcessingStatus] = Field(
         None,
-        description="Filter by processing status (new/processing/resolving/complete/failed/canceled)",
+        description=(
+            "Filter by processing status "
+            "(new/processing/waiting_clear/escalation/resolving/complete/failed/canceled)"
+        ),
     )
     alert_status: Optional[AlertStatus] = Field(
         None, description="Filter by alert status (firing/resolved)"

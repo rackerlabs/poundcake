@@ -17,6 +17,10 @@ from api.core.http_client import request_with_retry_sync
 
 from api.core.config import get_settings
 from api.core.logging import get_logger, setup_logging
+from kitchen.execution_segments import (
+    PENDING_EXECUTION_STATUSES,
+    next_pending_execution_segment,
+)
 from kitchen.service_helpers import get_service_headers, wait_for_api
 
 setup_logging()
@@ -35,7 +39,7 @@ CHEF_EXECUTE_MISSING_WORKFLOW_RETRY_BACKOFF_SECONDS = max(
     0.1, get_settings().chef_execute_missing_workflow_retry_backoff_seconds
 )
 MISSING_WORKFLOW_PATH_FRAGMENT = "/opt/stackstorm/packs/poundcake/actions/workflows/"
-PENDING_STATUSES = {"pending", "queued", "processing", "running", None}
+PENDING_STATUSES = PENDING_EXECUTION_STATUSES
 
 
 def _is_missing_workflow_file_response(response_text: str | None) -> bool:
@@ -141,6 +145,7 @@ def _execute_bakery_steps(
                 "started_at": now,
                 "execution_engine": "bakery",
                 "execution_target": item.get("execution_target"),
+                "destination_target": item.get("destination_target"),
             },
         )
 
@@ -155,6 +160,7 @@ def _execute_bakery_steps(
                 "context": {
                     "order_id": order_id,
                     "recipe_ingredient_id": recipe_ingredient_id,
+                    "destination_target": item.get("destination_target") or "",
                 },
             },
             headers=get_service_headers(req_id),
@@ -192,6 +198,7 @@ def _execute_bakery_steps(
                 "error_message": error_message,
                 "execution_engine": "bakery",
                 "execution_target": item.get("execution_target"),
+                "destination_target": item.get("destination_target"),
             },
         )
 
@@ -367,53 +374,58 @@ def run_chef() -> None:
 
             dish = claim_resp.json()
             dish_id = int(dish.get("id"))
-            ingredients = _fetch_dish_ingredients(dish_id, req_id)
-            stackstorm_pending = [
-                item
-                for item in ingredients
-                if (item.get("execution_engine") or "").strip().lower() == "stackstorm"
-                and item.get("execution_status") in PENDING_STATUSES
-            ]
-            bakery_pending = [
-                item
-                for item in ingredients
-                if (item.get("execution_engine") or "").strip().lower() == "bakery"
-                and item.get("execution_status") in PENDING_STATUSES
-            ]
+            while True:
+                ingredients = _fetch_dish_ingredients(dish_id, req_id)
+                next_segment = next_pending_execution_segment(dish, ingredients)
+                if next_segment is None:
+                    _finalize_dish(dish_id, req_id, success=True)
+                    break
 
-            if stackstorm_pending:
-                try:
-                    recipe = dish.get("recipe") if isinstance(dish.get("recipe"), dict) else {}
-                    _start_stackstorm_workflow(
-                        dish_id=dish_id,
+                segment_engine, segment_items = next_segment
+                if segment_engine == "bakery":
+                    ok, err = _execute_bakery_steps(
+                        dish=dish,
                         req_id=req_id,
-                        recipe=recipe,
-                        stackstorm_ingredient_rows=stackstorm_pending,
+                        ingredients=segment_items,
                     )
-                    logger.info(
-                        "StackStorm workflow execution started",
-                        extra={
-                            "req_id": req_id,
-                            "dish_id": dish_id,
-                            "run_phase": dish.get("run_phase"),
-                        },
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.error(
-                        "Workflow execution failed",
-                        extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
-                    )
-                    _finalize_dish(dish_id, req_id, success=False, error=str(exc))
-                continue
+                    if not ok:
+                        _finalize_dish(dish_id, req_id, success=False, error=err)
+                        break
+                    continue
 
-            if bakery_pending:
-                ok, err = _execute_bakery_steps(
-                    dish=dish, req_id=req_id, ingredients=bakery_pending
+                if segment_engine == "stackstorm":
+                    try:
+                        recipe = dish.get("recipe") if isinstance(dish.get("recipe"), dict) else {}
+                        _start_stackstorm_workflow(
+                            dish_id=dish_id,
+                            req_id=req_id,
+                            recipe=recipe,
+                            stackstorm_ingredient_rows=segment_items,
+                        )
+                        logger.info(
+                            "StackStorm workflow execution started",
+                            extra={
+                                "req_id": req_id,
+                                "dish_id": dish_id,
+                                "run_phase": dish.get("run_phase"),
+                                "segment_size": len(segment_items),
+                            },
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error(
+                            "Workflow execution failed",
+                            extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
+                        )
+                        _finalize_dish(dish_id, req_id, success=False, error=str(exc))
+                    break
+
+                _finalize_dish(
+                    dish_id,
+                    req_id,
+                    success=False,
+                    error=f"Unsupported segment engine: {segment_engine}",
                 )
-                _finalize_dish(dish_id, req_id, success=ok, error=err)
-                continue
-
-            _finalize_dish(dish_id, req_id, success=True)
+                break
 
         except Exception as e:  # noqa: BLE001
             if api_unavailable_since is None:

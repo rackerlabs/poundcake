@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from api.core.logging import setup_logging, get_logger
 from api.core.config import get_settings
 from api.core.statuses import ST2_TERMINAL_STATUSES, ST2_FAILURE_STATUSES
+from kitchen.execution_segments import next_pending_execution_segment
 from kitchen.service_helpers import wait_for_api, get_service_headers
 
 # Configuration
@@ -261,31 +262,78 @@ def _mark_pending_ingredients_failed(dish_id: int, req_id: str, error_message: s
         )
 
 
+def _fetch_dish_ingredients(dish_id: int, req_id: str) -> list[dict[str, Any]]:
+    ingredients_resp = request_with_retry_sync(
+        "GET",
+        f"{API_BASE_URL}/dishes/{dish_id}/ingredients",
+        headers=get_service_headers(req_id),
+        timeout=10,
+        retries=POLLER_RETRIES,
+    )
+    if ingredients_resp.status_code != 200:
+        raise RuntimeError(f"Failed to fetch dish ingredients: {ingredients_resp.text}")
+    payload = ingredients_resp.json()
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def _requeue_dish_for_next_segment(
+    dish: dict[str, Any],
+    req_id: str,
+    *,
+    result: Any | None = None,
+    started_at: str | None = None,
+) -> bool:
+    dish_id = dish.get("id")
+    payload: dict[str, Any] = {
+        "processing_status": "new",
+        "execution_status": None,
+        "execution_ref": None,
+        "error_message": None,
+    }
+    if result is not None:
+        payload["result"] = result
+    if started_at:
+        payload["started_at"] = started_at
+    try:
+        resp = request_with_retry_sync(
+            "PATCH",
+            f"{API_BASE_URL}/dishes/{dish_id}",
+            json=payload,
+            headers=get_service_headers(req_id),
+            timeout=10,
+            retries=POLLER_RETRIES,
+        )
+        resp.raise_for_status()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Failed to requeue dish for next execution segment",
+            extra={"req_id": req_id, "dish_id": dish_id, "error": str(exc)},
+        )
+        return False
+
+
 def _execute_pending_bakery_ingredients(
-    dish: dict[str, Any], req_id: str
+    dish: dict[str, Any],
+    req_id: str,
+    *,
+    ingredients: list[dict[str, Any]] | None = None,
+    segment: list[dict[str, Any]] | None = None,
 ) -> tuple[bool, str | None, bool]:
     """Execute pending Bakery ingredients for a dish and persist per-step state."""
     dish_id = dish.get("id")
     if not dish_id:
         return True, None, False
     try:
-        ingredients_resp = request_with_retry_sync(
-            "GET",
-            f"{API_BASE_URL}/dishes/{dish_id}/ingredients",
-            headers=get_service_headers(req_id),
-            timeout=10,
-            retries=POLLER_RETRIES,
-        )
-        if ingredients_resp.status_code != 200:
-            return False, f"Failed to fetch dish ingredients: {ingredients_resp.text}", False
-        ingredients = ingredients_resp.json() or []
-        pending_bakery = [
-            item
-            for item in ingredients
-            if isinstance(item, dict)
-            and (item.get("execution_engine") or "").strip().lower() == "bakery"
-            and item.get("execution_status") in {"pending", "queued", "processing", None}
-        ]
+        current_ingredients = ingredients or _fetch_dish_ingredients(int(dish_id), req_id)
+        pending_bakery = segment
+        if pending_bakery is None:
+            next_segment = next_pending_execution_segment(dish, current_ingredients)
+            if next_segment is None or next_segment[0] != "bakery":
+                return True, None, False
+            pending_bakery = next_segment[1]
         if not pending_bakery:
             return True, None, False
 
@@ -317,6 +365,7 @@ def _execute_pending_bakery_ingredients(
                             "task_key": task_key,
                             "execution_engine": "bakery",
                             "execution_target": item.get("execution_target"),
+                            "destination_target": item.get("destination_target"),
                             "execution_status": "running",
                             "started_at": start_ts,
                         }
@@ -337,6 +386,7 @@ def _execute_pending_bakery_ingredients(
                     "context": {
                         "order_id": dish.get("order_id"),
                         "recipe_ingredient_id": recipe_ingredient_id,
+                        "destination_target": item.get("destination_target") or "",
                     },
                 },
                 headers=get_service_headers(req_id),
@@ -368,6 +418,7 @@ def _execute_pending_bakery_ingredients(
                             "task_key": task_key,
                             "execution_engine": "bakery",
                             "execution_target": item.get("execution_target"),
+                            "destination_target": item.get("destination_target"),
                             "execution_ref": execution_ref,
                             "execution_status": "succeeded" if success else "failed",
                             "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -547,35 +598,57 @@ def monitor_dishes() -> None:
                 continue
 
             if not execution_id:
-                ingredients_resp = request_with_retry_sync(
-                    "GET",
-                    f"{API_BASE_URL}/dishes/{dish.get('id')}/ingredients",
-                    headers=get_service_headers(req_id),
-                    timeout=10,
-                    retries=POLLER_RETRIES,
-                )
-                ingredients_payload = (
-                    ingredients_resp.json()
-                    if ingredients_resp.status_code == 200
-                    and isinstance(ingredients_resp.json(), list)
-                    else []
-                )
-                has_stackstorm_ingredients = any(
-                    isinstance(item, dict)
-                    and (item.get("execution_engine") or "").strip().lower() == "stackstorm"
-                    for item in ingredients_payload
-                )
-                if not has_stackstorm_ingredients:
-                    bakery_ok, bakery_err, _ = _execute_pending_bakery_ingredients(dish, req_id)
+                try:
+                    ingredients_payload = _fetch_dish_ingredients(int(dish["id"]), req_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "Failed to fetch dish ingredients for no-execution recovery",
+                        extra={"req_id": req_id, "dish_id": dish.get("id"), "error": str(exc)},
+                    )
+                    continue
+
+                next_segment = next_pending_execution_segment(dish, ingredients_payload)
+                if next_segment is None:
                     update_dish(
                         dish,
                         req_id,
-                        processing_status="complete" if bakery_ok else "failed",
-                        execution_status="succeeded" if bakery_ok else "failed",
-                        error_msg=bakery_err,
+                        processing_status="complete",
+                        execution_status="succeeded",
                         final_status=True,
                     )
                     continue
+
+                if next_segment[0] == "bakery":
+                    bakery_ok, bakery_err, _ = _execute_pending_bakery_ingredients(
+                        dish,
+                        req_id,
+                        ingredients=ingredients_payload,
+                        segment=next_segment[1],
+                    )
+                    if not bakery_ok:
+                        update_dish(
+                            dish,
+                            req_id,
+                            processing_status="failed",
+                            execution_status="failed",
+                            error_msg=bakery_err,
+                            final_status=True,
+                        )
+                        continue
+
+                    refreshed_ingredients = _fetch_dish_ingredients(int(dish["id"]), req_id)
+                    if next_pending_execution_segment(dish, refreshed_ingredients) is None:
+                        update_dish(
+                            dish,
+                            req_id,
+                            processing_status="complete",
+                            execution_status="succeeded",
+                            final_status=True,
+                        )
+                    else:
+                        _requeue_dish_for_next_segment(dish, req_id)
+                    continue
+
                 start_str = dish.get("started_at") or dish.get("created_at")
                 if start_str:
                     dt_obj = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
@@ -828,12 +901,30 @@ def monitor_dishes() -> None:
                             err = f"{err}; workflow file retry failed: {retry_error}"
                         _mark_pending_ingredients_failed(dish["id"], req_id, str(err))
                     elif st2_status == "succeeded":
-                        bakery_ok, bakery_err, had_bakery = _execute_pending_bakery_ingredients(
-                            dish, req_id
-                        )
-                        if had_bakery and not bakery_ok:
+                        try:
+                            refreshed_ingredients = _fetch_dish_ingredients(int(dish["id"]), req_id)
+                        except Exception as exc:  # noqa: BLE001
                             processing_status = "failed"
-                            err = bakery_err or "Bakery stage failed"
+                            err = f"Failed to fetch next execution segment: {exc}"
+                        else:
+                            if next_pending_execution_segment(dish, refreshed_ingredients) is not None:
+                                if _requeue_dish_for_next_segment(
+                                    dish,
+                                    req_id,
+                                    result=dish_result,
+                                    started_at=dish_started_at or dish.get("started_at"),
+                                ):
+                                    logger.info(
+                                        "Dish requeued for next execution segment",
+                                        extra={
+                                            "req_id": req_id,
+                                            "dish_id": dish["id"],
+                                            "execution_id": execution_id,
+                                        },
+                                    )
+                                    continue
+                                processing_status = "failed"
+                                err = "Failed to requeue dish for next execution segment"
 
                     update_dish(
                         dish,
