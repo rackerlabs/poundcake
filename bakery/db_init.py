@@ -73,16 +73,28 @@ def wait_for_database(max_attempts: int = 30, delay_sec: int = 2) -> bool:
     return False
 
 
-def inspect_existing_tables(database_url: str) -> set[str]:
-    """Return the current set of table names in the Bakery database."""
+def inspect_schema_state(database_url: str) -> tuple[set[str], list[str]]:
+    """Return the current Bakery table names and stored Alembic revisions."""
     engine = create_engine(database_url, pool_pre_ping=True)
     try:
-        return set(inspect(engine).get_table_names())
+        table_names = set(inspect(engine).get_table_names())
+        revisions: list[str] = []
+        if ALEMBIC_VERSION_TABLE in table_names:
+            with engine.connect() as conn:
+                revisions = [
+                    row[0]
+                    for row in conn.execute(text("SELECT version_num FROM alembic_version"))
+                    if row[0]
+                ]
+        return table_names, revisions
     finally:
         engine.dispose()
 
 
-def determine_migration_strategy(existing_tables: Iterable[str]) -> str:
+def determine_migration_strategy(
+    existing_tables: Iterable[str],
+    alembic_revisions: Iterable[str] | None = None,
+) -> str:
     """
     Decide how Bakery migrations should initialize an existing database.
 
@@ -92,9 +104,10 @@ def determine_migration_strategy(existing_tables: Iterable[str]) -> str:
       - "error": partial managed schema exists without alembic_version
     """
     table_names = set(existing_tables)
+    stored_revisions = [revision for revision in (alembic_revisions or []) if revision]
     managed_present = MANAGED_TABLES & table_names
 
-    if ALEMBIC_VERSION_TABLE in table_names:
+    if stored_revisions:
         return "upgrade"
     if not managed_present:
         return "upgrade"
@@ -115,8 +128,8 @@ def run_migrations() -> bool:
         alembic_cfg = Config(str(alembic_ini))
         alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
         alembic_cfg.set_main_option("script_location", str(alembic_ini.parent / "alembic"))
-        existing_tables = inspect_existing_tables(settings.database_url)
-        strategy = determine_migration_strategy(existing_tables)
+        existing_tables, alembic_revisions = inspect_schema_state(settings.database_url)
+        strategy = determine_migration_strategy(existing_tables, alembic_revisions)
 
         logger.info(
             "Running Bakery database migrations",
@@ -124,6 +137,7 @@ def run_migrations() -> bool:
             database_host=settings.database_host,
             database_name=settings.database_name,
             strategy=strategy,
+            alembic_revisions=alembic_revisions,
         )
 
         if strategy == "stamp":

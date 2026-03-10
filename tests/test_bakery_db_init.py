@@ -29,9 +29,20 @@ def test_determine_migration_strategy_upgrades_empty_schema() -> None:
 def test_determine_migration_strategy_upgrades_versioned_schema() -> None:
     assert (
         db_init.determine_migration_strategy(
-            {"messages", "ticket_requests", "mixer_configs", "alembic_version"}
+            {"messages", "ticket_requests", "mixer_configs", "alembic_version"},
+            ["001"],
         )
         == "upgrade"
+    )
+
+
+def test_determine_migration_strategy_stamps_when_version_table_is_empty() -> None:
+    assert (
+        db_init.determine_migration_strategy(
+            {"messages", "ticket_requests", "mixer_configs", "alembic_version"},
+            [],
+        )
+        == "stamp"
     )
 
 
@@ -54,8 +65,8 @@ def test_run_migrations_stamps_existing_unversioned_schema(monkeypatch) -> None:
     monkeypatch.setattr(db_init, "Config", Mock(return_value=fake_config))
     monkeypatch.setattr(
         db_init,
-        "inspect_existing_tables",
-        Mock(return_value={"messages", "ticket_requests", "mixer_configs"}),
+        "inspect_schema_state",
+        Mock(return_value=({"messages", "ticket_requests", "mixer_configs"}, [])),
     )
     monkeypatch.setattr(db_init.command, "stamp", stamp)
     monkeypatch.setattr(db_init.command, "upgrade", upgrade)
@@ -73,8 +84,8 @@ def test_run_migrations_fails_for_partial_unversioned_schema(monkeypatch) -> Non
     monkeypatch.setattr(db_init, "Config", Mock(return_value=fake_config))
     monkeypatch.setattr(
         db_init,
-        "inspect_existing_tables",
-        Mock(return_value={"messages"}),
+        "inspect_schema_state",
+        Mock(return_value=({"messages"}, [])),
     )
     monkeypatch.setattr(db_init.command, "stamp", stamp)
     monkeypatch.setattr(db_init.command, "upgrade", upgrade)
