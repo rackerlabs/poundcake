@@ -433,7 +433,9 @@ async def get_bakery_ticketing_history(
     )
     if params.status:
         order_query = order_query.where(
-            or_(Order.processing_status == params.status, Order.bakery_ticket_state == params.status)
+            or_(
+                Order.processing_status == params.status, Order.bakery_ticket_state == params.status
+            )
         )
     order_result = await db.execute(
         order_query.order_by(Order.updated_at.desc()).limit(params.limit)

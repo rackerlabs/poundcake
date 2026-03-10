@@ -12,6 +12,7 @@ python-multipart==0.0.22
 
 # Database
 sqlalchemy==2.0.46
+greenlet==3.2.4
 alembic==1.18.3
 pymysql==1.1.2
 cryptography==46.0.4

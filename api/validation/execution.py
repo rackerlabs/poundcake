@@ -63,7 +63,6 @@ def validate_bakery_target_payload(
     bakery_ticket_id: str | None = None,
 ) -> str | None:
     target = normalize_destination_type(execution_target)
-    ticket_id = str(payload.get("ticket_id") or bakery_ticket_id or "").strip()
     params = execution_parameters if isinstance(execution_parameters, dict) else {}
     operation = normalize_communication_operation(params.get("operation"))
 

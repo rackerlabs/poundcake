@@ -77,7 +77,9 @@ def build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
 
 async def expected_duration_for_phase(db: AsyncSession, *, recipe_id: int, phase: str) -> int:
     normalized_phase = normalize_run_phase(phase)
-    allowed_phases = (normalized_phase, "both") if normalized_phase != "escalation" else ("escalation",)
+    allowed_phases = (
+        (normalized_phase, "both") if normalized_phase != "escalation" else ("escalation",)
+    )
     query = (
         select(func.coalesce(func.sum(Ingredient.expected_duration_sec), 0))
         .select_from(RecipeIngredient)
@@ -112,7 +114,10 @@ def seed_dish_ingredients_for_phase(
             continue
         if not is_phase_eligible(ri.run_phase, phase):
             continue
-        if normalized_phase in {"escalation", "resolving"} and not is_non_firing_ingredient_eligible(ri):
+        if normalized_phase in {
+            "escalation",
+            "resolving",
+        } and not is_non_firing_ingredient_eligible(ri):
             continue
         if not is_run_condition_eligible(ri, phase=phase, order=order):
             continue

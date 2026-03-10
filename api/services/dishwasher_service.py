@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import yaml
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import SessionLocal
@@ -24,6 +24,7 @@ from api.models.models import Ingredient, Recipe, RecipeIngredient
 from api.services.bootstrap_ingredient_catalog import upsert_bootstrap_bakery_ingredients
 from api.services.bootstrap_recipe_catalog import upsert_bootstrap_recipe_catalog
 from api.services.fallback_recipe import ensure_fallback_recipe
+from api.services.recipe_ingredient_cleanup import delete_recipe_ingredients_safely
 from api.services.stackstorm_service import get_action_manager
 
 logger = get_logger(__name__)
@@ -336,7 +337,7 @@ async def sync_recipe_ingredients_from_yaml(
         )
         return False
 
-    await db.execute(delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id))
+    await delete_recipe_ingredients_safely(db, recipe_id=recipe.id)
 
     step_order = 1
     for task_name in ordered_tasks:

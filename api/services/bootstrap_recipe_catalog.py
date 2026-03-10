@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import delete, select, tuple_
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.logging import get_logger
@@ -19,6 +19,7 @@ from api.services.communications import (
     normalize_destination_type,
     normalize_run_condition,
 )
+from api.services.recipe_ingredient_cleanup import delete_recipe_ingredients_safely
 
 logger = get_logger(__name__)
 
@@ -221,12 +222,12 @@ async def upsert_bootstrap_recipe_catalog(
     ingredient_map: dict[tuple[str, str, str, str], Ingredient] = {}
     ingredient_candidates: dict[tuple[str, str], list[Ingredient]] = {}
     if refs:
-        result = await db.execute(
+        ingredient_result = await db.execute(
             select(Ingredient).where(
                 tuple_(Ingredient.execution_engine, Ingredient.execution_target).in_(list(refs))
             )
         )
-        for row in result.scalars().all():
+        for row in ingredient_result.scalars().all():
             exact_key = (
                 row.execution_engine,
                 row.execution_target,
@@ -234,7 +235,9 @@ async def upsert_bootstrap_recipe_catalog(
                 getattr(row, "task_key_template", "") or "",
             )
             ingredient_map[exact_key] = row
-            ingredient_candidates.setdefault((row.execution_engine, row.execution_target), []).append(row)
+            ingredient_candidates.setdefault(
+                (row.execution_engine, row.execution_target), []
+            ).append(row)
 
     # Any missing ingredient reference is a hard per-entry validation failure.
     valid_recipes: list[dict[str, Any]] = []
@@ -282,10 +285,10 @@ async def upsert_bootstrap_recipe_catalog(
     for payload in valid_recipes:
         processed += 1
         recipe_name = payload["name"]
-        result = await db.execute(select(Recipe).where(Recipe.name == recipe_name))
-        recipe = result.scalars().first()
-        if recipe is None:
-            recipe = Recipe(
+        recipe_result = await db.execute(select(Recipe).where(Recipe.name == recipe_name))
+        db_recipe: Recipe | None = recipe_result.scalars().first()
+        if db_recipe is None:
+            db_recipe = Recipe(
                 name=recipe_name,
                 description=payload["description"],
                 enabled=payload["enabled"],
@@ -294,35 +297,35 @@ async def upsert_bootstrap_recipe_catalog(
                 deleted_at=None,
                 updated_at=now,
             )
-            db.add(recipe)
+            db.add(db_recipe)
             await db.flush()
             created += 1
         else:
             changed = False
-            if recipe.description != payload["description"]:
-                recipe.description = payload["description"]
+            if db_recipe.description != payload["description"]:
+                db_recipe.description = payload["description"]
                 changed = True
-            if recipe.enabled != payload["enabled"]:
-                recipe.enabled = payload["enabled"]
+            if db_recipe.enabled != payload["enabled"]:
+                db_recipe.enabled = payload["enabled"]
                 changed = True
-            if recipe.clear_timeout_sec != payload["clear_timeout_sec"]:
-                recipe.clear_timeout_sec = payload["clear_timeout_sec"]
+            if db_recipe.clear_timeout_sec != payload["clear_timeout_sec"]:
+                db_recipe.clear_timeout_sec = payload["clear_timeout_sec"]
                 changed = True
-            if recipe.deleted is True or recipe.deleted_at is not None:
-                recipe.deleted = False
-                recipe.deleted_at = None
+            if db_recipe.deleted is True or db_recipe.deleted_at is not None:
+                db_recipe.deleted = False
+                db_recipe.deleted_at = None
                 changed = True
             if changed:
-                recipe.updated_at = now
+                db_recipe.updated_at = now
                 updated += 1
             else:
                 skipped += 1
 
-        await db.execute(delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id))
+        await delete_recipe_ingredients_safely(db, recipe_id=db_recipe.id)
         for step in sorted(payload["recipe_ingredients"], key=lambda s: s["step_order"]):
             db.add(
                 RecipeIngredient(
-                    recipe_id=recipe.id,
+                    recipe_id=db_recipe.id,
                     ingredient_id=step["resolved_ingredient_id"],
                     step_order=step["step_order"],
                     on_success=step["on_success"],

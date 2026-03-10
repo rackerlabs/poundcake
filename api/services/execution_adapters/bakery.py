@@ -137,7 +137,9 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                     idempotency_key=idem_key,
                 )
             elif operation == "notify":
-                comment_payload = payload if "comment" in payload else {"comment": self._payload_comment(payload)}
+                comment_payload = (
+                    payload if "comment" in payload else {"comment": self._payload_comment(payload)}
+                )
                 accepted = await add_ticket_comment_with_key(
                     req_id=ctx.req_id,
                     ticket_id=ticket_id,

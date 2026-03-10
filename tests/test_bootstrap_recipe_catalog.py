@@ -148,8 +148,10 @@ recipe:
         side_effect=[
             _ScalarResult(all_=[ingredient]),  # ingredient map
             _ScalarResult(first=existing_recipe),  # node-a
+            _ScalarResult(),  # detach node-a dish_ingredients
             _ScalarResult(),  # delete node-a recipe_ingredients
             _ScalarResult(first=None),  # node-b
+            _ScalarResult(),  # detach node-b dish_ingredients
             _ScalarResult(),  # delete node-b recipe_ingredients
         ]
     )
@@ -167,6 +169,18 @@ recipe:
     assert existing_recipe.enabled is True
     assert existing_recipe.deleted is False
     assert existing_recipe.deleted_at is None
+
+    dml_tables = [
+        stmt.table.name
+        for stmt in (call.args[0] for call in db.execute.call_args_list)
+        if hasattr(stmt, "table")
+    ]
+    assert dml_tables == [
+        "dish_ingredients",
+        "recipe_ingredients",
+        "dish_ingredients",
+        "recipe_ingredients",
+    ]
 
     added_rows = [call.args[0] for call in db.add.call_args_list]
     assert any(isinstance(row, Recipe) and row.name == "node-b" for row in added_rows)

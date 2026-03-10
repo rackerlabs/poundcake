@@ -25,7 +25,16 @@ def orders() -> None:
     "--processing-status",
     "-s",
     type=click.Choice(
-        ["new", "processing", "waiting_clear", "escalation", "resolving", "complete", "failed", "canceled"]
+        [
+            "new",
+            "processing",
+            "waiting_clear",
+            "escalation",
+            "resolving",
+            "complete",
+            "failed",
+            "canceled",
+        ]
     ),
     help="Filter by processing status",
 )
@@ -99,7 +108,16 @@ def timeline(ctx: click.Context, order_id: int) -> None:
     "--processing-status",
     "-s",
     type=click.Choice(
-        ["new", "processing", "waiting_clear", "escalation", "resolving", "complete", "failed", "canceled"]
+        [
+            "new",
+            "processing",
+            "waiting_clear",
+            "escalation",
+            "resolving",
+            "complete",
+            "failed",
+            "canceled",
+        ]
     ),
     help="Filter by processing status",
 )

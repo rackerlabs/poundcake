@@ -284,9 +284,7 @@ class Order(Base):
     )
     clear_timeout_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
     clear_deadline_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-    clear_timed_out_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True, index=True
-    )
+    clear_timed_out_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     auto_close_eligible: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, index=True
     )

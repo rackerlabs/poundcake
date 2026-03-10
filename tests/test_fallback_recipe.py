@@ -85,6 +85,7 @@ async def test_ensure_fallback_recipe_recovers_from_duplicate_managed_ingredient
             _ScalarResult(first=existing_update),
             _ScalarResult(first=recipe),
             _ScalarResult(first=None),
+            _ScalarResult(first=None),
         ]
     )
     db.add = Mock()
@@ -105,6 +106,11 @@ async def test_ensure_fallback_recipe_recovers_from_duplicate_managed_ingredient
     assert existing_open.execution_purpose == "comms"
     assert existing_update.is_default is True
     assert existing_update.execution_purpose == "comms"
+    statements = [call.args[0] for call in db.execute.call_args_list]
+    assert [stmt.table.name for stmt in statements[-2:]] == [
+        "dish_ingredients",
+        "recipe_ingredients",
+    ]
 
 
 @pytest.mark.asyncio
@@ -163,6 +169,7 @@ async def test_ensure_fallback_recipe_builds_firing_open_and_resolving_update_st
             _ScalarResult(first=update_ingredient),
             _ScalarResult(first=recipe),
             _ScalarResult(first=None),
+            _ScalarResult(first=None),
         ]
     )
     db.add = Mock(side_effect=added.append)
@@ -184,4 +191,9 @@ async def test_ensure_fallback_recipe_builds_firing_open_and_resolving_update_st
     assert [(step.step_order, step.run_phase, step.run_condition) for step in steps] == [
         (1, "firing", "always"),
         (2, "resolving", "resolved_after_no_remediation"),
+    ]
+    statements = [call.args[0] for call in db.execute.call_args_list]
+    assert [stmt.table.name for stmt in statements[-2:]] == [
+        "dish_ingredients",
+        "recipe_ingredients",
     ]

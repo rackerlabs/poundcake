@@ -17,13 +17,6 @@ from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.metrics import record_order_resolved_before_dish_start
 from api.core.statuses import can_transition_to_resolving, is_order_terminal, should_keep_active
-from api.services.bakery_client import (
-    add_ticket_comment,
-    close_ticket,
-    create_ticket,
-    get_ticket,
-    update_ticket,
-)
 from api.services.suppression_service import find_first_matching_suppression, save_suppressed_event
 
 logger = get_logger(__name__)

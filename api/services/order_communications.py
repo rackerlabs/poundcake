@@ -45,7 +45,9 @@ def determine_writeability(*, execution_target: str, remote_state: str | None) -
 
 def _sync_legacy_order_fields(order: Order) -> None:
     ticket_routes = [
-        item for item in (order.communications or []) if item.bakery_ticket_id and is_ticket_capable_destination(item.execution_target)
+        item
+        for item in (order.communications or [])
+        if item.bakery_ticket_id and is_ticket_capable_destination(item.execution_target)
     ]
     if len(ticket_routes) == 1:
         item = ticket_routes[0]
@@ -65,7 +67,9 @@ def _sync_legacy_order_fields(order: Order) -> None:
 
 
 def build_route_key(*, execution_target: str, destination_target: str | None) -> tuple[str, str]:
-    return normalize_destination_type(execution_target), normalize_destination_target(destination_target)
+    return normalize_destination_type(execution_target), normalize_destination_target(
+        destination_target
+    )
 
 
 def find_communication_for_route(
@@ -76,10 +80,13 @@ def find_communication_for_route(
         destination_target=destination_target,
     )
     for item in order.communications or []:
-        if build_route_key(
-            execution_target=item.execution_target,
-            destination_target=item.destination_target,
-        ) == route_key:
+        if (
+            build_route_key(
+                execution_target=item.execution_target,
+                destination_target=item.destination_target,
+            )
+            == route_key
+        ):
             return item
     return None
 
@@ -87,11 +94,7 @@ def find_communication_for_route(
 async def load_order_with_communications(
     db: AsyncSession, *, order_id: int, for_update: bool = False
 ) -> Order | None:
-    query = (
-        select(Order)
-        .options(joinedload(Order.communications))
-        .where(Order.id == order_id)
-    )
+    query = select(Order).options(joinedload(Order.communications)).where(Order.id == order_id)
     if for_update:
         query = query.with_for_update()
     result = await db.execute(query)
@@ -177,7 +180,8 @@ async def find_reusable_communication(
             Order.fingerprint == order.fingerprint,
             Order.id != order.id,
             OrderCommunication.execution_target == normalize_destination_type(execution_target),
-            OrderCommunication.destination_target == normalize_destination_target(destination_target),
+            OrderCommunication.destination_target
+            == normalize_destination_target(destination_target),
             OrderCommunication.bakery_ticket_id.is_not(None),
         )
         .order_by(Order.updated_at.desc(), OrderCommunication.updated_at.desc())

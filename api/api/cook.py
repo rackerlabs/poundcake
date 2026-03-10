@@ -15,7 +15,10 @@ from api.core.database import get_db
 from api.schemas.schemas import ExecuteRequest, ExecutionEnvelopeResponse
 from api.services.execution_orchestrator import ExecutionOrchestrator, get_execution_orchestrator
 from api.services.execution_types import ExecutionContext
-from api.services.communications import normalize_communication_operation, normalize_destination_target
+from api.services.communications import (
+    normalize_communication_operation,
+    normalize_destination_target,
+)
 from api.services.order_communications import apply_execution_result, prepare_communication_context
 from api.services.stackstorm_service import (
     StackStormActionManager,
@@ -76,7 +79,15 @@ async def execute_ingredient(
         context = dict(payload.context) if isinstance(payload.context, dict) else {}
 
         order_id_raw = context.get("order_id")
-        order_id = int(order_id_raw) if isinstance(order_id_raw, int) or str(order_id_raw).isdigit() else None
+        order_id = (
+            order_id_raw
+            if isinstance(order_id_raw, int)
+            else (
+                int(order_id_raw)
+                if isinstance(order_id_raw, str) and order_id_raw.isdigit()
+                else None
+            )
+        )
         destination_target = normalize_destination_target(
             context.get("destination_target")
             or ((execution_payload.get("context") or {}).get("destination_target"))
@@ -100,10 +111,9 @@ async def execute_ingredient(
                     "reopen" if communication.reopenable else "reuse"
                 )
 
+            raw_payload_context = execution_payload.get("context")
             payload_context = (
-                dict(execution_payload.get("context"))
-                if isinstance(execution_payload.get("context"), dict)
-                else {}
+                dict(raw_payload_context) if isinstance(raw_payload_context, dict) else {}
             )
             payload_context["provider_type"] = payload.execution_target
             payload_context["destination_target"] = destination_target

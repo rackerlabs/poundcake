@@ -10,14 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-from typing import List
+from typing import List, Literal
 from datetime import datetime, timezone
 
 from api.core.database import get_db
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
-from api.models.models import Dish, DishIngredient, Order, OrderCommunication, Recipe, RecipeIngredient
+from api.models.models import Dish, DishIngredient, Order, Recipe, RecipeIngredient
 from api.schemas.schemas import (
     IncidentTimelineEvent,
     IncidentTimelineResponse,
@@ -263,7 +263,7 @@ async def dispatch_order(
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        run_phase: str
+        run_phase: Literal["firing", "escalation", "resolving"]
         if order.processing_status == "new":
             run_phase = "firing"
         elif order.processing_status == "escalation":
@@ -306,7 +306,9 @@ async def dispatch_order(
         recipe = recipe_result.unique().scalars().first()
         if not recipe:
             catch_all_name = (settings.catch_all_recipe_name or "").strip()
-            if catch_all_name and (run_phase == "firing" or (order.remediation_outcome or "").lower() == "none"):
+            if catch_all_name and (
+                run_phase == "firing" or (order.remediation_outcome or "").lower() == "none"
+            ):
                 await ensure_fallback_recipe(db, req_id=req_id)
                 fallback_result = await db.execute(
                     select(Recipe)

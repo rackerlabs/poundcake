@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from kitchen.execution_segments import next_pending_execution_segment, sort_ingredients_for_execution
+from kitchen.execution_segments import (
+    next_pending_execution_segment,
+    sort_ingredients_for_execution,
+)
 
 
 def test_sort_ingredients_for_execution_uses_recipe_step_order():

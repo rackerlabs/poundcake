@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.models.models import Ingredient, Recipe, RecipeIngredient
 from api.services.communications import DESTINATION_TYPES, normalize_destination_type
+from api.services.recipe_ingredient_cleanup import delete_recipe_ingredients_safely
 
 logger = get_logger(__name__)
 
@@ -202,7 +203,7 @@ async def ensure_fallback_recipe(
         if changed:
             recipe.updated_at = now
 
-    await db.execute(delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id))
+    await delete_recipe_ingredients_safely(db, recipe_id=recipe.id)
     db.add(
         RecipeIngredient(
             recipe_id=recipe.id,

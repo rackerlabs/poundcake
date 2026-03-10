@@ -613,10 +613,7 @@ def _process_operation(operation: TicketOperation) -> None:
     _persist_normalized_payload(operation.operation_id, payload)
     missing = _preflight_missing_fields(provider, operation.action, payload)
     if missing:
-        error = (
-            f"{provider} {operation.action} missing required fields: "
-            + ", ".join(missing)
-        )
+        error = f"{provider} {operation.action} missing required fields: " + ", ".join(missing)
         logger.error(
             "Provider preflight validation failed",
             operation_id=operation.operation_id,

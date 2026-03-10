@@ -907,7 +907,10 @@ def monitor_dishes() -> None:
                             processing_status = "failed"
                             err = f"Failed to fetch next execution segment: {exc}"
                         else:
-                            if next_pending_execution_segment(dish, refreshed_ingredients) is not None:
+                            if (
+                                next_pending_execution_segment(dish, refreshed_ingredients)
+                                is not None
+                            ):
                                 if _requeue_dish_for_next_segment(
                                     dish,
                                     req_id,

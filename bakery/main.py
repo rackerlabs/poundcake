@@ -82,9 +82,7 @@ tags_metadata = [
     },
     {
         "name": "tickets",
-        "description": (
-            "Legacy ticket-shaped compatibility routes for communication operations."
-        ),
+        "description": ("Legacy ticket-shaped compatibility routes for communication operations."),
     },
     {
         "name": "mixers",
