@@ -42,6 +42,14 @@ MISSING_WORKFLOW_PATH_FRAGMENT = "/opt/stackstorm/packs/poundcake/actions/workfl
 PENDING_STATUSES = PENDING_EXECUTION_STATUSES
 
 
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
 def _is_missing_workflow_file_response(response_text: str | None) -> bool:
     if not isinstance(response_text, str):
         return False
@@ -110,22 +118,23 @@ def _execute_bakery_steps(
     req_id: str,
     ingredients: list[dict[str, Any]],
 ) -> tuple[bool, str | None]:
-    recipe = dish.get("recipe") if isinstance(dish.get("recipe"), dict) else {}
-    ri_defs = (
-        recipe.get("recipe_ingredients")
-        if isinstance(recipe.get("recipe_ingredients"), list)
-        else []
-    )
+    raw_recipe = dish.get("recipe")
+    recipe = raw_recipe if isinstance(raw_recipe, dict) else {}
+    raw_ri_defs = recipe.get("recipe_ingredients")
+    ri_defs = raw_ri_defs if isinstance(raw_ri_defs, list) else []
     on_failure_by_ri_id: dict[int, str] = {}
     for ri in ri_defs:
         if not isinstance(ri, dict):
             continue
-        ingredient = ri.get("ingredient") if isinstance(ri.get("ingredient"), dict) else {}
+        raw_ingredient = ri.get("ingredient")
+        ingredient = raw_ingredient if isinstance(raw_ingredient, dict) else {}
         ri_id = ri.get("id")
         if isinstance(ri_id, int):
             on_failure_by_ri_id[ri_id] = str(ingredient.get("on_failure") or "stop").lower()
 
-    dish_id = int(dish.get("id"))
+    dish_id = _coerce_int(dish.get("id"))
+    if dish_id is None:
+        raise ValueError("Dish id is required")
     order_id = dish.get("order_id")
     for item in ingredients:
         if (item.get("execution_engine") or "").strip().lower() != "bakery":
@@ -133,7 +142,7 @@ def _execute_bakery_steps(
         if item.get("execution_status") not in PENDING_STATUSES:
             continue
 
-        recipe_ingredient_id = item.get("recipe_ingredient_id")
+        recipe_ingredient_id = _coerce_int(item.get("recipe_ingredient_id"))
         now = datetime.now(timezone.utc).isoformat()
         _upsert_dish_ingredient(
             dish_id,
@@ -202,7 +211,12 @@ def _execute_bakery_steps(
             },
         )
 
-        if not success and on_failure_by_ri_id.get(recipe_ingredient_id, "stop") != "continue":
+        on_failure = (
+            on_failure_by_ri_id.get(recipe_ingredient_id, "stop")
+            if recipe_ingredient_id is not None
+            else "stop"
+        )
+        if not success and on_failure != "continue":
             return False, error_message
 
     return True, None

@@ -38,6 +38,14 @@ API_UNAVAILABLE_SINCE: float | None = None
 LAST_SUPPRESSION_LIFECYCLE_RUN = 0.0
 
 
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
 def _task_execution_ref(task: dict[str, Any]) -> str | None:
     execution_ref = task.get("id")
     if execution_ref:
@@ -352,7 +360,7 @@ def _execute_pending_bakery_ingredients(
                     on_failure_by_ri_id[ri_id] = str(ingredient.get("on_failure") or "stop").lower()
 
         for item in pending_bakery:
-            recipe_ingredient_id = item.get("recipe_ingredient_id")
+            recipe_ingredient_id = _coerce_int(item.get("recipe_ingredient_id"))
             task_key = item.get("task_key")
             start_ts = datetime.now(timezone.utc).isoformat()
             request_with_retry_sync(
@@ -432,7 +440,12 @@ def _execute_pending_bakery_ingredients(
                 retries=POLLER_RETRIES,
             )
 
-            if not success and on_failure_by_ri_id.get(recipe_ingredient_id, "stop") != "continue":
+            on_failure = (
+                on_failure_by_ri_id.get(recipe_ingredient_id, "stop")
+                if recipe_ingredient_id is not None
+                else "stop"
+            )
+            if not success and on_failure != "continue":
                 return False, error_message, True
 
         return True, None, True

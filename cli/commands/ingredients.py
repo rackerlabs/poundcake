@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import click
 
@@ -77,7 +78,7 @@ def create_ingredient_cmd(
 ) -> None:
     client: PoundCakeClient = ctx.obj["client"]
     output_format: str = ctx.obj["format"]
-    payload = {
+    payload: dict[str, Any] = {
         "execution_target": execution_target,
         "destination_target": destination_target,
         "task_key_template": task_key_template,
@@ -130,7 +131,7 @@ def update_ingredient_cmd(
 ) -> None:
     client: PoundCakeClient = ctx.obj["client"]
     output_format: str = ctx.obj["format"]
-    payload = {
+    payload: dict[str, Any] = {
         "execution_target": execution_target,
         "destination_target": destination_target,
         "task_key_template": task_key_template,

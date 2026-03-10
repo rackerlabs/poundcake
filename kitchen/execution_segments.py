@@ -28,12 +28,10 @@ def _parse_step_order_from_task_key(task_key: str | None) -> int | None:
 
 
 def build_recipe_step_order_map(dish: dict[str, Any]) -> dict[int, int]:
-    recipe = dish.get("recipe") if isinstance(dish.get("recipe"), dict) else {}
-    recipe_ingredients = (
-        recipe.get("recipe_ingredients")
-        if isinstance(recipe.get("recipe_ingredients"), list)
-        else []
-    )
+    raw_recipe = dish.get("recipe")
+    recipe = raw_recipe if isinstance(raw_recipe, dict) else {}
+    raw_recipe_ingredients = recipe.get("recipe_ingredients")
+    recipe_ingredients = raw_recipe_ingredients if isinstance(raw_recipe_ingredients, list) else []
     step_orders: dict[int, int] = {}
     for item in recipe_ingredients:
         if not isinstance(item, dict):
@@ -54,7 +52,9 @@ def sort_ingredients_for_execution(
     def _sort_key(item: dict[str, Any]) -> tuple[int, str, str, int]:
         recipe_ingredient_id = _coerce_int(item.get("recipe_ingredient_id"))
         task_key = str(item.get("task_key") or "")
-        step_order = step_orders.get(recipe_ingredient_id)
+        step_order = (
+            step_orders.get(recipe_ingredient_id) if recipe_ingredient_id is not None else None
+        )
         if step_order is None:
             step_order = _parse_step_order_from_task_key(task_key)
         if step_order is None:
