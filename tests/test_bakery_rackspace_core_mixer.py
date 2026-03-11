@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from bakery.config import settings
 from bakery.mixer.rackspace_core import RackspaceCoreMixer
 
 
@@ -79,6 +80,25 @@ async def test_close_ticket_uses_set_status_by_name(monkeypatch: pytest.MonkeyPa
 
     assert result["success"] is True
     assert calls[0][0]["method"] == "setStatusByName"
+    assert calls[0][0]["args"] == ["Confirm Solved"]
+    assert calls[0][0]["keyword_args"] == {}
+
+
+@pytest.mark.asyncio
+async def test_close_ticket_defaults_to_confirm_solved(monkeypatch: pytest.MonkeyPatch):
+    mixer = RackspaceCoreMixer()
+    calls: list[list[dict[str, object]]] = []
+
+    async def _fake_execute(query_set: list[dict[str, object]]):
+        calls.append(query_set)
+        return [{"result": {"ok": True}}]
+
+    monkeypatch.setattr(settings, "bakery_rackspace_confirmed_solved_status", "confirmed solved")
+    monkeypatch.setattr(mixer, "_execute_query", _fake_execute)
+
+    result = await mixer._close_ticket({"ticket_id": "260309-12345"})
+
+    assert result["success"] is True
     assert calls[0][0]["args"] == ["Confirm Solved"]
 
 

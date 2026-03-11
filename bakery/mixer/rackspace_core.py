@@ -504,13 +504,13 @@ class RackspaceCoreMixer(BaseMixer):
         """
         Close a Rackspace Core ticket.
 
-        Sets the ticket status to closed via set_attribute.
+        Sets the ticket status via Ticket.Ticket.setStatusByName.
 
         Required data fields:
             - ticket_number: CORE ticket number
 
         Optional data fields:
-            - status: CTK status value (default "Solved")
+            - status: CTK status value (default "Confirm Solved")
         """
         ticket_number = data.get("ticket_number") or data.get("ticket_id")
         if not ticket_number:
@@ -519,7 +519,10 @@ class RackspaceCoreMixer(BaseMixer):
                 "error": "ticket_number required for close",
             }
 
-        status_value = self._normalize_status_name(data.get("status", "Solved"))
+        requested_status = data.get("status")
+        if not requested_status:
+            requested_status = settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+        status_value = self._normalize_status_name(requested_status)
 
         query_set = [
             {
@@ -527,6 +530,7 @@ class RackspaceCoreMixer(BaseMixer):
                 "load_arg": str(ticket_number),
                 "method": "setStatusByName",
                 "args": [status_value],
+                "keyword_args": {},
             }
         ]
 

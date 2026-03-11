@@ -314,12 +314,11 @@ def _build_provider_payload(
             )
             return provider_payload
         if provider == "rackspace_core":
-            status_hint = _first_non_empty(
-                provider_payload.get("status"),
-                payload.get("state"),
-            )
-            if status_hint is not None:
-                provider_payload.setdefault("status", str(status_hint).replace("_", " "))
+            status_hint = _first_non_empty(provider_payload.get("status"), payload.get("state"))
+            normalized_hint = str(status_hint or "").strip().lower().replace("_", " ")
+            if normalized_hint in {"", "closed"}:
+                status_hint = settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+            provider_payload.setdefault("status", str(status_hint).replace("_", " "))
         if payload.get("resolution_notes") is not None:
             provider_payload.setdefault("close_notes", payload.get("resolution_notes"))
         if payload.get("resolution_code") is not None:
@@ -484,7 +483,13 @@ def _persist_success(operation_id: str, result: dict[str, Any]) -> None:
             ticket.state = "open"
         elif operation.action == "close":
             if (ticket.provider_type or settings.active_provider) == "rackspace_core":
-                requested_state = str((operation.request_payload or {}).get("state") or "").lower()
+                normalized_payload = operation.normalized_payload or {}
+                requested_state = str(
+                    normalized_payload.get("status")
+                    or normalized_payload.get("state")
+                    or (operation.request_payload or {}).get("state")
+                    or ""
+                ).lower()
                 if requested_state.replace(" ", "_") == "confirmed_solved":
                     ticket.state = "confirmed_solved"
                 else:
