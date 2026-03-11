@@ -87,9 +87,6 @@ class Settings:
         self.rackspace_core_default_subcategory: str = os.getenv(
             "RACKSPACE_CORE_DEFAULT_SUBCATEGORY", "Monitoring"
         )
-        self.bakery_rackspace_confirmed_solved_status: str = os.getenv(
-            "BAKERY_RACKSPACE_CONFIRMED_SOLVED_STATUS", "confirmed solved"
-        )
 
     @property
     def database_url(self) -> str:
