@@ -35,4 +35,4 @@ def test_worker_persists_provider_normalized_payload_before_execution() -> None:
 def test_rackspace_core_close_payload_defaults_to_confirm_solved() -> None:
     source = _worker_source()
     assert 'if normalized_hint in {"", "closed"}:' in source
-    assert 'status_hint = "confirmed solved"' in source
+    assert 'settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"' in source

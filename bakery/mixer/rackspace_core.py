@@ -519,7 +519,9 @@ class RackspaceCoreMixer(BaseMixer):
                 "error": "ticket_number required for close",
             }
 
-        requested_status = data.get("status") or "confirmed solved"
+        requested_status = data.get("status")
+        if not requested_status:
+            requested_status = settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
         status_value = self._normalize_status_name(requested_status)
 
         query_set = [
@@ -528,6 +530,7 @@ class RackspaceCoreMixer(BaseMixer):
                 "load_arg": str(ticket_number),
                 "method": "setStatusByName",
                 "args": [status_value],
+                "keyword_args": {},
             }
         ]
 
