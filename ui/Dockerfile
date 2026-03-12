@@ -25,9 +25,6 @@ COPY --from=build /app/ui/dist /usr/share/nginx/html
 # Keep the legacy static UI reachable during migration.
 COPY ui/static /usr/share/nginx/html/legacy
 
-# Keep the existing login shell at the root login route.
-COPY ui/static/login.html /usr/share/nginx/html/login.html
-
 # Copy managed UI entrypoint.
 COPY ui/docker-entrypoint.sh /app/ui/docker-entrypoint.sh
 RUN chmod +x /app/ui/docker-entrypoint.sh

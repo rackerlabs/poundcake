@@ -1,4 +1,14 @@
-import { createContext, useContext, useDeferredValue, useEffect, useState, startTransition } from "react";
+import {
+  createContext,
+  type FocusEvent,
+  type FormEvent,
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useId,
+  useState,
+  startTransition,
+} from "react";
 import {
   Link,
   NavLink,
@@ -26,7 +36,7 @@ import {
   apiPatch,
   apiPost,
   apiPut,
-  type ApiError,
+  ApiError,
 } from "./api";
 import {
   compactJson,
@@ -41,6 +51,7 @@ import type {
   DishRecord,
   HealthResponse,
   IncidentTimelineResponse,
+  IncidentTimelineEvent,
   ObservabilityActivityRecord,
   ObservabilityOverviewResponse,
   OrderResponse,
@@ -164,6 +175,17 @@ function App() {
 }
 
 function SessionGate() {
+  const location = useLocation();
+
+  if (isLoginPath(location.pathname)) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
   const settingsQuery = useQuery({
     queryKey: ["settings"],
     queryFn: () => apiGet<AppSettings>("/api/v1/settings"),
@@ -174,6 +196,14 @@ function SessionGate() {
   }
 
   if (settingsQuery.isError || !settingsQuery.data) {
+    if (settingsQuery.error instanceof ApiError && settingsQuery.error.status === 401) {
+      return (
+        <FullscreenState
+          title="Redirecting to sign in"
+          message="Your session is missing or expired. Taking you back to the login screen."
+        />
+      );
+    }
     return (
       <FullscreenState
         title="Unable to load PoundCake"
@@ -201,6 +231,184 @@ function SessionGate() {
         </Route>
       </Routes>
     </SettingsContext.Provider>
+  );
+}
+
+function LoginPage() {
+  const [searchParams] = useSearchParams();
+  const nextTarget = getLoginNextTarget(searchParams);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [sessionMessage, setSessionMessage] = useState(
+    "Use your PoundCake admin credentials to open the monitoring console.",
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/api/v1/settings", {
+      credentials: "same-origin",
+    })
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        if (response.ok) {
+          setSessionMessage("Active session detected. Returning you to the monitoring console.");
+          window.location.replace(nextTarget);
+          return;
+        }
+
+        if (response.status !== 401) {
+          setSessionMessage(`Session check returned ${response.status}. You can still sign in below.`);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSessionMessage("Session check is unavailable right now. You can still sign in below.");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [nextTarget]);
+
+  const loginMutation = useMutation({
+    mutationFn: async (credentials: { username: string; password: string }) => {
+      const response = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(credentials),
+      });
+
+      const contentType = response.headers.get("content-type") || "";
+      const body = contentType.includes("application/json")
+        ? await response.json().catch(() => null)
+        : await response.text().catch(() => "");
+
+      if (!response.ok) {
+        const detail =
+          typeof body === "object" && body && "detail" in body
+            ? String((body as { detail: unknown }).detail)
+            : response.statusText;
+        throw new Error(detail || "Sign in failed.");
+      }
+
+      return body;
+    },
+    onSuccess: () => {
+      setSessionMessage("Sign-in successful. Opening your monitoring workspace.");
+      window.location.replace(nextTarget);
+    },
+  });
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitAttempted(true);
+    loginMutation.reset();
+
+    if (!username.trim() || !password) {
+      return;
+    }
+
+    loginMutation.mutate({
+      username: username.trim(),
+      password,
+    });
+  }
+
+  const credentialError =
+    !username.trim() || !password ? "Username and password are required." : undefined;
+
+  return (
+    <div className="login-screen">
+      <div className="login-layout">
+        <section className="login-hero-panel">
+          <div className="eyebrow">Mission Control</div>
+          <h1>See incidents, communications, ticket state, and automation health in one place.</h1>
+          <p>
+            PoundCake&apos;s monitoring console is built for fast triage. Sign in to drill into live incidents,
+            verify whether tickets were created, and confirm Teams or Discord updates were delivered.
+          </p>
+
+          <div className="login-highlight-grid">
+            <div className="hint-card">
+              <strong>Incident drilldowns</strong>
+              <p>Open a single incident and follow its timeline, communication routes, and latest automation outcome.</p>
+            </div>
+            <div className="hint-card">
+              <strong>Communication visibility</strong>
+              <p>Track Core ticket IDs, remote delivery status, provider references, and last errors without hunting through logs.</p>
+            </div>
+            <div className="hint-card">
+              <strong>Clear configuration tools</strong>
+              <p>Edit alert rules, workflows, and actions with inline help that explains each field in plain language.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="login-panel">
+          <div className="eyebrow">Secure access</div>
+          <h2>Sign in to the monitoring console</h2>
+          <p>{sessionMessage}</p>
+          <div className="login-meta">
+            <span className="version-chip">Next stop: {getRouteName(nextTarget)}</span>
+          </div>
+
+          <form className="form-stack" onSubmit={handleSubmit}>
+            <FormField label="Username">
+              <input
+                autoComplete="username"
+                autoFocus
+                onChange={(event) => {
+                  if (loginMutation.isError) {
+                    loginMutation.reset();
+                  }
+                  setSubmitAttempted(false);
+                  setUsername(event.target.value);
+                }}
+                placeholder="Enter your username"
+                type="text"
+                value={username}
+              />
+            </FormField>
+
+            <FormField label="Password">
+              <input
+                autoComplete="current-password"
+                onChange={(event) => {
+                  if (loginMutation.isError) {
+                    loginMutation.reset();
+                  }
+                  setSubmitAttempted(false);
+                  setPassword(event.target.value);
+                }}
+                placeholder="Enter your password"
+                type="password"
+                value={password}
+              />
+            </FormField>
+
+            {loginMutation.isError ? <PageError compact message={getErrorMessage(loginMutation.error)} /> : null}
+            {!loginMutation.isError && submitAttempted && credentialError ? (
+              <div className="login-note">Enter both fields to continue.</div>
+            ) : null}
+
+            <div className="form-actions">
+              <button className="primary-button" disabled={loginMutation.isPending} type="submit">
+                {loginMutation.isPending ? "Signing in..." : "Sign in"}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
   );
 }
 
@@ -453,21 +661,18 @@ function IncidentsPage() {
   });
 
   const selectedId = incidentId ? Number(incidentId) : null;
-  const timelineQuery = useQuery({
-    queryKey: ["incident-timeline", selectedId],
-    enabled: Boolean(selectedId),
-    queryFn: () => apiGet<IncidentTimelineResponse>(`/api/v1/orders/${selectedId}/timeline`),
+  const selectedFromRoute = selectedId && incidentsQuery.data
+    ? incidentsQuery.data.find((item) => item.id === selectedId)
+    : undefined;
+
+  const selectedIncidentQuery = useQuery({
+    queryKey: ["incident", selectedId],
+    enabled: Boolean(selectedId) && Boolean(incidentsQuery.data) && !selectedFromRoute,
+    queryFn: () => apiGet<OrderResponse>(`/api/v1/orders/${selectedId}`),
   });
 
-  if (incidentsQuery.isLoading) {
-    return <PageLoading message="Loading incidents and current workflow state." />;
-  }
-
-  if (incidentsQuery.isError || !incidentsQuery.data) {
-    return <PageError message={getErrorMessage(incidentsQuery.error)} />;
-  }
-
-  const filtered = incidentsQuery.data.filter((incident) => {
+  const incidentRows = incidentsQuery.data || [];
+  const filtered = incidentRows.filter((incident) => {
     if (statusFilter && incident.processing_status !== statusFilter) {
       return false;
     }
@@ -486,8 +691,13 @@ function IncidentsPage() {
     return haystack.includes(deferredSearch.toLowerCase());
   });
 
-  const activeSelection =
-    (selectedId ? filtered.find((item) => item.id === selectedId) : undefined) || filtered[0];
+  const activeSelection = selectedFromRoute || selectedIncidentQuery.data || filtered[0];
+  const timelineTargetId = activeSelection?.id || selectedId;
+  const timelineQuery = useQuery({
+    queryKey: ["incident-timeline", timelineTargetId],
+    enabled: Boolean(timelineTargetId),
+    queryFn: () => apiGet<IncidentTimelineResponse>(`/api/v1/orders/${timelineTargetId}/timeline`),
+  });
 
   useEffect(() => {
     if (!selectedId && activeSelection) {
@@ -496,6 +706,14 @@ function IncidentsPage() {
       });
     }
   }, [activeSelection, navigate, selectedId]);
+
+  if (incidentsQuery.isLoading) {
+    return <PageLoading message="Loading incidents and current workflow state." />;
+  }
+
+  if (incidentsQuery.isError || !incidentsQuery.data) {
+    return <PageError message={getErrorMessage(incidentsQuery.error)} />;
+  }
 
   return (
     <div className="page-stack">
@@ -529,38 +747,45 @@ function IncidentsPage() {
       <div className="master-detail">
         <Panel title="Incident queue" subtitle={`${filtered.length} incidents in view.`}>
           <div className="list-stack incident-list">
-            {filtered.map((incident) => (
-              <button
-                className={`incident-row ${activeSelection?.id === incident.id ? "active" : ""}`}
-                key={incident.id}
-                type="button"
-                onClick={() => startTransition(() => navigate(`/incidents/${incident.id}`))}
-              >
-                <div>
-                  <strong>{incident.alert_group_name}</strong>
-                  <p>
-                    {incident.instance || "No instance"} • {incident.severity || "unknown severity"} •{" "}
-                    {incident.communications.length} route(s)
-                  </p>
-                </div>
-                <div className="feed-meta">
-                  <StatusBadge status={incident.processing_status}>{incident.processing_status}</StatusBadge>
-                  <span>{formatDate(incident.updated_at)}</span>
-                </div>
-              </button>
-            ))}
+            {filtered.length ? (
+              filtered.map((incident) => (
+                <button
+                  className={`incident-row ${timelineTargetId === incident.id ? "active" : ""}`}
+                  key={incident.id}
+                  type="button"
+                  onClick={() => startTransition(() => navigate(`/incidents/${incident.id}`))}
+                >
+                  <div>
+                    <strong>{incident.alert_group_name}</strong>
+                    <p>
+                      {incident.instance || "No instance"} • {incident.severity || "unknown severity"} •{" "}
+                      {incident.communications.length} route(s)
+                    </p>
+                  </div>
+                  <div className="feed-meta">
+                    <StatusBadge status={incident.processing_status}>{incident.processing_status}</StatusBadge>
+                    <span>{formatDate(incident.updated_at)}</span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <EmptyState message="No incidents match the current filters." />
+            )}
           </div>
         </Panel>
 
         <Panel title="Incident drilldown" subtitle="Status, ticketing, chat routes, and full timeline in one place.">
-          {timelineQuery.isLoading || !activeSelection ? (
+          {!timelineTargetId ? (
             <EmptyState message="Select an incident to inspect its current state." />
-          ) : timelineQuery.isError || !timelineQuery.data ? (
-            <PageError message={getErrorMessage(timelineQuery.error)} compact />
+          ) : timelineQuery.isLoading || selectedIncidentQuery.isLoading ? (
+            <EmptyState message="Select an incident to inspect its current state." />
+          ) : timelineQuery.isError || selectedIncidentQuery.isError || !timelineQuery.data ? (
+            <PageError message={getErrorMessage(timelineQuery.error || selectedIncidentQuery.error)} compact />
           ) : (
             <IncidentDetail
               data={timelineQuery.data}
               highlightedCommunicationId={searchParams.get("communication") || undefined}
+              highlightedDishId={searchParams.get("dish") || undefined}
             />
           )}
         </Panel>
@@ -572,9 +797,11 @@ function IncidentsPage() {
 function IncidentDetail({
   data,
   highlightedCommunicationId,
+  highlightedDishId,
 }: {
   data: IncidentTimelineResponse;
   highlightedCommunicationId?: string;
+  highlightedDishId?: string;
 }) {
   const order = data.order;
 
@@ -644,9 +871,20 @@ function IncidentDetail({
           <h4>Timeline</h4>
           <p>Workflow tasks, communication updates, and order state transitions in chronological order.</p>
         </div>
+        {highlightedDishId ? (
+          <div className="helper-card">
+            <strong>Selected workflow run</strong>
+            <p>Timeline events related to workflow run #{highlightedDishId} are highlighted below.</p>
+          </div>
+        ) : null}
         <div className="timeline">
           {data.events.map((event, index) => (
-            <div className="timeline-row" key={`${event.event_type}-${index}-${event.timestamp}`}>
+            <div
+              className={`timeline-row ${
+                isTimelineEventHighlighted(event, highlightedCommunicationId, highlightedDishId) ? "highlighted" : ""
+              }`}
+              key={`${event.event_type}-${index}-${event.timestamp}`}
+            >
               <div className="timeline-dot" />
               <div className="timeline-body">
                 <div className="timeline-head">
@@ -982,10 +1220,57 @@ function SuppressionsPage() {
 }
 
 function ActivityPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState("");
+  const [phaseFilter, setPhaseFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const query = useQuery({
     queryKey: ["activity-dishes"],
     queryFn: () => apiGet<DishRecord[]>("/api/v1/dishes?limit=100"),
   });
+
+  const selectedDishId = searchParams.get("dish");
+  const activityRows = query.data || [];
+  const rows = activityRows.filter((item) => {
+    if (statusFilter && statusFilter !== (item.execution_status || item.processing_status || "")) {
+      return false;
+    }
+    if (phaseFilter && phaseFilter !== item.run_phase) {
+      return false;
+    }
+    if (!deferredSearch) {
+      return true;
+    }
+    const haystack = [
+      item.recipe?.name,
+      item.execution_ref,
+      item.error_message,
+      item.run_phase,
+      item.order_id ? `incident ${item.order_id}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(deferredSearch.toLowerCase());
+  });
+
+  const selected =
+    (selectedDishId ? activityRows.find((item) => String(item.id) === selectedDishId) : undefined) || rows[0];
+
+  useEffect(() => {
+    if (!selectedDishId && rows[0]) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("dish", String(rows[0].id));
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [rows, searchParams, selectedDishId, setSearchParams]);
+
+  function selectDish(dishId: number) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("dish", String(dishId));
+    setSearchParams(nextParams);
+  }
 
   if (query.isLoading) {
     return <PageLoading message="Loading workflow activity and execution history." />;
@@ -1001,40 +1286,134 @@ function ActivityPage() {
         title="Activity"
         description="Workflow execution history across incidents, with quick links back to the originating incident when one exists."
       />
-      <Panel title="Workflow runs" subtitle="Execution status, run phase, and links back to incident context.">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Workflow</th>
-                <th>Order</th>
-                <th>Phase</th>
-                <th>Status</th>
-                <th>Execution</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {query.data.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.recipe?.name || `Workflow #${item.recipe_id}`}</td>
-                  <td>
-                    {item.order_id ? <Link to={`/incidents/${item.order_id}?dish=${item.id}`}>Incident #{item.order_id}</Link> : "-"}
-                  </td>
-                  <td>{item.run_phase}</td>
-                  <td>
+      <div className="toolbar">
+        <label>
+          Phase
+          <select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value)}>
+            <option value="">All</option>
+            {Array.from(new Set(query.data.map((item) => item.run_phase))).sort().map((phase) => (
+              <option key={phase} value={phase}>
+                {titleize(phase)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Status
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">All</option>
+            {Array.from(new Set(query.data.map((item) => item.execution_status || item.processing_status || "unknown"))).sort().map((status) => (
+              <option key={status} value={status}>
+                {titleize(status)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="toolbar-search">
+          Search
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Workflow, execution ref, incident, error"
+          />
+        </label>
+      </div>
+
+      <div className="master-detail">
+        <Panel title="Workflow runs" subtitle={`${rows.length} activity records in view.`}>
+          <div className="list-stack incident-list">
+            {rows.length ? (
+              rows.map((item) => (
+                <button
+                  className={`incident-row ${selected?.id === item.id ? "active" : ""}`}
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectDish(item.id)}
+                >
+                  <div>
+                    <strong>{item.recipe?.name || `Workflow #${item.recipe_id}`}</strong>
+                    <p>
+                      {titleize(item.run_phase)} • {item.execution_ref || "Execution pending"} •{" "}
+                      {item.order_id ? `Incident #${item.order_id}` : "No incident linked"}
+                    </p>
+                  </div>
+                  <div className="feed-meta">
                     <StatusBadge status={item.execution_status || item.processing_status}>
                       {item.execution_status || item.processing_status}
                     </StatusBadge>
-                  </td>
-                  <td>{item.execution_ref || "-"}</td>
-                  <td>{formatDate(item.updated_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+                    <span>{formatDate(item.updated_at)}</span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <EmptyState message="No workflow runs match the current filters." />
+            )}
+          </div>
+        </Panel>
+
+        <Panel title="Activity drilldown" subtitle="Execution details, incident linkage, and the latest workflow outcome.">
+          {selected ? (
+            <div className="detail-stack">
+              <section className="detail-hero">
+                <div>
+                  <div className="eyebrow">Workflow run #{selected.id}</div>
+                  <h3>{selected.recipe?.name || `Workflow #${selected.recipe_id}`}</h3>
+                  <p>
+                    {titleize(selected.run_phase)} phase • retry attempt {selected.retry_attempt} • updated{" "}
+                    {formatLongDate(selected.updated_at)}
+                  </p>
+                </div>
+                <div className="hero-strip">
+                  <MetricPill label="Processing" value={selected.processing_status} />
+                  <MetricPill label="Execution" value={selected.execution_status || "pending"} />
+                  <MetricPill label="Duration" value={selected.actual_duration_sec ? `${selected.actual_duration_sec}s` : "Pending"} />
+                  <MetricPill label="Incident" value={selected.order_id ? `#${selected.order_id}` : "Unlinked"} />
+                </div>
+              </section>
+
+              <div className="form-actions">
+                {selected.order_id ? (
+                  <Link className="primary-button" to={`/incidents/${selected.order_id}?dish=${selected.id}`}>
+                    Open incident drilldown
+                  </Link>
+                ) : null}
+              </div>
+
+              <div className="kv-grid">
+                <KeyValue label="Workflow" value={selected.recipe?.name || `Workflow #${selected.recipe_id}`} />
+                <KeyValue label="Incident" value={selected.order_id ? `Incident #${selected.order_id}` : "-"} />
+                <KeyValue label="Phase" value={titleize(selected.run_phase)} />
+                <KeyValue label="Execution ref" value={selected.execution_ref || "-"} />
+                <KeyValue label="Processing status" value={selected.processing_status} />
+                <KeyValue label="Execution status" value={selected.execution_status || "-"} />
+                <KeyValue label="Expected duration" value={selected.expected_duration_sec ? `${selected.expected_duration_sec}s` : "-"} />
+                <KeyValue label="Actual duration" value={selected.actual_duration_sec ? `${selected.actual_duration_sec}s` : "-"} />
+                <KeyValue label="Started" value={formatLongDate(selected.started_at)} />
+                <KeyValue label="Completed" value={formatLongDate(selected.completed_at)} />
+                <KeyValue label="Created" value={formatLongDate(selected.created_at)} />
+                <KeyValue label="Updated" value={formatLongDate(selected.updated_at)} />
+              </div>
+
+              {selected.error_message ? (
+                <div className="helper-card">
+                  <strong>Latest error</strong>
+                  <p>{selected.error_message}</p>
+                </div>
+              ) : (
+                <div className="helper-card">
+                  <strong>Latest outcome</strong>
+                  <p>
+                    This run is currently {selected.execution_status || selected.processing_status}. Use the incident drilldown
+                    to see communications and the rest of the lifecycle around this workflow run.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <EmptyState message="Select a workflow run to inspect its details." />
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }
@@ -1954,7 +2333,7 @@ function HelpRail({
 }) {
   return (
     <aside className="help-rail">
-      <div className="eyebrow">Inline guidance</div>
+      <div className="eyebrow">Page guide</div>
       <h4>{title}</h4>
       <div className="help-list">
         {items.map((item) => (
@@ -2042,14 +2421,45 @@ function FormField({
     <label className="form-field">
       <span className="field-label">
         {label}
-        {help ? (
-          <button className="help-dot" title={help} type="button">
-            ?
-          </button>
-        ) : null}
+        {help ? <HelpBubble help={help} label={label} /> : null}
       </span>
       {children}
     </label>
+  );
+}
+
+function HelpBubble({ label, help }: { label: string; help: string }) {
+  const [open, setOpen] = useState(false);
+  const tooltipId = useId();
+
+  function handleBlur(event: FocusEvent<HTMLSpanElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setOpen(false);
+    }
+  }
+
+  return (
+    <span
+      className="help-bubble"
+      onBlur={handleBlur}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        aria-describedby={open ? tooltipId : undefined}
+        aria-expanded={open}
+        aria-label={`Help for ${label}`}
+        className="help-dot"
+        onClick={() => setOpen((current) => !current)}
+        onFocus={() => setOpen(true)}
+        type="button"
+      >
+        ?
+      </button>
+      <span className={`help-popover ${open ? "open" : ""}`} id={tooltipId} role="tooltip">
+        {help}
+      </span>
+    </span>
   );
 }
 
@@ -2119,6 +2529,40 @@ function getRouteName(pathname: string): string {
   if (pathname.startsWith("/config/workflows")) return "Workflows";
   if (pathname.startsWith("/config/actions")) return "Actions";
   return "Overview";
+}
+
+function isLoginPath(pathname: string): boolean {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  return normalized === "/login";
+}
+
+function getLoginNextTarget(searchParams: URLSearchParams): string {
+  const raw = searchParams.get("next");
+  if (!raw || !raw.startsWith("/")) {
+    return "/overview";
+  }
+  if (raw === "/login" || raw.startsWith("/login?")) {
+    return "/overview";
+  }
+  return raw;
+}
+
+function isTimelineEventHighlighted(
+  event: IncidentTimelineEvent,
+  highlightedCommunicationId?: string,
+  highlightedDishId?: string,
+): boolean {
+  if (highlightedDishId && event.correlation_ids.dish_id === highlightedDishId) {
+    return true;
+  }
+  if (
+    highlightedCommunicationId
+    && (event.correlation_ids.bakery_operation_id === highlightedCommunicationId
+      || event.correlation_ids.bakery_ticket_id === highlightedCommunicationId)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function getErrorMessage(error: unknown): string {
