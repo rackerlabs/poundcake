@@ -33,6 +33,8 @@ MANIFEST
 # Keep frontend module libs in image build context.
 !ui/static/assets/js/lib/
 !ui/static/assets/js/lib/**
+ui/node_modules/
+ui/dist/
 .pytest_cache/
 .coverage
 htmlcov/
@@ -40,6 +42,7 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+*.tsbuildinfo
 
 # Environment
 .env

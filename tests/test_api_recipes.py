@@ -1,0 +1,194 @@
+"""Tests for recipe workflow editing APIs."""
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from api.main import app
+from api.models.models import Ingredient, Recipe, RecipeIngredient
+
+
+class ScalarResult:
+    def __init__(self, first=None, all_=None):
+        self._first = first
+        self._all = all_ or []
+
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self._first
+
+    def all(self):
+        return self._all
+
+    def unique(self):
+        return self
+
+
+class _BeginContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+
+@pytest.fixture
+def mock_db():
+    with patch("api.core.database.SessionLocal") as mock_session:
+        db = AsyncMock()
+        db.begin = Mock(return_value=_BeginContext())
+        db.flush = AsyncMock(return_value=None)
+        db.refresh = AsyncMock(return_value=None)
+        mock_session.return_value.__aenter__ = AsyncMock(return_value=db)
+        mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
+        yield db
+
+
+def _make_recipe() -> Recipe:
+    now = datetime.now(timezone.utc)
+    recipe = Recipe(
+        id=9,
+        name="node-filesystem-workflow",
+        description="Disk response",
+        enabled=True,
+        clear_timeout_sec=300,
+        created_at=now,
+        updated_at=now,
+        deleted=False,
+        deleted_at=None,
+    )
+    recipe.recipe_ingredients = [
+        RecipeIngredient(
+            id=1,
+            recipe_id=recipe.id,
+            ingredient_id=11,
+            step_order=1,
+            on_success="continue",
+            parallel_group=0,
+            depth=0,
+            execution_parameters_override=None,
+            run_phase="firing",
+            run_condition="always",
+        )
+    ]
+    return recipe
+
+
+def _make_ingredient(ingredient_id: int, target: str) -> Ingredient:
+    now = datetime.now(timezone.utc)
+    return Ingredient(
+        id=ingredient_id,
+        execution_target=target,
+        destination_target="ops-alerts" if target == "teams" else "",
+        task_key_template=f"{target}.dispatch",
+        execution_engine="bakery" if target == "teams" else "stackstorm",
+        execution_purpose="comms" if target == "teams" else "remediation",
+        execution_id=None,
+        execution_payload=None,
+        execution_parameters={"operation": "notify"} if target == "teams" else {},
+        is_default=False,
+        is_blocking=True,
+        expected_duration_sec=60,
+        timeout_duration_sec=300,
+        retry_count=0,
+        retry_delay=5,
+        on_failure="stop",
+        created_at=now,
+        updated_at=now,
+        deleted=False,
+        deleted_at=None,
+    )
+
+
+def test_recipe_update_replaces_workflow_steps(client, mock_db):
+    recipe = _make_recipe()
+    ingredient_one = _make_ingredient(11, "teams")
+    ingredient_two = _make_ingredient(12, "rackspace_core")
+
+    async def _flush():
+        for index, item in enumerate(recipe.recipe_ingredients, start=1):
+            if not item.id:
+                item.id = index + 100
+
+    mock_db.flush = AsyncMock(side_effect=_flush)
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=recipe),
+            ScalarResult(all_=[ingredient_one, ingredient_two]),
+            ScalarResult(first=recipe),
+        ]
+    )
+
+    response = client.put(
+        "/api/v1/recipes/9",
+        json={
+            "description": "Updated workflow",
+            "recipe_ingredients": [
+                {
+                    "ingredient_id": 12,
+                    "step_order": 1,
+                    "on_success": "continue",
+                    "parallel_group": 0,
+                    "depth": 0,
+                    "execution_parameters_override": {"operation": "open"},
+                    "run_phase": "firing",
+                    "run_condition": "always",
+                },
+                {
+                    "ingredient_id": 11,
+                    "step_order": 2,
+                    "on_success": "continue",
+                    "parallel_group": 0,
+                    "depth": 0,
+                    "execution_parameters_override": {"operation": "notify"},
+                    "run_phase": "resolving",
+                    "run_condition": "resolved_after_success",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert recipe.description == "Updated workflow"
+    assert [item.ingredient_id for item in recipe.recipe_ingredients] == [12, 11]
+    assert recipe.recipe_ingredients[1].run_phase == "resolving"
+
+
+def test_recipe_update_returns_404_when_workflow_references_missing_action(client, mock_db):
+    recipe = _make_recipe()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=recipe),
+            ScalarResult(all_=[]),
+        ]
+    )
+
+    response = client.patch(
+        "/api/v1/recipes/9",
+        json={
+            "recipe_ingredients": [
+                {
+                    "ingredient_id": 999,
+                    "step_order": 1,
+                    "on_success": "continue",
+                    "parallel_group": 0,
+                    "depth": 0,
+                    "execution_parameters_override": None,
+                    "run_phase": "firing",
+                    "run_condition": "always",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Missing ingredients: [999]"

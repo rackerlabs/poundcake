@@ -255,6 +255,7 @@ class RecipeUpdate(BaseModel):
     description: Optional[str] = None
     enabled: Optional[bool] = None
     clear_timeout_sec: Optional[int] = Field(default=None, gt=0)
+    recipe_ingredients: Optional[List[RecipeIngredientCreate]] = Field(default=None, min_length=1)
 
 
 class RecipeResponse(RecipeBase):
@@ -616,10 +617,45 @@ class ObservabilityOverviewResponse(BaseModel):
     suppressions: Dict[str, Any]
 
 
+class ObservabilityActivityRecord(BaseModel):
+    type: str
+    status: str
+    title: str
+    summary: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    target_kind: str
+    target_id: str
+    link_hint: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CommunicationActivityRecord(BaseModel):
+    communication_id: str
+    reference_type: str
+    reference_id: str
+    reference_name: Optional[str] = None
+    channel: str
+    destination: Optional[str] = None
+    ticket_id: Optional[str] = None
+    provider_reference_id: Optional[str] = None
+    operation_id: Optional[str] = None
+    lifecycle_state: Optional[str] = None
+    remote_state: Optional[str] = None
+    last_error: Optional[str] = None
+    writable: Optional[bool] = None
+    reopenable: Optional[bool] = None
+    updated_at: Optional[datetime] = None
+
+
 class BakeryOperationRecord(BaseModel):
     source: str
     reference_id: str
+    reference_type: Optional[str] = None
+    reference_name: Optional[str] = None
+    channel: Optional[str] = None
+    destination: Optional[str] = None
     ticket_id: Optional[str] = None
+    provider_reference_id: Optional[str] = None
     operation_id: Optional[str] = None
     status: Optional[str] = None
     execution_target: Optional[str] = None
@@ -627,6 +663,7 @@ class BakeryOperationRecord(BaseModel):
     remote_state: Optional[str] = None
     writable: Optional[bool] = None
     reopenable: Optional[bool] = None
+    last_error: Optional[str] = None
     updated_at: Optional[datetime] = None
     details: Optional[Dict[str, Any]] = None
 

@@ -6,10 +6,27 @@
 # Build: docker build -t ghcr.io/rackerlabs/poundcake-ui:VERSION -f ui/Dockerfile .
 # Push:  docker push ghcr.io/rackerlabs/poundcake-ui:VERSION
 
+FROM node:20-alpine AS build
+
+WORKDIR /app/ui
+
+COPY ui/package.json ui/package-lock.json* ./
+RUN npm ci
+
+COPY ui/index.html ui/tsconfig.json ui/tsconfig.node.json ui/vite.config.ts ./
+COPY ui/src ./src
+RUN npm run build
+
 FROM nginx:alpine
 
-# Copy static files
-COPY ui/static /usr/share/nginx/html
+# Copy the new React application.
+COPY --from=build /app/ui/dist /usr/share/nginx/html
+
+# Keep the legacy static UI reachable during migration.
+COPY ui/static /usr/share/nginx/html/legacy
+
+# Keep the existing login shell at the root login route.
+COPY ui/static/login.html /usr/share/nginx/html/login.html
 
 # Copy managed UI entrypoint.
 COPY ui/docker-entrypoint.sh /app/ui/docker-entrypoint.sh

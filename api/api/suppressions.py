@@ -408,9 +408,15 @@ async def get_bakery_ticketing_history(
             BakeryOperationRecord(
                 source="suppression_summary",
                 reference_id=str(item.suppression_id),
+                reference_type="suppression",
+                reference_name=item.suppression.name if item.suppression else None,
+                channel="suppression_summary",
+                destination=item.suppression.name if item.suppression else "Suppression summary",
                 ticket_id=item.bakery_ticket_id,
+                provider_reference_id=None,
                 operation_id=item.bakery_create_operation_id or item.bakery_close_operation_id,
                 status=item.state,
+                last_error=item.last_error,
                 updated_at=item.updated_at,
                 details={
                     "create_operation_id": item.bakery_create_operation_id,
@@ -453,7 +459,20 @@ async def get_bakery_ticketing_history(
                     BakeryOperationRecord(
                         source="order",
                         reference_id=str(order.id),
+                        reference_type="incident",
+                        reference_name=order.alert_group_name,
+                        channel=communication.execution_target,
+                        destination=(
+                            f"{communication.execution_target}:{communication.destination_target}"
+                            if communication.destination_target
+                            else communication.execution_target
+                        ),
                         ticket_id=communication.bakery_ticket_id,
+                        provider_reference_id=(
+                            None
+                            if communication.execution_target == "rackspace_core"
+                            else communication.bakery_ticket_id
+                        ),
                         operation_id=communication.bakery_operation_id,
                         status=communication.lifecycle_state or communication.remote_state,
                         execution_target=communication.execution_target,
@@ -461,6 +480,7 @@ async def get_bakery_ticketing_history(
                         remote_state=communication.remote_state,
                         writable=communication.writable,
                         reopenable=communication.reopenable,
+                        last_error=communication.last_error,
                         updated_at=communication.updated_at,
                         details={
                             "alert_group_name": order.alert_group_name,
@@ -475,9 +495,15 @@ async def get_bakery_ticketing_history(
                 BakeryOperationRecord(
                     source="order",
                     reference_id=str(order.id),
+                    reference_type="incident",
+                    reference_name=order.alert_group_name,
+                    channel="rackspace_core",
+                    destination="rackspace_core",
                     ticket_id=order.bakery_ticket_id,
+                    provider_reference_id=None,
                     operation_id=order.bakery_operation_id,
                     status=order.bakery_ticket_state or order.processing_status,
+                    last_error=order.bakery_last_error,
                     updated_at=order.updated_at,
                     details={
                         "alert_group_name": order.alert_group_name,

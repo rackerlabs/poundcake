@@ -199,14 +199,51 @@ async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession 
     """Update a recipe."""
     recipe: Recipe | None = None
     async with db.begin():
-        result = await db.execute(select(Recipe).where(Recipe.id == recipe_id).with_for_update())
+        result = await db.execute(
+            select(Recipe)
+            .options(joinedload(Recipe.recipe_ingredients))
+            .where(Recipe.id == recipe_id)
+            .with_for_update()
+        )
         recipe = result.unique().scalars().first()
         if not recipe:
             raise HTTPException(status_code=404, detail="Recipe not found")
 
-        update_data = payload.dict(exclude_unset=True)
+        update_data = payload.model_dump(exclude_unset=True)
+        recipe_ingredients = update_data.pop("recipe_ingredients", None)
         for key, value in update_data.items():
             setattr(recipe, key, value)
+
+        if recipe_ingredients is not None:
+            ingredient_ids = [item["ingredient_id"] for item in recipe_ingredients]
+            ingredient_result = await db.execute(
+                select(Ingredient).where(Ingredient.id.in_(ingredient_ids))
+            )
+            found_ids = {ingredient.id for ingredient in ingredient_result.scalars().all()}
+            missing = [
+                ingredient_id for ingredient_id in ingredient_ids if ingredient_id not in found_ids
+            ]
+            if missing:
+                raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
+
+            recipe.recipe_ingredients.clear()
+            await db.flush()
+            for item in recipe_ingredients:
+                recipe.recipe_ingredients.append(
+                    RecipeIngredient(
+                        recipe_id=recipe.id,
+                        ingredient_id=item["ingredient_id"],
+                        step_order=item["step_order"],
+                        on_success=item["on_success"],
+                        parallel_group=item["parallel_group"],
+                        depth=item["depth"],
+                        execution_parameters_override=item["execution_parameters_override"],
+                        run_phase=item["run_phase"],
+                        run_condition=item["run_condition"],
+                    )
+                )
+            await db.flush()
+
         recipe.updated_at = datetime.now(timezone.utc)
 
     if recipe is None:

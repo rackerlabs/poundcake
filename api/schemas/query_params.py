@@ -169,3 +169,26 @@ class BakeryOperationQueryParams(BaseModel):
         100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
     )
     offset: int = Field(0, ge=0, description="Number of results to skip for pagination")
+
+
+class ObservabilityActivityQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/observability/activity endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Optional[str] = Field(None, description="Filter by activity type")
+    limit: int = Field(50, ge=1, le=250, description="Maximum number of results to return (1-250)")
+    offset: int = Field(0, ge=0, description="Number of results to skip for pagination")
+
+
+class CommunicationActivityQueryParams(BaseModel):
+    """Query parameters for GET /api/v1/communications/activity endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Optional[str] = Field(None, description="Filter by lifecycle or remote status")
+    channel: Optional[str] = Field(None, description="Filter by communication channel")
+    limit: int = Field(
+        100, ge=1, le=1000, description="Maximum number of results to return (1-1000)"
+    )
+    offset: int = Field(0, ge=0, description="Number of results to skip for pagination")

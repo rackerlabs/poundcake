@@ -29,6 +29,8 @@ MANIFEST
 # Keep frontend module libs tracked.
 !ui/static/assets/js/lib/
 !ui/static/assets/js/lib/**
+ui/node_modules/
+ui/dist/
 
 # Virtual Environments
 .env
@@ -76,6 +78,7 @@ Thumbs.db
 .mypy_cache/
 .dmypy.json
 dmypy.json
+*.tsbuildinfo
 
 # ruff
 .ruff_cache/
