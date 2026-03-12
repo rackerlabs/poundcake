@@ -55,7 +55,9 @@ def _slug(value: str) -> str:
     return cleaned or "route"
 
 
-def _coerce_route_id(value: Any, *, execution_target: str, destination_target: str, position: int) -> str:
+def _coerce_route_id(
+    value: Any, *, execution_target: str, destination_target: str, position: int
+) -> str:
     raw = str(value or "").strip()
     if raw:
         return raw
@@ -121,9 +123,15 @@ def is_route_available_for_update(
     normalized_target = normalize_destination_type(execution_target)
     normalized_destination = normalize_destination_target(destination_target)
     for communication in getattr(order, "communications", []) or []:
-        if normalize_destination_type(getattr(communication, "execution_target", "")) != normalized_target:
+        if (
+            normalize_destination_type(getattr(communication, "execution_target", ""))
+            != normalized_target
+        ):
             continue
-        if normalize_destination_target(getattr(communication, "destination_target", "")) != normalized_destination:
+        if (
+            normalize_destination_target(getattr(communication, "destination_target", ""))
+            != normalized_destination
+        ):
             continue
         if str(getattr(communication, "bakery_ticket_id", "") or "").strip():
             return True
@@ -137,7 +145,8 @@ def _route_from_metadata(metadata: dict[str, Any]) -> CommunicationRoute | None:
         return None
     return CommunicationRoute(
         id=route_id,
-        label=str(metadata.get("label") or "").strip() or titleize_route(execution_target, metadata.get("destination_target")),
+        label=str(metadata.get("label") or "").strip()
+        or titleize_route(execution_target, metadata.get("destination_target")),
         execution_target=execution_target,
         destination_target=normalize_destination_target(metadata.get("destination_target")),
         enabled=bool(metadata.get("enabled", True)),
@@ -151,7 +160,9 @@ def titleize_route(execution_target: str, destination_target: Any) -> str:
     return f"{target} - {destination}" if destination else target
 
 
-def normalize_routes(routes: list[dict[str, Any]] | list[CommunicationRoute]) -> list[CommunicationRoute]:
+def normalize_routes(
+    routes: list[dict[str, Any]] | list[CommunicationRoute],
+) -> list[CommunicationRoute]:
     normalized: list[CommunicationRoute] = []
     for index, item in enumerate(routes, start=1):
         raw = item if isinstance(item, dict) else item.__dict__
@@ -338,7 +349,9 @@ async def _delete_recipe_ingredient_ids_safely(
     await db.execute(delete(RecipeIngredient).where(RecipeIngredient.id.in_(recipe_ingredient_ids)))
 
 
-async def _cleanup_orphaned_managed_ingredients(db: AsyncSession, *, ingredient_ids: list[int]) -> None:
+async def _cleanup_orphaned_managed_ingredients(
+    db: AsyncSession, *, ingredient_ids: list[int]
+) -> None:
     if not ingredient_ids:
         return
     result = await db.execute(
@@ -347,7 +360,9 @@ async def _cleanup_orphaned_managed_ingredients(db: AsyncSession, *, ingredient_
         .where(Ingredient.id.in_(ingredient_ids))
         .group_by(Ingredient.id)
     )
-    orphan_ids = [ingredient_id for ingredient_id, ref_count in result.all() if int(ref_count or 0) == 0]
+    orphan_ids = [
+        ingredient_id for ingredient_id, ref_count in result.all() if int(ref_count or 0) == 0
+    ]
     if orphan_ids:
         await db.execute(delete(Ingredient).where(Ingredient.id.in_(orphan_ids)))
 
@@ -462,7 +477,9 @@ def _group_routes_from_steps(steps: list[RecipeIngredient]) -> list[Communicatio
         if metadata:
             route = _route_from_metadata(metadata)
         if route is None:
-            execution_target = normalize_destination_type(getattr(ingredient, "execution_target", ""))
+            execution_target = normalize_destination_type(
+                getattr(ingredient, "execution_target", "")
+            )
             destination_target = normalize_destination_target(
                 getattr(ingredient, "destination_target", "")
             )
@@ -495,7 +512,11 @@ def recipe_uses_local_communications(recipe: Recipe | Any) -> bool:
 
 
 def get_visible_recipe_steps(recipe: Recipe | Any) -> list[RecipeIngredient]:
-    return [ri for ri in getattr(recipe, "recipe_ingredients", []) or [] if not is_communication_step(ri)]
+    return [
+        ri
+        for ri in getattr(recipe, "recipe_ingredients", []) or []
+        if not is_communication_step(ri)
+    ]
 
 
 async def get_global_policy_routes(db: AsyncSession) -> list[CommunicationRoute]:
@@ -510,7 +531,9 @@ async def global_policy_configured(db: AsyncSession) -> bool:
     return any(route.enabled for route in routes)
 
 
-async def get_effective_recipe_routes(db: AsyncSession, recipe: Recipe | Any) -> tuple[str | None, list[CommunicationRoute]]:
+async def get_effective_recipe_routes(
+    db: AsyncSession, recipe: Recipe | Any
+) -> tuple[str | None, list[CommunicationRoute]]:
     local_routes = get_recipe_local_routes(recipe)
     if any(route.enabled for route in local_routes):
         return "local", local_routes
@@ -692,7 +715,9 @@ def should_seed_route_step(
     }:
         return True
     metadata = _metadata_from_payload(getattr(ingredient, "execution_payload", None))
-    execution_target = metadata.get("execution_target") or getattr(ingredient, "execution_target", "")
+    execution_target = metadata.get("execution_target") or getattr(
+        ingredient, "execution_target", ""
+    )
     destination_target = metadata.get("destination_target") or getattr(
         ingredient, "destination_target", ""
     )
