@@ -109,7 +109,7 @@ spec:
             - name: POUNDCAKE_LOG_FORMAT
               value: {{ .Values.logFormat | quote }}
             - name: POUNDCAKE_APP_VERSION
-              value: {{ .Chart.AppVersion | quote }}
+              value: {{ include "poundcake.poundcakeImageVersion" . | quote }}
             - name: POUNDCAKE_PROMETHEUS_URL
               value: {{ .Values.prometheus.url | quote }}
             - name: POUNDCAKE_PROMETHEUS_VERIFY_SSL
@@ -377,7 +377,7 @@ spec:
               mountPath: /app/config
       containers:
         - name: ui
-          image: {{ .Values.uiImage.repository }}:{{ .Values.uiImage.tag }}
+          image: {{ .Values.uiImage.repository }}:{{ default .Chart.AppVersion .Values.uiImage.tag }}
           imagePullPolicy: {{ .Values.uiImage.pullPolicy }}
           securityContext:
             {{- toYaml .Values.uiImage.securityContext | nindent 12 }}

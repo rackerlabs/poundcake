@@ -77,7 +77,7 @@ All endpoints are prefixed with `/api/v1`.
 
 ### Communications
 
-Preferred provider-agnostic API:
+Provider-agnostic API:
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -89,21 +89,6 @@ Preferred provider-agnostic API:
 | `POST` | `/api/v1/communications/{communication_id}/sync` | Refresh communication details from provider |
 | `GET` | `/api/v1/communications/{communication_id}/operations` | Get operation history |
 | `GET` | `/api/v1/communications/operations/{operation_id}` | Get operation status/details |
-
-### Tickets
-
-Legacy compatibility API backed by the same logical communication records:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/tickets` | Queue create operation; returns `ticket_id` + `operation_id` |
-| `PATCH` | `/api/v1/tickets/{ticket_id}` | Queue update operation |
-| `POST` | `/api/v1/tickets/{ticket_id}/comments` | Queue comment operation |
-| `POST` | `/api/v1/tickets/{ticket_id}/close` | Queue close operation |
-| `GET` | `/api/v1/tickets/{ticket_id}` | Get logical ticket state |
-| `POST` | `/api/v1/tickets/{ticket_id}/find` | Resolve ticket details (provider search when dry-run is off, local cache when dry-run is on) |
-| `GET` | `/api/v1/tickets/{ticket_id}/operations` | Get operation history |
-| `GET` | `/api/v1/operations/{operation_id}` | Get operation status/details |
 
 All non-health endpoints require HMAC auth (`Authorization: HMAC <key_id>:<signature>`, `X-Timestamp`) and mutating endpoints require `Idempotency-Key`.
 
@@ -505,7 +490,7 @@ The application starts on `http://localhost:8000` with auto-reload enabled when 
 ```
 bakery/
 ├── requirements.txt        # Runtime Python dependencies
-├── __init__.py             # Version (1.0.0)
+├── __init__.py             # Version re-export
 ├── main.py                 # FastAPI application entry point
 ├── config.py               # Environment variable configuration
 ├── database.py             # SQLAlchemy engine and session management
@@ -521,8 +506,8 @@ bakery/
 ├── api/
 │   ├── __init__.py
 │   ├── health.py           # GET /health
-│   ├── messages.py         # GET/DELETE /messages, POST /messages/cleanup
-│   └── tickets.py          # POST /tickets, GET /tickets/{id}
+│   ├── communications.py   # Public /communications API surface
+│   └── tickets.py          # Internal ticket operation helpers reused by communications
 └── mixer/
     ├── __init__.py
     ├── base.py             # BaseMixer ABC

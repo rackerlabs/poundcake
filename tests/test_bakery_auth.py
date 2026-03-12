@@ -34,8 +34,8 @@ def _signed_headers(
 def _app() -> FastAPI:
     app = FastAPI()
 
-    @app.post("/api/v1/tickets", dependencies=[Depends(require_hmac_auth)])
-    async def create_ticket() -> dict[str, str]:
+    @app.post("/api/v1/communications", dependencies=[Depends(require_hmac_auth)])
+    async def create_communication() -> dict[str, str]:
         return {"status": "ok"}
 
     return app
@@ -56,10 +56,10 @@ def test_require_hmac_auth_accepts_valid_signature(monkeypatch) -> None:
         key_id="active-id",
         key="active-secret",
         method="POST",
-        path="/api/v1/tickets",
+        path="/api/v1/communications",
         body=body,
     )
-    response = client.post("/api/v1/tickets", content=body, headers=headers)
+    response = client.post("/api/v1/communications", content=body, headers=headers)
     assert response.status_code == 200
 
 
@@ -76,13 +76,13 @@ def test_require_hmac_auth_rejects_invalid_signature(monkeypatch) -> None:
         key_id="active-id",
         key="active-secret",
         method="POST",
-        path="/api/v1/tickets",
+        path="/api/v1/communications",
         body=body,
     )
     auth_prefix, signature = headers["Authorization"].split(":", maxsplit=1)
     flipped_first = "0" if signature[0] != "0" else "1"
     headers["Authorization"] = f"{auth_prefix}:{flipped_first}{signature[1:]}"
-    response = client.post("/api/v1/tickets", content=body, headers=headers)
+    response = client.post("/api/v1/communications", content=body, headers=headers)
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid request signature"
 
@@ -101,11 +101,11 @@ def test_require_hmac_auth_rejects_stale_timestamp(monkeypatch) -> None:
         key_id="active-id",
         key="active-secret",
         method="POST",
-        path="/api/v1/tickets",
+        path="/api/v1/communications",
         body=body,
         timestamp=stale,
     )
-    response = client.post("/api/v1/tickets", content=body, headers=headers)
+    response = client.post("/api/v1/communications", content=body, headers=headers)
     assert response.status_code == 401
     assert response.json()["detail"] == "Request timestamp outside allowed skew window"
 
@@ -125,9 +125,9 @@ def test_require_hmac_auth_rejects_unknown_key(monkeypatch) -> None:
         key_id="unknown-id",
         key="unknown-secret",
         method="POST",
-        path="/api/v1/tickets",
+        path="/api/v1/communications",
         body=body,
     )
-    response = client.post("/api/v1/tickets", content=body, headers=headers)
+    response = client.post("/api/v1/communications", content=body, headers=headers)
     assert response.status_code == 401
     assert response.json()["detail"] == "Unknown key id"

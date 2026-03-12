@@ -25,6 +25,7 @@ from api.core.httpx_utils import silence_httpx
 from api.core.http_client import request_with_retry
 from api.core.statuses import ST2_TERMINAL_STATUSES
 from api.models.models import Recipe
+from api.version import __version__
 
 logger = get_logger(__name__)
 
@@ -780,7 +781,7 @@ def build_stackstorm_pack_files(
     files: dict[str, bytes] = {
         "pack.yaml": (
             f"name: {resolved_pack_name}\n"
-            'version: "0.1.0"\n'
+            f'version: "{__version__}"\n'
             'description: "PoundCake generated pack"\n'
             'author: "PoundCake"\n'
         ).encode("utf-8")

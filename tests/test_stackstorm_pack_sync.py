@@ -10,6 +10,7 @@ from api.api.cook import router as cook_router
 from api.api.auth import require_auth_if_enabled
 from api.core.database import get_db
 from api.services.stackstorm_service import build_stackstorm_pack_artifact
+from api.version import __version__
 
 
 def test_build_stackstorm_pack_artifact_contains_pack_yaml_and_workflows():
@@ -29,6 +30,9 @@ def test_build_stackstorm_pack_artifact_contains_pack_yaml_and_workflows():
         names = sorted(archive.getnames())
         assert "pack.yaml" in names
         assert "actions/workflows/My_Workflow.yaml" in names
+        pack_yaml = archive.extractfile("pack.yaml")
+        assert pack_yaml is not None
+        assert f'version: "{__version__}"' in pack_yaml.read().decode("utf-8")
 
 
 def test_pack_artifact_endpoint_requires_token_and_supports_etag():

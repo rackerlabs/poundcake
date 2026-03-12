@@ -314,12 +314,30 @@ imagePullSecrets:
 {{- end -}}
 {{- end -}}
 
+{{- define "poundcake.poundcakeImageVersion" -}}
+{{- $digest := .Values.poundcakeImage.digest | default "" -}}
+{{- if $digest -}}
+{{- $digest -}}
+{{- else -}}
+{{- default .Chart.AppVersion .Values.poundcakeImage.tag -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.bakeryImageRef" -}}
 {{- $digest := .Values.bakery.image.digest | default .Values.poundcakeImage.digest | default "" -}}
 {{- if $digest -}}
 {{- printf "%s@%s" .Values.bakery.image.repository $digest -}}
 {{- else -}}
 {{- printf "%s:%s" .Values.bakery.image.repository (default .Chart.AppVersion .Values.bakery.image.tag) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "poundcake.bakeryImageVersion" -}}
+{{- $digest := .Values.bakery.image.digest | default .Values.poundcakeImage.digest | default "" -}}
+{{- if $digest -}}
+{{- $digest -}}
+{{- else -}}
+{{- default .Chart.AppVersion .Values.bakery.image.tag -}}
 {{- end -}}
 {{- end -}}
 

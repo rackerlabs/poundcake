@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 from shared.env import env_to_bool
+from shared.version import resolve_version
 
 
 class Settings:
@@ -16,6 +17,7 @@ class Settings:
         self.environment: str = os.getenv("ENVIRONMENT", "production")
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO")
         self.api_prefix: str = "/api/v1"
+        self.app_version: str = resolve_version("BAKERY_APP_VERSION", "POUNDCAKE_APP_VERSION")
 
         # Database
         self.database_host: str = os.getenv("DATABASE_HOST", "bakery-mariadb")

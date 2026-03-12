@@ -15,9 +15,14 @@ def test_canonical_json_body_is_stable() -> None:
 
 
 def test_build_hmac_signing_payload_includes_body_hash() -> None:
-    payload = build_hmac_signing_payload("1700000000", "post", "/api/v1/tickets", b'{"a":1}')
+    payload = build_hmac_signing_payload(
+        "1700000000",
+        "post",
+        "/api/v1/communications",
+        b'{"a":1}',
+    )
     assert payload == (
-        "1700000000\nPOST\n/api/v1/tickets\n"
+        "1700000000\nPOST\n/api/v1/communications\n"
         "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862"
     )
 

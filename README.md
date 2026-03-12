@@ -142,17 +142,17 @@ stateDiagram-v2
 
     note right of processing
       Dish-terminal Bakery sync (_sync_bakery_for_terminal_dish):
-      - POST /api/v1/tickets (create if missing)
-      - PATCH /api/v1/tickets/{ticket_id} (reopen if confirmed_solved)
-      - POST /api/v1/tickets/{ticket_id}/comments (execution summary)
-      - GET /api/v1/operations/{operation_id} (poll loop)
+      - POST /api/v1/communications (open if missing)
+      - PATCH /api/v1/communications/{communication_id} (reopen if confirmed_solved)
+      - POST /api/v1/communications/{communication_id}/notifications (execution summary)
+      - GET /api/v1/communications/operations/{operation_id} (poll loop)
     end note
 
     note right of resolving
       Resolved-webhook Bakery sync (pre_heat):
-      - POST /api/v1/tickets/{ticket_id}/comments (clear note)
-      - POST /api/v1/tickets/{ticket_id}/close (if auto-remediation succeeded)
-      - GET /api/v1/operations/{operation_id} (poll loop)
+      - POST /api/v1/communications/{communication_id}/notifications (clear note)
+      - POST /api/v1/communications/{communication_id}/close (if auto-remediation succeeded)
+      - GET /api/v1/communications/operations/{operation_id} (poll loop)
 
       Resolve-phase dispatch (/orders/{id}/dispatch):
       - comms-only Bakery ingredients execute in resolving

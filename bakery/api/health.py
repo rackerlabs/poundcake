@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from bakery import __version__
+from bakery.config import settings
 from bakery.database import get_db
 from bakery.schemas import HealthResponse, ComponentHealth
 
@@ -63,7 +63,7 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
 
     return HealthResponse(
         status=overall_status,
-        version=__version__,
+        version=settings.app_version,
         instance_id=os.getenv("HOSTNAME", "unknown"),
         timestamp=datetime.now(timezone.utc),
         components=components,

@@ -10,12 +10,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 import structlog
 
-from bakery import __version__
 from bakery.api.communications import router as communications_router
 from bakery.config import settings
 from bakery.api.health import router as health_router
 from bakery.api.mixers import router as mixers_router
-from bakery.api.tickets import router as tickets_router
 from bakery.metrics import render_metrics
 
 
@@ -57,7 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger = structlog.get_logger()
     logger.info(
         "Bakery starting",
-        version=__version__,
+        version=settings.app_version,
         environment=settings.environment,
     )
     yield
@@ -79,10 +77,6 @@ tags_metadata = [
             "Submit and query provider-agnostic communications. "
             "Mutating endpoints return operation handles and are processed asynchronously."
         ),
-    },
-    {
-        "name": "tickets",
-        "description": ("Legacy ticket-shaped compatibility routes for communication operations."),
     },
     {
         "name": "mixers",
@@ -108,7 +102,7 @@ app = FastAPI(
         "2. `GET /api/v1/communications/operations/{operation_id}` - Poll operation status\n"
         "3. `GET /api/v1/communications/{communication_id}` - Read logical communication state\n"
     ),
-    version=__version__,
+    version=settings.app_version,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -150,7 +144,6 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # Include routers
 app.include_router(health_router, prefix=settings.api_prefix, tags=["health"])
 app.include_router(communications_router, prefix=settings.api_prefix, tags=["communications"])
-app.include_router(tickets_router, prefix=settings.api_prefix, tags=["tickets"])
 app.include_router(mixers_router, prefix=settings.api_prefix, tags=["mixers"])
 
 
@@ -171,7 +164,7 @@ async def root() -> dict[str, str]:
     """
     return {
         "service": "Bakery",
-        "version": __version__,
+        "version": settings.app_version,
         "description": "PoundCake ticketing system integration service",
     }
 

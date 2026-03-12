@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "poundcake-api"
-version = "1.0.0"
+dynamic = ["version"]
 description = "FastAPI application for processing Alertmanager webhooks with StackStorm integration"
 requires-python = ">=3.11"
 dependencies = [
@@ -51,6 +51,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["api*", "bakery*", "shared*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "shared.version.__version__"}
 
 [tool.ruff]
 line-length = 100

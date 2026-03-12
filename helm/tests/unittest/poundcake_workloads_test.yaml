@@ -162,24 +162,35 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:0.1.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.114
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:0.1.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.114
         documentIndex: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:0.1.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.114
         documentIndex: 3
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:0.1.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.114
         documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:0.1.0
+          value: ghcr.io/rackerlabs/poundcake:2.0.114
         documentIndex: 5
+
+  - it: reports API version from the deployed PoundCake image tag
+    set:
+      poundcakeImage.tag: "2.0.999"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_APP_VERSION
+            value: "2.0.999"
+        documentIndex: 0
 
   - it: supports immutable digest image references for PoundCake workloads
     set:

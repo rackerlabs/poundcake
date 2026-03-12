@@ -189,5 +189,19 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/example/poundcake-bakery:0.1.0
+          value: ghcr.io/example/poundcake-bakery:2.0.114
+        template: templates/bakery-deployment.yaml
+
+  - it: reports Bakery version from the deployed Bakery image tag
+    set:
+      poundcake.enabled: true
+      bakery.enabled: true
+      bakery.database.createServer: true
+      bakery.image.tag: "2.0.999"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: BAKERY_APP_VERSION
+            value: "2.0.999"
         template: templates/bakery-deployment.yaml

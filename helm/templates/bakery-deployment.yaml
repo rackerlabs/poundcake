@@ -68,6 +68,8 @@ spec:
               value: {{ .Values.bakery.config.environment | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.bakery.config.logLevel | quote }}
+            - name: BAKERY_APP_VERSION
+              value: {{ include "poundcake.bakeryImageVersion" . | quote }}
             - name: TICKETING_DRY_RUN
               value: {{ .Values.bakery.config.ticketingDryRun | quote }}
             - name: BAKERY_ACTIVE_PROVIDER

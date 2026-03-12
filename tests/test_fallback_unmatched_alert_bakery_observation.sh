@@ -103,10 +103,10 @@ operation=$(echo "${bakery_row}" | jq -r '.execution_parameters.operation // emp
 recipe_ingredient_id=$(echo "${bakery_row}" | jq -r '.recipe_ingredient_id // empty')
 
 case "${operation}" in
-  ticket_create) expected_call="POST /api/v1/tickets" ;;
-  ticket_update) expected_call="PATCH /api/v1/tickets/{ticket_id}" ;;
-  ticket_comment) expected_call="POST /api/v1/tickets/{ticket_id}/comments" ;;
-  ticket_close) expected_call="POST /api/v1/tickets/{ticket_id}/close" ;;
+  ticket_create) expected_call="POST /api/v1/communications" ;;
+  ticket_update) expected_call="PATCH /api/v1/communications/{communication_id}" ;;
+  ticket_comment) expected_call="POST /api/v1/communications/{communication_id}/notifications" ;;
+  ticket_close) expected_call="POST /api/v1/communications/{communication_id}/close" ;;
   *) expected_call="UNKNOWN (operation=${operation})" ;;
 esac
 
