@@ -88,9 +88,7 @@ async def _load_communication_activity(
                     else None
                 )
                 provider_reference_id = (
-                    None
-                    if ticket_id
-                    else (communication.bakery_ticket_id or None)
+                    None if ticket_id else (communication.bakery_ticket_id or None)
                 )
                 rows.append(
                     CommunicationActivityRecord(

@@ -7,7 +7,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.models.models import AlertSuppression, Dish, Order, OrderCommunication, Recipe, SuppressionSummary
+from api.models.models import (
+    AlertSuppression,
+    Dish,
+    Order,
+    OrderCommunication,
+    Recipe,
+    SuppressionSummary,
+)
 
 
 class ScalarResult:
@@ -218,8 +225,7 @@ def test_observability_activity_returns_clickable_typed_feed(client, mock_db):
     communication_item = next(
         item
         for item in data
-        if item["type"] == "communication"
-        and item["metadata"]["reference_type"] == "incident"
+        if item["type"] == "communication" and item["metadata"]["reference_type"] == "incident"
     )
     assert incident_item["link_hint"] == "/incidents/1"
     assert communication_item["link_hint"] == "/incidents/1?communication=17"
