@@ -107,6 +107,10 @@ class RackspaceCoreMixer(BaseMixer):
                     return row_id
         return None
 
+    @staticmethod
+    def _is_private_comment(visibility: Any) -> bool:
+        return str(visibility or "").strip().lower() in {"internal", "private"}
+
     async def _resolve_queue_id(self, queue: Any) -> int | None:
         queue_id = self._coerce_int(queue)
         if queue_id is not None:
@@ -169,6 +173,23 @@ class RackspaceCoreMixer(BaseMixer):
             "severities": self._flatten_value_rows(queue_row.get("severities")),
         }
 
+    async def _load_ticket_queue_id(self, ticket_number: Any) -> int | None:
+        query_set = [
+            {
+                "class": "Ticket.Ticket",
+                "load_arg": str(ticket_number),
+                "attributes": ["queue"],
+            }
+        ]
+        result = await self._execute_query(query_set)
+        rows = self._extract_result_rows(result)
+        if not rows:
+            return None
+        queue = rows[0].get("queue")
+        if isinstance(queue, dict):
+            return self._coerce_int(queue.get("load_value"))
+        return None
+
     @staticmethod
     def _normalize_source_name(source: Any) -> str:
         source_text = str(source or "").strip()
@@ -209,6 +230,31 @@ class RackspaceCoreMixer(BaseMixer):
         if lowered == "closed":
             return "Closed"
         return " ".join(part.capitalize() for part in raw.split())
+
+    async def _resolve_ticket_source_id(self, ticket_number: Any, source: Any) -> int | None:
+        source_id = self._coerce_int(source)
+        if source_id is not None:
+            return source_id
+
+        queue_id = await self._load_ticket_queue_id(ticket_number)
+        if queue_id is None:
+            return None
+
+        taxonomy = await self._load_queue_taxonomy(queue_id)
+        source_rows = taxonomy.get("sources", [])
+        if not source_rows:
+            return None
+
+        normalized_source = self._normalize_source_name(source)
+        source_id = self._pick_named_value_id(source_rows, normalized_source)
+        if source_id is not None:
+            return source_id
+
+        source_id = self._pick_named_value_id(source_rows, "RunBook")
+        if source_id is not None:
+            return source_id
+
+        return self._coerce_int(source_rows[0].get("id"))
 
     async def _resolve_create_classification_ids(
         self,
@@ -521,8 +567,32 @@ class RackspaceCoreMixer(BaseMixer):
 
         requested_status = data.get("status")
         if not requested_status:
-            requested_status = settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+            requested_status = (
+                settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+            )
         status_value = self._normalize_status_name(requested_status)
+
+        close_notes = self._normalize_text(data.get("close_notes"))
+        if close_notes:
+            source_id = await self._resolve_ticket_source_id(ticket_number, data.get("source"))
+            if source_id is None:
+                return {
+                    "success": False,
+                    "error": "Unable to resolve Rackspace Core comment source for close notes.",
+                }
+            note_query_set = [
+                {
+                    "class": "Ticket.Ticket",
+                    "load_arg": str(ticket_number),
+                    "method": "addMessage",
+                    "args": [close_notes, source_id],
+                    "keyword_args": {
+                        "private": self._is_private_comment(data.get("visibility")),
+                        "has_bbcode": bool(data.get("has_bbcode", True)),
+                    },
+                }
+            ]
+            await self._execute_query(note_query_set)
 
         query_set = [
             {
@@ -574,13 +644,21 @@ class RackspaceCoreMixer(BaseMixer):
                 "error": "ticket_number and comment required",
             }
 
+        source_id = await self._resolve_ticket_source_id(ticket_number, data.get("source"))
+        if source_id is None:
+            return {
+                "success": False,
+                "error": "Unable to resolve Rackspace Core comment source.",
+            }
+
         query_set = [
             {
                 "class": "Ticket.Ticket",
                 "load_arg": str(ticket_number),
-                "method": "addComment",
-                "args": [comment],
+                "method": "addMessage",
+                "args": [comment, source_id],
                 "keyword_args": {
+                    "private": self._is_private_comment(data.get("visibility")),
                     "has_bbcode": bool(data.get("has_bbcode", True)),
                 },
             }

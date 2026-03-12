@@ -130,6 +130,7 @@ async def notify_communication(
         payload=TicketCommentRequest(
             comment=payload.comment or payload.message or "",
             visibility=payload.visibility,
+            has_bbcode=payload.has_bbcode,
             context=payload.context,
         ),
         idempotency_key=idempotency_key,

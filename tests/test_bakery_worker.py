@@ -36,3 +36,8 @@ def test_rackspace_core_close_payload_defaults_to_confirm_solved() -> None:
     source = _worker_source()
     assert 'if normalized_hint in {"", "closed"}:' in source
     assert 'settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"' in source
+
+
+def test_worker_propagates_has_bbcode_to_provider_payload() -> None:
+    source = _worker_source()
+    assert 'provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))' in source

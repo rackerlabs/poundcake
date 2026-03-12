@@ -124,3 +124,113 @@ async def test_close_ticket_falls_back_to_set_attribute_on_http_error(
     assert result["success"] is True
     assert calls[0][0]["method"] == "setStatusByName"
     assert "set_attribute" in calls[1][0]
+
+
+@pytest.mark.asyncio
+async def test_add_comment_uses_add_message_with_numeric_source_id(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mixer = RackspaceCoreMixer()
+    calls: list[list[dict[str, object]]] = []
+
+    async def _fake_execute(query_set: list[dict[str, object]]):
+        calls.append(query_set)
+        first = query_set[0]
+        class_name = first.get("class")
+        load_arg = first.get("load_arg")
+
+        if class_name == "Ticket.Ticket" and load_arg == "260309-12345" and "attributes" in first:
+            return [{"result": [{"queue": {"load_value": 472}}]}]
+
+        if class_name == "Ticket.Queue" and load_arg == 472:
+            return [
+                {
+                    "result": [
+                        {
+                            "id": 472,
+                            "name": "CloudBuilders Support",
+                            "subcategories": [],
+                            "sources": [{"id": 12, "name": "RunBook"}],
+                            "severities": [],
+                        }
+                    ]
+                }
+            ]
+
+        if class_name == "Ticket.Ticket" and first.get("method") == "addMessage":
+            assert first.get("args") == ["[b]test[/b]", 12]
+            assert first.get("keyword_args") == {"private": True, "has_bbcode": True}
+            return [{"result": [{"load_value": 123}]}]
+
+        raise AssertionError(f"Unexpected query_set: {query_set}")
+
+    monkeypatch.setattr(mixer, "_execute_query", _fake_execute)
+
+    result = await mixer._add_comment(
+        {
+            "ticket_id": "260309-12345",
+            "comment": "[b]test[/b]",
+            "visibility": "internal",
+            "has_bbcode": True,
+        }
+    )
+
+    assert result["success"] is True
+    assert calls[-1][0]["method"] == "addMessage"
+
+
+@pytest.mark.asyncio
+async def test_close_ticket_adds_close_notes_before_status_change(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mixer = RackspaceCoreMixer()
+    calls: list[list[dict[str, object]]] = []
+
+    async def _fake_execute(query_set: list[dict[str, object]]):
+        calls.append(query_set)
+        first = query_set[0]
+        class_name = first.get("class")
+        load_arg = first.get("load_arg")
+
+        if class_name == "Ticket.Ticket" and load_arg == "260309-12345" and "attributes" in first:
+            return [{"result": [{"queue": {"load_value": 472}}]}]
+
+        if class_name == "Ticket.Queue" and load_arg == 472:
+            return [
+                {
+                    "result": [
+                        {
+                            "id": 472,
+                            "name": "CloudBuilders Support",
+                            "subcategories": [],
+                            "sources": [{"id": 12, "name": "RunBook"}],
+                            "severities": [],
+                        }
+                    ]
+                }
+            ]
+
+        if class_name == "Ticket.Ticket" and first.get("method") == "addMessage":
+            assert first.get("args") == ["[b]resolved[/b]", 12]
+            assert first.get("keyword_args") == {"private": False, "has_bbcode": True}
+            return [{"result": [{"load_value": 456}]}]
+
+        if class_name == "Ticket.Ticket" and first.get("method") == "setStatusByName":
+            assert first.get("args") == ["Confirm Solved"]
+            return [{"result": {"ok": True}}]
+
+        raise AssertionError(f"Unexpected query_set: {query_set}")
+
+    monkeypatch.setattr(mixer, "_execute_query", _fake_execute)
+
+    result = await mixer._close_ticket(
+        {
+            "ticket_id": "260309-12345",
+            "status": "confirmed_solved",
+            "close_notes": "[b]resolved[/b]",
+            "has_bbcode": True,
+        }
+    )
+
+    assert result["success"] is True
+    assert calls[-1][0]["method"] == "setStatusByName"

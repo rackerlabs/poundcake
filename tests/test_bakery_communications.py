@@ -58,7 +58,7 @@ async def test_notify_communication_maps_message_to_comment(monkeypatch: pytest.
 
     response = await communications.notify_communication(
         communication_id="comm-2",
-        payload=CommunicationNotifyRequest(message="manual action required"),
+        payload=CommunicationNotifyRequest(message="manual action required", has_bbcode=False),
         idempotency_key="idem-2",
         db=None,
     )
@@ -66,6 +66,7 @@ async def test_notify_communication_maps_message_to_comment(monkeypatch: pytest.
     assert response.communication_id == "comm-2"
     sent_payload = add_comment.await_args.kwargs["payload"]
     assert sent_payload.comment == "manual action required"
+    assert sent_payload.has_bbcode is False
 
 
 def test_communication_response_supports_agnostic_metadata() -> None:

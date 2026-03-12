@@ -80,6 +80,8 @@ def _build_provider_payload(
             provider_payload.setdefault("category", payload.get("category"))
         if payload.get("source") is not None:
             provider_payload.setdefault("source", payload.get("source"))
+        if payload.get("has_bbcode") is not None:
+            provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))
 
         # Provider-specific label/annotation mappings for generic PoundCake requests.
         if provider == "servicenow":
@@ -295,8 +297,12 @@ def _build_provider_payload(
             )
             return provider_payload
         provider_payload.setdefault("comment", payload.get("comment", ""))
+        if payload.get("has_bbcode") is not None:
+            provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))
         if payload.get("visibility") is not None:
             provider_payload.setdefault("visibility", payload.get("visibility"))
+        if payload.get("source") is not None:
+            provider_payload.setdefault("source", payload.get("source"))
         return provider_payload
 
     if action == "close":
@@ -317,14 +323,20 @@ def _build_provider_payload(
             status_hint = _first_non_empty(provider_payload.get("status"), payload.get("state"))
             normalized_hint = str(status_hint or "").strip().lower().replace("_", " ")
             if normalized_hint in {"", "closed"}:
-                status_hint = settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+                status_hint = (
+                    settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
+                )
             provider_payload.setdefault("status", str(status_hint).replace("_", " "))
+        if payload.get("has_bbcode") is not None:
+            provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))
         if payload.get("resolution_notes") is not None:
             provider_payload.setdefault("close_notes", payload.get("resolution_notes"))
         if payload.get("resolution_code") is not None:
             provider_payload.setdefault("resolution_code", payload.get("resolution_code"))
         if payload.get("state") is not None:
             provider_payload.setdefault("state", payload.get("state"))
+        if payload.get("source") is not None:
+            provider_payload.setdefault("source", payload.get("source"))
         return provider_payload
 
     raise ValueError(f"Unsupported action: {action}")
