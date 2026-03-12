@@ -56,6 +56,52 @@ class StatsResponse(BaseModel):
     recent_alerts: int
 
 
+class CommunicationRouteBase(BaseModel):
+    id: Optional[str] = None
+    label: str = Field(..., min_length=1, max_length=255)
+    execution_target: str = Field(..., min_length=1, max_length=100)
+    destination_target: Optional[str] = Field(default="", max_length=255)
+    enabled: bool = True
+    position: int = Field(default=1, ge=1)
+
+
+class CommunicationRouteCreate(CommunicationRouteBase):
+    pass
+
+
+class CommunicationRouteResponse(CommunicationRouteBase):
+    id: str
+
+
+class CommunicationPolicyUpdate(BaseModel):
+    routes: List[CommunicationRouteCreate] = Field(default_factory=list)
+
+
+class CommunicationPolicyResponse(BaseModel):
+    configured: bool
+    routes: List[CommunicationRouteResponse] = Field(default_factory=list)
+    lifecycle_summary: Dict[str, str] = Field(default_factory=dict)
+
+
+class RecipeCommunicationsConfig(BaseModel):
+    mode: str = Field(default="inherit")
+    routes: List[CommunicationRouteCreate] = Field(default_factory=list)
+
+    @field_validator("mode")
+    @classmethod
+    def _validate_mode(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"inherit", "local"}:
+            raise ValueError("communications.mode must be either 'inherit' or 'local'")
+        return normalized
+
+
+class RecipeCommunicationsResponse(BaseModel):
+    mode: str
+    effective_source: Optional[str] = None
+    routes: List[CommunicationRouteResponse] = Field(default_factory=list)
+
+
 # =============================================================================
 # Ingredient Schemas (Global)
 # =============================================================================
@@ -246,6 +292,7 @@ class RecipeCreate(RecipeBase):
     """Schema for creating a recipe with recipe_ingredients."""
 
     recipe_ingredients: List[RecipeIngredientCreate] = Field(..., min_length=1)
+    communications: RecipeCommunicationsConfig = Field(default_factory=RecipeCommunicationsConfig)
 
 
 class RecipeUpdate(BaseModel):
@@ -256,6 +303,7 @@ class RecipeUpdate(BaseModel):
     enabled: Optional[bool] = None
     clear_timeout_sec: Optional[int] = Field(default=None, gt=0)
     recipe_ingredients: Optional[List[RecipeIngredientCreate]] = Field(default=None, min_length=1)
+    communications: Optional[RecipeCommunicationsConfig] = None
 
 
 class RecipeResponse(RecipeBase):
@@ -274,6 +322,9 @@ class RecipeDetailResponse(RecipeResponse):
     """Schema for detailed recipe responses (includes recipe_ingredients)."""
 
     recipe_ingredients: List[RecipeIngredientResponse] = []
+    communications: RecipeCommunicationsResponse = Field(
+        default_factory=lambda: RecipeCommunicationsResponse(mode="inherit")
+    )
 
 
 # =============================================================================

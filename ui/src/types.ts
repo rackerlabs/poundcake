@@ -7,6 +7,28 @@ export interface AppSettings {
   git_provider: string | null;
   stackstorm_enabled: boolean;
   version: string;
+  global_communications_configured: boolean;
+}
+
+export interface CommunicationRouteRecord {
+  id: string;
+  label: string;
+  execution_target: string;
+  destination_target: string;
+  enabled: boolean;
+  position: number;
+}
+
+export interface CommunicationPolicyRecord {
+  configured: boolean;
+  routes: CommunicationRouteRecord[];
+  lifecycle_summary: Record<string, string>;
+}
+
+export interface RecipeCommunicationsRecord {
+  mode: "inherit" | "local";
+  effective_source?: "global" | "local" | null;
+  routes: CommunicationRouteRecord[];
 }
 
 export interface ComponentHealth {
@@ -261,4 +283,5 @@ export interface RecipeRecord {
   deleted: boolean;
   deleted_at?: string | null;
   recipe_ingredients: RecipeStepRecord[];
+  communications: RecipeCommunicationsRecord;
 }

@@ -7,7 +7,7 @@
 """API endpoints for ingredient management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import not_, select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -23,6 +23,10 @@ from api.schemas.schemas import (
     DeleteResponse,
 )
 from api.schemas.query_params import IngredientQueryParams, validate_query_params
+from api.services.communications_policy import (
+    MANAGED_TASK_PREFIX,
+    is_managed_communications_ingredient,
+)
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -99,6 +103,7 @@ async def list_ingredients(
 ):
     """List global ingredients with optional filtering."""
     query = select(Ingredient)
+    query = query.where(not_(Ingredient.task_key_template.like(f"{MANAGED_TASK_PREFIX}%")))
 
     if params.execution_target is not None:
         query = query.where(Ingredient.execution_target == params.execution_target)
@@ -115,7 +120,7 @@ async def get_ingredient(ingredient_id: int, db: AsyncSession = Depends(get_db))
     """Fetch a single ingredient by ID."""
     result = await db.execute(select(Ingredient).where(Ingredient.id == ingredient_id))
     ingredient = result.scalars().first()
-    if not ingredient:
+    if not ingredient or is_managed_communications_ingredient(ingredient):
         raise HTTPException(status_code=404, detail="Ingredient not found")
     return ingredient
 
@@ -131,7 +136,7 @@ async def delete_ingredient(
             select(Ingredient).where(Ingredient.id == ingredient_id).with_for_update()
         )
         ingredient = result.scalars().first()
-        if not ingredient:
+        if not ingredient or is_managed_communications_ingredient(ingredient):
             raise HTTPException(status_code=404, detail="Ingredient not found")
 
         task_name = ingredient.task_key_template
@@ -191,7 +196,7 @@ async def update_ingredient(
             select(Ingredient).where(Ingredient.id == ingredient_id).with_for_update()
         )
         ingredient = result.scalars().first()
-        if not ingredient:
+        if not ingredient or is_managed_communications_ingredient(ingredient):
             raise HTTPException(status_code=404, detail="Ingredient not found")
 
         update_data = payload.dict(exclude_unset=True)

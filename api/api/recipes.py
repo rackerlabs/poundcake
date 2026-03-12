@@ -6,46 +6,210 @@
 #
 """API endpoints for recipe management."""
 
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, List
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
-from datetime import datetime, timezone
+from sqlalchemy.orm import joinedload
 
 from api.core.database import get_db
 from api.core.logging import get_logger
-from api.models.models import Recipe, RecipeIngredient, Ingredient
-from api.schemas.schemas import (
-    RecipeCreate,
-    RecipeUpdate,
-    RecipeDetailResponse,
-    DeleteResponse,
-)
+from api.models.models import Ingredient, Recipe, RecipeIngredient
 from api.schemas.query_params import RecipeQueryParams, validate_query_params
+from api.schemas.schemas import DeleteResponse, RecipeCreate, RecipeDetailResponse, RecipeUpdate
+from api.services.communications_policy import (
+    build_recipe_local_policy_step_specs,
+    get_global_policy_routes,
+    get_recipe_local_routes,
+    get_visible_recipe_steps,
+    global_policy_configured,
+    is_communication_step,
+    is_hidden_workflow_recipe,
+    normalize_routes,
+    policy_has_enabled_routes,
+    route_payloads_for_response,
+)
+from api.services.recipe_ingredient_cleanup import delete_recipe_ingredients_safely
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _recipe_query():
+    return select(Recipe).options(
+        joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient)
+    )
+
+
+def _recipe_to_step_spec(step: RecipeIngredient) -> dict[str, Any]:
+    return {
+        "ingredient_id": step.ingredient_id,
+        "step_order": step.step_order,
+        "on_success": step.on_success,
+        "parallel_group": step.parallel_group,
+        "depth": step.depth,
+        "execution_parameters_override": step.execution_parameters_override,
+        "run_phase": step.run_phase,
+        "run_condition": step.run_condition,
+    }
+
+
+def _append_recipe_steps(recipe: Recipe, step_specs: list[dict[str, Any]]) -> None:
+    for spec in step_specs:
+        recipe.recipe_ingredients.append(
+            RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=spec["ingredient_id"],
+                step_order=spec["step_order"],
+                on_success=spec["on_success"],
+                parallel_group=spec["parallel_group"],
+                depth=spec["depth"],
+                execution_parameters_override=spec["execution_parameters_override"],
+                run_phase=spec["run_phase"],
+                run_condition=spec["run_condition"],
+            )
+        )
+
+
+async def _validate_ingredient_ids(db: AsyncSession, *, step_specs: list[dict[str, Any]]) -> None:
+    ingredient_ids = [int(item["ingredient_id"]) for item in step_specs]
+    if not ingredient_ids:
+        return
+    result = await db.execute(select(Ingredient).where(Ingredient.id.in_(ingredient_ids)))
+    found_ids = {ingredient.id for ingredient in result.scalars().all()}
+    missing = [ingredient_id for ingredient_id in ingredient_ids if ingredient_id not in found_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
+
+
+async def _serialize_recipe(db: AsyncSession, recipe: Recipe) -> dict[str, Any]:
+    visible_steps = get_visible_recipe_steps(recipe)
+    local_routes = get_recipe_local_routes(recipe)
+    if local_routes:
+        communications = route_payloads_for_response(
+            mode="local",
+            effective_source="local" if policy_has_enabled_routes(local_routes) else None,
+            routes=local_routes,
+        )
+    else:
+        global_routes = await get_global_policy_routes(db)
+        communications = route_payloads_for_response(
+            mode="inherit",
+            effective_source="global" if policy_has_enabled_routes(global_routes) else None,
+            routes=global_routes,
+        )
+
+    return {
+        "id": recipe.id,
+        "name": recipe.name,
+        "description": recipe.description,
+        "enabled": recipe.enabled,
+        "clear_timeout_sec": recipe.clear_timeout_sec,
+        "created_at": recipe.created_at,
+        "updated_at": recipe.updated_at,
+        "deleted": recipe.deleted,
+        "deleted_at": recipe.deleted_at,
+        "recipe_ingredients": visible_steps,
+        "communications": communications,
+    }
+
+
+async def _validate_effective_communications(
+    db: AsyncSession,
+    *,
+    enabled: bool,
+    communications_mode: str,
+    local_routes: list[Any],
+) -> None:
+    if not enabled:
+        return
+    if communications_mode == "local":
+        if not policy_has_enabled_routes(local_routes):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Enabled workflows must define at least one enabled workflow-specific "
+                    "communication route when using local communications."
+                ),
+            )
+        return
+
+    if not await global_policy_configured(db):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Enabled workflows must inherit a configured global communications policy "
+                "or define workflow-specific communications."
+            ),
+        )
+
+
+def _communications_payload_mode(payload: RecipeCreate | RecipeUpdate | None) -> str | None:
+    if payload is None:
+        return None
+    communications = getattr(payload, "communications", None)
+    if communications is None:
+        return None
+    return communications.mode
+
+
+def _communications_payload_routes(
+    payload: RecipeCreate | RecipeUpdate | None,
+) -> list[dict[str, Any]] | None:
+    if payload is None:
+        return None
+    communications = getattr(payload, "communications", None)
+    if communications is None:
+        return None
+    return [item.model_dump() for item in communications.routes]
+
+
+def _step_specs_from_payload(step_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "ingredient_id": item["ingredient_id"],
+            "step_order": item["step_order"],
+            "on_success": item["on_success"],
+            "parallel_group": item["parallel_group"],
+            "depth": item["depth"],
+            "execution_parameters_override": item["execution_parameters_override"],
+            "run_phase": item["run_phase"],
+            "run_condition": item["run_condition"],
+        }
+        for item in step_items
+    ]
 
 
 @router.post("/recipes/", response_model=RecipeDetailResponse, status_code=201)
 async def create_recipe(
     request: Request, recipe: RecipeCreate, db: AsyncSession = Depends(get_db)
 ) -> RecipeDetailResponse:
-    """Create a new recipe with recipe_ingredients."""
+    """Create a new recipe with remediation/utility steps and optional local comms."""
     req_id = request.state.req_id
-
     logger.info("Creating recipe", extra={"req_id": req_id, "recipe_name": recipe.name})
 
-    db_recipe: Recipe | None = None
+    visible_step_specs = _step_specs_from_payload(
+        [item.model_dump() for item in recipe.recipe_ingredients]
+    )
+    await _validate_ingredient_ids(db, step_specs=visible_step_specs)
+
+    communications_mode = recipe.communications.mode
+    local_routes = normalize_routes(_communications_payload_routes(recipe) or [])
+    await _validate_effective_communications(
+        db,
+        enabled=recipe.enabled,
+        communications_mode=communications_mode,
+        local_routes=local_routes,
+    )
+
     async with db.begin():
         result = await db.execute(select(Recipe).where(Recipe.name == recipe.name))
         existing = result.scalars().first()
         if existing:
-            logger.warning(
-                "Recipe already exists",
-                extra={"req_id": req_id, "recipe_name": recipe.name},
-            )
             raise HTTPException(status_code=400, detail=f"Recipe '{recipe.name}' already exists")
 
         db_recipe = Recipe(
@@ -57,50 +221,50 @@ async def create_recipe(
         db.add(db_recipe)
         await db.flush()
 
-        ingredient_ids = [ri.ingredient_id for ri in recipe.recipe_ingredients]
-        if ingredient_ids:
-            result = await db.execute(select(Ingredient).where(Ingredient.id.in_(ingredient_ids)))
-            ingredients = result.scalars().all()
-        else:
-            ingredients = []
-        found_ids = {ing.id for ing in ingredients}
-        missing = [ing_id for ing_id in ingredient_ids if ing_id not in found_ids]
-        if missing:
-            raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
-
-        for ri in recipe.recipe_ingredients:
-            db_recipe_ingredient = RecipeIngredient(
+        _append_recipe_steps(db_recipe, visible_step_specs)
+        if communications_mode == "local":
+            _, managed_specs = build_recipe_local_policy_step_specs(
                 recipe_id=db_recipe.id,
-                ingredient_id=ri.ingredient_id,
-                step_order=ri.step_order,
-                on_success=ri.on_success,
-                parallel_group=ri.parallel_group,
-                depth=ri.depth,
-                execution_parameters_override=ri.execution_parameters_override,
-                run_phase=ri.run_phase,
-                run_condition=ri.run_condition,
+                routes=local_routes,
             )
-            db.add(db_recipe_ingredient)
+            for spec in managed_specs:
+                ingredient = Ingredient(
+                    execution_target=spec["execution_target"],
+                    destination_target=spec["destination_target"],
+                    task_key_template=spec["task_key_template"],
+                    execution_engine=spec["execution_engine"],
+                    execution_purpose=spec["execution_purpose"],
+                    execution_payload=spec["execution_payload"],
+                    execution_parameters=spec["execution_parameters"],
+                    is_default=spec["is_default"],
+                    is_blocking=spec["is_blocking"],
+                    expected_duration_sec=spec["expected_duration_sec"],
+                    timeout_duration_sec=spec["timeout_duration_sec"],
+                    retry_count=spec["retry_count"],
+                    retry_delay=spec["retry_delay"],
+                    on_failure=spec["on_failure"],
+                )
+                db.add(ingredient)
+                await db.flush()
+                db_recipe.recipe_ingredients.append(
+                    RecipeIngredient(
+                        recipe_id=db_recipe.id,
+                        ingredient_id=ingredient.id,
+                        step_order=spec["step_order"],
+                        on_success=spec["on_success"],
+                        parallel_group=spec["parallel_group"],
+                        depth=spec["depth"],
+                        execution_parameters_override=spec["execution_parameters_override"],
+                        run_phase=spec["run_phase"],
+                        run_condition=spec["run_condition"],
+                    )
+                )
 
-    result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .where(Recipe.id == db_recipe.id)
-    )
-    db_recipe = result.scalars().first()
+    result = await db.execute(_recipe_query().where(Recipe.name == recipe.name))
+    db_recipe = result.unique().scalars().first()
     if db_recipe is None:
         raise HTTPException(status_code=500, detail="Recipe retrieval failed after create")
-    logger.info(
-        "Recipe created successfully",
-        extra={
-            "req_id": req_id,
-            "recipe_id": db_recipe.id if db_recipe else None,
-            "recipe_name": db_recipe.name if db_recipe else None,
-            "ingredient_count": len(recipe.recipe_ingredients),
-        },
-    )
-
-    return db_recipe
+    return await _serialize_recipe(db, db_recipe)
 
 
 @router.get("/recipes/", response_model=List[RecipeDetailResponse])
@@ -109,59 +273,41 @@ async def list_recipes(
     params: RecipeQueryParams = Depends(validate_query_params(RecipeQueryParams)),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    List recipes with optional filtering and nested recipe_ingredients.
-
-    Query Parameters:
-    - name: Filter by recipe name
-    - enabled: Filter by enabled status (true/false)
-    - limit: Maximum number of results (default: 100, max: 1000)
-    - offset: Number of results to skip (default: 0)
-
-    Returns 422 Unprocessable Entity if unknown or invalid query parameters are provided.
-    """
-    query = select(Recipe).options(
-        joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient)
-    )
-
+    """List user-facing workflows with communications summary."""
+    _ = request.state.req_id
+    query = _recipe_query()
     if params.name is not None:
         query = query.where(Recipe.name == params.name)
     if params.enabled is not None:
         query = query.where(Recipe.enabled == params.enabled)
-
     query = query.limit(params.limit).offset(params.offset)
     result = await db.execute(query)
-    return result.unique().scalars().all()
+    recipes = [
+        recipe
+        for recipe in result.unique().scalars().all()
+        if not is_hidden_workflow_recipe(recipe)
+    ]
+    return [await _serialize_recipe(db, recipe) for recipe in recipes]
 
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 async def get_recipe(recipe_id: int, db: AsyncSession = Depends(get_db)):
-    """Get a recipe with all its recipe_ingredients."""
-    result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .where(Recipe.id == recipe_id)
-    )
+    """Get a workflow with non-communications steps and effective communications settings."""
+    result = await db.execute(_recipe_query().where(Recipe.id == recipe_id))
     recipe = result.unique().scalars().first()
-    if not recipe:
+    if not recipe or is_hidden_workflow_recipe(recipe):
         raise HTTPException(status_code=404, detail="Recipe not found")
-
-    return recipe
+    return await _serialize_recipe(db, recipe)
 
 
 @router.get("/recipes/by-name/{recipe_name}", response_model=RecipeDetailResponse)
 async def get_recipe_by_name(recipe_name: str, db: AsyncSession = Depends(get_db)):
-    """Get a recipe by name (matches order.alert_group_name)."""
-    result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .where(Recipe.name == recipe_name)
-    )
+    """Get a workflow by name."""
+    result = await db.execute(_recipe_query().where(Recipe.name == recipe_name))
     recipe = result.unique().scalars().first()
-    if not recipe:
+    if not recipe or is_hidden_workflow_recipe(recipe):
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
-
-    return recipe
+    return await _serialize_recipe(db, recipe)
 
 
 @router.delete("/recipes/{recipe_id}", response_model=DeleteResponse)
@@ -170,23 +316,15 @@ async def delete_recipe(
 ) -> DeleteResponse:
     """Delete a recipe and its recipe_ingredients."""
     req_id = request.state.req_id
-
     logger.info("Deleting recipe", extra={"req_id": req_id, "recipe_id": recipe_id})
 
     async with db.begin():
         result = await db.execute(select(Recipe).where(Recipe.id == recipe_id).with_for_update())
         recipe = result.unique().scalars().first()
-        if not recipe:
-            logger.warning("Recipe not found", extra={"req_id": req_id, "recipe_id": recipe_id})
+        if not recipe or is_hidden_workflow_recipe(recipe):
             raise HTTPException(status_code=404, detail="Recipe not found")
-
         recipe_name = recipe.name
         await db.delete(recipe)
-
-    logger.info(
-        "Recipe deleted successfully",
-        extra={"req_id": req_id, "recipe_id": recipe_id, "recipe_name": recipe_name},
-    )
 
     return DeleteResponse(
         status="deleted", id=recipe_id, message=f"Recipe '{recipe_name}' deleted successfully"
@@ -196,50 +334,112 @@ async def delete_recipe(
 @router.put("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 @router.patch("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession = Depends(get_db)):
-    """Update a recipe."""
+    """Update a workflow, preserving comms when omitted and normalizing local comms when supplied."""
     recipe: Recipe | None = None
     async with db.begin():
-        result = await db.execute(
-            select(Recipe)
-            .options(joinedload(Recipe.recipe_ingredients))
-            .where(Recipe.id == recipe_id)
-            .with_for_update()
-        )
+        result = await db.execute(_recipe_query().where(Recipe.id == recipe_id).with_for_update())
         recipe = result.unique().scalars().first()
-        if not recipe:
+        if not recipe or is_hidden_workflow_recipe(recipe):
             raise HTTPException(status_code=404, detail="Recipe not found")
+
+        existing_visible_specs = [
+            _recipe_to_step_spec(step) for step in get_visible_recipe_steps(recipe)
+        ]
+        existing_comm_specs = [
+            _recipe_to_step_spec(step)
+            for step in recipe.recipe_ingredients
+            if is_communication_step(step)
+        ]
+        current_local_routes = get_recipe_local_routes(recipe)
 
         update_data = payload.model_dump(exclude_unset=True)
         recipe_ingredients = update_data.pop("recipe_ingredients", None)
+        communications = update_data.pop("communications", None)
         for key, value in update_data.items():
             setattr(recipe, key, value)
 
+        final_visible_specs = existing_visible_specs
         if recipe_ingredients is not None:
-            ingredient_ids = [item["ingredient_id"] for item in recipe_ingredients]
-            ingredient_result = await db.execute(
-                select(Ingredient).where(Ingredient.id.in_(ingredient_ids))
-            )
-            found_ids = {ingredient.id for ingredient in ingredient_result.scalars().all()}
-            missing = [
-                ingredient_id for ingredient_id in ingredient_ids if ingredient_id not in found_ids
-            ]
-            if missing:
-                raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
+            final_visible_specs = _step_specs_from_payload(recipe_ingredients)
+            await _validate_ingredient_ids(db, step_specs=final_visible_specs)
 
-            recipe.recipe_ingredients.clear()
-            await db.flush()
-            for item in recipe_ingredients:
+        final_communications_mode = "local" if current_local_routes else "inherit"
+        final_local_routes = current_local_routes
+        final_comm_specs = existing_comm_specs
+        if communications is not None:
+            final_communications_mode = communications["mode"]
+            if final_communications_mode == "local":
+                final_local_routes, managed_specs = build_recipe_local_policy_step_specs(
+                    recipe_id=recipe.id,
+                    routes=communications["routes"],
+                )
+                final_comm_specs = [
+                    {
+                        "managed_spec": spec,
+                    }
+                    for spec in managed_specs
+                ]
+            else:
+                final_local_routes = []
+                final_comm_specs = []
+
+        await _validate_effective_communications(
+            db,
+            enabled=bool(recipe.enabled),
+            communications_mode=final_communications_mode,
+            local_routes=final_local_routes,
+        )
+
+        if recipe_ingredients is not None or communications is not None:
+            await delete_recipe_ingredients_safely(db, recipe_id=recipe.id)
+            recipe.recipe_ingredients = []
+            _append_recipe_steps(recipe, final_visible_specs)
+            for spec in final_comm_specs:
+                if "managed_spec" in spec:
+                    managed = spec["managed_spec"]
+                    ingredient = Ingredient(
+                        execution_target=managed["execution_target"],
+                        destination_target=managed["destination_target"],
+                        task_key_template=managed["task_key_template"],
+                        execution_engine=managed["execution_engine"],
+                        execution_purpose=managed["execution_purpose"],
+                        execution_payload=managed["execution_payload"],
+                        execution_parameters=managed["execution_parameters"],
+                        is_default=managed["is_default"],
+                        is_blocking=managed["is_blocking"],
+                        expected_duration_sec=managed["expected_duration_sec"],
+                        timeout_duration_sec=managed["timeout_duration_sec"],
+                        retry_count=managed["retry_count"],
+                        retry_delay=managed["retry_delay"],
+                        on_failure=managed["on_failure"],
+                    )
+                    db.add(ingredient)
+                    await db.flush()
+                    recipe.recipe_ingredients.append(
+                        RecipeIngredient(
+                            recipe_id=recipe.id,
+                            ingredient_id=ingredient.id,
+                            step_order=managed["step_order"],
+                            on_success=managed["on_success"],
+                            parallel_group=managed["parallel_group"],
+                            depth=managed["depth"],
+                            execution_parameters_override=managed["execution_parameters_override"],
+                            run_phase=managed["run_phase"],
+                            run_condition=managed["run_condition"],
+                        )
+                    )
+                    continue
                 recipe.recipe_ingredients.append(
                     RecipeIngredient(
                         recipe_id=recipe.id,
-                        ingredient_id=item["ingredient_id"],
-                        step_order=item["step_order"],
-                        on_success=item["on_success"],
-                        parallel_group=item["parallel_group"],
-                        depth=item["depth"],
-                        execution_parameters_override=item["execution_parameters_override"],
-                        run_phase=item["run_phase"],
-                        run_condition=item["run_condition"],
+                        ingredient_id=spec["ingredient_id"],
+                        step_order=spec["step_order"],
+                        on_success=spec["on_success"],
+                        parallel_group=spec["parallel_group"],
+                        depth=spec["depth"],
+                        execution_parameters_override=spec["execution_parameters_override"],
+                        run_phase=spec["run_phase"],
+                        run_condition=spec["run_condition"],
                     )
                 )
             await db.flush()
@@ -248,13 +448,9 @@ async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession 
 
     if recipe is None:
         raise HTTPException(status_code=500, detail="Recipe update failed")
-    await db.refresh(recipe)
 
-    result = await db.execute(
-        select(Recipe)
-        .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-        .where(Recipe.id == recipe_id)
-    )
-    recipe = result.unique().scalars().first()
-
-    return recipe
+    result = await db.execute(_recipe_query().where(Recipe.id == recipe_id))
+    updated_recipe = result.unique().scalars().first()
+    if updated_recipe is None:
+        raise HTTPException(status_code=500, detail="Recipe update failed")
+    return await _serialize_recipe(db, updated_recipe)

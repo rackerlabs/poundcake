@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.models import DishIngredient, Ingredient, Order, Recipe, RecipeIngredient
 from api.services.communications import normalize_run_condition, normalize_run_phase
+from api.services.communications_policy import should_seed_route_step
 
 
 def is_phase_eligible(step_phase: str | None, target_phase: str) -> bool:
@@ -75,7 +76,13 @@ def build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
     return base or None
 
 
-async def expected_duration_for_phase(db: AsyncSession, *, recipe_id: int, phase: str) -> int:
+async def expected_duration_for_phase(
+    db: AsyncSession,
+    *,
+    recipe_id: int,
+    phase: str,
+    extra_recipe_ingredients: list[RecipeIngredient] | None = None,
+) -> int:
     normalized_phase = normalize_run_phase(phase)
     allowed_phases = (
         (normalized_phase, "both") if normalized_phase != "escalation" else ("escalation",)
@@ -95,7 +102,20 @@ async def expected_duration_for_phase(db: AsyncSession, *, recipe_id: int, phase
             Ingredient.execution_purpose == "comms",
         )
     result = await db.execute(query)
-    return int(result.scalar() or 0)
+    total = int(result.scalar() or 0)
+    if extra_recipe_ingredients:
+        for ri in extra_recipe_ingredients:
+            if ri.ingredient is None:
+                continue
+            if not is_phase_eligible(ri.run_phase, phase):
+                continue
+            if normalized_phase in {
+                "escalation",
+                "resolving",
+            } and not is_non_firing_ingredient_eligible(ri):
+                continue
+            total += int(getattr(ri.ingredient, "expected_duration_sec", 0) or 0)
+    return total
 
 
 def seed_dish_ingredients_for_phase(
@@ -105,11 +125,12 @@ def seed_dish_ingredients_for_phase(
     phase: str,
     order: Order | None = None,
     existing_by_recipe_ingredient_id: dict[int, DishIngredient] | None = None,
+    extra_recipe_ingredients: list[RecipeIngredient] | None = None,
 ) -> list[DishIngredient]:
     existing = existing_by_recipe_ingredient_id or {}
     seeded: list[DishIngredient] = []
     normalized_phase = normalize_run_phase(phase)
-    for ri in recipe.recipe_ingredients:
+    for ri in list(recipe.recipe_ingredients) + list(extra_recipe_ingredients or []):
         if ri.ingredient is None:
             continue
         if not is_phase_eligible(ri.run_phase, phase):
@@ -120,6 +141,8 @@ def seed_dish_ingredients_for_phase(
         } and not is_non_firing_ingredient_eligible(ri):
             continue
         if not is_run_condition_eligible(ri, phase=phase, order=order):
+            continue
+        if not should_seed_route_step(recipe_ingredient=ri, order=order):
             continue
         if ri.id in existing:
             continue

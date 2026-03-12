@@ -7,9 +7,13 @@
 """Settings API endpoints."""
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.database import get_db
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.api.auth import require_auth_if_enabled
+from api.services.communications_policy import global_policy_configured
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["settings"])
@@ -19,6 +23,7 @@ router = APIRouter(tags=["settings"])
 async def get_application_settings(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get application settings for UI configuration.
 
@@ -28,6 +33,8 @@ async def get_application_settings(
     req_id = request.state.req_id
 
     logger.debug("Settings requested", extra={"req_id": req_id})
+
+    communications_configured = await global_policy_configured(db)
 
     return {
         # Authentication
@@ -43,4 +50,5 @@ async def get_application_settings(
         "stackstorm_enabled": True,  # Always enabled in this setup
         # Version info
         "version": settings.app_version,
+        "global_communications_configured": communications_configured,
     }

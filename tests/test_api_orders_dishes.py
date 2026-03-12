@@ -430,9 +430,12 @@ def test_order_dispatch__without_matching_recipe__returns_skipped(client, mock_d
         side_effect=[ScalarResult(first=order), ScalarResult(first=None)]
     )
 
-    with patch(
-        "api.api.orders.get_settings",
-        return_value=SimpleNamespace(catch_all_recipe_name=""),
+    with (
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name=""),
+        ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=False)),
     ):
         response = client.post("/api/v1/orders/1/dispatch")
 
@@ -460,6 +463,7 @@ def test_order_dispatch__without_group_recipe__uses_fallback_recipe(client, mock
             "api.api.orders.get_settings",
             return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
         ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=True)),
         patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
         patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=15)),
     ):
@@ -479,6 +483,7 @@ def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_stat
 ):
     order = _make_order(status="resolving")
     recipe = SimpleNamespace(id=12, name="group", recipe_ingredients=[])
+    policy_recipe = SimpleNamespace(recipe_ingredients=[])
 
     mock_db_session.execute = AsyncMock(
         side_effect=[
@@ -494,6 +499,11 @@ def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_stat
         patch(
             "api.api.orders.get_settings", return_value=SimpleNamespace(catch_all_recipe_name="")
         ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=True)),
+        patch(
+            "api.api.orders.get_global_policy_recipe_for_dispatch",
+            new=AsyncMock(return_value=policy_recipe),
+        ),
     ):
         response = client.post("/api/v1/orders/1/dispatch")
 
@@ -505,7 +515,7 @@ def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_stat
     assert order.is_active is True
 
 
-def test_order_dispatch__resolving_stackstorm_only_recipe__does_not_inject_fallback_bakery_comms(
+def test_order_dispatch__resolving_stackstorm_only_recipe__without_effective_communications_skips(
     client, mock_db_session
 ):
     order = _make_order(status="resolving")
@@ -527,10 +537,65 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__does_not_inject_fallb
     )
 
     with (
-        patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=30)),
         patch(
             "api.api.orders.get_settings",
             return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=False)),
+        patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
+    ):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "skipped"
+    assert body["reason"] == "No recipe for group"
+    added = [call.args[0] for call in mock_db_session.add.call_args_list]
+    seeded = [row for row in added if isinstance(row, DishIngredient)]
+    assert seeded == []
+    ensure_fallback.assert_not_called()
+
+
+def test_order_dispatch__resolving_stackstorm_only_recipe__injects_global_policy_communications(
+    client, mock_db_session
+):
+    order = _make_order(status="resolving")
+    group_recipe = SimpleNamespace(
+        id=12,
+        name="group",
+        recipe_ingredients=[
+            _make_recipe_step(ri_id=101, ingredient_id=201, run_phase="both", engine="stackstorm")
+        ],
+    )
+    policy_step = _make_recipe_step(
+        ri_id=301,
+        ingredient_id=401,
+        run_phase="both",
+        engine="bakery",
+        purpose="comms",
+    )
+    policy_recipe = SimpleNamespace(recipe_ingredients=[policy_step])
+    expected_duration = AsyncMock(return_value=30)
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+            ScalarResult(first=group_recipe),  # group recipe hit
+            ScalarResult(first=None),  # active dish lookup for phase
+            ScalarResult(all_=[]),  # existing dish ingredients
+        ]
+    )
+
+    with (
+        patch("api.api.orders.expected_duration_for_phase", new=expected_duration),
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=True)),
+        patch(
+            "api.api.orders.get_global_policy_recipe_for_dispatch",
+            new=AsyncMock(return_value=policy_recipe),
         ),
         patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
     ):
@@ -540,9 +605,13 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__does_not_inject_fallb
     body = response.json()
     assert body["status"] == "dispatched"
     assert body["run_phase"] == "resolving"
+    expected_duration.assert_awaited_once()
+    assert expected_duration.await_args.kwargs["extra_recipe_ingredients"] == [policy_step]
     added = [call.args[0] for call in mock_db_session.add.call_args_list]
     seeded = [row for row in added if isinstance(row, DishIngredient)]
-    assert seeded == []
+    assert len(seeded) == 1
+    assert seeded[0].execution_engine == "bakery"
+    assert seeded[0].recipe_ingredient_id == 301
     ensure_fallback.assert_not_called()
 
 
@@ -579,6 +648,11 @@ def test_order_dispatch__resolving_with_recipe_bakery_comms__does_not_inject_fal
             "api.api.orders.get_settings",
             return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
         ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=False)),
+        patch(
+            "api.api.orders.get_global_policy_recipe_for_dispatch",
+            new=AsyncMock(return_value=SimpleNamespace(recipe_ingredients=[])),
+        ) as get_policy_recipe,
         patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
     ):
         response = client.post("/api/v1/orders/1/dispatch")
@@ -592,6 +666,7 @@ def test_order_dispatch__resolving_with_recipe_bakery_comms__does_not_inject_fal
     assert len(seeded) == 1
     assert seeded[0].execution_engine == "bakery"
     assert seeded[0].recipe_ingredient_id == 101
+    get_policy_recipe.assert_not_awaited()
     ensure_fallback.assert_not_called()
 
 

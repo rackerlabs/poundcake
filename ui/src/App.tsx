@@ -48,6 +48,8 @@ import {
 import type {
   AppSettings,
   CommunicationActivityRecord,
+  CommunicationPolicyRecord,
+  CommunicationRouteRecord,
   DishRecord,
   HealthResponse,
   IncidentTimelineResponse,
@@ -100,12 +102,23 @@ const workflowStepSchema = z.object({
   execution_parameters_override_text: z.string().optional(),
 });
 
+const communicationRouteSchema = z.object({
+  id: z.string().optional(),
+  label: z.string().min(1, "Route label is required"),
+  execution_target: z.string().min(1, "Provider is required"),
+  destination_target: z.string().optional(),
+  enabled: z.boolean(),
+  position: z.coerce.number().min(1),
+});
+
 const workflowSchema = z.object({
   name: z.string().min(1, "Workflow name is required"),
   description: z.string().optional(),
   enabled: z.boolean(),
   clear_timeout_sec: z.string().optional(),
   recipe_ingredients: z.array(workflowStepSchema).min(1, "Add at least one action"),
+  communications_mode: z.enum(["inherit", "local"]),
+  communications_routes: z.array(communicationRouteSchema),
 });
 
 const actionSchema = z.object({
@@ -137,6 +150,20 @@ const suppressionSchema = z.object({
   matcher_operator: z.string().min(1),
   matcher_value: z.string().optional(),
 });
+
+const communicationsPolicySchema = z.object({
+  routes: z.array(communicationRouteSchema),
+});
+
+const communicationTargetOptions = [
+  "rackspace_core",
+  "teams",
+  "discord",
+  "servicenow",
+  "jira",
+  "github",
+  "pagerduty",
+] as const;
 
 function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -225,6 +252,7 @@ function SessionGate() {
           <Route path="/suppressions" element={<SuppressionsPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/config/alert-rules" element={<AlertRulesPage />} />
+          <Route path="/config/communications" element={<GlobalCommunicationsPage />} />
           <Route path="/config/workflows" element={<WorkflowsPage />} />
           <Route path="/config/actions" element={<ActionsPage />} />
           <Route path="*" element={<Navigate to="/overview" replace />} />
@@ -451,6 +479,7 @@ function ShellLayout() {
             title="Configuration"
             items={[
               { to: "/config/alert-rules", label: "Alert Rules" },
+              { to: "/config/communications", label: "Global Communications" },
               { to: "/config/workflows", label: "Workflows" },
               { to: "/config/actions", label: "Actions" },
             ]}
@@ -852,7 +881,7 @@ function IncidentDetail({
                   </StatusBadge>
                 </div>
                 <KeyValue label="Destination" value={route.destination_target || route.execution_target} />
-                <KeyValue label="Ticket number" value={route.bakery_ticket_id || "-"} />
+                <KeyValue label="Reference" value={route.bakery_ticket_id || "-"} />
                 <KeyValue label="Operation ID" value={route.bakery_operation_id || "-"} />
                 <KeyValue label="Writable" value={String(route.writable)} />
                 <KeyValue label="Reopenable" value={String(route.reopenable)} />
@@ -1631,8 +1660,214 @@ function AlertRulesPage() {
   );
 }
 
+function GlobalCommunicationsPage() {
+  const notify = useToast();
+  const queryClient = useQueryClient();
+
+  const policyQuery = useQuery({
+    queryKey: ["communications-policy"],
+    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+  });
+
+  const form = useForm<z.infer<typeof communicationsPolicySchema>>({
+    resolver: zodResolver(communicationsPolicySchema),
+    defaultValues: {
+      routes: [],
+    },
+  });
+
+  const routes = useFieldArray({
+    control: form.control,
+    name: "routes",
+  });
+
+  useEffect(() => {
+    if (!policyQuery.data) {
+      return;
+    }
+    form.reset({
+      routes: policyQuery.data.routes.map((route) => ({
+        id: route.id,
+        label: route.label,
+        execution_target: route.execution_target,
+        destination_target: route.destination_target || "",
+        enabled: route.enabled,
+        position: route.position,
+      })),
+    });
+  }, [form, policyQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (values: z.infer<typeof communicationsPolicySchema>) => {
+      return apiPut<CommunicationPolicyRecord>("/api/v1/communications/policy", {
+        routes: values.routes.map((route, index) => ({
+          id: route.id || undefined,
+          label: route.label,
+          execution_target: route.execution_target,
+          destination_target: route.destination_target || "",
+          enabled: route.enabled,
+          position: index + 1,
+        })),
+      });
+    },
+    onSuccess: async () => {
+      notify("success", "Global communications policy updated.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["communications-policy"] }),
+        queryClient.invalidateQueries({ queryKey: ["settings"] }),
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  if (policyQuery.isLoading) {
+    return <PageLoading message="Loading global communications policy." />;
+  }
+
+  if (policyQuery.isError || !policyQuery.data) {
+    return <PageError message={getErrorMessage(policyQuery.error)} />;
+  }
+
+  const watchedRoutes = form.watch("routes");
+  const enabledCount = watchedRoutes.filter((route) => route.enabled).length;
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Global Communications"
+        description="Define the default communication routes inherited by workflows that do not supply a workflow-specific override."
+      />
+      <div className="editor-grid">
+        <Panel
+          title="Default route set"
+          subtitle="This policy is optional. If it is empty, enabled workflows must define workflow-specific communications."
+        >
+          <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+            <div className="builder-header">
+              <div>
+                <h4>Communication routes</h4>
+                <p>Any enabled route counts. Core, Teams, Discord, and mixed route sets are all valid.</p>
+              </div>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() =>
+                  routes.append({
+                    id: crypto.randomUUID(),
+                    label: "",
+                    execution_target: "rackspace_core",
+                    destination_target: "",
+                    enabled: true,
+                    position: routes.fields.length + 1,
+                  })
+                }
+              >
+                Add route
+              </button>
+            </div>
+
+            <div className="builder-stack">
+              {routes.fields.length ? (
+                routes.fields.map((field, index) => (
+                  <div className="builder-card" key={field.id}>
+                    <div className="builder-card-head">
+                      <strong>Route {index + 1}</strong>
+                      <div className="inline-actions">
+                        <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(routes, index, -1)}>
+                          Up
+                        </button>
+                        <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(routes, index, 1)}>
+                          Down
+                        </button>
+                        <button className="danger-button" type="button" onClick={() => routes.remove(index)}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid-two">
+                      <FormField label="Route label" help="Give the route a plain-language name that operators will recognize in workflow and communications views.">
+                        <input {...form.register(`routes.${index}.label` as const)} placeholder="Primary on-call route" />
+                        <FieldError message={form.formState.errors.routes?.[index]?.label?.message} />
+                      </FormField>
+                      <FormField label="Provider" help="Choose the communication provider or destination type such as rackspace_core, teams, or discord.">
+                        <select {...form.register(`routes.${index}.execution_target` as const)}>
+                          {communicationTargetOptions.map((target) => (
+                            <option key={target} value={target}>
+                              {target}
+                            </option>
+                          ))}
+                        </select>
+                      </FormField>
+                    </div>
+                    <div className="grid-two">
+                      <FormField label="Destination" help="Optional route target such as a queue, channel, room, or project. Leave blank when the provider uses its own default destination.">
+                        <input {...form.register(`routes.${index}.destination_target` as const)} placeholder="ops-alerts" />
+                      </FormField>
+                      <FormField label="Enabled" help="Disabled routes are kept in the policy but are ignored by runtime dispatch.">
+                        <label className="toggle-row">
+                          <input type="checkbox" {...form.register(`routes.${index}.enabled` as const)} />
+                          <span>Route is enabled</span>
+                        </label>
+                      </FormField>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyState message="No global routes are configured. Enabled workflows will need workflow-specific communications." />
+              )}
+            </div>
+
+            <div className="preview-card">
+              <div className="eyebrow">Policy preview</div>
+              <p>
+                {enabledCount
+                  ? `${enabledCount} enabled route(s) will open on escalation, open then close after successful auto-remediation clears, and post clear updates after escalation clears.`
+                  : "This global policy is empty. Enabled workflows must define workflow-specific communications to be valid."}
+              </p>
+            </div>
+
+            <div className="form-actions">
+              <button className="primary-button" disabled={saveMutation.isPending} type="submit">
+                {saveMutation.isPending ? "Saving..." : "Save global policy"}
+              </button>
+            </div>
+          </form>
+        </Panel>
+
+        <HelpRail
+          title="Global comms help"
+          items={[
+            {
+              label: "Optional by design",
+              description: "If you leave the global policy empty, each enabled workflow must define its own local communications override.",
+            },
+            {
+              label: "Fixed lifecycle",
+              description: "Global and local policies share the same runtime lifecycle: open on escalation, open plus close after successful resolve, and update only after escalation clears.",
+            },
+            {
+              label: "Any route type",
+              description: "Ticket-backed and chat-only destinations are both valid. PoundCake tracks ticket numbers when available and generic provider references otherwise.",
+            },
+          ]}
+        />
+      </div>
+
+      <Panel title="Lifecycle summary" subtitle="What PoundCake does with the effective communications policy at runtime.">
+        <div className="kv-grid">
+          {Object.entries(policyQuery.data.lifecycle_summary).map(([key, value]) => (
+            <KeyValue key={key} label={titleize(key.replace(/_/g, " "))} value={value} />
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function WorkflowsPage() {
   const notify = useToast();
+  const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingWorkflow, setEditingWorkflow] = useState<RecipeRecord | null>(null);
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
@@ -1645,6 +1880,10 @@ function WorkflowsPage() {
     queryKey: ["actions"],
     queryFn: () => apiGet<IngredientRecord[]>("/api/v1/ingredients/?limit=500"),
   });
+  const policyQuery = useQuery({
+    queryKey: ["communications-policy"],
+    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+  });
 
   const form = useForm<z.infer<typeof workflowSchema>>({
     resolver: zodResolver(workflowSchema),
@@ -1653,6 +1892,8 @@ function WorkflowsPage() {
       description: "",
       enabled: true,
       clear_timeout_sec: "",
+      communications_mode: settings.global_communications_configured ? "inherit" : "local",
+      communications_routes: [],
       recipe_ingredients: [
         {
           ingredient_id: 0,
@@ -1672,6 +1913,10 @@ function WorkflowsPage() {
     control: form.control,
     name: "recipe_ingredients",
   });
+  const communicationRoutes = useFieldArray({
+    control: form.control,
+    name: "communications_routes",
+  });
 
   useEffect(() => {
     if (!editingWorkflow) {
@@ -1682,6 +1927,18 @@ function WorkflowsPage() {
       description: editingWorkflow.description || "",
       enabled: editingWorkflow.enabled,
       clear_timeout_sec: editingWorkflow.clear_timeout_sec ? String(editingWorkflow.clear_timeout_sec) : "",
+      communications_mode: editingWorkflow.communications.mode,
+      communications_routes:
+        editingWorkflow.communications.mode === "local"
+          ? editingWorkflow.communications.routes.map((route) => ({
+              id: route.id,
+              label: route.label,
+              execution_target: route.execution_target,
+              destination_target: route.destination_target || "",
+              enabled: route.enabled,
+              position: route.position,
+            }))
+          : [],
       recipe_ingredients: editingWorkflow.recipe_ingredients.map((step) => ({
         ingredient_id: step.ingredient_id,
         step_order: step.step_order,
@@ -1697,13 +1954,42 @@ function WorkflowsPage() {
     });
   }, [editingWorkflow, form]);
 
+  useEffect(() => {
+    if (editingWorkflow || settings.global_communications_configured) {
+      return;
+    }
+    if (form.getValues("communications_mode") === "inherit") {
+      form.setValue("communications_mode", "local");
+    }
+  }, [editingWorkflow, form, settings.global_communications_configured]);
+
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof workflowSchema>) => {
+      if (values.enabled && values.communications_mode === "inherit" && !settings.global_communications_configured) {
+        throw new Error("Configure a global communications policy or switch this workflow to workflow-specific communications.");
+      }
+      if (values.enabled && values.communications_mode === "local" && !values.communications_routes.some((route) => route.enabled)) {
+        throw new Error("Enabled workflows need at least one enabled workflow-specific communication route.");
+      }
       const payload = {
         name: values.name,
         description: values.description || null,
         enabled: values.enabled,
         clear_timeout_sec: values.clear_timeout_sec ? Number(values.clear_timeout_sec) : null,
+        communications: {
+          mode: values.communications_mode,
+          routes:
+            values.communications_mode === "local"
+              ? values.communications_routes.map((route, index) => ({
+                  id: route.id || undefined,
+                  label: route.label,
+                  execution_target: route.execution_target,
+                  destination_target: route.destination_target || "",
+                  enabled: route.enabled,
+                  position: index + 1,
+                }))
+              : [],
+        },
         recipe_ingredients: values.recipe_ingredients.map((step, index) => ({
           ingredient_id: Number(step.ingredient_id),
           step_order: index + 1,
@@ -1726,8 +2012,11 @@ function WorkflowsPage() {
     onSuccess: async () => {
       notify("success", editingWorkflow ? "Workflow updated." : "Workflow created.");
       setEditingWorkflow(null);
-      resetWorkflowForm(form, steps);
-      await queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["communications-policy"] }),
+      ]);
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -1737,28 +2026,37 @@ function WorkflowsPage() {
     onSuccess: async () => {
       notify("success", "Workflow deleted.");
       setEditingWorkflow(null);
-      resetWorkflowForm(form, steps);
+      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
       await queryClient.invalidateQueries({ queryKey: ["workflows"] });
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
-  if (recipesQuery.isLoading || actionsQuery.isLoading) {
+  if (recipesQuery.isLoading || actionsQuery.isLoading || policyQuery.isLoading) {
     return <PageLoading message="Loading workflows, actions, and builder controls." />;
   }
 
-  if (recipesQuery.isError || actionsQuery.isError || !recipesQuery.data || !actionsQuery.data) {
-    return <PageError message={getErrorMessage(recipesQuery.error || actionsQuery.error)} />;
+  if (recipesQuery.isError || actionsQuery.isError || policyQuery.isError || !recipesQuery.data || !actionsQuery.data || !policyQuery.data) {
+    return <PageError message={getErrorMessage(recipesQuery.error || actionsQuery.error || policyQuery.error)} />;
   }
 
+  const availableActions = actionsQuery.data.filter((action) => !isCommunicationAction(action));
   const watchedSteps = form.watch("recipe_ingredients");
-  const workflowPreview = buildWorkflowPreview(watchedSteps, actionsQuery.data, form.watch("name"));
+  const watchedCommunicationMode = form.watch("communications_mode");
+  const watchedCommunicationRoutes = form.watch("communications_routes");
+  const workflowPreview = buildWorkflowPreview(
+    watchedSteps,
+    availableActions,
+    form.watch("name"),
+    watchedCommunicationMode,
+    watchedCommunicationMode === "local" ? watchedCommunicationRoutes : policyQuery.data.routes,
+  );
 
   return (
     <div className="page-stack">
       <PageHeader
         title="Workflows"
-        description="Build alert response workflows with readable steps, inline help, and a plain-English preview of what will run."
+        description="Build remediation and utility workflows, then choose whether they inherit global communications or define a workflow-specific override."
       />
       <div className="editor-grid">
         <Panel title={editingWorkflow ? `Edit ${editingWorkflow.name}` : "Create workflow"} subtitle="Simple mode keeps the common path short. Advanced mode exposes execution plumbing when you need it.">
@@ -1793,8 +2091,135 @@ function WorkflowsPage() {
 
             <div className="builder-header">
               <div>
+                <h4>Communications</h4>
+                <p>Communications are policy-driven. Use the global default or replace it with workflow-specific routes.</p>
+              </div>
+            </div>
+
+            <div className="builder-stack">
+              <div className="builder-card">
+                <div className="grid-two">
+                  <FormField label="Communications source" help="Use the global route set when possible, or replace it entirely for this workflow with workflow-specific communications.">
+                    <select {...form.register("communications_mode")}>
+                      <option value="inherit">Use global default</option>
+                      <option value="local">Use workflow-specific communications</option>
+                    </select>
+                  </FormField>
+                  <div className="helper-card">
+                    <strong>Current effective policy</strong>
+                    <p>
+                      {watchedCommunicationMode === "inherit"
+                        ? policyQuery.data.configured
+                          ? `${policyQuery.data.routes.filter((route) => route.enabled).length} global route(s) are available to this workflow.`
+                          : "No global routes are configured yet. Switch this workflow to workflow-specific communications before enabling it."
+                        : `${watchedCommunicationRoutes.filter((route) => route.enabled).length} workflow-specific route(s) are currently enabled.`}
+                    </p>
+                  </div>
+                </div>
+
+                {watchedCommunicationMode === "inherit" ? (
+                  policyQuery.data.routes.length ? (
+                    <div className="route-grid">
+                      {policyQuery.data.routes.map((route) => (
+                        <div className="route-card" key={route.id}>
+                          <div className="route-card-head">
+                            <strong>{route.label}</strong>
+                            <StatusBadge status={route.enabled ? "active" : "canceled"}>
+                              {route.enabled ? "enabled" : "disabled"}
+                            </StatusBadge>
+                          </div>
+                          <KeyValue label="Provider" value={route.execution_target} />
+                          <KeyValue label="Destination" value={route.destination_target || "-"} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState message="No global communications are configured. Use workflow-specific communications or configure the global policy first." />
+                  )
+                ) : (
+                  <>
+                    <div className="builder-header">
+                      <div>
+                        <h4>Workflow-specific routes</h4>
+                        <p>These routes replace the global default entirely for this workflow.</p>
+                      </div>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() =>
+                          communicationRoutes.append({
+                            id: crypto.randomUUID(),
+                            label: "",
+                            execution_target: "rackspace_core",
+                            destination_target: "",
+                            enabled: true,
+                            position: communicationRoutes.fields.length + 1,
+                          })
+                        }
+                      >
+                        Add route
+                      </button>
+                    </div>
+
+                    <div className="builder-stack">
+                      {communicationRoutes.fields.length ? (
+                        communicationRoutes.fields.map((field, index) => (
+                          <div className="builder-card" key={field.id}>
+                            <div className="builder-card-head">
+                              <strong>Route {index + 1}</strong>
+                              <div className="inline-actions">
+                                <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(communicationRoutes, index, -1)}>
+                                  Up
+                                </button>
+                                <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(communicationRoutes, index, 1)}>
+                                  Down
+                                </button>
+                                <button className="danger-button" type="button" onClick={() => communicationRoutes.remove(index)}>
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                            <div className="grid-two">
+                              <FormField label="Route label" help="Name this route the way operators will recognize it later in incidents and communications history.">
+                                <input {...form.register(`communications_routes.${index}.label` as const)} placeholder="Primary escalation route" />
+                                <FieldError message={form.formState.errors.communications_routes?.[index]?.label?.message} />
+                              </FormField>
+                              <FormField label="Provider" help="Provider or destination type such as rackspace_core, teams, or discord.">
+                                <select {...form.register(`communications_routes.${index}.execution_target` as const)}>
+                                  {communicationTargetOptions.map((target) => (
+                                    <option key={target} value={target}>
+                                      {target}
+                                    </option>
+                                  ))}
+                                </select>
+                              </FormField>
+                            </div>
+                            <div className="grid-two">
+                              <FormField label="Destination" help="Optional queue, channel, project, or room for this route.">
+                                <input {...form.register(`communications_routes.${index}.destination_target` as const)} placeholder="ops-alerts" />
+                              </FormField>
+                              <FormField label="Enabled" help="Disabled routes stay in the workflow definition but do not run.">
+                                <label className="toggle-row">
+                                  <input type="checkbox" {...form.register(`communications_routes.${index}.enabled` as const)} />
+                                  <span>Route is enabled</span>
+                                </label>
+                              </FormField>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <EmptyState message="Add at least one route if this workflow should override the global default." />
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="builder-header">
+              <div>
                 <h4>Workflow steps</h4>
-                <p>Actions run in order. Use run phase and condition to decide when each step should execute.</p>
+                <p>Workflow steps should focus on remediation and utility logic. Communications are managed separately above.</p>
               </div>
               <button
                 className="ghost-button"
@@ -1837,7 +2262,7 @@ function WorkflowsPage() {
                     <FormField label="Action" help="The reusable action this step will run.">
                       <select {...form.register(`recipe_ingredients.${index}.ingredient_id` as const)}>
                         <option value={0}>Choose an action</option>
-                        {actionsQuery.data.map((action) => (
+                        {availableActions.map((action) => (
                           <option key={action.id} value={action.id}>
                             {action.task_key_template} ({titleize(action.execution_target)})
                           </option>
@@ -1878,7 +2303,7 @@ function WorkflowsPage() {
                     ) : (
                       <div className="helper-card">
                         <strong>Plain-English step</strong>
-                        <p>{describeWorkflowStep(watchedSteps[index], actionsQuery.data)}</p>
+                        <p>{describeWorkflowStep(watchedSteps[index], availableActions)}</p>
                       </div>
                     )}
                   </div>
@@ -1906,10 +2331,19 @@ function WorkflowsPage() {
                 {saveMutation.isPending ? "Saving..." : editingWorkflow ? "Save workflow" : "Create workflow"}
               </button>
               {editingWorkflow ? (
-                <button className="ghost-button" type="button" onClick={() => {
-                  setEditingWorkflow(null);
-                  resetWorkflowForm(form, steps);
-                }}>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => {
+                    setEditingWorkflow(null);
+                    resetWorkflowForm(
+                      form,
+                      steps,
+                      communicationRoutes,
+                      settings.global_communications_configured,
+                    );
+                  }}
+                >
                   Clear
                 </button>
               ) : null}
@@ -1921,16 +2355,16 @@ function WorkflowsPage() {
           title="Workflow help"
           items={[
             {
-              label: "Simple vs advanced",
-              description: "Simple mode hides execution plumbing. Advanced mode exposes override JSON, parallel groups, and depth.",
+              label: "Global vs local",
+              description: "Use the global default when the workflow should follow the platform-wide route set. Switch to workflow-specific communications only when this workflow needs its own route list.",
             },
             {
-              label: "Run phase",
-              description: "Use firing for initial alert handling, resolving for clear-side follow-up, and escalation when the workflow needs a distinct escalation step.",
+              label: "Lifecycle",
+              description: "Communications do not fire when the workflow starts. PoundCake opens routes on escalation, opens then closes after successful resolve, and posts clear updates after escalation clears.",
             },
             {
-              label: "Common mistake",
-              description: "If you want a chat update after remediation succeeds, model that as a resolving or resolved_after_success step instead of a remediation step.",
+              label: "Step scope",
+              description: "Keep workflow steps focused on remediation and utility actions. Configure ticketing, Teams, Discord, and similar destinations in the communications section instead of as ordinary steps.",
             },
           ]}
         />
@@ -1944,6 +2378,7 @@ function WorkflowsPage() {
                 <th>Name</th>
                 <th>Description</th>
                 <th>Enabled</th>
+                <th>Communications</th>
                 <th>Steps</th>
                 <th>Updated</th>
                 <th />
@@ -1958,6 +2393,13 @@ function WorkflowsPage() {
                     <StatusBadge status={workflow.enabled ? "active" : "canceled"}>
                       {workflow.enabled ? "enabled" : "disabled"}
                     </StatusBadge>
+                  </td>
+                  <td>
+                    {workflow.communications.mode === "local"
+                      ? `${workflow.communications.routes.filter((route) => route.enabled).length} local route(s)`
+                      : workflow.communications.routes.filter((route) => route.enabled).length
+                        ? `${workflow.communications.routes.filter((route) => route.enabled).length} global route(s)`
+                        : "none"}
                   </td>
                   <td>{workflow.recipe_ingredients.length}</td>
                   <td>{formatDate(workflow.updated_at)}</td>
@@ -2123,17 +2565,17 @@ function ActionsPage() {
     <div className="page-stack">
       <PageHeader
         title="Actions"
-        description="Reusable execution actions for tickets, chat notifications, remediation, and custom integrations."
+        description="Reusable remediation and utility actions for workflows. Communication routes now live in Global Communications and the workflow communications section."
       />
       <div className="editor-grid">
-        <Panel title={editingAction ? `Edit ${editingAction.task_key_template}` : "Create action"} subtitle="Start with a template and adjust the details only when you need something specific.">
+        <Panel title={editingAction ? `Edit ${editingAction.task_key_template}` : "Create action"} subtitle="Start with remediation or custom automation templates. Ticket and chat actions remain available only for legacy compatibility.">
           <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
-            <FormField label="Action type" help="Templates prefill sensible defaults for ticketing, chat, remediation, and custom automation.">
+            <FormField label="Action type" help="Use remediation or custom for new workflow actions. Communications are configured in communications policy screens instead of ordinary workflow steps.">
               <select {...form.register("template")}>
-                <option value="ticket">Ticket</option>
-                <option value="chat">Chat notification</option>
                 <option value="remediation">Remediation</option>
                 <option value="custom">Custom</option>
+                <option value="ticket">Ticket</option>
+                <option value="chat">Chat notification</option>
               </select>
             </FormField>
             <div className="grid-two">
@@ -2225,16 +2667,16 @@ function ActionsPage() {
           title="Action help"
           items={[
             {
-              label: "Ticket actions",
-              description: "Use the ticket template for Core or other ticket-capable destinations. Keep the destination blank unless your provider needs a route target.",
+              label: "Workflow comms",
+              description: "For new workflows, configure Core, Teams, Discord, and other communication routes in Global Communications or the workflow communications override instead of ordinary actions.",
             },
             {
-              label: "Chat actions",
-              description: "Use chat actions for Teams or Discord. The provider reference will usually be a message handle instead of a ticket number.",
+              label: "Primary use",
+              description: "This page is now best suited for remediation and utility actions that do real workflow work.",
             },
             {
-              label: "Common mistake",
-              description: "If the action is bakery-backed, execution parameters usually carry the communication operation such as open, notify, update, or close.",
+              label: "Legacy compatibility",
+              description: "Ticket and chat action templates remain here only so older actions can still be inspected or updated during the transition.",
             },
           ]}
         />
@@ -2526,6 +2968,7 @@ function getRouteName(pathname: string): string {
   if (pathname.startsWith("/suppressions")) return "Suppressions";
   if (pathname.startsWith("/activity")) return "Activity";
   if (pathname.startsWith("/config/alert-rules")) return "Alert Rules";
+  if (pathname.startsWith("/config/communications")) return "Global Communications";
   if (pathname.startsWith("/config/workflows")) return "Workflows";
   if (pathname.startsWith("/config/actions")) return "Actions";
   return "Overview";
@@ -2614,15 +3057,34 @@ function moveField(
   fieldArray.move(index, nextIndex);
 }
 
+function moveCommunicationRoute(
+  fieldArray: {
+    fields: Array<{ id: string }>;
+    move: (from: number, to: number) => void;
+  },
+  index: number,
+  direction: number,
+) {
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= fieldArray.fields.length) {
+    return;
+  }
+  fieldArray.move(index, nextIndex);
+}
+
 function resetWorkflowForm(
   form: ReturnType<typeof useForm<z.infer<typeof workflowSchema>>>,
   steps: ReturnType<typeof useFieldArray<z.infer<typeof workflowSchema>, "recipe_ingredients">>,
+  communicationRoutes: ReturnType<typeof useFieldArray<z.infer<typeof workflowSchema>, "communications_routes">>,
+  globalCommunicationsConfigured: boolean,
 ) {
   form.reset({
     name: "",
     description: "",
     enabled: true,
     clear_timeout_sec: "",
+    communications_mode: globalCommunicationsConfigured ? "inherit" : "local",
+    communications_routes: [],
     recipe_ingredients: [],
   });
   steps.replace([
@@ -2637,6 +3099,7 @@ function resetWorkflowForm(
       execution_parameters_override_text: "",
     },
   ]);
+  communicationRoutes.replace([]);
 }
 
 function describeWorkflowStep(
@@ -2657,6 +3120,8 @@ function buildWorkflowPreview(
   steps: z.infer<typeof workflowStepSchema>[],
   actions: IngredientRecord[],
   workflowName: string,
+  communicationsMode: "inherit" | "local",
+  routes: Array<Pick<CommunicationRouteRecord, "label" | "execution_target" | "enabled">>,
 ): string {
   const fragments = steps
     .map((step, index) => {
@@ -2667,10 +3132,18 @@ function buildWorkflowPreview(
       return `${step.run_phase} -> ${action.task_key_template} (${titleize(action.execution_target)})`;
     })
     .filter(Boolean);
+  const enabledRoutes = routes.filter((route) => route.enabled);
+  const communicationsSummary = communicationsMode === "inherit"
+    ? enabledRoutes.length
+      ? `inherit ${enabledRoutes.length} global communication route(s)`
+      : "inherit no configured global communication routes yet"
+    : enabledRoutes.length
+      ? `use ${enabledRoutes.length} workflow-specific communication route(s)`
+      : "use workflow-specific communications with no enabled routes yet";
   if (!fragments.length) {
-    return "Add actions to see the workflow preview.";
+    return `${workflowName || "This workflow"} will ${communicationsSummary} once you add execution steps.`;
   }
-  return `${workflowName || "This workflow"} will run ${fragments.join(", then ")}.`;
+  return `${workflowName || "This workflow"} will ${communicationsSummary}, then run ${fragments.join(", then ")}.`;
 }
 
 function classifyActionTemplate(action: IngredientRecord): "ticket" | "chat" | "remediation" | "custom" {
@@ -2687,6 +3160,10 @@ function buildActionPreview(values: z.infer<typeof actionSchema>): string {
     ? `${values.execution_target}:${values.destination_target}`
     : values.execution_target;
   return `${titleize(values.template)} action "${values.task_key_template || "unnamed"}" will use ${values.execution_engine} against ${route || "a target"} with ${values.retry_count} retries.`;
+}
+
+function isCommunicationAction(action: IngredientRecord): boolean {
+  return action.execution_engine === "bakery" && action.execution_purpose === "comms";
 }
 
 export default App;

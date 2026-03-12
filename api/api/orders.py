@@ -28,6 +28,12 @@ from api.schemas.schemas import (
 )
 from api.schemas.query_params import OrderQueryParams, validate_query_params
 from api.services.bakery_client import get_operation
+from api.services.communications_policy import (
+    get_global_policy_recipe_for_dispatch,
+    get_recipe_local_routes,
+    global_policy_configured,
+    policy_has_enabled_routes,
+)
 from api.services.fallback_recipe import ensure_fallback_recipe
 from api.services.dish_planner import expected_duration_for_phase, seed_dish_ingredients_for_phase
 
@@ -250,6 +256,7 @@ async def dispatch_order(
     req_id = request.state.req_id
     settings = get_settings()
     now = datetime.now(timezone.utc)
+    global_policy_is_configured = await global_policy_configured(db)
 
     response: OrderDispatchResponse | None = None
     async with db.begin():
@@ -322,6 +329,18 @@ async def dispatch_order(
                 )
                 recipe = fallback_result.unique().scalars().first()
 
+        extra_policy_steps: list[RecipeIngredient] = []
+        if recipe:
+            local_routes = get_recipe_local_routes(recipe)
+            has_local_policy = policy_has_enabled_routes(local_routes)
+            if not has_local_policy and not global_policy_is_configured:
+                recipe = None
+            elif run_phase in {"escalation", "resolving"} and not has_local_policy:
+                global_policy_recipe = await get_global_policy_recipe_for_dispatch(db)
+                extra_policy_steps = (
+                    list(global_policy_recipe.recipe_ingredients) if global_policy_recipe else []
+                )
+
         if not recipe:
             if run_phase == "firing":
                 order.processing_status = "waiting_clear"
@@ -370,7 +389,10 @@ async def dispatch_order(
             dish = dish_result.scalars().first()
             if dish is None:
                 expected_duration_sec = await expected_duration_for_phase(
-                    db, recipe_id=recipe.id, phase=run_phase
+                    db,
+                    recipe_id=recipe.id,
+                    phase=run_phase,
+                    extra_recipe_ingredients=extra_policy_steps,
                 )
                 dish = Dish(
                     req_id=order.req_id,
@@ -400,6 +422,7 @@ async def dispatch_order(
                 phase=run_phase,
                 order=order,
                 existing_by_recipe_ingredient_id=existing_by_recipe_ingredient_id,
+                extra_recipe_ingredients=extra_policy_steps,
             )
             for row in seeded_rows:
                 db.add(row)

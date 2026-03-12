@@ -64,8 +64,8 @@ flowchart TD
   E -->|resolving| G["Dispatch run_phase=resolving"]
   E -->|other| H["409 not dispatchable"]
 
-  F --> I["Create/reuse firing Dish<br/>seed phase-eligible dish_ingredients<br/>(can include StackStorm + Bakery comms)"]
-  G --> J["Create/reuse resolving Dish<br/>seed Bakery comms only<br/>(inject fallback comms if recipe has none)"]
+  F --> I["Create/reuse firing Dish<br/>seed phase-eligible remediation/utility dish_ingredients"]
+  G --> J["Create/reuse resolving Dish<br/>seed policy-backed Bakery comms only"]
 
   I --> K["Dish status=new"]
   J --> K
@@ -120,6 +120,31 @@ flowchart TD
 | `resolving` | `prep-chef -> /orders/{order_id}/dispatch` | `complete` | Resolve flow is comms-only (Bakery); StackStorm rows are not seeded in resolving. |
 | `complete`/`failed`/`canceled` | Any webhook/timer follow-up | unchanged | Terminal statuses are immutable and not re-opened by side effects. |
 
+## Communications Policy
+
+- Communications are policy-driven, not authored as ordinary workflow steps in the default UI path.
+- A global communications policy is optional and is managed from `Configuration -> Global Communications`.
+- A workflow can be enabled only if it has effective communications from one of these sources:
+  - the global default
+  - a workflow-specific local override
+- Workflow-local communications replace the global default for that workflow.
+- Any enabled route type is valid. Ticket-backed and chat-only routes both count.
+
+### Runtime lifecycle
+
+- Workflow start: no communication is created just because remediation started.
+- Failed remediation or escalation: PoundCake issues `open` on each effective route and leaves it open.
+- Successful auto-remediation after the alert clears: PoundCake issues `open` and then `close` on each effective route.
+- Alert clears after escalation: PoundCake issues `update` on existing routes and leaves them open.
+- No matching workflow: fallback communications use the global route set, issuing `open` immediately and `update` when the alert clears.
+
+### Configuration model
+
+- `Global Communications` defines the shared default route set for Core, Teams, Discord, or any other supported Bakery destination.
+- `Workflows` choose `Use global default` or `Use workflow-specific communications`.
+- `Actions` are for remediation and utility steps. Communication routes are configured in the communications policy editors instead of as normal workflow actions.
+- Managed policy artifacts are stored internally as hidden Bakery-backed ingredients and recipe steps and are not shown in the normal workflow/action inventories.
+
 ## Order Workflow Graph (States + Bakery Calls)
 
 ```mermaid
@@ -141,23 +166,18 @@ stateDiagram-v2
     resolving --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
 
     note right of processing
-      Dish-terminal Bakery sync (_sync_bakery_for_terminal_dish):
-      - POST /api/v1/communications (open if missing)
-      - PATCH /api/v1/communications/{communication_id} (reopen if confirmed_solved)
-      - POST /api/v1/communications/{communication_id}/notifications (execution summary)
-      - GET /api/v1/communications/operations/{operation_id} (poll loop)
+      Communications policy during active remediation:
+      - workflow start does not create communications
+      - if remediation fails or times out, escalation opens each effective route
+      - routes can be ticket-backed or chat-only
     end note
 
     note right of resolving
-      Resolved-webhook Bakery sync (pre_heat):
-      - POST /api/v1/communications/{communication_id}/notifications (clear note)
-      - POST /api/v1/communications/{communication_id}/close (if auto-remediation succeeded)
-      - GET /api/v1/communications/operations/{operation_id} (poll loop)
-
-      Resolve-phase dispatch (/orders/{id}/dispatch):
-      - comms-only Bakery ingredients execute in resolving
-      - if recipe has no resolving comms ingredient, fallback comms is injected
-      - mapped Bakery endpoints + operation polling when operation_id is returned
+      Resolve-phase policy behavior:
+      - successful auto-remediation clear -> open then close each effective route
+      - clear after escalation -> update existing routes only
+      - unmatched alerts use fallback communications sourced from the global policy
+      - workflow-local communications replace the global default for that workflow
     end note
 
     note right of complete
@@ -189,6 +209,7 @@ stateDiagram-v2
 - `ingredients`: StackStorm actions and defaults.
 - `recipes`: Workflow templates and payloads.
 - `recipe_ingredients`: Ordered ingredients for a recipe.
+- communications policy internals are stored as hidden Bakery-backed ingredients and recipe steps; the user-facing UI exposes them as global or workflow-specific communication routes.
 - `dishes`: Execution instance for a recipe/order.
 - `dish_ingredients`: Per-task execution data (task_id, st2_execution_id, status, timestamps, result).
 - `alert_suppressions`: Time-windowed suppression windows (`scope=all|matchers`).

@@ -1,6 +1,7 @@
 """Tests for recipe workflow editing APIs."""
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -113,6 +114,14 @@ def test_recipe_update_replaces_workflow_steps(client, mock_db):
     recipe = _make_recipe()
     ingredient_one = _make_ingredient(11, "teams")
     ingredient_two = _make_ingredient(12, "rackspace_core")
+    global_route = SimpleNamespace(
+        id="global-primary",
+        label="Primary teams route",
+        execution_target="teams",
+        destination_target="ops-alerts",
+        enabled=True,
+        position=1,
+    )
 
     async def _flush():
         for index, item in enumerate(recipe.recipe_ingredients, start=1):
@@ -128,39 +137,47 @@ def test_recipe_update_replaces_workflow_steps(client, mock_db):
         ]
     )
 
-    response = client.put(
-        "/api/v1/recipes/9",
-        json={
-            "description": "Updated workflow",
-            "recipe_ingredients": [
-                {
-                    "ingredient_id": 12,
-                    "step_order": 1,
-                    "on_success": "continue",
-                    "parallel_group": 0,
-                    "depth": 0,
-                    "execution_parameters_override": {"operation": "open"},
-                    "run_phase": "firing",
-                    "run_condition": "always",
-                },
-                {
-                    "ingredient_id": 11,
-                    "step_order": 2,
-                    "on_success": "continue",
-                    "parallel_group": 0,
-                    "depth": 0,
-                    "execution_parameters_override": {"operation": "notify"},
-                    "run_phase": "resolving",
-                    "run_condition": "resolved_after_success",
-                },
-            ],
-        },
-    )
+    with (
+        patch("api.api.recipes.global_policy_configured", new=AsyncMock(return_value=True)),
+        patch(
+            "api.api.recipes.get_global_policy_routes", new=AsyncMock(return_value=[global_route])
+        ),
+        patch("api.api.recipes.delete_recipe_ingredients_safely", new=AsyncMock(return_value=None)),
+    ):
+        response = client.put(
+            "/api/v1/recipes/9",
+            json={
+                "description": "Updated workflow",
+                "recipe_ingredients": [
+                    {
+                        "ingredient_id": 12,
+                        "step_order": 1,
+                        "on_success": "continue",
+                        "parallel_group": 0,
+                        "depth": 0,
+                        "execution_parameters_override": {"operation": "open"},
+                        "run_phase": "firing",
+                        "run_condition": "always",
+                    },
+                    {
+                        "ingredient_id": 11,
+                        "step_order": 2,
+                        "on_success": "continue",
+                        "parallel_group": 0,
+                        "depth": 0,
+                        "execution_parameters_override": {"operation": "notify"},
+                        "run_phase": "resolving",
+                        "run_condition": "resolved_after_success",
+                    },
+                ],
+            },
+        )
 
     assert response.status_code == 200
     assert recipe.description == "Updated workflow"
     assert [item.ingredient_id for item in recipe.recipe_ingredients] == [12, 11]
     assert recipe.recipe_ingredients[1].run_phase == "resolving"
+    assert response.json()["communications"]["effective_source"] == "global"
 
 
 def test_recipe_update_returns_404_when_workflow_references_missing_action(client, mock_db):
@@ -192,3 +209,35 @@ def test_recipe_update_returns_404_when_workflow_references_missing_action(clien
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Missing ingredients: [999]"
+
+
+def test_recipe_create_enabled_without_global_or_local_communications_returns_400(client, mock_db):
+    ingredient = _make_ingredient(12, "rackspace_core")
+    mock_db.execute = AsyncMock(return_value=ScalarResult(all_=[ingredient]))
+
+    with patch("api.api.recipes.global_policy_configured", new=AsyncMock(return_value=False)):
+        response = client.post(
+            "/api/v1/recipes/",
+            json={
+                "name": "filesystem-response",
+                "description": "Example workflow",
+                "enabled": True,
+                "clear_timeout_sec": 300,
+                "communications": {"mode": "inherit", "routes": []},
+                "recipe_ingredients": [
+                    {
+                        "ingredient_id": 12,
+                        "step_order": 1,
+                        "on_success": "continue",
+                        "parallel_group": 0,
+                        "depth": 0,
+                        "execution_parameters_override": None,
+                        "run_phase": "firing",
+                        "run_condition": "always",
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 400
+    assert "global communications policy" in response.json()["detail"]

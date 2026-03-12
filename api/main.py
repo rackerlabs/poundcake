@@ -27,6 +27,7 @@ from api.api.auth import router as auth_router
 from api.api.auth import require_auth_if_enabled
 from api.api.settings import router as settings_router
 from api.api.ingredients import router as ingredients_router
+from api.api.communications_policy import router as communications_policy_router
 from api.api.webhook import router as webhook_router
 from api.api.observability import router as observability_router
 from api.api.suppressions import router as suppressions_router
@@ -83,6 +84,7 @@ async def metrics():
 # System & Monitoring
 app.include_router(health_router, prefix="/api/v1", tags=["system"])
 app.include_router(settings_router, prefix="/api/v1", tags=["system"])
+app.include_router(communications_policy_router, prefix="/api/v1", tags=["communications"])
 app.include_router(prometheus_router, prefix="/api/v1", tags=["prometheus"])
 app.include_router(observability_router, prefix="/api/v1", tags=["observability"])
 

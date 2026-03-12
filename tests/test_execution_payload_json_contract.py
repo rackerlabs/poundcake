@@ -270,7 +270,8 @@ def test_order_dispatch__resolving_phase__seeds_phase_ingredients(client, mock_d
         ]
     )
 
-    response = client.post("/api/v1/orders/1/dispatch")
+    with patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=False)):
+        response = client.post("/api/v1/orders/1/dispatch")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "dispatched"
@@ -291,5 +292,6 @@ def test_order_dispatch__when_not_dispatchable__returns_409(client, mock_db_sess
     order = _make_resolving_order()
     order.processing_status = "processing"
     mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
-    response = client.post("/api/v1/orders/1/dispatch")
+    with patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=False)):
+        response = client.post("/api/v1/orders/1/dispatch")
     assert response.status_code == 409
