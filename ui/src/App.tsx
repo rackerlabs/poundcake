@@ -27,14 +27,14 @@ import {
   apiPost,
   apiPut,
   type ApiError,
-} from "./lib/api";
+} from "./api";
 import {
   compactJson,
   formatDate,
   formatLongDate,
   statusTone,
   titleize,
-} from "./lib/format";
+} from "./format";
 import type {
   AppSettings,
   CommunicationActivityRecord,
