@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -175,7 +175,12 @@ def normalize_routes(
 ) -> list[CommunicationRoute]:
     normalized: list[CommunicationRoute] = []
     for index, item in enumerate(routes, start=1):
-        raw = item if isinstance(item, dict) else item.__dict__
+        if isinstance(item, dict):
+            raw = item
+        elif is_dataclass(item):
+            raw = asdict(item)
+        else:
+            raw = getattr(item, "__dict__", {})
         execution_target = normalize_destination_type(raw.get("execution_target"))
         if not execution_target:
             continue

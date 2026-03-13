@@ -129,6 +129,35 @@ def test_normalize_routes_preserves_provider_config_for_required_targets() -> No
     assert routes[0].provider_config["account_number"] == "1781738"
 
 
+def test_build_recipe_local_policy_step_specs_accepts_pre_normalized_routes() -> None:
+    normalized = communications_policy.normalize_routes(
+        [
+            {
+                "label": "Primary Core",
+                "execution_target": "rackspace_core",
+                "destination_target": "",
+                "provider_config": {
+                    "account_number": "1781738",
+                    "queue": "CloudBuilders Support",
+                    "subcategory": "Monitoring",
+                },
+                "enabled": True,
+                "position": 1,
+            }
+        ]
+    )
+
+    routes, step_specs = communications_policy.build_recipe_local_policy_step_specs(
+        recipe_id=42,
+        routes=normalized,
+    )
+
+    assert len(routes) == 1
+    assert routes[0].execution_target == "rackspace_core"
+    assert step_specs[0]["execution_target"] == "rackspace_core"
+    assert step_specs[0]["execution_parameters"]["operation"] == "open"
+
+
 def test_get_recipe_local_routes_hydrates_legacy_provider_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
