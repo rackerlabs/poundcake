@@ -24,7 +24,12 @@ def test_build_canonical_communication_context_includes_alert_links_and_route_co
         severity="warning",
         instance="host7",
         counter=2,
-        labels={"alertname": "DiskFull", "group_name": "filesystem-response", "severity": "warning", "instance": "host7"},
+        labels={
+            "alertname": "DiskFull",
+            "group_name": "filesystem-response",
+            "severity": "warning",
+            "instance": "host7",
+        },
         annotations={
             "summary": "Filesystem almost full",
             "description": "Usage exceeded the alert threshold.",

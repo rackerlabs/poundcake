@@ -46,9 +46,17 @@ def build_canonical_communication_context(
     labels = dict(order.labels or {})
     annotations = dict(order.annotations or {})
     raw_data = dict(order.raw_data or {})
-    metadata = context.get(POLICY_METADATA_KEY) if isinstance(context.get(POLICY_METADATA_KEY), dict) else {}
-    semantic_text = context.get("semantic_text") if isinstance(context.get("semantic_text"), dict) else {}
-    provider_config = context.get("provider_config") if isinstance(context.get("provider_config"), dict) else {}
+    metadata = (
+        context.get(POLICY_METADATA_KEY)
+        if isinstance(context.get(POLICY_METADATA_KEY), dict)
+        else {}
+    )
+    semantic_text = (
+        context.get("semantic_text") if isinstance(context.get("semantic_text"), dict) else {}
+    )
+    provider_config = (
+        context.get("provider_config") if isinstance(context.get("provider_config"), dict) else {}
+    )
 
     links: list[dict[str, str]] = []
     generator_url = _first_text(raw_data.get("generatorURL"))

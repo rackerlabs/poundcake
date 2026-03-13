@@ -8,7 +8,12 @@ def _canonical_payload() -> dict:
         "context": {
             "_canonical": {
                 "schema_version": 1,
-                "event": {"name": "escalation_open", "operation": "open", "managed": True, "source": "poundcake"},
+                "event": {
+                    "name": "escalation_open",
+                    "operation": "open",
+                    "managed": True,
+                    "source": "poundcake",
+                },
                 "route": {
                     "label": "Primary route",
                     "execution_target": "rackspace_core",
