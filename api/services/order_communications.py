@@ -291,10 +291,13 @@ async def apply_execution_result(
         )
     if remote_state is not None:
         communication.remote_state = normalize_remote_state(remote_state)
-    communication.writable, communication.reopenable = determine_writeability(
-        execution_target=communication.execution_target,
-        remote_state=communication.remote_state,
-    )
-    communication.updated_at = _now()
+    if status == "succeeded" and communication.bakery_ticket_id:
+        await refresh_remote_state(communication)
+    else:
+        communication.writable, communication.reopenable = determine_writeability(
+            execution_target=communication.execution_target,
+            remote_state=communication.remote_state,
+        )
+        communication.updated_at = _now()
     _sync_legacy_order_fields(order)
     await db.flush()
