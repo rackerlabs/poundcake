@@ -964,6 +964,28 @@ def monitor_dishes() -> None:
                             "latency_ms": st2_latency_ms,
                         },
                     )
+                else:
+                    update_dish(
+                        dish,
+                        req_id,
+                        processing_status="processing",
+                        execution_status=st2_status,
+                        final_status=False,
+                        result=dish_result,
+                        started_at=dish_started_at or dish.get("started_at"),
+                    )
+                    logger.debug(
+                        "Dish execution still running; returning to processing",
+                        extra={
+                            **extra,
+                            "dish_id": dish["id"],
+                            "execution_id": execution_id,
+                            "st2_status": st2_status,
+                            "method": "GET",
+                            "status_code": st2_resp.status_code,
+                            "latency_ms": st2_latency_ms,
+                        },
+                    )
 
             elif st2_resp.status_code == 404:
                 extra.update(

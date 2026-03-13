@@ -212,6 +212,77 @@ def test_monitor_dishes__terminal_success__persists_ingredients_and_completes(
     assert [task["task_key"] for task in kwargs["result"]] == ["step1", "step2"]
 
 
+def test_monitor_dishes__non_terminal_execution_returns_dish_to_processing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dish = {
+        "id": 24,
+        "req_id": "REQ-24",
+        "execution_ref": "exec-24",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": None,
+    }
+    claimed_dish = {**dish, "processing_status": "finalizing"}
+    update_calls: list[tuple[dict, str, dict]] = []
+    ingredient_bulk_posts: list[dict] = []
+
+    def _update(d: dict, req_id: str, **kwargs) -> bool:
+        update_calls.append((d, req_id, kwargs))
+        return True
+
+    steps = iter(
+        [
+            _Resp(200, [dish]),  # processing dishes
+            _Resp(200, []),  # finalizing dishes
+            _Resp(200, claimed_dish),  # finalize-claim
+            _Resp(
+                200,
+                {
+                    "status": "running",
+                    "result": {
+                        "tasks": [
+                            {
+                                "id": "task-24",
+                                "task_id": "step1",
+                                "status": "running",
+                                "result": {"stdout": "still going"},
+                                "start_timestamp": "2026-02-13T10:00:01Z",
+                                "end_timestamp": None,
+                            }
+                        ]
+                    },
+                },
+            ),  # execution
+            _Resp(200, []),  # existing dish ingredients
+            _Resp(200, {"ok": True}),  # bulk ingredient write
+        ]
+    )
+
+    def _request(method: str, url: str, **kwargs):
+        if method == "POST" and str(url).endswith("/ingredients/bulk"):
+            ingredient_bulk_posts.append(kwargs.get("json") or {})
+        return next(steps)
+
+    monkeypatch.setattr(timer, "update_dish", _update)
+    monkeypatch.setattr(timer, "request_with_retry_sync", _request)
+    monkeypatch.setattr(timer, "check_for_timeouts", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(timer, "API_UNAVAILABLE_SINCE", None)
+
+    timer.monitor_dishes()
+
+    assert len(ingredient_bulk_posts) == 1
+    assert ingredient_bulk_posts[0]["items"][0]["execution_status"] == "running"
+
+    assert len(update_calls) == 1
+    _updated_dish, req_id, kwargs = update_calls[0]
+    assert req_id == "REQ-24"
+    assert kwargs["processing_status"] == "processing"
+    assert kwargs["execution_status"] == "running"
+    assert kwargs["final_status"] is False
+    assert kwargs["started_at"] == "2026-02-13T10:00:01Z"
+    assert kwargs["result"][0]["task_key"] == "step1"
+
+
 def test_monitor_dishes__terminal_success_requeues_when_more_segments_remain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
