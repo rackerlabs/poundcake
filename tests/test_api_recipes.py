@@ -59,6 +59,7 @@ def client():
 def mock_db():
     with patch("api.core.database.SessionLocal") as mock_session:
         db = AsyncMock()
+        db.add = Mock()
         db.begin = Mock(return_value=_BeginContext())
         db.flush = AsyncMock(return_value=None)
         db.refresh = AsyncMock(return_value=None)
@@ -137,11 +138,16 @@ def test_recipe_update_replaces_workflow_steps(client, mock_db):
         position=1,
     )
 
+    def _add(obj):
+        if isinstance(obj, RecipeIngredient):
+            recipe.recipe_ingredients.append(obj)
+
     async def _flush():
         for index, item in enumerate(recipe.recipe_ingredients, start=1):
             if not item.id:
                 item.id = index + 100
 
+    mock_db.add = Mock(side_effect=_add)
     mock_db.flush = AsyncMock(side_effect=_flush)
     mock_db.execute = AsyncMock(
         side_effect=[
@@ -259,7 +265,22 @@ def test_recipe_create_enabled_without_global_or_local_communications_returns_40
 
 def test_recipe_create_validates_ingredients_inside_transaction(client, mock_db):
     mock_db.begin = Mock(return_value=_TrackingBeginContext(mock_db))
-    mock_db.add = Mock()
+    created_recipe: dict[str, Recipe] = {}
+    queued_steps: list[RecipeIngredient] = []
+
+    def _add(obj):
+        if isinstance(obj, Recipe) and obj.id is None:
+            created_recipe["recipe"] = obj
+        if isinstance(obj, RecipeIngredient):
+            queued_steps.append(obj)
+
+    async def _flush():
+        recipe_obj = created_recipe.get("recipe")
+        if recipe_obj is not None and recipe_obj.id is None:
+            recipe_obj.id = 42
+
+    mock_db.add = Mock(side_effect=_add)
+    mock_db.flush = AsyncMock(side_effect=_flush)
     mock_db.execute = AsyncMock(
         side_effect=[
             ScalarResult(first=None),
@@ -345,3 +366,6 @@ def test_recipe_create_validates_ingredients_inside_transaction(client, mock_db)
 
     assert response.status_code == 201
     assert response.json()["id"] == 42
+    assert len(queued_steps) == 1
+    assert queued_steps[0].recipe_id == 42
+    assert queued_steps[0].ingredient_id == 12

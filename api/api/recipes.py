@@ -58,21 +58,25 @@ def _recipe_to_step_spec(step: RecipeIngredient) -> dict[str, Any]:
     }
 
 
-def _append_recipe_steps(recipe: Recipe, step_specs: list[dict[str, Any]]) -> None:
+def _recipe_ingredient_row(*, recipe_id: int, spec: dict[str, Any]) -> RecipeIngredient:
+    return RecipeIngredient(
+        recipe_id=recipe_id,
+        ingredient_id=spec["ingredient_id"],
+        step_order=spec["step_order"],
+        on_success=spec["on_success"],
+        parallel_group=spec["parallel_group"],
+        depth=spec["depth"],
+        execution_parameters_override=spec["execution_parameters_override"],
+        run_phase=spec["run_phase"],
+        run_condition=spec["run_condition"],
+    )
+
+
+def _queue_recipe_steps(
+    db: AsyncSession, *, recipe_id: int, step_specs: list[dict[str, Any]]
+) -> None:
     for spec in step_specs:
-        recipe.recipe_ingredients.append(
-            RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=spec["ingredient_id"],
-                step_order=spec["step_order"],
-                on_success=spec["on_success"],
-                parallel_group=spec["parallel_group"],
-                depth=spec["depth"],
-                execution_parameters_override=spec["execution_parameters_override"],
-                run_phase=spec["run_phase"],
-                run_condition=spec["run_condition"],
-            )
-        )
+        db.add(_recipe_ingredient_row(recipe_id=recipe_id, spec=spec))
 
 
 async def _validate_ingredient_ids(db: AsyncSession, *, step_specs: list[dict[str, Any]]) -> None:
@@ -220,7 +224,7 @@ async def create_recipe(
         db.add(db_recipe)
         await db.flush()
 
-        _append_recipe_steps(db_recipe, visible_step_specs)
+        _queue_recipe_steps(db, recipe_id=db_recipe.id, step_specs=visible_step_specs)
         if communications_mode == "local":
             _, managed_specs = build_recipe_local_policy_step_specs(
                 recipe_id=db_recipe.id,
@@ -245,19 +249,7 @@ async def create_recipe(
                 )
                 db.add(ingredient)
                 await db.flush()
-                db_recipe.recipe_ingredients.append(
-                    RecipeIngredient(
-                        recipe_id=db_recipe.id,
-                        ingredient_id=ingredient.id,
-                        step_order=spec["step_order"],
-                        on_success=spec["on_success"],
-                        parallel_group=spec["parallel_group"],
-                        depth=spec["depth"],
-                        execution_parameters_override=spec["execution_parameters_override"],
-                        run_phase=spec["run_phase"],
-                        run_condition=spec["run_condition"],
-                    )
-                )
+                db.add(_recipe_ingredient_row(recipe_id=db_recipe.id, spec=spec))
 
     result = await db.execute(_recipe_query().where(Recipe.name == recipe.name))
     db_recipe = result.unique().scalars().first()
@@ -392,7 +384,7 @@ async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession 
         if recipe_ingredients is not None or communications is not None:
             await delete_recipe_ingredients_safely(db, recipe_id=recipe.id)
             recipe.recipe_ingredients = []
-            _append_recipe_steps(recipe, final_visible_specs)
+            _queue_recipe_steps(db, recipe_id=recipe.id, step_specs=final_visible_specs)
             for spec in final_comm_specs:
                 if "managed_spec" in spec:
                     managed = spec["managed_spec"]
@@ -414,33 +406,9 @@ async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession 
                     )
                     db.add(ingredient)
                     await db.flush()
-                    recipe.recipe_ingredients.append(
-                        RecipeIngredient(
-                            recipe_id=recipe.id,
-                            ingredient_id=ingredient.id,
-                            step_order=managed["step_order"],
-                            on_success=managed["on_success"],
-                            parallel_group=managed["parallel_group"],
-                            depth=managed["depth"],
-                            execution_parameters_override=managed["execution_parameters_override"],
-                            run_phase=managed["run_phase"],
-                            run_condition=managed["run_condition"],
-                        )
-                    )
+                    db.add(_recipe_ingredient_row(recipe_id=recipe.id, spec=managed))
                     continue
-                recipe.recipe_ingredients.append(
-                    RecipeIngredient(
-                        recipe_id=recipe.id,
-                        ingredient_id=spec["ingredient_id"],
-                        step_order=spec["step_order"],
-                        on_success=spec["on_success"],
-                        parallel_group=spec["parallel_group"],
-                        depth=spec["depth"],
-                        execution_parameters_override=spec["execution_parameters_override"],
-                        run_phase=spec["run_phase"],
-                        run_condition=spec["run_condition"],
-                    )
-                )
+                db.add(_recipe_ingredient_row(recipe_id=recipe.id, spec=spec))
             await db.flush()
 
         recipe.updated_at = datetime.now(timezone.utc)
