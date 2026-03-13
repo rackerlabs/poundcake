@@ -509,6 +509,25 @@
         "client": { "type": "object", "properties": { "enabled": { "type": "boolean", "default": false } } }
       }
     },
+    "stackstormActionrunner": {
+      "type": "object",
+      "properties": {
+        "serviceAccount": {
+          "type": "object",
+          "properties": {
+            "create": { "type": "boolean", "default": true },
+            "annotations": { "type": "object" },
+            "name": { "type": "string", "default": "" }
+          }
+        },
+        "pvcPatchRbac": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true }
+          }
+        }
+      }
+    },
     "intervals": {
       "type": "object",
       "properties": {

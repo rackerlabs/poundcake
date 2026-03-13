@@ -7,12 +7,41 @@ import re
 from typing import Any
 
 URL_RE = re.compile(r"(https?://[^\s<>\]]+)")
+AUTH_HEADER_RE = re.compile(r"(?im)\b(authorization\s*:\s*(?:bearer|basic)\s+)[^\s]+")
+SECRET_KV_RE = re.compile(
+    r"(?im)\b("
+    r"api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password|"
+    r"webhook(?:_url)?|cookie"
+    r")\b(\s*[:=]\s*)([^\s,;]+)"
+)
+QUERY_SECRET_RE = re.compile(
+    r"([?&](?:access_token|token|api[_-]?key|apikey|sig|signature|password|secret|webhook_url)=)"
+    r"[^&\s]+",
+    re.IGNORECASE,
+)
+WEBHOOK_URL_RE = re.compile(
+    r"https?://(?:discord(?:app)?\.com/api/webhooks|hooks\.slack\.com/services|"
+    r"outlook\.office\.com/webhook)[^\s]+",
+    re.IGNORECASE,
+)
+URL_CREDENTIALS_RE = re.compile(r"(https?://)([^/\s:@]+):([^/\s@]+)@", re.IGNORECASE)
+
+FULL_STEP_LIMIT = 8
+COMPACT_STEP_LIMIT = 3
+FULL_STEP_OUTCOME_LIMIT = 180
+COMPACT_STEP_OUTCOME_LIMIT = 90
+FULL_EXCERPT_LIMIT = 900
+COMPACT_EXCERPT_LIMIT = 260
 
 
 def _text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _collapse_line(value: Any) -> str:
+    return " ".join(_text(value).split()).strip()
 
 
 def _csv_list(value: Any) -> list[str]:
@@ -31,6 +60,47 @@ def _truncate(text: str, limit: int) -> str:
     if limit <= 3:
         return text[:limit]
     return text[: limit - 3].rstrip() + "..."
+
+
+def _redact_sensitive_text(text: str) -> str:
+    if not text:
+        return ""
+
+    text = AUTH_HEADER_RE.sub(r"\1[REDACTED]", text)
+    text = SECRET_KV_RE.sub(r"\1\2[REDACTED]", text)
+    text = QUERY_SECRET_RE.sub(r"\1[REDACTED]", text)
+    text = WEBHOOK_URL_RE.sub("[REDACTED_WEBHOOK_URL]", text)
+    text = URL_CREDENTIALS_RE.sub(r"\1[REDACTED]@", text)
+    return text
+
+
+def _sanitize_multiline_text(value: Any, limit: int) -> str:
+    raw = _redact_sensitive_text(_text(value)).replace("\r\n", "\n")
+    if not raw:
+        return ""
+    lines = [line.rstrip() for line in raw.split("\n")]
+    normalized: list[str] = []
+    pending_blank = False
+    for line in lines:
+        if line.strip():
+            normalized.append(line.strip())
+            pending_blank = False
+            continue
+        if normalized and not pending_blank:
+            normalized.append("")
+            pending_blank = True
+    return _truncate("\n".join(normalized).strip(), limit)
+
+
+def _sanitize_line(value: Any, limit: int) -> str:
+    sanitized = _collapse_line(_redact_sensitive_text(_text(value)))
+    return _truncate(sanitized, limit)
+
+
+def _pluralize(count: int, singular: str, plural: str | None = None) -> str:
+    if count == 1:
+        return f"{count} {singular}"
+    return f"{count} {plural or singular + 's'}"
 
 
 def _auto_link_bbcode(text: str) -> str:
@@ -158,6 +228,14 @@ def _build_fallback_canonical(action: str, payload: dict[str, Any]) -> dict[str,
             ),
             "resolution": _text(payload.get("resolution_notes") or payload.get("comment")),
         },
+        "remediation": {
+            "summary": {"total": 0, "succeeded": 0, "failed": 0, "skipped": 0, "incomplete": 0},
+            "steps": [],
+            "before_excerpt": "",
+            "after_excerpt": "",
+            "failure_excerpt": "",
+            "latest_completed_step": None,
+        },
     }
 
 
@@ -278,46 +356,169 @@ def _discord_embed_color(model: dict[str, Any]) -> int:
     return _severity_color(model["severity"])
 
 
-def _section_model(canonical: dict[str, Any], action: str) -> dict[str, Any]:
+def _pretty_status(value: Any) -> str:
+    normalized = _collapse_line(value).lower().replace("_", " ")
+    if normalized == "incomplete":
+        return "in progress"
+    return normalized
+
+
+def _remediation_summary_line(summary: dict[str, Any]) -> str:
+    total = int(summary.get("total") or 0)
+    if total <= 0:
+        return ""
+    parts = [f"{_pluralize(total, 'step')} recorded"]
+    for key in ("succeeded", "failed", "skipped", "incomplete"):
+        count = int(summary.get(key) or 0)
+        if count:
+            if key == "incomplete":
+                parts.append(f"{count} in progress")
+            else:
+                parts.append(_pluralize(count, key))
+    return ": ".join((parts[0], ", ".join(parts[1:]))) if len(parts) > 1 else parts[0]
+
+
+def _step_line(step: dict[str, Any], *, outcome_limit: int) -> str:
+    label = _sanitize_line(step.get("task_key") or "step", 120)
+    status = _pretty_status(step.get("status"))
+    outcome = _sanitize_line(step.get("outcome"), outcome_limit)
+    parts = [item for item in (label, status) if item]
+    line = " - ".join(parts)
+    if outcome and outcome.lower() not in line.lower():
+        line = f"{line} - {outcome}" if line else outcome
+    return f"- {line}".strip()
+
+
+def _latest_step_line(step: dict[str, Any] | None, *, outcome_limit: int) -> str:
+    if not isinstance(step, dict):
+        return ""
+    rendered = _step_line(step, outcome_limit=outcome_limit).removeprefix("- ").strip()
+    if not rendered:
+        return ""
+    return f"Latest completed step: {rendered}"
+
+
+def _pick_remediation_excerpts(
+    remediation: dict[str, Any],
+    *,
+    remediation_outcome: str,
+    action: str,
+    excerpt_limit: int,
+) -> dict[str, str]:
+    failure_excerpt = _sanitize_multiline_text(remediation.get("failure_excerpt"), excerpt_limit)
+    before_excerpt = _sanitize_multiline_text(remediation.get("before_excerpt"), excerpt_limit)
+    after_excerpt = _sanitize_multiline_text(remediation.get("after_excerpt"), excerpt_limit)
+    normalized_outcome = remediation_outcome.lower()
+    normalized_action = action.lower()
+
+    if failure_excerpt and normalized_outcome not in {"succeeded", "success"}:
+        return {"failure_excerpt": failure_excerpt}
+    if normalized_outcome in {"succeeded", "success"} or normalized_action == "close":
+        excerpts: dict[str, str] = {}
+        if before_excerpt:
+            excerpts["before_excerpt"] = before_excerpt
+        if after_excerpt:
+            excerpts["after_excerpt"] = after_excerpt
+        return excerpts
+    if failure_excerpt:
+        return {"failure_excerpt": failure_excerpt}
+    if before_excerpt and normalized_action == "comment":
+        return {"before_excerpt": before_excerpt}
+    return {}
+
+
+def _build_remediation_model(
+    canonical: dict[str, Any],
+    action: str,
+    *,
+    compact: bool,
+) -> dict[str, Any]:
+    remediation = (
+        canonical.get("remediation") if isinstance(canonical.get("remediation"), dict) else {}
+    )
+    order = canonical.get("order") if isinstance(canonical.get("order"), dict) else {}
+    summary = remediation.get("summary") if isinstance(remediation.get("summary"), dict) else {}
+    raw_steps = remediation.get("steps") if isinstance(remediation.get("steps"), list) else []
+    latest_completed_step = (
+        remediation.get("latest_completed_step")
+        if isinstance(remediation.get("latest_completed_step"), dict)
+        else None
+    )
+
+    step_limit = COMPACT_STEP_LIMIT if compact else FULL_STEP_LIMIT
+    outcome_limit = COMPACT_STEP_OUTCOME_LIMIT if compact else FULL_STEP_OUTCOME_LIMIT
+    excerpt_limit = COMPACT_EXCERPT_LIMIT if compact else FULL_EXCERPT_LIMIT
+
+    step_lines = [
+        _step_line(step, outcome_limit=outcome_limit)
+        for step in raw_steps[:step_limit]
+        if isinstance(step, dict)
+    ]
+    hidden_steps = max(len(raw_steps) - len(step_lines), 0)
+    if hidden_steps:
+        step_lines.append(f"- ... {_pluralize(hidden_steps, 'more step')}")
+
+    excerpts = _pick_remediation_excerpts(
+        remediation,
+        remediation_outcome=_text(order.get("remediation_outcome")),
+        action=action,
+        excerpt_limit=excerpt_limit,
+    )
+
+    return {
+        "summary": _remediation_summary_line(summary),
+        "latest": (
+            _latest_step_line(latest_completed_step, outcome_limit=outcome_limit)
+            if action == "comment"
+            else ""
+        ),
+        "steps": step_lines,
+        "before_excerpt": excerpts.get("before_excerpt", ""),
+        "after_excerpt": excerpts.get("after_excerpt", ""),
+        "failure_excerpt": excerpts.get("failure_excerpt", ""),
+    }
+
+
+def _section_model(canonical: dict[str, Any], action: str, *, compact: bool) -> dict[str, Any]:
     text = canonical.get("text") if isinstance(canonical.get("text"), dict) else {}
     alert = canonical.get("alert") if isinstance(canonical.get("alert"), dict) else {}
     annotations = alert.get("annotations") if isinstance(alert.get("annotations"), dict) else {}
     order = canonical.get("order") if isinstance(canonical.get("order"), dict) else {}
     event = canonical.get("event") if isinstance(canonical.get("event"), dict) else {}
 
-    headline = _text(text.get("headline")) or _title_from_canonical(canonical)
+    headline = _sanitize_line(_text(text.get("headline")) or _title_from_canonical(canonical), 255)
     overview_lines: list[str] = []
     for line in (
-        _text(text.get("summary")),
-        _text(text.get("detail")),
-        _text(annotations.get("summary")),
-        _text(annotations.get("description")),
-        _text(annotations.get("customer_impact")),
-        _text(annotations.get("suggested_action")),
+        _sanitize_line(text.get("summary"), 500),
+        _sanitize_line(text.get("detail"), 500),
+        _sanitize_line(annotations.get("summary"), 500),
+        _sanitize_line(annotations.get("description"), 500),
+        _sanitize_line(annotations.get("customer_impact"), 500),
+        _sanitize_line(annotations.get("suggested_action"), 500),
     ):
         if line and line not in overview_lines:
             overview_lines.append(line)
     if action == "close":
-        resolution = _text(text.get("resolution"))
+        resolution = _sanitize_line(text.get("resolution"), 500)
         if resolution:
             overview_lines.insert(0, resolution)
 
     links = _known_links(canonical)
     metadata = [
-        ("Alert", _text(alert.get("group_name"))),
-        ("Severity", _text(alert.get("severity"))),
-        ("Status", _text(alert.get("status"))),
-        ("Instance", _text(alert.get("instance"))),
-        ("Fingerprint", _text(alert.get("fingerprint"))),
-        ("Started", _text(alert.get("starts_at"))),
-        ("Ended", _text(alert.get("ends_at"))),
-        ("Order", _text(order.get("id"))),
-        ("Request", _text(order.get("req_id"))),
+        ("Alert", _sanitize_line(alert.get("group_name"), 255)),
+        ("Severity", _sanitize_line(alert.get("severity"), 64)),
+        ("Status", _sanitize_line(alert.get("status"), 64)),
+        ("Instance", _sanitize_line(alert.get("instance"), 255)),
+        ("Fingerprint", _sanitize_line(alert.get("fingerprint"), 255)),
+        ("Started", _sanitize_line(alert.get("starts_at"), 64)),
+        ("Ended", _sanitize_line(alert.get("ends_at"), 64)),
+        ("Order", _sanitize_line(order.get("id"), 64)),
+        ("Request", _sanitize_line(order.get("req_id"), 128)),
     ]
     metadata = [(label, value) for label, value in metadata if value]
     return {
         "headline": headline,
-        "title": _title_from_canonical(canonical),
+        "title": _sanitize_line(_title_from_canonical(canonical), 255),
         "overview": overview_lines,
         "links": links,
         "metadata": metadata,
@@ -326,15 +527,42 @@ def _section_model(canonical: dict[str, Any], action: str) -> dict[str, Any]:
         "event_name": _text(event.get("name")),
         "operation": _text(event.get("operation") or action),
         "remediation_outcome": _text(order.get("remediation_outcome")),
+        "remediation": _build_remediation_model(canonical, action, compact=compact),
     }
 
 
+def _markdown_code_text(text: str) -> str:
+    return text.replace("```", "'''")
+
+
+def _bbcode_code_text(text: str) -> str:
+    return text.replace("[code]", "[ code]").replace("[/code]", "[/ code]")
+
+
 def _render_plain_sections(model: dict[str, Any]) -> str:
+    remediation = model["remediation"]
     parts = [model["headline"]]
     if model["overview"]:
         parts.append("")
         parts.append("Overview")
         parts.extend(model["overview"])
+    if remediation["summary"] or remediation["latest"] or remediation["steps"]:
+        parts.append("")
+        parts.append("Remediation")
+        if remediation["summary"]:
+            parts.append(remediation["summary"])
+        if remediation["latest"]:
+            parts.append(remediation["latest"])
+        parts.extend(remediation["steps"])
+    for heading, body in (
+        ("Failure excerpt", remediation["failure_excerpt"]),
+        ("Before remediation excerpt", remediation["before_excerpt"]),
+        ("After remediation excerpt", remediation["after_excerpt"]),
+    ):
+        if body:
+            parts.append("")
+            parts.append(heading)
+            parts.append(body)
     if model["links"]:
         parts.append("")
         parts.append("Links")
@@ -347,11 +575,29 @@ def _render_plain_sections(model: dict[str, Any]) -> str:
 
 
 def _render_markdown_sections(model: dict[str, Any]) -> str:
+    remediation = model["remediation"]
     parts = [f"## {model['headline']}"]
     if model["overview"]:
         parts.append("")
         parts.append("**Overview**")
         parts.extend(_auto_link_markdown(line) for line in model["overview"])
+    if remediation["summary"] or remediation["latest"] or remediation["steps"]:
+        parts.append("")
+        parts.append("**Remediation**")
+        if remediation["summary"]:
+            parts.append(remediation["summary"])
+        if remediation["latest"]:
+            parts.append(remediation["latest"])
+        parts.extend(remediation["steps"])
+    for heading, body in (
+        ("Failure excerpt", remediation["failure_excerpt"]),
+        ("Before remediation excerpt", remediation["before_excerpt"]),
+        ("After remediation excerpt", remediation["after_excerpt"]),
+    ):
+        if body:
+            parts.append("")
+            parts.append(f"**{heading}**")
+            parts.append(f"```text\n{_markdown_code_text(body)}\n```")
     if model["links"]:
         parts.append("")
         parts.append("**Links**")
@@ -364,11 +610,29 @@ def _render_markdown_sections(model: dict[str, Any]) -> str:
 
 
 def _render_bbcode_sections(model: dict[str, Any]) -> str:
+    remediation = model["remediation"]
     parts = [f"[b]{_auto_link_bbcode(model['headline'])}[/b]"]
     if model["overview"]:
         parts.append("")
         parts.append("[b]Overview[/b]")
         parts.extend(_auto_link_bbcode(line) for line in model["overview"])
+    if remediation["summary"] or remediation["latest"] or remediation["steps"]:
+        parts.append("")
+        parts.append("[b]Remediation[/b]")
+        if remediation["summary"]:
+            parts.append(_auto_link_bbcode(remediation["summary"]))
+        if remediation["latest"]:
+            parts.append(_auto_link_bbcode(remediation["latest"]))
+        parts.extend(_auto_link_bbcode(line) for line in remediation["steps"])
+    for heading, body in (
+        ("Failure excerpt", remediation["failure_excerpt"]),
+        ("Before remediation excerpt", remediation["before_excerpt"]),
+        ("After remediation excerpt", remediation["after_excerpt"]),
+    ):
+        if body:
+            parts.append("")
+            parts.append(f"[b]{heading}[/b]")
+            parts.append(f"[code]{_bbcode_code_text(body)}[/code]")
     if model["links"]:
         parts.append("")
         parts.append("[b]Links[/b]")
@@ -402,7 +666,12 @@ def _adf_paragraph(text: str) -> dict[str, Any]:
     return {"type": "paragraph", "content": _adf_text_nodes(text)}
 
 
+def _adf_code_block(text: str) -> dict[str, Any]:
+    return {"type": "codeBlock", "attrs": {}, "content": [{"type": "text", "text": text}]}
+
+
 def _render_adf_sections(model: dict[str, Any]) -> dict[str, Any]:
+    remediation = model["remediation"]
     content: list[dict[str, Any]] = [
         {"type": "heading", "attrs": {"level": 2}, "content": _adf_text_nodes(model["headline"])}
     ]
@@ -411,6 +680,37 @@ def _render_adf_sections(model: dict[str, Any]) -> dict[str, Any]:
             {"type": "heading", "attrs": {"level": 3}, "content": _adf_text_nodes("Overview")}
         )
         content.extend(_adf_paragraph(line) for line in model["overview"])
+    if remediation["summary"] or remediation["latest"] or remediation["steps"]:
+        content.append(
+            {"type": "heading", "attrs": {"level": 3}, "content": _adf_text_nodes("Remediation")}
+        )
+        if remediation["summary"]:
+            content.append(_adf_paragraph(remediation["summary"]))
+        if remediation["latest"]:
+            content.append(_adf_paragraph(remediation["latest"]))
+        if remediation["steps"]:
+            content.append(
+                {
+                    "type": "bulletList",
+                    "content": [
+                        {
+                            "type": "listItem",
+                            "content": [_adf_paragraph(line.removeprefix("- ").strip())],
+                        }
+                        for line in remediation["steps"]
+                    ],
+                }
+            )
+    for heading, body in (
+        ("Failure excerpt", remediation["failure_excerpt"]),
+        ("Before remediation excerpt", remediation["before_excerpt"]),
+        ("After remediation excerpt", remediation["after_excerpt"]),
+    ):
+        if body:
+            content.append(
+                {"type": "heading", "attrs": {"level": 3}, "content": _adf_text_nodes(heading)}
+            )
+            content.append(_adf_code_block(body))
     if model["links"]:
         content.append(
             {"type": "heading", "attrs": {"level": 3}, "content": _adf_text_nodes("Links")}
@@ -456,6 +756,7 @@ def _render_adf_sections(model: dict[str, Any]) -> dict[str, Any]:
 
 
 def _render_discord_message(model: dict[str, Any]) -> dict[str, Any]:
+    remediation = model["remediation"]
     content = _truncate(model["headline"], 1800)
     description_lines = model["overview"][:]
     if model["links"]:
@@ -466,6 +767,39 @@ def _render_discord_message(model: dict[str, Any]) -> dict[str, Any]:
         {"name": label, "value": _truncate(value, 1000), "inline": True}
         for label, value in model["metadata"][:6]
     ]
+    remediation_lines: list[str] = []
+    if remediation["summary"]:
+        remediation_lines.append(remediation["summary"])
+    if remediation["latest"]:
+        remediation_lines.append(remediation["latest"])
+    remediation_lines.extend(line.removeprefix("- ").strip() for line in remediation["steps"])
+    if remediation_lines:
+        fields.append(
+            {
+                "name": "Remediation",
+                "value": _truncate("\n".join(remediation_lines), 1000),
+                "inline": False,
+            }
+        )
+    excerpt_label = ""
+    excerpt_body = ""
+    for label, body in (
+        ("Failure excerpt", remediation["failure_excerpt"]),
+        ("After remediation excerpt", remediation["after_excerpt"]),
+        ("Before remediation excerpt", remediation["before_excerpt"]),
+    ):
+        if body:
+            excerpt_label = label
+            excerpt_body = body
+            break
+    if excerpt_body:
+        fields.append(
+            {
+                "name": excerpt_label,
+                "value": _truncate(excerpt_body, 1000),
+                "inline": False,
+            }
+        )
     return {
         "message": content,
         "content": content,
@@ -482,7 +816,7 @@ def _render_discord_message(model: dict[str, Any]) -> dict[str, Any]:
 
 def render_provider_content(provider: str, action: str, payload: dict[str, Any]) -> dict[str, Any]:
     canonical = canonical_from_payload(action, payload)
-    model = _section_model(canonical, action)
+    model = _section_model(canonical, action, compact=provider in {"teams", "discord"})
     source = _text(payload.get("source") or canonical.get("event", {}).get("source") or "poundcake")
     visibility = _text(
         payload.get("visibility")

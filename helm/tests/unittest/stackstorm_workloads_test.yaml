@@ -61,6 +61,15 @@ tests:
           value: client
         documentIndex: 7
 
+  - it: attaches the dedicated service account to stackstorm-actionrunner
+    documentSelector:
+      path: metadata.name
+      value: stackstorm-actionrunner
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-poundcake-stackstorm-actionrunner
+
   - it: supports gate logging overrides on stackstorm init gates
     set:
       startupHooks.gateLogging.enabled: false

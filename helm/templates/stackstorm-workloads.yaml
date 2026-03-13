@@ -352,6 +352,7 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-actionrunner") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
       {{- if .Values.podSecurityContext }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}

@@ -1,0 +1,52 @@
+{{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "actionrunner")) "true" }}
+{{- $cfg := .Values.stackstormActionrunner | default dict }}
+{{- $serviceAccount := $cfg.serviceAccount | default dict }}
+{{- $createServiceAccount := true }}
+{{- if hasKey $serviceAccount "create" }}
+{{- $createServiceAccount = $serviceAccount.create }}
+{{- end }}
+{{- $pvcPatchRbac := $cfg.pvcPatchRbac | default dict }}
+{{- $enablePvcPatchRbac := true }}
+{{- if hasKey $pvcPatchRbac "enabled" }}
+{{- $enablePvcPatchRbac = $pvcPatchRbac.enabled }}
+{{- end }}
+{{- if $createServiceAccount }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+  {{- with $serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if $enablePvcPatchRbac }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+{{- end }}
+{{- end }}

@@ -51,6 +51,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "poundcake.stackstormActionrunnerServiceAccountName" -}}
+{{- $cfg := .Values.stackstormActionrunner | default dict -}}
+{{- $serviceAccount := $cfg.serviceAccount | default dict -}}
+{{- $name := $serviceAccount.name | default "" -}}
+{{- $create := $serviceAccount.create | default true -}}
+{{- if $create -}}
+{{- default (printf "%s-stackstorm-actionrunner" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-") $name -}}
+{{- else -}}
+{{- default "default" $name -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.stackstormSubchartPrefix" -}}
 {{- default "stackstorm" .Values.stackstorm.releaseName -}}
 {{- end -}}

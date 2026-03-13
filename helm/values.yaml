@@ -717,6 +717,15 @@ bootstrap:
     defaultTimeout: 300
     pruneMissing: false
 
+# StackStorm actionrunner runtime configuration
+stackstormActionrunner:
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  pvcPatchRbac:
+    enabled: true
+
 # Bakery service configuration
 # API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)
 bakery:

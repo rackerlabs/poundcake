@@ -5,8 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from api.models.models import Order
-from api.services.communications import normalize_destination_target, normalize_destination_type
+from api.models.models import DishIngredient, Order
+from api.services.communications import (
+    DESTINATION_TYPES,
+    normalize_destination_target,
+    normalize_destination_type,
+)
 from api.services.communications_policy import POLICY_METADATA_KEY
 
 KNOWN_LINK_FIELDS = (
@@ -16,6 +20,23 @@ KNOWN_LINK_FIELDS = (
     ("investigation_url", "Investigation"),
     ("silence_url", "Silence"),
 )
+RESULT_TEXT_PRIORITY = (
+    "stdout",
+    "stderr",
+    "message",
+    "messages",
+    "output",
+    "outputs",
+    "detail",
+    "details",
+    "summary",
+    "body",
+    "content",
+    "response",
+    "result",
+    "results",
+)
+CANONICAL_OUTCOME_LIMIT = 240
 
 
 def _iso(value: Any) -> str | None:
@@ -31,6 +52,238 @@ def _first_text(*values: Any) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _collapse_line(value: Any) -> str:
+    if value is None:
+        return ""
+    return " ".join(str(value).split()).strip()
+
+
+def _normalize_multiline_text(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    lines = [line.strip() for line in value.replace("\r\n", "\n").split("\n")]
+    normalized: list[str] = []
+    pending_blank = False
+    for line in lines:
+        if line:
+            normalized.append(line)
+            pending_blank = False
+            continue
+        if normalized and not pending_blank:
+            normalized.append("")
+            pending_blank = True
+    return "\n".join(normalized).strip()
+
+
+def _truncate(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    if limit <= 3:
+        return text[:limit]
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _result_scalar_lines(value: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for key, item in value.items():
+        if key in RESULT_TEXT_PRIORITY:
+            continue
+        if isinstance(item, (str, int, float, bool)):
+            text = _collapse_line(item)
+            if text:
+                lines.append(f"{key}: {text}")
+        if len(lines) >= 4:
+            break
+    return lines
+
+
+def _extract_result_excerpt(value: Any, *, depth: int = 0) -> str:
+    if depth > 4 or value is None:
+        return ""
+    if isinstance(value, str):
+        return _normalize_multiline_text(value)
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        lines: list[str] = []
+        for item in value[:4]:
+            excerpt = _extract_result_excerpt(item, depth=depth + 1)
+            if excerpt:
+                lines.append(excerpt)
+        return "\n".join(line for line in lines if line).strip()
+    if not isinstance(value, dict):
+        return ""
+
+    stream_lines: list[str] = []
+    for key, label in (("stdout", "stdout"), ("stderr", "stderr")):
+        excerpt = _extract_result_excerpt(value.get(key), depth=depth + 1)
+        if excerpt:
+            stream_lines.append(f"{label}:\n{excerpt}")
+    if stream_lines:
+        return "\n\n".join(stream_lines).strip()
+
+    for key in RESULT_TEXT_PRIORITY:
+        excerpt = _extract_result_excerpt(value.get(key), depth=depth + 1)
+        if excerpt:
+            return excerpt
+
+    scalar_lines = _result_scalar_lines(value)
+    if scalar_lines:
+        return "\n".join(scalar_lines)
+
+    for item in value.values():
+        excerpt = _extract_result_excerpt(item, depth=depth + 1)
+        if excerpt:
+            return excerpt
+    return ""
+
+
+def _normalize_step_status(value: Any) -> str:
+    normalized = _collapse_line(value).lower().replace(" ", "_")
+    if normalized in {
+        "",
+        "pending",
+        "new",
+        "queued",
+        "requested",
+        "scheduled",
+        "running",
+        "processing",
+    }:
+        return "incomplete" if normalized else ""
+    if normalized in {"succeeded", "success", "successful", "completed", "complete"}:
+        return "succeeded"
+    if normalized in {"failed", "failure", "error", "abandoned", "timed_out", "timeout"}:
+        return "failed"
+    if normalized in {"skipped", "canceled", "cancelled"}:
+        return "skipped"
+    return normalized
+
+
+def _display_status(value: Any) -> str:
+    status = _normalize_step_status(value)
+    if not status:
+        return ""
+    if status == "incomplete":
+        return "in progress"
+    return status.replace("_", " ")
+
+
+def _step_sort_key(step: DishIngredient) -> tuple[str, str, int]:
+    started = _iso(step.started_at) or _iso(step.created_at) or ""
+    completed = _iso(step.completed_at) or ""
+    return (started, completed, int(getattr(step, "id", 0) or 0))
+
+
+def _step_label(step: DishIngredient) -> str:
+    return _first_text(
+        step.task_key,
+        (
+            getattr(getattr(step, "recipe_ingredient", None), "ingredient", None).task_key_template
+            if getattr(getattr(step, "recipe_ingredient", None), "ingredient", None) is not None
+            else None
+        ),
+        step.execution_target,
+        f"step-{getattr(step, 'id', 'unknown')}",
+    )
+
+
+def _is_communication_step(step: DishIngredient) -> bool:
+    recipe_ingredient = getattr(step, "recipe_ingredient", None)
+    ingredient = getattr(recipe_ingredient, "ingredient", None)
+    purpose = _collapse_line(getattr(ingredient, "execution_purpose", "")).lower()
+    if purpose:
+        return purpose == "comms"
+    engine = _collapse_line(step.execution_engine).lower()
+    target = normalize_destination_type(_collapse_line(step.execution_target))
+    return engine == "bakery" and target in DESTINATION_TYPES
+
+
+def _step_excerpt(step: DishIngredient) -> str:
+    result_excerpt = _extract_result_excerpt(step.result)
+    error_excerpt = _normalize_multiline_text(step.error_message)
+    if error_excerpt and result_excerpt and error_excerpt not in result_excerpt:
+        return f"{error_excerpt}\n\n{result_excerpt}"
+    return error_excerpt or result_excerpt
+
+
+def _step_outcome(step: DishIngredient) -> str:
+    excerpt = _step_excerpt(step)
+    if excerpt:
+        return _truncate(_collapse_line(excerpt), CANONICAL_OUTCOME_LIMIT)
+    return _display_status(step.execution_status)
+
+
+def _build_remediation_context(order: Order) -> dict[str, Any]:
+    steps = sorted(
+        [
+            step
+            for dish in (order.dishes or [])
+            for step in (dish.dish_ingredients or [])
+            if not getattr(step, "deleted", False) and not _is_communication_step(step)
+        ],
+        key=_step_sort_key,
+    )
+
+    counts = {"total": len(steps), "succeeded": 0, "failed": 0, "skipped": 0, "incomplete": 0}
+    before_excerpt = ""
+    after_excerpt = ""
+    failure_excerpt = ""
+    latest_completed_step: dict[str, Any] | None = None
+    step_rows: list[dict[str, Any]] = []
+
+    for step in steps:
+        status = _normalize_step_status(step.execution_status)
+        if status == "succeeded":
+            counts["succeeded"] += 1
+            latest_completed_step = {
+                "task_key": _step_label(step),
+                "status": status,
+                "outcome": _step_outcome(step),
+                "started_at": _iso(step.started_at),
+                "completed_at": _iso(step.completed_at),
+                "execution_ref": _first_text(step.execution_ref),
+            }
+        elif status == "failed":
+            counts["failed"] += 1
+        elif status == "skipped":
+            counts["skipped"] += 1
+        else:
+            counts["incomplete"] += 1
+
+        excerpt = _step_excerpt(step)
+        if excerpt and not before_excerpt:
+            before_excerpt = excerpt
+        if excerpt:
+            after_excerpt = excerpt
+        if status == "failed" and excerpt:
+            failure_excerpt = excerpt
+
+        step_rows.append(
+            {
+                "task_key": _step_label(step),
+                "status": status or _collapse_line(step.execution_status).lower(),
+                "started_at": _iso(step.started_at),
+                "completed_at": _iso(step.completed_at),
+                "execution_ref": _first_text(step.execution_ref),
+                "outcome": _step_outcome(step),
+            }
+        )
+
+    remediation_outcome = _collapse_line(order.remediation_outcome).lower()
+    if remediation_outcome != "succeeded":
+        after_excerpt = ""
+
+    return {
+        "summary": counts,
+        "steps": step_rows,
+        "before_excerpt": before_excerpt,
+        "after_excerpt": after_excerpt,
+        "failure_excerpt": failure_excerpt,
+        "latest_completed_step": latest_completed_step,
+    }
 
 
 def build_canonical_communication_context(
@@ -133,4 +386,5 @@ def build_canonical_communication_context(
                 payload.get("message"),
             ),
         },
+        "remediation": _build_remediation_context(order),
     }

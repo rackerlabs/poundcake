@@ -7,10 +7,10 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 
 from api.core.logging import get_logger
-from api.models.models import Order, OrderCommunication
+from api.models.models import Dish, DishIngredient, Order, OrderCommunication, RecipeIngredient
 from api.services.bakery_client import get_communication
 from api.services.communications import (
     is_ticket_capable_destination,
@@ -94,7 +94,17 @@ def find_communication_for_route(
 async def load_order_with_communications(
     db: AsyncSession, *, order_id: int, for_update: bool = False
 ) -> Order | None:
-    query = select(Order).options(joinedload(Order.communications)).where(Order.id == order_id)
+    query = (
+        select(Order)
+        .options(
+            selectinload(Order.communications),
+            selectinload(Order.dishes)
+            .selectinload(Dish.dish_ingredients)
+            .selectinload(DishIngredient.recipe_ingredient)
+            .selectinload(RecipeIngredient.ingredient),
+        )
+        .where(Order.id == order_id)
+    )
     if for_update:
         query = query.with_for_update()
     result = await db.execute(query)
