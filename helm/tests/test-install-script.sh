@@ -112,7 +112,34 @@ if [[ "${1:-}" == "create" && "${2:-}" == "namespace" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "secret" ]]; then
-  if [[ "${MOCK_BAKERY_SECRET_EXISTS:-1}" == "1" ]]; then
+  secret_name="${5:-}"
+  case "${secret_name}" in
+    bakery-rackspace-core)
+      secret_exists="${MOCK_BAKERY_RACKSPACE_SECRET_EXISTS:-${MOCK_BAKERY_SECRET_EXISTS:-1}}"
+      ;;
+    bakery-servicenow)
+      secret_exists="${MOCK_BAKERY_SERVICENOW_SECRET_EXISTS:-0}"
+      ;;
+    bakery-jira)
+      secret_exists="${MOCK_BAKERY_JIRA_SECRET_EXISTS:-0}"
+      ;;
+    bakery-github)
+      secret_exists="${MOCK_BAKERY_GITHUB_SECRET_EXISTS:-0}"
+      ;;
+    bakery-pagerduty)
+      secret_exists="${MOCK_BAKERY_PAGERDUTY_SECRET_EXISTS:-0}"
+      ;;
+    bakery-teams)
+      secret_exists="${MOCK_BAKERY_TEAMS_SECRET_EXISTS:-0}"
+      ;;
+    bakery-discord)
+      secret_exists="${MOCK_BAKERY_DISCORD_SECRET_EXISTS:-0}"
+      ;;
+    *)
+      secret_exists="${MOCK_BAKERY_SECRET_EXISTS:-1}"
+      ;;
+  esac
+  if [[ "${secret_exists}" == "1" ]]; then
     exit 0
   fi
   exit 1
@@ -265,6 +292,7 @@ run_with_mocks "${EXPLICIT_REMOTE_OUT}" \
   POUNDCAKE_IMAGE_TAG="env-tag" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET="external-bakery-hmac" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
   POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${POUNDCAKE_INSTALLER}" \
@@ -272,6 +300,7 @@ run_with_mocks "${EXPLICIT_REMOTE_OUT}" \
   --remote-bakery-url https://bakery.external.example
 
 assert_contains "--set-string bakery.client.baseUrl=https://bakery.external.example" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.client.auth.existingSecret=external-bakery-hmac" "${TMP_DIR}/helm.log"
 assert_contains "--set bakery.client.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set database.mode=embedded" "${TMP_DIR}/helm.log"
 
@@ -395,6 +424,48 @@ run_with_mocks "${BAKERY_SECRET_CREATE_OUT}" \
 
 assert_contains "create secret generic bakery-rackspace-core" "${TMP_DIR}/kubectl.log"
 assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery installer provisions ServiceNow secrets the same way..."
+BAKERY_SERVICENOW_SECRET_OUT="${TMP_DIR}/bakery-servicenow-secret.out"
+run_with_mocks "${BAKERY_SERVICENOW_SECRET_OUT}" \
+  env \
+  MOCK_BAKERY_SERVICENOW_SECRET_EXISTS=0 \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight \
+  --bakery-servicenow-url https://snow.example \
+  --bakery-servicenow-username snow-user \
+  --bakery-servicenow-password snow-pass
+
+assert_contains "create secret generic bakery-servicenow" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.servicenow.existingSecret=bakery-servicenow" "${TMP_DIR}/helm.log"
+
+echo "Validating Teams-only Bakery installs do not force Rackspace Core secrets..."
+BAKERY_TEAMS_ONLY_OUT="${TMP_DIR}/bakery-teams-only.out"
+run_with_mocks "${BAKERY_TEAMS_ONLY_OUT}" \
+  env \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=0 \
+  MOCK_BAKERY_TEAMS_SECRET_EXISTS=0 \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight \
+  --bakery-active-provider teams \
+  --bakery-teams-webhook-url https://teams.example/webhook
+
+assert_contains "create secret generic bakery-teams" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.config.activeProvider=teams" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.teams.existingSecret=bakery-teams" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
 
 echo "Validating Bakery installer requires --update-bakery-secret for credential changes..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \

@@ -223,6 +223,7 @@ Install model:
 - `./install/install-bakery-helm.sh` installs Bakery only.
 - `./install/install-poundcake-helm.sh` installs PoundCake only.
 - `install-poundcake-helm.sh` no longer supports `--target`.
+- `install-bakery-helm.sh` is the supported path for Bakery provider credentials and can verify/create secret-backed config for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord, wiring `bakery.<provider>.existingSecret` automatically.
 
 Co-located install order:
 1. Install Bakery first in the namespace.

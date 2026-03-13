@@ -2,7 +2,7 @@
 
 Bakery is PoundCake's communication integration microservice. It is an async broker between PoundCake and external ticketing or messaging systems and exposes Bakery-owned UUID handles (not provider-native IDs) to callers.
 
-## Supported Ticketing Systems
+## Supported Communication Systems
 
 | Mixer | Key | Actions |
 |-------|-----|---------|
@@ -11,6 +11,8 @@ Bakery is PoundCake's communication integration microservice. It is an async bro
 | GitHub Issues | `github` | create, update, close, comment, search |
 | PagerDuty | `pagerduty` | create, update, close, comment, search |
 | Rackspace Core | `rackspace_core` | create, update, close, comment, search |
+| Microsoft Teams | `teams` | create, update, close, comment |
+| Discord | `discord` | create, update, close, comment |
 
 ## Architecture
 
@@ -24,6 +26,8 @@ PoundCake API
   │  FastAPI  │    │                  │    │  Jira             │
   │           │    │  get_mixer()     │    │  GitHub           │
   │           │    │  list_mixers()   │    │  PagerDuty        │
+  │           │    │                  │    │  Teams            │
+  │           │    │                  │    │  Discord          │
   └──────────┘    └──────────────────┘    │  Rackspace Core   │
        |                                   └──────────────────┘
        v                                            |
@@ -386,6 +390,10 @@ All credentials are stored in Kubernetes Secrets. Each mixer supports two modes:
 1. **Existing Secret** -- reference a pre-created Secret by name via `existingSecret` in values.yaml
 2. **Chart-managed Secret** -- provide values directly in values.yaml (chart creates the Secret)
 
+For the supported install flow, prefer installer-managed existing secrets. `./install/install-bakery-helm.sh`
+can verify or create provider secrets for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams,
+and Discord, then wire the corresponding `bakery.<provider>.existingSecret` values automatically.
+
 | Variable | Mixer | Description |
 |----------|-------|-------------|
 | `SERVICENOW_URL` | ServiceNow | Instance URL |
@@ -396,6 +404,8 @@ All credentials are stored in Kubernetes Secrets. Each mixer supports two modes:
 | `JIRA_API_TOKEN` | Jira | API token (Secret) |
 | `GITHUB_TOKEN` | GitHub | Personal access token (Secret) |
 | `PAGERDUTY_API_KEY` | PagerDuty | API key (Secret) |
+| `TEAMS_WEBHOOK_URL` | Microsoft Teams | Incoming webhook URL (Secret) |
+| `DISCORD_WEBHOOK_URL` | Discord | Incoming webhook URL (Secret) |
 | `RACKSPACE_CORE_URL` | Rackspace Core | CTKAPI base URL (default: `https://ws.core.rackspace.com`) |
 | `RACKSPACE_CORE_VERIFY_SSL` | Rackspace Core | Verify TLS certificates for CTKAPI calls (`true` by default; set `false` only for controlled testing) |
 | `RACKSPACE_CORE_USERNAME` | Rackspace Core | Username |
@@ -516,6 +526,8 @@ bakery/
     ├── jira.py             # JiraMixer
     ├── github.py           # GitHubMixer
     ├── pagerduty.py        # PagerDutyMixer
+    ├── teams.py            # TeamsMixer
+    ├── discord.py          # DiscordMixer
     └── rackspace_core.py   # RackspaceCoreMixer (CTKAPI)
 ```
 

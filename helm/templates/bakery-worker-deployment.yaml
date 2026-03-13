@@ -227,6 +227,32 @@ spec:
                   name: {{ include "poundcake.bakerySecretName" . }}
                   key: pagerduty-api-key
             {{- end }}
+            {{- if .Values.bakery.teams.existingSecret }}
+            - name: TEAMS_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bakery.teams.existingSecret }}
+                  key: {{ .Values.bakery.teams.secretKeys.webhookUrl }}
+            {{- else if .Values.bakery.teams.webhookUrl }}
+            - name: TEAMS_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.bakerySecretName" . }}
+                  key: teams-webhook-url
+            {{- end }}
+            {{- if .Values.bakery.discord.existingSecret }}
+            - name: DISCORD_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bakery.discord.existingSecret }}
+                  key: {{ .Values.bakery.discord.secretKeys.webhookUrl }}
+            {{- else if .Values.bakery.discord.webhookUrl }}
+            - name: DISCORD_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "poundcake.bakerySecretName" . }}
+                  key: discord-webhook-url
+            {{- end }}
             {{- if .Values.bakery.rackspaceCore.existingSecret }}
             - name: RACKSPACE_CORE_URL
               valueFrom:

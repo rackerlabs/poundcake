@@ -36,7 +36,7 @@ class Message(Base):
     mixer_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="servicenow, jira, github, pagerduty, rackspace_core",
+        comment="servicenow, jira, github, pagerduty, rackspace_core, teams, discord",
     )
     status: Mapped[str] = mapped_column(
         String(50),
@@ -73,7 +73,7 @@ class TicketRequest(Base):
     mixer_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="servicenow, jira, github, pagerduty, rackspace_core",
+        comment="servicenow, jira, github, pagerduty, rackspace_core, teams, discord",
     )
     action: Mapped[str] = mapped_column(
         String(50), nullable=False, comment="create, update, close, comment, etc"
@@ -149,7 +149,7 @@ class TicketIdMapping(Base):
         String(50),
         nullable=False,
         index=True,
-        comment="servicenow, jira, github, pagerduty, rackspace_core",
+        comment="servicenow, jira, github, pagerduty, rackspace_core, teams, discord",
     )
     external_ticket_id: Mapped[str] = mapped_column(
         String(255),

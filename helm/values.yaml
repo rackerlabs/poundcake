@@ -891,6 +891,22 @@ bakery:
     secretKeys:
       apiKey: "pagerduty-api-key"
 
+  # Microsoft Teams configuration
+  teams:
+    webhookUrl: ""
+    # Reference to existing secret
+    existingSecret: ""
+    secretKeys:
+      webhookUrl: "teams-webhook-url"
+
+  # Discord configuration
+  discord:
+    webhookUrl: ""
+    # Reference to existing secret
+    existingSecret: ""
+    secretKeys:
+      webhookUrl: "discord-webhook-url"
+
   # Rackspace Core configuration
   rackspaceCore:
     # Credentials and endpoint must come from existingSecret keys

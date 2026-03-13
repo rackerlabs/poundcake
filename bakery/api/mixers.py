@@ -9,6 +9,16 @@ from bakery.schemas import MixerListResponse, MixerInfo, MixerValidateResponse
 
 router = APIRouter()
 
+MIXER_ACTIONS = {
+    "servicenow": ["create", "update", "close", "comment", "search"],
+    "jira": ["create", "update", "close", "comment", "search"],
+    "github": ["create", "update", "close", "comment", "search"],
+    "pagerduty": ["create", "update", "close", "comment", "search"],
+    "rackspace_core": ["create", "update", "close", "comment", "search"],
+    "teams": ["create", "update", "close", "comment"],
+    "discord": ["create", "update", "close", "comment"],
+}
+
 
 @router.get(
     "/mixers",
@@ -16,7 +26,7 @@ router = APIRouter()
     summary="List available mixers",
     description=(
         "Returns all registered mixer types and their current configuration "
-        "status. Use this to discover which ticketing systems Bakery can "
+        "status. Use this to discover which ticketing or messaging systems Bakery can "
         "communicate with."
     ),
 )
@@ -37,7 +47,7 @@ async def get_available_mixers() -> MixerListResponse:
             mixers.append(
                 MixerInfo(
                     mixer_type=mixer_type,
-                    actions=["create", "update", "close", "comment", "search"],
+                    actions=MIXER_ACTIONS.get(mixer_type, ["create", "update", "close"]),
                     configured=has_credentials,
                 )
             )
@@ -45,7 +55,7 @@ async def get_available_mixers() -> MixerListResponse:
             mixers.append(
                 MixerInfo(
                     mixer_type=mixer_type,
-                    actions=["create", "update", "close", "comment", "search"],
+                    actions=MIXER_ACTIONS.get(mixer_type, ["create", "update", "close"]),
                     configured=False,
                 )
             )
@@ -58,7 +68,7 @@ async def get_available_mixers() -> MixerListResponse:
     response_model=MixerValidateResponse,
     summary="Validate mixer credentials",
     description=(
-        "Tests connectivity and authentication with the specified ticketing "
+        "Tests connectivity and authentication with the specified communication "
         "system. Makes a live API call to verify the configured credentials "
         "are valid."
     ),
@@ -122,6 +132,8 @@ def _check_credentials_configured(mixer_type: str, mixer: Any) -> bool:
         return bool(getattr(mixer, "token", None))
     elif mixer_type == "pagerduty":
         return bool(getattr(mixer, "api_key", None))
+    elif mixer_type in {"teams", "discord"}:
+        return bool(getattr(mixer, "webhook_url", None))
     elif mixer_type == "rackspace_core":
         return bool(
             getattr(mixer, "base_url", None)
