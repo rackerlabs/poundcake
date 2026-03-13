@@ -162,23 +162,23 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.124
+          value: ghcr.io/rackerlabs/poundcake:2.0.125
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.124
+          value: ghcr.io/rackerlabs/poundcake:2.0.125
         documentIndex: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.124
+          value: ghcr.io/rackerlabs/poundcake:2.0.125
         documentIndex: 3
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.124
+          value: ghcr.io/rackerlabs/poundcake:2.0.125
         documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.124
+          value: ghcr.io/rackerlabs/poundcake:2.0.125
         documentIndex: 5
 
   - it: reports API version from the deployed PoundCake image tag

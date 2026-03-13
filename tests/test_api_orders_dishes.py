@@ -43,6 +43,19 @@ class _BeginContext:
         return None
 
 
+class _TrackingBeginContext:
+    def __init__(self, db):
+        self.db = db
+
+    async def __aenter__(self):
+        self.db._in_begin_context = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.db._in_begin_context = False
+        return None
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
@@ -668,6 +681,56 @@ def test_order_dispatch__resolving_with_recipe_bakery_comms__does_not_inject_fal
     assert seeded[0].recipe_ingredient_id == 101
     get_policy_recipe.assert_not_awaited()
     ensure_fallback.assert_not_called()
+
+
+def test_order_dispatch__checks_global_policy_inside_transaction(client, mock_db_session):
+    order = _make_order(status="resolving")
+    recipe = SimpleNamespace(
+        id=12,
+        name="group",
+        recipe_ingredients=[
+            _make_recipe_step(ri_id=101, ingredient_id=201, run_phase="both", engine="stackstorm")
+        ],
+    )
+    policy_step = _make_recipe_step(
+        ri_id=301,
+        ingredient_id=401,
+        run_phase="both",
+        engine="bakery",
+        purpose="comms",
+    )
+
+    mock_db_session.begin = Mock(return_value=_TrackingBeginContext(mock_db_session))
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+            ScalarResult(first=recipe),  # group recipe hit
+            ScalarResult(first=None),  # active dish lookup for phase
+            ScalarResult(all_=[]),  # existing dish ingredients
+        ]
+    )
+
+    async def _global_policy(db):
+        assert getattr(db, "_in_begin_context", False) is True
+        return True
+
+    with (
+        patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=30)),
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        ),
+        patch("api.api.orders.global_policy_configured", new=_global_policy),
+        patch(
+            "api.api.orders.get_global_policy_recipe_for_dispatch",
+            new=AsyncMock(return_value=SimpleNamespace(recipe_ingredients=[policy_step])),
+        ),
+        patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()),
+    ):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "dispatched"
 
 
 def test_order_timeline_get__returns_events(client, mock_db_session):

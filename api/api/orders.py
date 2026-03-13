@@ -256,10 +256,10 @@ async def dispatch_order(
     req_id = request.state.req_id
     settings = get_settings()
     now = datetime.now(timezone.utc)
-    global_policy_is_configured = await global_policy_configured(db)
 
     response: OrderDispatchResponse | None = None
     async with db.begin():
+        global_policy_is_configured = await global_policy_configured(db)
         result = await db.execute(
             select(Order)
             .options(joinedload(Order.communications))
