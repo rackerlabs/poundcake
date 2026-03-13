@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 from bakery.formatters import provider_config_from_context, render_provider_content
 
 
@@ -78,6 +80,22 @@ def test_render_provider_content_discord_returns_embed_payload() -> None:
 
     assert rendered["message"] == "Alert requires attention"
     assert rendered["embeds"][0]["title"]
+    assert rendered["embeds"][0]["color"] == 0xF79009
+
+
+def test_render_provider_content_discord_resolved_messages_use_green_embed() -> None:
+    payload = deepcopy(_canonical_payload())
+    payload["context"]["_canonical"]["event"]["name"] = "resolved_success_close"
+    payload["context"]["_canonical"]["event"]["operation"] = "close"
+    payload["context"]["_canonical"]["order"]["remediation_outcome"] = "succeeded"
+    payload["context"]["_canonical"]["alert"]["severity"] = "critical"
+    payload["context"]["_canonical"]["alert"]["status"] = "resolved"
+    payload["context"]["_canonical"]["alert"]["ends_at"] = "2026-03-13T12:03:00Z"
+    payload["context"]["_canonical"]["text"]["headline"] = "Alert resolved"
+
+    rendered = render_provider_content("discord", "close", payload)
+
+    assert rendered["embeds"][0]["color"] == 0x12B76A
 
 
 def test_provider_config_from_context_prefers_route_provider_config() -> None:

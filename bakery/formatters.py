@@ -261,11 +261,29 @@ def _severity_color(severity: str) -> int:
     return 0x667085
 
 
+def _discord_embed_color(model: dict[str, Any]) -> int:
+    event_name = _text(model.get("event_name")).lower()
+    alert_status = _text(model.get("alert_status")).lower()
+    operation = _text(model.get("operation")).lower()
+    remediation_outcome = _text(model.get("remediation_outcome")).lower()
+
+    if operation == "close":
+        return 0x12B76A
+    if alert_status == "resolved":
+        return 0x12B76A
+    if event_name.startswith("resolved_") or event_name in {"fallback_notify", "alert_resolved"}:
+        return 0x12B76A
+    if remediation_outcome == "succeeded" and event_name.endswith("_close"):
+        return 0x12B76A
+    return _severity_color(model["severity"])
+
+
 def _section_model(canonical: dict[str, Any], action: str) -> dict[str, Any]:
     text = canonical.get("text") if isinstance(canonical.get("text"), dict) else {}
     alert = canonical.get("alert") if isinstance(canonical.get("alert"), dict) else {}
     annotations = alert.get("annotations") if isinstance(alert.get("annotations"), dict) else {}
     order = canonical.get("order") if isinstance(canonical.get("order"), dict) else {}
+    event = canonical.get("event") if isinstance(canonical.get("event"), dict) else {}
 
     headline = _text(text.get("headline")) or _title_from_canonical(canonical)
     overview_lines: list[str] = []
@@ -304,6 +322,10 @@ def _section_model(canonical: dict[str, Any], action: str) -> dict[str, Any]:
         "links": links,
         "metadata": metadata,
         "severity": _text(alert.get("severity") or "unknown"),
+        "alert_status": _text(alert.get("status")),
+        "event_name": _text(event.get("name")),
+        "operation": _text(event.get("operation") or action),
+        "remediation_outcome": _text(order.get("remediation_outcome")),
     }
 
 
@@ -451,7 +473,7 @@ def _render_discord_message(model: dict[str, Any]) -> dict[str, Any]:
             {
                 "title": _truncate(model["title"], 256),
                 "description": description or _truncate(model["headline"], 1024),
-                "color": _severity_color(model["severity"]),
+                "color": _discord_embed_color(model),
                 "fields": fields,
             }
         ],
