@@ -37,6 +37,19 @@ class _BeginContext:
         return None
 
 
+class _TrackingBeginContext:
+    def __init__(self, db):
+        self.db = db
+
+    async def __aenter__(self):
+        self.db._in_begin_context = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.db._in_begin_context = False
+        return None
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
@@ -242,3 +255,93 @@ def test_recipe_create_enabled_without_global_or_local_communications_returns_40
 
     assert response.status_code == 400
     assert "global communications policy" in response.json()["detail"]
+
+
+def test_recipe_create_validates_ingredients_inside_transaction(client, mock_db):
+    mock_db.begin = Mock(return_value=_TrackingBeginContext(mock_db))
+    mock_db.add = Mock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=None),
+            ScalarResult(first=SimpleNamespace(id=42, name="filesystem-response")),
+        ]
+    )
+
+    async def _validate_ingredients(db, *, step_specs):
+        assert getattr(db, "_in_begin_context", False) is True
+        assert step_specs[0]["ingredient_id"] == 12
+
+    serialized_recipe = {
+        "id": 42,
+        "name": "filesystem-response",
+        "description": "Example workflow",
+        "enabled": True,
+        "clear_timeout_sec": 300,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "deleted": False,
+        "deleted_at": None,
+        "recipe_ingredients": [],
+        "communications": {
+            "mode": "local",
+            "effective_source": "local",
+            "routes": [
+                {
+                    "id": "route-1",
+                    "label": "Rackspace Core",
+                    "execution_target": "rackspace_core",
+                    "destination_target": "",
+                    "provider_config": {"account_number": "1781738"},
+                    "enabled": True,
+                    "position": 1,
+                }
+            ],
+        },
+    }
+
+    with (
+        patch("api.api.recipes._validate_ingredient_ids", new=_validate_ingredients),
+        patch("api.api.recipes._validate_effective_communications", new=AsyncMock()),
+        patch(
+            "api.api.recipes.build_recipe_local_policy_step_specs",
+            return_value=([], []),
+        ),
+        patch("api.api.recipes._serialize_recipe", new=AsyncMock(return_value=serialized_recipe)),
+    ):
+        response = client.post(
+            "/api/v1/recipes/",
+            json={
+                "name": "filesystem-response",
+                "description": "Example workflow",
+                "enabled": True,
+                "clear_timeout_sec": 300,
+                "communications": {
+                    "mode": "local",
+                    "routes": [
+                        {
+                            "label": "Rackspace Core",
+                            "execution_target": "rackspace_core",
+                            "destination_target": "",
+                            "provider_config": {"account_number": "1781738"},
+                            "enabled": True,
+                            "position": 1,
+                        }
+                    ],
+                },
+                "recipe_ingredients": [
+                    {
+                        "ingredient_id": 12,
+                        "step_order": 1,
+                        "on_success": "continue",
+                        "parallel_group": 0,
+                        "depth": 0,
+                        "execution_parameters_override": None,
+                        "run_phase": "firing",
+                        "run_condition": "always",
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == 42

@@ -195,18 +195,17 @@ async def create_recipe(
     visible_step_specs = _step_specs_from_payload(
         [item.model_dump() for item in recipe.recipe_ingredients]
     )
-    await _validate_ingredient_ids(db, step_specs=visible_step_specs)
-
     communications_mode = recipe.communications.mode
     local_routes = normalize_routes(_communications_payload_routes(recipe) or [])
-    await _validate_effective_communications(
-        db,
-        enabled=recipe.enabled,
-        communications_mode=communications_mode,
-        local_routes=local_routes,
-    )
 
     async with db.begin():
+        await _validate_ingredient_ids(db, step_specs=visible_step_specs)
+        await _validate_effective_communications(
+            db,
+            enabled=recipe.enabled,
+            communications_mode=communications_mode,
+            local_routes=local_routes,
+        )
         result = await db.execute(select(Recipe).where(Recipe.name == recipe.name))
         existing = result.scalars().first()
         if existing:
