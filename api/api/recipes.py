@@ -58,10 +58,18 @@ def _recipe_to_step_spec(step: RecipeIngredient) -> dict[str, Any]:
     }
 
 
-def _recipe_ingredient_row(*, recipe_id: int, spec: dict[str, Any]) -> RecipeIngredient:
+def _recipe_ingredient_row(
+    *,
+    recipe_id: int,
+    spec: dict[str, Any],
+    ingredient_id: int | None = None,
+) -> RecipeIngredient:
+    resolved_ingredient_id = ingredient_id or spec.get("ingredient_id")
+    if resolved_ingredient_id is None:
+        raise KeyError("ingredient_id")
     return RecipeIngredient(
         recipe_id=recipe_id,
-        ingredient_id=spec["ingredient_id"],
+        ingredient_id=resolved_ingredient_id,
         step_order=spec["step_order"],
         on_success=spec["on_success"],
         parallel_group=spec["parallel_group"],
@@ -249,7 +257,13 @@ async def create_recipe(
                 )
                 db.add(ingredient)
                 await db.flush()
-                db.add(_recipe_ingredient_row(recipe_id=db_recipe.id, spec=spec))
+                db.add(
+                    _recipe_ingredient_row(
+                        recipe_id=db_recipe.id,
+                        spec=spec,
+                        ingredient_id=ingredient.id,
+                    )
+                )
 
     result = await db.execute(_recipe_query().where(Recipe.name == recipe.name))
     db_recipe = result.unique().scalars().first()
@@ -406,7 +420,13 @@ async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession 
                     )
                     db.add(ingredient)
                     await db.flush()
-                    db.add(_recipe_ingredient_row(recipe_id=recipe.id, spec=managed))
+                    db.add(
+                        _recipe_ingredient_row(
+                            recipe_id=recipe.id,
+                            spec=managed,
+                            ingredient_id=ingredient.id,
+                        )
+                    )
                     continue
                 db.add(_recipe_ingredient_row(recipe_id=recipe.id, spec=spec))
             await db.flush()

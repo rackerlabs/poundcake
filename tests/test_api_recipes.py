@@ -369,3 +369,232 @@ def test_recipe_create_validates_ingredients_inside_transaction(client, mock_db)
     assert len(queued_steps) == 1
     assert queued_steps[0].recipe_id == 42
     assert queued_steps[0].ingredient_id == 12
+
+
+def test_recipe_create_local_communications_use_created_managed_ingredient_ids(client, mock_db):
+    mock_db.begin = Mock(return_value=_TrackingBeginContext(mock_db))
+    created_recipe: dict[str, Recipe] = {}
+    created_managed_ingredients: list[Ingredient] = []
+    queued_steps: list[RecipeIngredient] = []
+
+    def _add(obj):
+        if isinstance(obj, Recipe) and obj.id is None:
+            created_recipe["recipe"] = obj
+        elif isinstance(obj, Ingredient):
+            created_managed_ingredients.append(obj)
+        elif isinstance(obj, RecipeIngredient):
+            queued_steps.append(obj)
+
+    async def _flush():
+        recipe_obj = created_recipe.get("recipe")
+        if recipe_obj is not None and recipe_obj.id is None:
+            recipe_obj.id = 42
+        next_id = 200
+        for ingredient in created_managed_ingredients:
+            if ingredient.id is None:
+                ingredient.id = next_id
+                next_id += 1
+
+    mock_db.add = Mock(side_effect=_add)
+    mock_db.flush = AsyncMock(side_effect=_flush)
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=None),
+            ScalarResult(first=SimpleNamespace(id=42, name="filesystem-response")),
+        ]
+    )
+
+    managed_spec = {
+        "execution_target": "rackspace_core",
+        "destination_target": "",
+        "task_key_template": "pcmcomms.recipe.42.route-1.open",
+        "execution_engine": "bakery",
+        "execution_purpose": "comms",
+        "execution_payload": {"context": {"source": "poundcake"}},
+        "execution_parameters": {"operation": "open"},
+        "is_default": False,
+        "is_blocking": False,
+        "expected_duration_sec": 15,
+        "timeout_duration_sec": 120,
+        "retry_count": 1,
+        "retry_delay": 5,
+        "on_failure": "continue",
+        "step_order": 1010,
+        "run_phase": "firing",
+        "run_condition": "always",
+        "on_success": "continue",
+        "parallel_group": 0,
+        "depth": 0,
+        "execution_parameters_override": None,
+    }
+
+    serialized_recipe = {
+        "id": 42,
+        "name": "filesystem-response",
+        "description": "Example workflow",
+        "enabled": True,
+        "clear_timeout_sec": 300,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "deleted": False,
+        "deleted_at": None,
+        "recipe_ingredients": [],
+        "communications": {
+            "mode": "local",
+            "effective_source": "local",
+            "routes": [],
+        },
+    }
+
+    with (
+        patch("api.api.recipes._validate_ingredient_ids", new=AsyncMock()),
+        patch("api.api.recipes._validate_effective_communications", new=AsyncMock()),
+        patch(
+            "api.api.recipes.build_recipe_local_policy_step_specs",
+            return_value=([], [managed_spec]),
+        ),
+        patch("api.api.recipes._serialize_recipe", new=AsyncMock(return_value=serialized_recipe)),
+    ):
+        response = client.post(
+            "/api/v1/recipes/",
+            json={
+                "name": "filesystem-response",
+                "description": "Example workflow",
+                "enabled": True,
+                "clear_timeout_sec": 300,
+                "communications": {
+                    "mode": "local",
+                    "routes": [
+                        {
+                            "label": "Rackspace Core",
+                            "execution_target": "rackspace_core",
+                            "destination_target": "",
+                            "provider_config": {"account_number": "1781738"},
+                            "enabled": True,
+                            "position": 1,
+                        }
+                    ],
+                },
+                "recipe_ingredients": [
+                    {
+                        "ingredient_id": 12,
+                        "step_order": 1,
+                        "on_success": "continue",
+                        "parallel_group": 0,
+                        "depth": 0,
+                        "execution_parameters_override": None,
+                        "run_phase": "firing",
+                        "run_condition": "always",
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 201
+    assert len(created_managed_ingredients) == 1
+    assert len(queued_steps) == 2
+    assert [item.ingredient_id for item in queued_steps] == [12, 200]
+    assert queued_steps[1].step_order == 1010
+
+
+def test_recipe_update_local_communications_use_created_managed_ingredient_ids(client, mock_db):
+    recipe = _make_recipe()
+    created_managed_ingredients: list[Ingredient] = []
+
+    def _add(obj):
+        if isinstance(obj, Ingredient):
+            created_managed_ingredients.append(obj)
+        elif isinstance(obj, RecipeIngredient):
+            recipe.recipe_ingredients.append(obj)
+
+    async def _flush():
+        next_id = 300
+        for ingredient in created_managed_ingredients:
+            if ingredient.id is None:
+                ingredient.id = next_id
+                next_id += 1
+
+    mock_db.add = Mock(side_effect=_add)
+    mock_db.flush = AsyncMock(side_effect=_flush)
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=recipe),
+            ScalarResult(first=recipe),
+        ]
+    )
+
+    managed_spec = {
+        "execution_target": "discord",
+        "destination_target": "",
+        "task_key_template": "pcmcomms.recipe.9.route-1.notify",
+        "execution_engine": "bakery",
+        "execution_purpose": "comms",
+        "execution_payload": {"context": {"source": "poundcake"}},
+        "execution_parameters": {"operation": "notify"},
+        "is_default": False,
+        "is_blocking": False,
+        "expected_duration_sec": 15,
+        "timeout_duration_sec": 120,
+        "retry_count": 1,
+        "retry_delay": 5,
+        "on_failure": "continue",
+        "step_order": 1010,
+        "run_phase": "firing",
+        "run_condition": "always",
+        "on_success": "continue",
+        "parallel_group": 0,
+        "depth": 0,
+        "execution_parameters_override": None,
+    }
+
+    serialized_recipe = {
+        "id": 9,
+        "name": "node-filesystem-workflow",
+        "description": "Disk response",
+        "enabled": True,
+        "clear_timeout_sec": 300,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "deleted": False,
+        "deleted_at": None,
+        "recipe_ingredients": [],
+        "communications": {
+            "mode": "local",
+            "effective_source": "local",
+            "routes": [],
+        },
+    }
+
+    with (
+        patch("api.api.recipes._validate_effective_communications", new=AsyncMock()),
+        patch("api.api.recipes.delete_recipe_ingredients_safely", new=AsyncMock(return_value=None)),
+        patch(
+            "api.api.recipes.build_recipe_local_policy_step_specs",
+            return_value=([], [managed_spec]),
+        ),
+        patch("api.api.recipes._serialize_recipe", new=AsyncMock(return_value=serialized_recipe)),
+    ):
+        response = client.patch(
+            "/api/v1/recipes/9",
+            json={
+                "communications": {
+                    "mode": "local",
+                    "routes": [
+                        {
+                            "label": "Discord",
+                            "execution_target": "discord",
+                            "destination_target": "",
+                            "provider_config": {},
+                            "enabled": True,
+                            "position": 1,
+                        }
+                    ],
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(created_managed_ingredients) == 1
+    assert len(recipe.recipe_ingredients) == 2
+    assert [item.ingredient_id for item in recipe.recipe_ingredients] == [11, 300]
+    assert recipe.recipe_ingredients[1].step_order == 1010
