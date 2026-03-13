@@ -439,10 +439,10 @@ async def ensure_global_policy_recipe(db: AsyncSession) -> Recipe:
             deleted=False,
             deleted_at=None,
             updated_at=now,
+            recipe_ingredients=[],
         )
         db.add(recipe)
         await db.flush()
-        recipe.recipe_ingredients = []
     else:
         recipe.description = f"{MANAGED_DESCRIPTION_GLOBAL} Global communications policy"
         recipe.enabled = True
@@ -618,10 +618,10 @@ async def sync_fallback_policy_recipe(
             deleted=False,
             deleted_at=None,
             updated_at=now,
+            recipe_ingredients=[],
         )
         db.add(recipe)
         await db.flush()
-        recipe.recipe_ingredients = []
     else:
         recipe.description = f"{MANAGED_DESCRIPTION_FALLBACK} Fallback communications policy"
         recipe.deleted = False

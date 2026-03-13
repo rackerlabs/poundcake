@@ -180,7 +180,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.initContainers[2].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.120
+          value: ghcr.io/rackerlabs/poundcake:2.0.121
         documentIndex: 8
 
   - it: supports immutable digest image references for poundcake-bootstrap job
