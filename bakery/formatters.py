@@ -114,7 +114,11 @@ def _build_fallback_canonical(action: str, payload: dict[str, Any]) -> dict[str,
             "label": route_label,
             "execution_target": _text(context.get("provider_type")),
             "destination_target": _text(context.get("destination_target")),
-            "provider_config": context.get("provider_config") if isinstance(context.get("provider_config"), dict) else {},
+            "provider_config": (
+                context.get("provider_config")
+                if isinstance(context.get("provider_config"), dict)
+                else {}
+            ),
         },
         "order": {
             "id": context.get("order_id"),
@@ -142,7 +146,9 @@ def _build_fallback_canonical(action: str, payload: dict[str, Any]) -> dict[str,
         },
         "links": _dedupe_links(links),
         "text": {
-            "headline": _text(payload.get("title") or payload.get("message") or payload.get("comment")),
+            "headline": _text(
+                payload.get("title") or payload.get("message") or payload.get("comment")
+            ),
             "summary": _text(payload.get("description") or annotations.get("summary")),
             "detail": _text(
                 payload.get("message")
@@ -166,11 +172,19 @@ def canonical_from_payload(action: str, payload: dict[str, Any]) -> dict[str, An
 def provider_config_from_context(provider: str, payload: dict[str, Any]) -> dict[str, Any]:
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
     provider_config = (
-        dict(context.get("provider_config")) if isinstance(context.get("provider_config"), dict) else {}
+        dict(context.get("provider_config"))
+        if isinstance(context.get("provider_config"), dict)
+        else {}
     )
     legacy_context = {
         "rackspace_core": (
-            ("account_number", context.get("account_number") or context.get("accountNumber") or context.get("coreAccountID") or context.get("rackspace_com_coreAccountID")),
+            (
+                "account_number",
+                context.get("account_number")
+                or context.get("accountNumber")
+                or context.get("coreAccountID")
+                or context.get("rackspace_com_coreAccountID"),
+            ),
             ("queue", context.get("queue") or context.get("coreQueue")),
             ("subcategory", context.get("subcategory") or context.get("coreSubcategory")),
             ("source", context.get("source")),
@@ -222,7 +236,11 @@ def _title_from_canonical(canonical: dict[str, Any]) -> str:
     text = canonical.get("text") if isinstance(canonical.get("text"), dict) else {}
     alert = canonical.get("alert") if isinstance(canonical.get("alert"), dict) else {}
     headline = _text(text.get("headline"))
-    summary = _text(alert.get("annotations", {}).get("summary") if isinstance(alert.get("annotations"), dict) else "")
+    summary = _text(
+        alert.get("annotations", {}).get("summary")
+        if isinstance(alert.get("annotations"), dict)
+        else ""
+    )
     base = summary or _text(alert.get("group_name")) or headline or "PoundCake communication"
     instance = _text(alert.get("instance"))
     if instance:
@@ -372,7 +390,9 @@ def _render_adf_sections(model: dict[str, Any]) -> dict[str, Any]:
         )
         content.extend(_adf_paragraph(line) for line in model["overview"])
     if model["links"]:
-        content.append({"type": "heading", "attrs": {"level": 3}, "content": _adf_text_nodes("Links")})
+        content.append(
+            {"type": "heading", "attrs": {"level": 3}, "content": _adf_text_nodes("Links")}
+        )
         content.append(
             {
                 "type": "bulletList",
@@ -405,10 +425,7 @@ def _render_adf_sections(model: dict[str, Any]) -> dict[str, Any]:
             {
                 "type": "bulletList",
                 "content": [
-                    {
-                        "type": "listItem",
-                        "content": [_adf_paragraph(f"{label}: {value}")]
-                    }
+                    {"type": "listItem", "content": [_adf_paragraph(f"{label}: {value}")]}
                     for label, value in model["metadata"]
                 ],
             }
@@ -445,7 +462,10 @@ def render_provider_content(provider: str, action: str, payload: dict[str, Any])
     canonical = canonical_from_payload(action, payload)
     model = _section_model(canonical, action)
     source = _text(payload.get("source") or canonical.get("event", {}).get("source") or "poundcake")
-    visibility = _text(payload.get("visibility") or canonical.get("route", {}).get("provider_config", {}).get("visibility"))
+    visibility = _text(
+        payload.get("visibility")
+        or canonical.get("route", {}).get("provider_config", {}).get("visibility")
+    )
 
     if provider == "rackspace_core":
         rendered = _render_bbcode_sections(model)
