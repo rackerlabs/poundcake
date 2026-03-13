@@ -15,6 +15,7 @@ export interface CommunicationRouteRecord {
   label: string;
   execution_target: string;
   destination_target: string;
+  provider_config: Record<string, unknown>;
   enabled: boolean;
   position: number;
 }

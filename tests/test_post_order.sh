@@ -54,7 +54,8 @@ payload=$(cat <<JSON
     "instance": "localhost:9090"
   },
   "annotations": {
-    "summary": "Automated manual order test"
+    "summary": "Automated manual order test",
+    "description": "Automated manual order test payload."
   },
   "raw_data": {
     "status": "firing",
@@ -65,7 +66,8 @@ payload=$(cat <<JSON
       "instance": "localhost:9090"
     },
     "annotations": {
-      "summary": "Automated manual order test"
+      "summary": "Automated manual order test",
+      "description": "Automated manual order test payload."
     },
     "startsAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "endsAt": null,

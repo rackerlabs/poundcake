@@ -103,7 +103,10 @@ post_webhook() {
         "severity": "warning",
         "instance": "localhost:9090"
       },
-      "annotations": {"summary": "Recipe reuse test"},
+      "annotations": {
+        "summary": "Recipe reuse test",
+        "description": "Recipe reuse test payload."
+      },
       "startsAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
       "endsAt": null,
       "generatorURL": "http://prometheus:9090/graph"

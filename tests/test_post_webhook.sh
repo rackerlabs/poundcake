@@ -58,7 +58,8 @@ payload=$(cat <<JSON
         "instance": "localhost:9090"
       },
       "annotations": {
-        "summary": "Automated webhook test"
+        "summary": "Automated webhook test",
+        "description": "Automated webhook test payload for contract validation."
       },
       "startsAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
       "endsAt": null,

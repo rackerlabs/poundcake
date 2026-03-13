@@ -19,7 +19,7 @@ class DiscordMixer(BaseMixer):
 
     @staticmethod
     def _message(data: Dict[str, Any]) -> str:
-        for key in ("message", "comment", "description", "title"):
+        for key in ("content", "message", "comment", "description", "title"):
             value = data.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
@@ -30,8 +30,12 @@ class DiscordMixer(BaseMixer):
             return {"success": False, "error": "Discord webhook URL not configured"}
         if action == "search":
             return {"success": False, "error": "Discord mixer does not support search"}
+        body: Dict[str, Any] = {"content": self._message(data)}
+        embeds = data.get("embeds")
+        if isinstance(embeds, list) and embeds:
+            body["embeds"] = embeds
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(self.webhook_url, json={"content": self._message(data)})
+            response = await client.post(self.webhook_url, json=body)
             response.raise_for_status()
         return {"success": True, "ticket_id": str(data.get("ticket_id") or "discord-message")}
 

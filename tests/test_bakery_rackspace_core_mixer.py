@@ -171,7 +171,6 @@ async def test_add_comment_uses_add_message_with_numeric_source_id(
             "ticket_id": "260309-12345",
             "comment": "[b]test[/b]",
             "visibility": "internal",
-            "has_bbcode": True,
         }
     )
 
@@ -228,7 +227,6 @@ async def test_close_ticket_adds_close_notes_before_status_change(
             "ticket_id": "260309-12345",
             "status": "confirmed_solved",
             "close_notes": "[b]resolved[/b]",
-            "has_bbcode": True,
         }
     )
 

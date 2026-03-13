@@ -14,6 +14,7 @@ from sqlalchemy import and_, or_
 
 from bakery.config import settings
 from bakery.database import SessionLocal
+from bakery.formatters import provider_config_from_context, render_provider_content
 from bakery.metrics import (
     BAKERY_DEAD_LETTER_TOTAL,
     BAKERY_OPERATION_LATENCY_SECONDS,
@@ -47,31 +48,21 @@ def _first_non_empty(*values: Any) -> Any:
     return None
 
 
-def _csv_to_list(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
-    return [str(value).strip()] if str(value).strip() else []
-
-
 def _build_provider_payload(
     action: str,
     ticket: Ticket,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     provider = str(ticket.provider_type or settings.active_provider or "").strip().lower()
-    context = payload.get("context") or {}
-    provider_payload = dict(context)
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    provider_payload = provider_config_from_context(provider, payload)
+
+    for key in ("source", "visibility"):
+        if context.get(key) is not None and key not in provider_payload:
+            provider_payload[key] = context.get(key)
 
     if action == "create":
-        labels = context.get("labels") if isinstance(context.get("labels"), dict) else {}
-        annotations = (
-            context.get("annotations") if isinstance(context.get("annotations"), dict) else {}
-        )
-
+        provider_payload.update(render_provider_content(provider, action, payload))
         provider_payload.setdefault("title", payload.get("title", ""))
         provider_payload.setdefault("description", payload.get("description", ""))
         if payload.get("severity") is not None:
@@ -80,172 +71,16 @@ def _build_provider_payload(
             provider_payload.setdefault("category", payload.get("category"))
         if payload.get("source") is not None:
             provider_payload.setdefault("source", payload.get("source"))
-        if payload.get("has_bbcode") is not None:
-            provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))
 
-        # Provider-specific label/annotation mappings for generic PoundCake requests.
-        if provider == "servicenow":
-            urgency = _first_non_empty(
-                provider_payload.get("urgency"),
-                provider_payload.get("serviceNowUrgency"),
-                labels.get("serviceNowUrgency"),
-                annotations.get("serviceNowUrgency"),
-            )
-            if urgency is not None:
-                provider_payload.setdefault("urgency", str(urgency))
-
-            impact = _first_non_empty(
-                provider_payload.get("impact"),
-                provider_payload.get("serviceNowImpact"),
-                labels.get("serviceNowImpact"),
-                annotations.get("serviceNowImpact"),
-            )
-            if impact is not None:
-                provider_payload.setdefault("impact", str(impact))
-
-        if provider == "jira":
-            project_key = _first_non_empty(
-                provider_payload.get("project_key"),
-                provider_payload.get("jiraProjectKey"),
-                labels.get("jiraProjectKey"),
-                annotations.get("jiraProjectKey"),
-            )
-            if project_key is not None:
-                provider_payload.setdefault("project_key", str(project_key))
-
-            issue_type = _first_non_empty(
-                provider_payload.get("issue_type"),
-                provider_payload.get("jiraIssueType"),
-                labels.get("jiraIssueType"),
-                annotations.get("jiraIssueType"),
-            )
-            if issue_type is not None:
-                provider_payload.setdefault("issue_type", str(issue_type))
-
-        if provider == "github":
-            owner = _first_non_empty(
-                provider_payload.get("owner"),
-                provider_payload.get("githubOwner"),
-                labels.get("githubOwner"),
-                annotations.get("githubOwner"),
-            )
-            if owner is not None:
-                provider_payload.setdefault("owner", str(owner))
-
-            repo = _first_non_empty(
-                provider_payload.get("repo"),
-                provider_payload.get("githubRepo"),
-                labels.get("githubRepo"),
-                annotations.get("githubRepo"),
-            )
-            if repo is not None:
-                provider_payload.setdefault("repo", str(repo))
-
-            if "labels" not in provider_payload:
-                gh_labels = _first_non_empty(
-                    provider_payload.get("githubLabels"),
-                    labels.get("githubLabels"),
-                    annotations.get("githubLabels"),
-                )
-                parsed = _csv_to_list(gh_labels)
-                if parsed:
-                    provider_payload["labels"] = parsed
-
-            if "assignees" not in provider_payload:
-                assignees = _first_non_empty(
-                    provider_payload.get("githubAssignees"),
-                    labels.get("githubAssignees"),
-                    annotations.get("githubAssignees"),
-                )
-                parsed = _csv_to_list(assignees)
-                if parsed:
-                    provider_payload["assignees"] = parsed
-
-        if provider == "pagerduty":
-            service_id = _first_non_empty(
-                provider_payload.get("service_id"),
-                provider_payload.get("pagerDutyServiceId"),
-                labels.get("pagerDutyServiceId"),
-                annotations.get("pagerDutyServiceId"),
-            )
-            if service_id is not None:
-                provider_payload.setdefault("service_id", str(service_id))
-
-            from_email = _first_non_empty(
-                provider_payload.get("from_email"),
-                provider_payload.get("pagerDutyFromEmail"),
-                labels.get("pagerDutyFromEmail"),
-                annotations.get("pagerDutyFromEmail"),
-            )
-            if from_email is not None:
-                provider_payload.setdefault("from_email", str(from_email))
-
-            urgency = _first_non_empty(
-                provider_payload.get("urgency"),
-                provider_payload.get("pagerDutyUrgency"),
-                labels.get("pagerDutyUrgency"),
-                annotations.get("pagerDutyUrgency"),
-            )
-            if urgency is not None:
-                provider_payload.setdefault("urgency", str(urgency))
-
-        # Rackspace Core expects account_number/queue/subcategory/subject/body.
         if provider == "rackspace_core":
-            account_number = (
-                provider_payload.get("account_number")
-                or provider_payload.get("accountNumber")
-                or provider_payload.get("coreAccountID")
-                or provider_payload.get("rackspace_com_coreAccountID")
-                or labels.get("account_number")
-                or labels.get("accountNumber")
-                or labels.get("coreAccountID")
-                or labels.get("rackspace_com_coreAccountID")
-                or annotations.get("account_number")
-                or annotations.get("accountNumber")
-                or annotations.get("coreAccountID")
-                or annotations.get("rackspace_com_coreAccountID")
-            )
-            if account_number:
-                provider_payload.setdefault("account_number", str(account_number))
-
             provider_payload.setdefault("subject", payload.get("title", ""))
             provider_payload.setdefault("body", payload.get("description", ""))
-
-            queue = (
-                provider_payload.get("queue")
-                or provider_payload.get("coreQueue")
-                or labels.get("coreQueue")
-                or annotations.get("coreQueue")
-            )
-            if queue:
-                provider_payload.setdefault("queue", str(queue))
-
-            subcategory = (
-                provider_payload.get("subcategory")
-                or provider_payload.get("coreSubcategory")
-                or labels.get("coreSubcategory")
-                or annotations.get("coreSubcategory")
-            )
-            if subcategory:
-                provider_payload.setdefault("subcategory", str(subcategory))
-
             if settings.rackspace_core_default_queue:
                 provider_payload.setdefault("queue", settings.rackspace_core_default_queue)
             if settings.rackspace_core_default_subcategory:
                 provider_payload.setdefault(
                     "subcategory", settings.rackspace_core_default_subcategory
                 )
-        if provider in {"teams", "discord"}:
-            provider_payload.setdefault(
-                "message",
-                _first_non_empty(
-                    payload.get("message"),
-                    payload.get("comment"),
-                    payload.get("description"),
-                    payload.get("title"),
-                )
-                or "PoundCake communication update.",
-            )
         return provider_payload
 
     if ticket.provider_ticket_id:
@@ -260,9 +95,11 @@ def _build_provider_payload(
 
     if action == "update":
         if provider in {"teams", "discord"}:
+            provider_payload.update(render_provider_content(provider, action, payload))
             provider_payload.setdefault(
                 "message",
                 _first_non_empty(
+                    provider_payload.get("message"),
                     payload.get("message"),
                     payload.get("comment"),
                     payload.get("description"),
@@ -284,10 +121,12 @@ def _build_provider_payload(
         return provider_payload
 
     if action == "comment":
+        provider_payload.update(render_provider_content(provider, action, payload))
         if provider in {"teams", "discord"}:
             provider_payload.setdefault(
                 "message",
                 _first_non_empty(
+                    provider_payload.get("message"),
                     payload.get("comment"),
                     payload.get("message"),
                     payload.get("description"),
@@ -297,8 +136,6 @@ def _build_provider_payload(
             )
             return provider_payload
         provider_payload.setdefault("comment", payload.get("comment", ""))
-        if payload.get("has_bbcode") is not None:
-            provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))
         if payload.get("visibility") is not None:
             provider_payload.setdefault("visibility", payload.get("visibility"))
         if payload.get("source") is not None:
@@ -306,10 +143,12 @@ def _build_provider_payload(
         return provider_payload
 
     if action == "close":
+        provider_payload.update(render_provider_content(provider, action, payload))
         if provider in {"teams", "discord"}:
             provider_payload.setdefault(
                 "message",
                 _first_non_empty(
+                    provider_payload.get("message"),
                     payload.get("message"),
                     payload.get("comment"),
                     payload.get("resolution_notes"),
@@ -327,8 +166,6 @@ def _build_provider_payload(
                     settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"
                 )
             provider_payload.setdefault("status", str(status_hint).replace("_", " "))
-        if payload.get("has_bbcode") is not None:
-            provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))
         if payload.get("resolution_notes") is not None:
             provider_payload.setdefault("close_notes", payload.get("resolution_notes"))
         if payload.get("resolution_code") is not None:

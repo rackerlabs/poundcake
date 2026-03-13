@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.logging import get_logger
-from api.schemas.schemas import WebhookResponse
+from api.schemas.schemas import AlertmanagerWebhookRequest, WebhookResponse
 from api.services.pre_heat import pre_heat
 
 router = APIRouter()
@@ -20,21 +20,24 @@ logger = get_logger(__name__)
 
 @router.post("/webhook", response_model=WebhookResponse, status_code=202)
 async def alertmanager_webhook(
-    request: Request, payload: dict = Body(...), db: AsyncSession = Depends(get_db)
+    request: Request,
+    payload: AlertmanagerWebhookRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
 ) -> WebhookResponse:
     """Entry point for Alertmanager webhooks. Handled by pre_heat service.
 
     Returns 202 Accepted - webhook received and queued for asynchronous processing.
     """
     req_id = request.state.req_id
-    alert_count = len(payload.get("alerts", []))
+    payload_dict = payload.model_dump()
+    alert_count = len(payload_dict.get("alerts", []))
 
     logger.info(
         "Received webhook from Alertmanager",
         extra={"req_id": req_id, "alert_count": alert_count},
     )
 
-    result = await pre_heat(payload, db, req_id)
+    result = await pre_heat(payload_dict, db, req_id)
 
     logger.info(
         "Webhook processed successfully",

@@ -119,6 +119,7 @@ def test_recipe_update_replaces_workflow_steps(client, mock_db):
         label="Primary teams route",
         execution_target="teams",
         destination_target="ops-alerts",
+        provider_config={},
         enabled=True,
         position=1,
     )

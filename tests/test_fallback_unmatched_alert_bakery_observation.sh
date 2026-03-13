@@ -32,7 +32,7 @@ order_payload=$(jq -n \
       severity: "warning",
       instance: "localhost:9090"
     },
-    annotations: {summary: "Observe fallback Bakery call path"},
+    annotations: {summary: "Observe fallback Bakery call path", description: "Observe fallback Bakery call path end to end."},
     raw_data: {
       status: "firing",
       labels: {
@@ -41,7 +41,7 @@ order_payload=$(jq -n \
         severity: "warning",
         instance: "localhost:9090"
       },
-      annotations: {summary: "Observe fallback Bakery call path"},
+      annotations: {summary: "Observe fallback Bakery call path", description: "Observe fallback Bakery call path end to end."},
       startsAt: (now | todateiso8601),
       endsAt: null
     },

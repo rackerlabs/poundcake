@@ -440,7 +440,6 @@ class RackspaceCoreMixer(BaseMixer):
 
         source = data.get("source")
         severity = data.get("severity")
-        has_bbcode = bool(data.get("has_bbcode", True))
         classification_ids = await self._resolve_create_classification_ids(
             queue=queue,
             subcategory=subcategory,
@@ -464,7 +463,7 @@ class RackspaceCoreMixer(BaseMixer):
                 "method": "addTicket",
                 "args": [queue_id, subcategory_id, source_id, severity_id, subject, body],
                 "keyword_args": {
-                    "has_bbcode": has_bbcode,
+                    "has_bbcode": True,
                 },
                 "result_map": {
                     "number": "number",
@@ -588,7 +587,7 @@ class RackspaceCoreMixer(BaseMixer):
                     "args": [close_notes, source_id],
                     "keyword_args": {
                         "private": self._is_private_comment(data.get("visibility")),
-                        "has_bbcode": bool(data.get("has_bbcode", True)),
+                        "has_bbcode": True,
                     },
                 }
             ]
@@ -659,7 +658,7 @@ class RackspaceCoreMixer(BaseMixer):
                 "args": [comment, source_id],
                 "keyword_args": {
                     "private": self._is_private_comment(data.get("visibility")),
-                    "has_bbcode": bool(data.get("has_bbcode", True)),
+                    "has_bbcode": True,
                 },
             }
         ]

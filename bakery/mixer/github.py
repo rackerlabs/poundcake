@@ -138,6 +138,19 @@ class GitHubMixer(BaseMixer):
                 "error": "owner, repo, and ticket_id required for close",
             }
 
+        close_notes = data.get("close_notes")
+        if close_notes:
+            comment_result = await self._add_comment(
+                {
+                    "owner": owner,
+                    "repo": repo,
+                    "ticket_id": ticket_id,
+                    "comment": close_notes,
+                }
+            )
+            if not comment_result.get("success"):
+                return comment_result
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.patch(
                 f"{self.base_url}/repos/{owner}/{repo}/issues/{ticket_id}",

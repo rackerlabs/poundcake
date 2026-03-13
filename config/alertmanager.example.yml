@@ -9,6 +9,18 @@
 # IMPORTANT:
 # - Replace the namespace in URL (example uses `rackspace`).
 # - Replace INTERNAL_API_KEY_VALUE with PoundCake internal API key.
+# - Standardize alert rules on these required fields:
+#   labels.alertname
+#   labels.group_name
+#   labels.severity
+#   annotations.summary
+#   annotations.description
+# - Optional readability fields supported by PoundCake include:
+#   labels.instance, labels.service, labels.team, labels.environment,
+#   annotations.runbook_url, annotations.dashboard_url,
+#   annotations.playbook_url, annotations.investigation_url,
+#   annotations.silence_url, annotations.customer_impact,
+#   annotations.suggested_action
 
 global:
   resolve_timeout: 5m

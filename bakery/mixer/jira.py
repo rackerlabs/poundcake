@@ -55,6 +55,23 @@ class JiraMixer(BaseMixer):
 
     async def _create_issue(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new Jira issue."""
+        description = data.get("description", "")
+        if not isinstance(description, dict):
+            description = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": str(description),
+                            }
+                        ],
+                    }
+                ],
+            }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/rest/api/3/issue",
@@ -63,21 +80,7 @@ class JiraMixer(BaseMixer):
                     "fields": {
                         "project": {"key": data.get("project_key")},
                         "summary": data.get("title", ""),
-                        "description": {
-                            "type": "doc",
-                            "version": 1,
-                            "content": [
-                                {
-                                    "type": "paragraph",
-                                    "content": [
-                                        {
-                                            "type": "text",
-                                            "text": data.get("description", ""),
-                                        }
-                                    ],
-                                }
-                            ],
-                        },
+                        "description": description,
                         "issuetype": {"name": data.get("issue_type", "Task")},
                     }
                 },
@@ -116,6 +119,17 @@ class JiraMixer(BaseMixer):
         if not ticket_id:
             return {"success": False, "error": "ticket_id required for close"}
 
+        close_notes = data.get("close_notes")
+        if close_notes:
+            comment_result = await self._add_comment(
+                {
+                    "ticket_id": ticket_id,
+                    "comment": close_notes,
+                }
+            )
+            if not comment_result.get("success"):
+                return comment_result
+
         # Transition to closed status (typically ID 2)
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
@@ -138,22 +152,24 @@ class JiraMixer(BaseMixer):
                 "error": "ticket_id and comment required",
             }
 
+        body = comment
+        if not isinstance(body, dict):
+            body = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": str(comment)}],
+                    }
+                ],
+            }
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/rest/api/3/issue/{ticket_id}/comment",
                 auth=(self.username, self.api_token),
-                json={
-                    "body": {
-                        "type": "doc",
-                        "version": 1,
-                        "content": [
-                            {
-                                "type": "paragraph",
-                                "content": [{"type": "text", "text": comment}],
-                            }
-                        ],
-                    }
-                },
+                json={"body": body},
             )
             response.raise_for_status()
 

@@ -18,6 +18,7 @@ async def test_ensure_fallback_recipe_syncs_global_policy_routes() -> None:
             label="Primary teams route",
             execution_target="teams",
             destination_target="ops-alerts",
+            provider_config={},
             enabled=True,
             position=1,
         )

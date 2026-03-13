@@ -8,8 +8,7 @@ def _worker_source() -> str:
 
 def test_rackspace_account_number_mapping_supports_plain_label_name() -> None:
     source = _worker_source()
-    assert 'labels.get("account_number")' in source
-    assert 'annotations.get("account_number")' in source
+    assert "provider_config_from_context(provider, payload)" in source
 
 
 def test_worker_contains_dry_run_execution_path() -> None:
@@ -38,6 +37,6 @@ def test_rackspace_core_close_payload_defaults_to_confirm_solved() -> None:
     assert 'settings.bakery_rackspace_confirmed_solved_status or "confirmed solved"' in source
 
 
-def test_worker_propagates_has_bbcode_to_provider_payload() -> None:
+def test_worker_uses_renderer_layer_for_provider_payloads() -> None:
     source = _worker_source()
-    assert 'provider_payload.setdefault("has_bbcode", bool(payload.get("has_bbcode")))' in source
+    assert "render_provider_content(provider, action, payload)" in source

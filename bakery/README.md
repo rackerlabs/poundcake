@@ -208,24 +208,13 @@ All non-health endpoints require HMAC auth (`Authorization: HMAC <key_id>:<signa
 
 Rackspace Core uses the CTKAPI query endpoint. Authentication is token-based and handled transparently by the mixer.
 
-When PoundCake submits generic create payloads, Bakery maps fields for Rackspace Core as follows:
-- `subject` <- request `title`
-- `body` <- request `description`
-- `account_number` <- first non-empty value from:
-  - `context.labels.coreAccountID`
-  - `context.labels.rackspace_com_coreAccountID`
-  - `context.annotations.coreAccountID`
-  - `context.annotations.rackspace_com_coreAccountID`
-- `queue` <- first non-empty value from:
-  - `context.coreQueue`
-  - `context.labels.coreQueue`
-  - `context.annotations.coreQueue`
-  - fallback default from `RACKSPACE_CORE_DEFAULT_QUEUE`
-- `subcategory` <- first non-empty value from:
-  - `context.coreSubcategory`
-  - `context.labels.coreSubcategory`
-  - `context.annotations.coreSubcategory`
-  - fallback default from `RACKSPACE_CORE_DEFAULT_SUBCATEGORY`
+When PoundCake submits generic create payloads, Bakery renders provider-native BBCode in the mixer and maps fields as follows:
+- `subject` <- rendered ticket title
+- `body` <- rendered BBCode body
+- `account_number` <- `context.provider_config.account_number`
+- `queue` <- `context.provider_config.queue` or fallback default from `RACKSPACE_CORE_DEFAULT_QUEUE`
+- `subcategory` <- `context.provider_config.subcategory` or fallback default from `RACKSPACE_CORE_DEFAULT_SUBCATEGORY`
+- `source` <- `context.provider_config.source` or request `source`
 
 Defaults:
 - `RACKSPACE_CORE_DEFAULT_QUEUE=CloudBuilders Support`
@@ -301,26 +290,28 @@ Safety check:
 }
 ```
 
-## Alert Label Mapping by Mixer
+## Standardized Alert Payload and Mixer Route Config
 
-PoundCake remains provider-agnostic. The monitoring/operator side must provide provider-specific routing fields via alert labels (or annotations) so Bakery can translate requests for the active mixer.
+PoundCake remains provider-agnostic. Alertmanager payloads should stay descriptive and provider-neutral. Provider-specific routing belongs in the communications route configuration under `context.provider_config`, not in alert labels or annotations.
 
-Bakery inspects these keys from `context.labels` and `context.annotations` on create requests:
+| Mixer | Required create fields | `context.provider_config` keys |
+|------|-------------------------|--------------------------------|
+| `rackspace_core` | `account_number`, `queue`, `subcategory`, `subject`, `body` | `account_number`, optional `queue`, optional `subcategory`, optional `source`, optional `visibility` |
+| `servicenow` | none beyond generic payload (`title`, `description`) | optional `urgency`, optional `impact` |
+| `jira` | `project_key` | `project_key`, optional `issue_type`, optional `transition_id` |
+| `github` | `owner`, `repo` | `owner`, `repo`, optional `labels`, optional `assignees` |
+| `pagerduty` | `service_id`, `from_email` | `service_id`, `from_email`, optional `urgency` |
+| `teams` | none beyond generic payload (`message`) | none |
+| `discord` | none beyond generic payload (`message`) | none |
 
-| Mixer | Required create fields | Supported label/annotation keys |
-|------|-------------------------|----------------------------------|
-| `rackspace_core` | `account_number`, `queue`, `subcategory`, `subject`, `body` | `coreAccountID` or `rackspace_com_coreAccountID` -> `account_number`; `coreQueue` -> `queue`; `coreSubcategory` -> `subcategory` |
-| `servicenow` | none beyond generic payload (`title`, `description`) | `serviceNowUrgency` -> `urgency`; `serviceNowImpact` -> `impact` |
-| `jira` | `project_key` | `jiraProjectKey` -> `project_key`; `jiraIssueType` -> `issue_type` |
-| `github` | `owner`, `repo` | `githubOwner` -> `owner`; `githubRepo` -> `repo`; `githubLabels` -> `labels` (comma-separated allowed); `githubAssignees` -> `assignees` (comma-separated allowed) |
-| `pagerduty` | `service_id`, `from_email` | `pagerDutyServiceId` -> `service_id`; `pagerDutyFromEmail` -> `from_email`; `pagerDutyUrgency` -> `urgency` |
+See [docs/ALERTMANAGER_PAYLOAD_TEMPLATE.md](../docs/ALERTMANAGER_PAYLOAD_TEMPLATE.md) for the standardized webhook payload shape and alert-rule annotation template.
 
 Rackspace Core defaults:
-- If `coreQueue` is not provided, Bakery uses `RACKSPACE_CORE_DEFAULT_QUEUE` (default `CloudBuilders Support`).
-- If `coreSubcategory` is not provided, Bakery uses `RACKSPACE_CORE_DEFAULT_SUBCATEGORY` (default `Monitoring`).
+- If `queue` is not provided, Bakery uses `RACKSPACE_CORE_DEFAULT_QUEUE` (default `CloudBuilders Support`).
+- If `subcategory` is not provided, Bakery uses `RACKSPACE_CORE_DEFAULT_SUBCATEGORY` (default `Monitoring`).
 
 Rackspace Core preflight behavior:
-- If required fields are still missing after label/default mapping, Bakery logs the missing field list and marks the operation `dead_letter` without retrying.
+- If required fields are still missing after provider-config/default mapping, Bakery logs the missing field list and marks the operation `dead_letter` without retrying.
 
 Global preflight behavior:
 - Bakery validates required fields for the active mixer/action before any outbound provider call.
@@ -410,8 +401,8 @@ and Discord, then wire the corresponding `bakery.<provider>.existingSecret` valu
 | `RACKSPACE_CORE_VERIFY_SSL` | Rackspace Core | Verify TLS certificates for CTKAPI calls (`true` by default; set `false` only for controlled testing) |
 | `RACKSPACE_CORE_USERNAME` | Rackspace Core | Username |
 | `RACKSPACE_CORE_PASSWORD` | Rackspace Core | Password (Secret) |
-| `RACKSPACE_CORE_DEFAULT_QUEUE` | Rackspace Core | Default queue used when `coreQueue` is not provided (default: `CloudBuilders Support`) |
-| `RACKSPACE_CORE_DEFAULT_SUBCATEGORY` | Rackspace Core | Default subcategory used when `coreSubcategory` is not provided (default: `Monitoring`) |
+| `RACKSPACE_CORE_DEFAULT_QUEUE` | Rackspace Core | Default queue used when route `provider_config.queue` is not provided (default: `CloudBuilders Support`) |
+| `RACKSPACE_CORE_DEFAULT_SUBCATEGORY` | Rackspace Core | Default subcategory used when route `provider_config.subcategory` is not provided (default: `Monitoring`) |
 
 ## Deployment
 

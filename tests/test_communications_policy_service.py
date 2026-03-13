@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -105,3 +106,54 @@ async def test_sync_fallback_policy_recipe_first_create_seeds_empty_recipe_relat
     assert recipe.enabled is False
     assert recipe.recipe_ingredients == []
     replace_steps.assert_awaited_once_with(db, recipe=recipe, step_specs=[])
+
+
+def test_normalize_routes_preserves_provider_config_for_required_targets() -> None:
+    routes = communications_policy.normalize_routes(
+        [
+            {
+                "label": "Primary Core",
+                "execution_target": "rackspace_core",
+                "destination_target": "primary",
+                "provider_config": {
+                    "account_number": "1781738",
+                    "queue": "CloudBuilders Support",
+                    "subcategory": "Monitoring",
+                },
+                "enabled": True,
+                "position": 1,
+            }
+        ]
+    )
+
+    assert routes[0].provider_config["account_number"] == "1781738"
+
+
+def test_get_recipe_local_routes_hydrates_legacy_provider_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        communications_policy,
+        "get_settings",
+        lambda: SimpleNamespace(
+            catch_all_recipe_name="fallback-recipe",
+            rackspace_core_default_queue="CloudBuilders Support",
+            rackspace_core_default_subcategory="Monitoring",
+        ),
+    )
+
+    ingredient = SimpleNamespace(
+        execution_engine="bakery",
+        execution_purpose="comms",
+        execution_target="rackspace_core",
+        destination_target="primary",
+        task_key_template="legacy.core",
+        execution_payload={"context": {"coreAccountID": "1781738"}},
+    )
+    recipe_step = SimpleNamespace(ingredient=ingredient)
+    recipe = SimpleNamespace(recipe_ingredients=[recipe_step], name="filesystem-response")
+
+    routes = communications_policy.get_recipe_local_routes(recipe)
+
+    assert routes[0].provider_config["account_number"] == "1781738"
+    assert routes[0].provider_config["queue"] == "CloudBuilders Support"

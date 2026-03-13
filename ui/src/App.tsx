@@ -107,6 +107,7 @@ const communicationRouteSchema = z.object({
   label: z.string().min(1, "Route label is required"),
   execution_target: z.string().min(1, "Provider is required"),
   destination_target: z.string().optional(),
+  provider_config: z.record(z.any()).default({}),
   enabled: z.boolean(),
   position: z.coerce.number().min(1),
 });
@@ -1688,6 +1689,7 @@ function GlobalCommunicationsPage() {
         label: route.label,
         execution_target: route.execution_target,
         destination_target: route.destination_target || "",
+        provider_config: normalizeProviderConfigForForm(route.execution_target, route.provider_config),
         enabled: route.enabled,
         position: route.position,
       })),
@@ -1702,6 +1704,7 @@ function GlobalCommunicationsPage() {
           label: route.label,
           execution_target: route.execution_target,
           destination_target: route.destination_target || "",
+          provider_config: route.provider_config || {},
           enabled: route.enabled,
           position: index + 1,
         })),
@@ -1749,16 +1752,7 @@ function GlobalCommunicationsPage() {
               <button
                 className="ghost-button"
                 type="button"
-                onClick={() =>
-                  routes.append({
-                    id: crypto.randomUUID(),
-                    label: "",
-                    execution_target: "rackspace_core",
-                    destination_target: "",
-                    enabled: true,
-                    position: routes.fields.length + 1,
-                  })
-                }
+                onClick={() => routes.append({ ...emptyCommunicationRoute(), position: routes.fields.length + 1 })}
               >
                 Add route
               </button>
@@ -1788,7 +1782,11 @@ function GlobalCommunicationsPage() {
                         <FieldError message={form.formState.errors.routes?.[index]?.label?.message} />
                       </FormField>
                       <FormField label="Provider" help="Choose the communication provider or destination type such as rackspace_core, teams, or discord.">
-                        <select {...form.register(`routes.${index}.execution_target` as const)}>
+                        <select
+                          {...form.register(`routes.${index}.execution_target` as const, {
+                            onChange: () => form.setValue(`routes.${index}.provider_config` as any, {}),
+                          })}
+                        >
                           {communicationTargetOptions.map((target) => (
                             <option key={target} value={target}>
                               {target}
@@ -1808,6 +1806,11 @@ function GlobalCommunicationsPage() {
                         </label>
                       </FormField>
                     </div>
+                    <CommunicationRouteProviderConfigFields
+                      form={form as ReturnType<typeof useForm<any>>}
+                      basePath={`routes.${index}`}
+                      executionTarget={watchedRoutes[index]?.execution_target || field.execution_target}
+                    />
                   </div>
                 ))
               ) : (
@@ -1819,7 +1822,7 @@ function GlobalCommunicationsPage() {
               <div className="eyebrow">Policy preview</div>
               <p>
                 {enabledCount
-                  ? `${enabledCount} enabled route(s) will open on escalation, open then close after successful auto-remediation clears, and post clear updates after escalation clears.`
+                  ? `${enabledCount} enabled route(s) will open on escalation, open then close after successful auto-remediation clears, and post clear notifications after escalation clears.`
                   : "This global policy is empty. Enabled workflows must define workflow-specific communications to be valid."}
               </p>
             </div>
@@ -1841,7 +1844,7 @@ function GlobalCommunicationsPage() {
             },
             {
               label: "Fixed lifecycle",
-              description: "Global and local policies share the same runtime lifecycle: open on escalation, open plus close after successful resolve, and update only after escalation clears.",
+              description: "Global and local policies share the same runtime lifecycle: open on escalation, open plus close after successful resolve, and notify only after escalation clears.",
             },
             {
               label: "Any route type",
@@ -1932,6 +1935,7 @@ function WorkflowsPage() {
               label: route.label,
               execution_target: route.execution_target,
               destination_target: route.destination_target || "",
+              provider_config: normalizeProviderConfigForForm(route.execution_target, route.provider_config),
               enabled: route.enabled,
               position: route.position,
             }))
@@ -1982,6 +1986,7 @@ function WorkflowsPage() {
                   label: route.label,
                   execution_target: route.execution_target,
                   destination_target: route.destination_target || "",
+                  provider_config: route.provider_config || {},
                   enabled: route.enabled,
                   position: index + 1,
                 }))
@@ -2127,6 +2132,7 @@ function WorkflowsPage() {
                           </div>
                           <KeyValue label="Provider" value={route.execution_target} />
                           <KeyValue label="Destination" value={route.destination_target || "-"} />
+                          <KeyValue label="Route config" value={providerConfigSummary(route.execution_target, route.provider_config)} />
                         </div>
                       ))}
                     </div>
@@ -2145,11 +2151,7 @@ function WorkflowsPage() {
                         type="button"
                         onClick={() =>
                           communicationRoutes.append({
-                            id: crypto.randomUUID(),
-                            label: "",
-                            execution_target: "rackspace_core",
-                            destination_target: "",
-                            enabled: true,
+                            ...emptyCommunicationRoute(),
                             position: communicationRoutes.fields.length + 1,
                           })
                         }
@@ -2182,7 +2184,12 @@ function WorkflowsPage() {
                                 <FieldError message={form.formState.errors.communications_routes?.[index]?.label?.message} />
                               </FormField>
                               <FormField label="Provider" help="Provider or destination type such as rackspace_core, teams, or discord.">
-                                <select {...form.register(`communications_routes.${index}.execution_target` as const)}>
+                                <select
+                                  {...form.register(`communications_routes.${index}.execution_target` as const, {
+                                    onChange: () =>
+                                      form.setValue(`communications_routes.${index}.provider_config` as any, {}),
+                                  })}
+                                >
                                   {communicationTargetOptions.map((target) => (
                                     <option key={target} value={target}>
                                       {target}
@@ -2202,6 +2209,11 @@ function WorkflowsPage() {
                                 </label>
                               </FormField>
                             </div>
+                            <CommunicationRouteProviderConfigFields
+                              form={form as ReturnType<typeof useForm<any>>}
+                              basePath={`communications_routes.${index}`}
+                              executionTarget={watchedCommunicationRoutes[index]?.execution_target || field.execution_target}
+                            />
                           </div>
                         ))
                       ) : (
@@ -2357,7 +2369,7 @@ function WorkflowsPage() {
             },
             {
               label: "Lifecycle",
-              description: "Communications do not fire when the workflow starts. PoundCake opens routes on escalation, opens then closes after successful resolve, and posts clear updates after escalation clears.",
+              description: "Communications do not fire when the workflow starts. PoundCake opens routes on escalation, opens then closes after successful resolve, and posts clear notifications after escalation clears.",
             },
             {
               label: "Step scope",
@@ -3040,6 +3052,149 @@ function parseOptionalJson(value?: string, label?: string): Record<string, unkno
   } catch {
     throw new Error(`${label || "JSON"} must be a valid object.`);
   }
+}
+
+function normalizeProviderConfigForForm(
+  executionTarget: string,
+  providerConfig: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const config = { ...(providerConfig || {}) };
+  if (executionTarget === "github") {
+    if (Array.isArray(config.labels)) {
+      config.labels = config.labels.join(", ");
+    }
+    if (Array.isArray(config.assignees)) {
+      config.assignees = config.assignees.join(", ");
+    }
+  }
+  return config;
+}
+
+function emptyCommunicationRoute(executionTarget = "rackspace_core") {
+  return {
+    id: crypto.randomUUID(),
+    label: "",
+    execution_target: executionTarget,
+    destination_target: "",
+    provider_config: {},
+    enabled: true,
+    position: 1,
+  };
+}
+
+function providerConfigSummary(
+  executionTarget: string,
+  providerConfig: Record<string, unknown> | undefined,
+): string {
+  const config = providerConfig || {};
+  const pairs = Object.entries(config)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(",") : String(value)}`);
+  if (!pairs.length) {
+    return executionTarget === "teams" || executionTarget === "discord"
+      ? "No provider config required"
+      : "No provider config set";
+  }
+  return pairs.join(" | ");
+}
+
+function CommunicationRouteProviderConfigFields({
+  form,
+  basePath,
+  executionTarget,
+}: {
+  form: ReturnType<typeof useForm<any>>;
+  basePath: string;
+  executionTarget: string;
+}) {
+  const register = (suffix: string) => form.register(`${basePath}.provider_config.${suffix}` as any);
+
+  if (executionTarget === "rackspace_core") {
+    return (
+      <div className="grid-two">
+        <FormField label="Account number" help="Required Rackspace Core account number for this route.">
+          <input {...register("account_number")} placeholder="1781738" />
+        </FormField>
+        <FormField label="Queue" help="Optional Core queue. Bakery defaults still apply when this is blank.">
+          <input {...register("queue")} placeholder="CloudBuilders Support" />
+        </FormField>
+        <FormField label="Subcategory" help="Optional Core subcategory. Bakery defaults still apply when this is blank.">
+          <input {...register("subcategory")} placeholder="Monitoring" />
+        </FormField>
+        <FormField label="Source" help="Optional Core source label such as RunBook.">
+          <input {...register("source")} placeholder="RunBook" />
+        </FormField>
+      </div>
+    );
+  }
+
+  if (executionTarget === "servicenow") {
+    return (
+      <div className="grid-two">
+        <FormField label="Urgency" help="Optional ServiceNow urgency value.">
+          <input {...register("urgency")} placeholder="3" />
+        </FormField>
+        <FormField label="Impact" help="Optional ServiceNow impact value.">
+          <input {...register("impact")} placeholder="3" />
+        </FormField>
+      </div>
+    );
+  }
+
+  if (executionTarget === "jira") {
+    return (
+      <div className="grid-two">
+        <FormField label="Project key" help="Required Jira project key for this route.">
+          <input {...register("project_key")} placeholder="OPS" />
+        </FormField>
+        <FormField label="Issue type" help="Optional Jira issue type.">
+          <input {...register("issue_type")} placeholder="Task" />
+        </FormField>
+      </div>
+    );
+  }
+
+  if (executionTarget === "github") {
+    return (
+      <div className="grid-two">
+        <FormField label="Owner" help="Required GitHub org or user name.">
+          <input {...register("owner")} placeholder="rackerlabs" />
+        </FormField>
+        <FormField label="Repo" help="Required GitHub repository name.">
+          <input {...register("repo")} placeholder="poundcake" />
+        </FormField>
+        <FormField label="Labels" help="Optional comma-separated GitHub labels.">
+          <input {...register("labels")} placeholder="alert, monitoring" />
+        </FormField>
+        <FormField label="Assignees" help="Optional comma-separated GitHub assignees.">
+          <input {...register("assignees")} placeholder="octocat" />
+        </FormField>
+      </div>
+    );
+  }
+
+  if (executionTarget === "pagerduty") {
+    return (
+      <div className="grid-two">
+        <FormField label="Service ID" help="Required PagerDuty service id.">
+          <input {...register("service_id")} placeholder="PXXXXXX" />
+        </FormField>
+        <FormField label="From email" help="Required PagerDuty sender email.">
+          <input {...register("from_email")} placeholder="alerts@example.com" />
+        </FormField>
+        <FormField label="Urgency" help="Optional PagerDuty urgency override.">
+          <input {...register("urgency")} placeholder="high" />
+        </FormField>
+      </div>
+    );
+  }
+
+  return (
+    <div className="helper-card">
+      <strong>Provider config</strong>
+      <p>This provider does not require extra route configuration.</p>
+    </div>
+  );
 }
 
 function moveField(

@@ -1,4 +1,4 @@
-"""Shared communication routing and operation helpers."""
+"""Shared communication routing, contract, and operation helpers."""
 
 from __future__ import annotations
 
@@ -64,6 +64,58 @@ LEGACY_DESTINATION_TYPE_ALIASES = {
     "core": "rackspace_core",
 }
 
+ROUTE_PROVIDER_CONFIG_REQUIRED_FIELDS = {
+    "rackspace_core": {"account_number"},
+    "servicenow": set(),
+    "jira": {"project_key"},
+    "github": {"owner", "repo"},
+    "pagerduty": {"service_id", "from_email"},
+    "teams": set(),
+    "discord": set(),
+}
+
+ROUTE_PROVIDER_CONFIG_ALLOWED_FIELDS = {
+    "rackspace_core": {"account_number", "queue", "subcategory", "source", "visibility"},
+    "servicenow": {"urgency", "impact"},
+    "jira": {"project_key", "issue_type", "transition_id"},
+    "github": {"owner", "repo", "labels", "assignees"},
+    "pagerduty": {"service_id", "from_email", "urgency"},
+    "teams": set(),
+    "discord": set(),
+}
+
+ALERTMANAGER_REQUIRED_LABEL_FIELDS = {
+    "alertname",
+    "group_name",
+    "severity",
+}
+
+ALERTMANAGER_REQUIRED_ANNOTATION_FIELDS = {
+    "summary",
+    "description",
+}
+
+ALERTMANAGER_OPTIONAL_LABEL_FIELDS = {
+    "instance",
+    "service",
+    "team",
+    "environment",
+    "cluster",
+    "namespace",
+    "job",
+    "region",
+}
+
+ALERTMANAGER_OPTIONAL_ANNOTATION_FIELDS = {
+    "runbook_url",
+    "dashboard_url",
+    "playbook_url",
+    "investigation_url",
+    "silence_url",
+    "customer_impact",
+    "suggested_action",
+}
+
 
 def normalize_destination_type(value: str | None) -> str:
     raw = str(value or "").strip().lower()
@@ -72,6 +124,76 @@ def normalize_destination_type(value: str | None) -> str:
 
 def normalize_destination_target(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _normalize_csv_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _normalize_provider_config_value(key: str, value: Any) -> Any:
+    if key in {"labels", "assignees"}:
+        values = _normalize_csv_list(value)
+        return values
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip()
+    return text or None
+
+
+def route_provider_config_required_fields(execution_target: str | None) -> set[str]:
+    return ROUTE_PROVIDER_CONFIG_REQUIRED_FIELDS.get(
+        normalize_destination_type(execution_target), set()
+    )
+
+
+def route_provider_config_allowed_fields(execution_target: str | None) -> set[str]:
+    return ROUTE_PROVIDER_CONFIG_ALLOWED_FIELDS.get(
+        normalize_destination_type(execution_target), set()
+    )
+
+
+def normalize_route_provider_config(
+    execution_target: str | None,
+    provider_config: dict[str, Any] | None,
+    *,
+    require_required: bool = True,
+) -> dict[str, Any]:
+    target = normalize_destination_type(execution_target)
+    raw = provider_config if isinstance(provider_config, dict) else {}
+    allowed = route_provider_config_allowed_fields(target)
+    if target and target in DESTINATION_TYPES and not allowed and raw:
+        raise ValueError(f"{target} routes do not accept provider_config fields")
+
+    normalized: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key not in allowed:
+            raise ValueError(
+                f"provider_config.{key} is not supported for execution_target={target or 'unknown'}"
+            )
+        normalized_value = _normalize_provider_config_value(key, value)
+        if normalized_value in (None, [], ""):
+            continue
+        normalized[key] = normalized_value
+
+    if require_required:
+        missing = sorted(
+            field
+            for field in route_provider_config_required_fields(target)
+            if field not in normalized
+        )
+        if missing:
+            joined = ", ".join(missing)
+            raise ValueError(f"{target} provider_config requires: {joined}")
+    return normalized
 
 
 def normalize_communication_operation(value: Any) -> str:

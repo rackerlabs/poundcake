@@ -37,7 +37,7 @@ payload=$(jq -n \
       severity: "warning",
       instance: "localhost:9090"
     },
-    annotations: {summary: "Concurrent cook test"},
+    annotations: {summary: "Concurrent cook test", description: "Concurrent cook test payload."},
     raw_data: {
       status: "firing",
       labels: {
@@ -46,7 +46,7 @@ payload=$(jq -n \
         severity: "warning",
         instance: "localhost:9090"
       },
-      annotations: {summary: "Concurrent cook test"},
+      annotations: {summary: "Concurrent cook test", description: "Concurrent cook test payload."},
       startsAt: (now | todateiso8601),
       endsAt: null,
       generatorURL: "http://prometheus:9090/graph"

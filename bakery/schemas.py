@@ -17,7 +17,6 @@ class TicketCreateRequest(BaseModel):
     severity: Optional[str] = Field(default=None, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
     source: Optional[str] = Field(default=None, max_length=100)
-    has_bbcode: bool = Field(default=True)
     context: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -37,7 +36,6 @@ class TicketCommentRequest(BaseModel):
 
     comment: str = Field(..., min_length=1)
     visibility: Optional[str] = Field(default=None, max_length=50)
-    has_bbcode: bool = Field(default=True)
     context: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -47,7 +45,6 @@ class TicketCloseRequest(BaseModel):
     resolution_code: Optional[str] = Field(default=None, max_length=100)
     resolution_notes: Optional[str] = Field(default=None, max_length=4096)
     state: Optional[str] = Field(default="closed", max_length=50)
-    has_bbcode: bool = Field(default=True)
     context: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -117,7 +114,6 @@ class CommunicationNotifyRequest(BaseModel):
     message: Optional[str] = Field(default=None, min_length=1)
     comment: Optional[str] = Field(default=None, min_length=1)
     visibility: Optional[str] = Field(default=None, max_length=50)
-    has_bbcode: bool = Field(default=True)
     context: Dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")

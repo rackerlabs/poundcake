@@ -14,7 +14,11 @@ from sqlalchemy.orm import joinedload
 
 from api.core.config import get_settings
 from api.models.models import DishIngredient, Ingredient, Recipe, RecipeIngredient
-from api.services.communications import normalize_destination_target, normalize_destination_type
+from api.services.communications import (
+    normalize_destination_target,
+    normalize_destination_type,
+    normalize_route_provider_config,
+)
 
 MANAGED_TASK_PREFIX = "pcmcomms."
 MANAGED_RECIPE_NAME_GLOBAL = "pcm-policy-global"
@@ -26,13 +30,13 @@ MATCHED_ROUTE_EVENTS = (
     ("escalation_open", "open", "escalation", "always", 1000),
     ("resolved_success_open", "open", "resolving", "resolved_after_success", 2000),
     ("resolved_success_close", "close", "resolving", "resolved_after_success", 2001),
-    ("resolved_failure_update", "update", "resolving", "resolved_after_failure", 2100),
-    ("resolved_timeout_update", "update", "resolving", "resolved_after_timeout", 2200),
+    ("resolved_failure_notify", "notify", "resolving", "resolved_after_failure", 2100),
+    ("resolved_timeout_notify", "notify", "resolving", "resolved_after_timeout", 2200),
 )
 
 FALLBACK_ROUTE_EVENTS = (
     ("fallback_open", "open", "firing", "always", 1000),
-    ("fallback_update", "update", "resolving", "resolved_after_no_remediation", 2000),
+    ("fallback_notify", "notify", "resolving", "resolved_after_no_remediation", 2000),
 )
 
 
@@ -42,6 +46,7 @@ class CommunicationRoute:
     label: str
     execution_target: str
     destination_target: str
+    provider_config: dict[str, Any]
     enabled: bool
     position: int
 
@@ -149,6 +154,11 @@ def _route_from_metadata(metadata: dict[str, Any]) -> CommunicationRoute | None:
         or titleize_route(execution_target, metadata.get("destination_target")),
         execution_target=execution_target,
         destination_target=normalize_destination_target(metadata.get("destination_target")),
+        provider_config=normalize_route_provider_config(
+            execution_target,
+            metadata.get("provider_config"),
+            require_required=False,
+        ),
         enabled=bool(metadata.get("enabled", True)),
         position=int(metadata.get("position") or 0),
     )
@@ -182,6 +192,10 @@ def normalize_routes(
             or titleize_route(execution_target, destination_target),
             execution_target=execution_target,
             destination_target=destination_target,
+            provider_config=normalize_route_provider_config(
+                execution_target,
+                raw.get("provider_config"),
+            ),
             enabled=bool(raw.get("enabled", True)),
             position=position,
         )
@@ -209,44 +223,50 @@ def _managed_payload(
     owner_key: str,
     event_name: str,
 ) -> dict[str, Any]:
-    messages = {
-        "escalation_open": (
-            "Alert requires attention",
-            "PoundCake escalated this alert because automated remediation failed or timed out.",
-            "Alert requires attention. Automated remediation did not complete successfully.",
-        ),
-        "resolved_success_open": (
-            "Alert cleared after successful auto-remediation",
-            "PoundCake remediated this alert successfully and is closing the communication now that the alert has cleared.",
-            "Alert cleared after successful auto-remediation. Closing communication.",
-        ),
-        "resolved_success_close": (
-            "Alert resolved",
-            "PoundCake is closing this communication because the alert cleared after successful auto-remediation.",
-            "Alert resolved after successful auto-remediation. Closing communication.",
-        ),
-        "resolved_failure_update": (
-            "Alert cleared after escalation",
-            "The alert cleared after an escalated communication was already opened.",
-            "Alert cleared after escalation. Leaving communication open for the responder.",
-        ),
-        "resolved_timeout_update": (
-            "Alert cleared after timeout escalation",
-            "The alert cleared after automation timed out and a communication was already opened.",
-            "Alert cleared after timeout escalation. Leaving communication open for the responder.",
-        ),
-        "fallback_open": (
-            "Alert requires attention",
-            "PoundCake did not find a matching workflow for this alert and opened a communication for human response.",
-            "Alert requires attention. No matching workflow is configured for this alert.",
-        ),
-        "fallback_update": (
-            "Alert cleared",
-            "The unmatched alert has cleared after a fallback communication was already opened.",
-            "Alert cleared. Leaving the existing communication open for the responder.",
-        ),
-    }
-    title, description, message = messages[event_name]
+    semantic_text = {
+        "escalation_open": {
+            "headline": "Alert requires attention",
+            "summary": "PoundCake escalated this alert because automated remediation failed or timed out.",
+            "detail": "Automated remediation did not complete successfully.",
+            "resolution": "",
+        },
+        "resolved_success_open": {
+            "headline": "Alert cleared after successful auto-remediation",
+            "summary": "PoundCake remediated this alert successfully and is closing the communication now that the alert has cleared.",
+            "detail": "Alert cleared after successful auto-remediation.",
+            "resolution": "Closing communication after successful auto-remediation.",
+        },
+        "resolved_success_close": {
+            "headline": "Alert resolved",
+            "summary": "PoundCake is closing this communication because the alert cleared after successful auto-remediation.",
+            "detail": "Alert resolved after successful auto-remediation.",
+            "resolution": "Closing communication.",
+        },
+        "resolved_failure_notify": {
+            "headline": "Alert cleared after escalation",
+            "summary": "The alert cleared after an escalated communication was already opened.",
+            "detail": "Leaving the communication open for the responder.",
+            "resolution": "",
+        },
+        "resolved_timeout_notify": {
+            "headline": "Alert cleared after timeout escalation",
+            "summary": "The alert cleared after automation timed out and a communication was already opened.",
+            "detail": "Leaving the communication open for the responder.",
+            "resolution": "",
+        },
+        "fallback_open": {
+            "headline": "Alert requires attention",
+            "summary": "PoundCake did not find a matching workflow for this alert and opened a communication for human response.",
+            "detail": "No matching workflow is configured for this alert.",
+            "resolution": "",
+        },
+        "fallback_notify": {
+            "headline": "Alert cleared",
+            "summary": "The unmatched alert has cleared after a fallback communication was already opened.",
+            "detail": "Leaving the existing communication open for the responder.",
+            "resolution": "",
+        },
+    }[event_name]
     metadata = {
         "managed": True,
         "scope": scope,
@@ -255,19 +275,22 @@ def _managed_payload(
         "label": route.label,
         "execution_target": route.execution_target,
         "destination_target": route.destination_target,
+        "provider_config": route.provider_config,
         "enabled": route.enabled,
         "position": route.position,
         "event": event_name,
     }
     return {
-        "title": title,
-        "description": description,
-        "message": message,
+        "title": semantic_text["headline"],
+        "description": semantic_text["summary"],
+        "message": semantic_text["detail"],
         "source": "poundcake",
         "context": {
             "source": "poundcake",
             "route_label": route.label,
             "destination_target": route.destination_target,
+            "provider_config": route.provider_config,
+            "semantic_text": semantic_text,
             POLICY_METADATA_KEY: metadata,
         },
     }
@@ -466,41 +489,6 @@ async def _load_global_policy_recipe(
     return result.unique().scalars().first()
 
 
-def _group_routes_from_steps(steps: list[RecipeIngredient]) -> list[CommunicationRoute]:
-    grouped: dict[tuple[str, str], CommunicationRoute] = {}
-    for step in steps:
-        ingredient = step.ingredient
-        if ingredient is None or not is_communication_ingredient(ingredient):
-            continue
-        metadata = _metadata_from_payload(ingredient.execution_payload)
-        route: CommunicationRoute | None = None
-        if metadata:
-            route = _route_from_metadata(metadata)
-        if route is None:
-            execution_target = normalize_destination_type(
-                getattr(ingredient, "execution_target", "")
-            )
-            destination_target = normalize_destination_target(
-                getattr(ingredient, "destination_target", "")
-            )
-            key = (execution_target, destination_target)
-            if key in grouped:
-                continue
-            route = CommunicationRoute(
-                id=f"legacy-{_slug(execution_target)}-{_slug(destination_target or 'default')}",
-                label=titleize_route(
-                    execution_target,
-                    destination_target or getattr(ingredient, "task_key_template", ""),
-                ),
-                execution_target=execution_target,
-                destination_target=destination_target,
-                enabled=True,
-                position=len(grouped) + 1,
-            )
-        grouped[(route.execution_target, route.destination_target)] = route
-    return sorted(grouped.values(), key=lambda item: (item.position, item.label.lower()))
-
-
 def get_recipe_local_routes(recipe: Recipe | Any) -> list[CommunicationRoute]:
     return _group_routes_from_steps(
         [ri for ri in getattr(recipe, "recipe_ingredients", []) or [] if is_communication_step(ri)]
@@ -658,12 +646,135 @@ async def get_global_policy_recipe_for_dispatch(db: AsyncSession) -> Recipe | No
     return recipe
 
 
+def _legacy_provider_config_from_payload(
+    execution_target: str,
+    execution_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    payload = execution_payload if isinstance(execution_payload, dict) else {}
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+
+    if isinstance(context.get("provider_config"), dict):
+        return normalize_route_provider_config(
+            execution_target,
+            context.get("provider_config"),
+            require_required=False,
+        )
+
+    legacy_sources: dict[str, dict[str, tuple[Any, ...]]] = {
+        "rackspace_core": {
+            "account_number": (
+                payload.get("account_number"),
+                context.get("account_number"),
+                context.get("accountNumber"),
+                context.get("coreAccountID"),
+                context.get("rackspace_com_coreAccountID"),
+            ),
+            "queue": (
+                payload.get("queue"),
+                context.get("queue"),
+                context.get("coreQueue"),
+            ),
+            "subcategory": (
+                payload.get("subcategory"),
+                context.get("subcategory"),
+                context.get("coreSubcategory"),
+            ),
+            "source": (payload.get("source"), context.get("source")),
+            "visibility": (payload.get("visibility"), context.get("visibility")),
+        },
+        "servicenow": {
+            "urgency": (context.get("urgency"), context.get("serviceNowUrgency")),
+            "impact": (context.get("impact"), context.get("serviceNowImpact")),
+        },
+        "jira": {
+            "project_key": (context.get("project_key"), context.get("jiraProjectKey")),
+            "issue_type": (context.get("issue_type"), context.get("jiraIssueType")),
+            "transition_id": (context.get("transition_id"),),
+        },
+        "github": {
+            "owner": (context.get("owner"), context.get("githubOwner")),
+            "repo": (context.get("repo"), context.get("githubRepo")),
+            "labels": (context.get("labels"), context.get("githubLabels")),
+            "assignees": (context.get("assignees"), context.get("githubAssignees")),
+        },
+        "pagerduty": {
+            "service_id": (context.get("service_id"), context.get("pagerDutyServiceId")),
+            "from_email": (context.get("from_email"), context.get("pagerDutyFromEmail")),
+            "urgency": (context.get("urgency"), context.get("pagerDutyUrgency")),
+        },
+    }
+
+    seeded: dict[str, Any] = {}
+    for key, candidates in legacy_sources.get(execution_target, {}).items():
+        for value in candidates:
+            if value not in (None, "", []):
+                seeded[key] = value
+                break
+
+    settings = get_settings()
+    if execution_target == "rackspace_core":
+        default_queue = getattr(settings, "rackspace_core_default_queue", None)
+        default_subcategory = getattr(settings, "rackspace_core_default_subcategory", None)
+        if default_queue:
+            seeded.setdefault("queue", default_queue)
+        if default_subcategory:
+            seeded.setdefault("subcategory", default_subcategory)
+
+    return normalize_route_provider_config(
+        execution_target,
+        seeded,
+        require_required=False,
+    )
+
+
+def _group_routes_from_steps(steps: list[RecipeIngredient]) -> list[CommunicationRoute]:
+    grouped: dict[str, CommunicationRoute] = {}
+    for step in steps:
+        ingredient = step.ingredient
+        if ingredient is None or not is_communication_ingredient(ingredient):
+            continue
+        metadata = _metadata_from_payload(ingredient.execution_payload)
+        route: CommunicationRoute | None = None
+        if metadata:
+            route = _route_from_metadata(metadata)
+        if route is None:
+            execution_target = normalize_destination_type(
+                getattr(ingredient, "execution_target", "")
+            )
+            destination_target = normalize_destination_target(
+                getattr(ingredient, "destination_target", "")
+            )
+            route = CommunicationRoute(
+                id=f"legacy-{_slug(execution_target)}-{_slug(destination_target or 'default')}",
+                label=titleize_route(
+                    execution_target,
+                    destination_target or getattr(ingredient, "task_key_template", ""),
+                ),
+                execution_target=execution_target,
+                destination_target=destination_target,
+                provider_config=_legacy_provider_config_from_payload(
+                    execution_target,
+                    getattr(ingredient, "execution_payload", None),
+                ),
+                enabled=True,
+                position=len(grouped) + 1,
+            )
+        route.provider_config = normalize_route_provider_config(
+            route.execution_target,
+            route.provider_config,
+            require_required=False,
+        )
+        grouped[route.id] = route
+    return sorted(grouped.values(), key=lambda item: (item.position, item.label.lower()))
+
+
 def serialize_route(route: CommunicationRoute) -> dict[str, Any]:
     return {
         "id": route.id,
         "label": route.label,
         "execution_target": route.execution_target,
         "destination_target": route.destination_target,
+        "provider_config": route.provider_config,
         "enabled": route.enabled,
         "position": route.position,
     }
@@ -674,7 +785,7 @@ def lifecycle_summary() -> dict[str, str]:
         "success": "When an alert clears after successful auto-remediation, PoundCake opens and then closes each configured route.",
         "failure_or_escalation": "When remediation fails or escalation is needed, PoundCake opens each configured route and leaves it open.",
         "unmatched_alert": "When no matching workflow exists, PoundCake opens each configured fallback route immediately.",
-        "clear_after_escalation": "When an escalated alert later clears, PoundCake updates the existing route and leaves it open.",
+        "clear_after_escalation": "When an escalated alert later clears, PoundCake notifies the existing route and leaves it open.",
     }
 
 
@@ -706,7 +817,7 @@ def should_seed_route_step(
     params = getattr(ingredient, "execution_parameters", None) or {}
     operation = str(params.get("operation") or "").strip().lower()
     run_condition = str(getattr(recipe_ingredient, "run_condition", "") or "").strip().lower()
-    if operation != "update":
+    if operation != "notify":
         return True
     if run_condition not in {
         "resolved_after_failure",

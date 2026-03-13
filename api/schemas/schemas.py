@@ -26,6 +26,12 @@ from api.types import (
     ExecutionPurpose,
     RemediationOutcome,
 )
+from api.services.communications import (
+    ALERTMANAGER_REQUIRED_ANNOTATION_FIELDS,
+    ALERTMANAGER_REQUIRED_LABEL_FIELDS,
+    normalize_destination_type,
+    normalize_route_provider_config,
+)
 
 # =============================================================================
 # Health & Stats
@@ -61,16 +67,40 @@ class CommunicationRouteBase(BaseModel):
     label: str = Field(..., min_length=1, max_length=255)
     execution_target: str = Field(..., min_length=1, max_length=100)
     destination_target: Optional[str] = Field(default="", max_length=255)
+    provider_config: Dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     position: int = Field(default=1, ge=1)
 
+    @field_validator("execution_target")
+    @classmethod
+    def _validate_execution_target(cls, value: str) -> str:
+        normalized = normalize_destination_type(value)
+        if not normalized:
+            raise ValueError("execution_target is required")
+        return normalized
+
 
 class CommunicationRouteCreate(CommunicationRouteBase):
-    pass
+    @model_validator(mode="after")
+    def _normalize_provider_config(self) -> "CommunicationRouteCreate":
+        self.provider_config = normalize_route_provider_config(
+            self.execution_target,
+            self.provider_config,
+        )
+        return self
 
 
 class CommunicationRouteResponse(CommunicationRouteBase):
     id: str
+
+    @model_validator(mode="after")
+    def _normalize_provider_config(self) -> "CommunicationRouteResponse":
+        self.provider_config = normalize_route_provider_config(
+            self.execution_target,
+            self.provider_config,
+            require_required=False,
+        )
+        return self
 
 
 class CommunicationPolicyUpdate(BaseModel):
@@ -100,6 +130,57 @@ class RecipeCommunicationsResponse(BaseModel):
     mode: str
     effective_source: Optional[str] = None
     routes: List[CommunicationRouteResponse] = Field(default_factory=list)
+
+
+class AlertmanagerAlertRequest(BaseModel):
+    status: str = Field(..., min_length=1)
+    labels: Dict[str, Any] = Field(default_factory=dict)
+    annotations: Dict[str, Any] = Field(default_factory=dict)
+    startsAt: str = Field(..., min_length=1)
+    fingerprint: str = Field(..., min_length=1)
+    endsAt: Optional[Any] = None
+    generatorURL: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow")
+
+    @field_validator("labels")
+    @classmethod
+    def _validate_labels(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        missing = sorted(
+            field
+            for field in ALERTMANAGER_REQUIRED_LABEL_FIELDS
+            if not str(value.get(field) or "").strip()
+        )
+        if missing:
+            raise ValueError(f"labels missing required fields: {', '.join(missing)}")
+        return value
+
+    @field_validator("annotations")
+    @classmethod
+    def _validate_annotations(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        missing = sorted(
+            field
+            for field in ALERTMANAGER_REQUIRED_ANNOTATION_FIELDS
+            if not str(value.get(field) or "").strip()
+        )
+        if missing:
+            raise ValueError(f"annotations missing required fields: {', '.join(missing)}")
+        return value
+
+
+class AlertmanagerWebhookRequest(BaseModel):
+    status: str = Field(..., min_length=1)
+    alerts: List[AlertmanagerAlertRequest] = Field(..., min_length=1)
+    receiver: Optional[str] = None
+    groupKey: Optional[str] = None
+    groupLabels: Dict[str, Any] = Field(default_factory=dict)
+    commonLabels: Dict[str, Any] = Field(default_factory=dict)
+    commonAnnotations: Dict[str, Any] = Field(default_factory=dict)
+    externalURL: Optional[str] = None
+    version: Optional[str] = None
+    truncatedAlerts: Optional[int] = None
+
+    model_config = ConfigDict(extra="allow")
 
 
 # =============================================================================

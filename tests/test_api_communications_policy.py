@@ -22,6 +22,7 @@ def _route(
     label: str,
     execution_target: str,
     destination_target: str,
+    provider_config: dict | None = None,
     enabled: bool = True,
     position: int = 1,
 ):
@@ -30,6 +31,7 @@ def _route(
         label=label,
         execution_target=execution_target,
         destination_target=destination_target,
+        provider_config=provider_config or {},
         enabled=enabled,
         position=position,
     )

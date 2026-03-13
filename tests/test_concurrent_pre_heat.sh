@@ -32,7 +32,7 @@ payload=$(jq -n \
           severity: "warning",
           instance: "localhost:9090"
         },
-        annotations: {summary: "Concurrent pre-heat test"},
+        annotations: {summary: "Concurrent pre-heat test", description: "Concurrent pre-heat test payload."},
         startsAt: (now | todateiso8601),
         endsAt: null,
         generatorURL: "http://prometheus:9090/graph"

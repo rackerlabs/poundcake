@@ -19,6 +19,7 @@ from api.services.communications import (
     normalize_communication_operation,
     normalize_destination_target,
 )
+from api.services.communication_canonical import build_canonical_communication_context
 from api.services.order_communications import apply_execution_result, prepare_communication_context
 from api.services.stackstorm_service import (
     StackStormActionManager,
@@ -93,10 +94,11 @@ async def execute_ingredient(
             or ((execution_payload.get("context") or {}).get("destination_target"))
         )
         operation = normalize_communication_operation(execution_parameters.get("operation"))
+        order = None
 
         if payload.execution_engine == "bakery" and order_id is not None:
             async with db.begin():
-                _, communication = await prepare_communication_context(
+                order, communication = await prepare_communication_context(
                     db,
                     order_id=order_id,
                     execution_target=payload.execution_target,
@@ -117,6 +119,17 @@ async def execute_ingredient(
             )
             payload_context["provider_type"] = payload.execution_target
             payload_context["destination_target"] = destination_target
+            if order is not None:
+                payload_context["_canonical"] = build_canonical_communication_context(
+                    order=order,
+                    execution_target=payload.execution_target,
+                    destination_target=destination_target,
+                    operation=operation,
+                    execution_payload={
+                        **execution_payload,
+                        "context": payload_context,
+                    },
+                )
             execution_payload["context"] = payload_context
 
         execution_result = await orchestrator.execute(

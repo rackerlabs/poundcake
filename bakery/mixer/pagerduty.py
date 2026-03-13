@@ -147,6 +147,18 @@ class PagerDutyMixer(BaseMixer):
                 "error": "ticket_id and from_email required for close",
             }
 
+        close_notes = data.get("close_notes")
+        if close_notes:
+            note_result = await self._add_note(
+                {
+                    "ticket_id": ticket_id,
+                    "from_email": from_email,
+                    "comment": close_notes,
+                }
+            )
+            if not note_result.get("success"):
+                return note_result
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             headers = self._get_headers()
             headers["From"] = from_email
