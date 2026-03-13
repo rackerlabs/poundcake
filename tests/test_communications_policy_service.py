@@ -34,9 +34,8 @@ def _guard_post_init_recipe_ingredients_assignment(monkeypatch: pytest.MonkeyPat
         return original_init(self, *args, **kwargs)
 
     def tracking_setattr(self, name, value):
-        if (
-            name == "recipe_ingredients"
-            and not getattr(self, "_recipe_ingredients_seeded_in_constructor", False)
+        if name == "recipe_ingredients" and not getattr(
+            self, "_recipe_ingredients_seeded_in_constructor", False
         ):
             raise AssertionError("recipe_ingredients must be seeded during construction")
         return original_setattr(self, name, value)
