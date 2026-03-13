@@ -18,7 +18,7 @@ def test_ui_dockerfile_uses_repo_managed_entrypoint() -> None:
     assert 'ENTRYPOINT ["/app/ui/docker-entrypoint.sh"]' in content
     assert 'CMD ["nginx", "-g", "daemon off;"]' in content
     assert "COPY ui/docker-entrypoint.sh /app/ui/docker-entrypoint.sh" in content
-    assert "COPY ui/static /usr/share/nginx/html/legacy" in content
+    assert "COPY ui/static /usr/share/nginx/html/legacy" not in content
     assert "COPY ui/static/login.html /usr/share/nginx/html/login.html" not in content
 
 
@@ -33,3 +33,9 @@ def test_ui_entrypoint_enforces_non_root_safe_startup() -> None:
 def test_ui_nginx_routes_login_through_spa_shell() -> None:
     content = UI_TEMPLATE.read_text(encoding="utf-8")
     assert "location = /login" not in content
+
+
+def test_ui_nginx_does_not_serve_legacy_shell() -> None:
+    content = UI_TEMPLATE.read_text(encoding="utf-8")
+    assert "location = /legacy" not in content
+    assert "location /legacy/" not in content

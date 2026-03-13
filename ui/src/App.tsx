@@ -487,9 +487,6 @@ function ShellLayout() {
         </nav>
 
         <div className="sidebar-footer">
-          <button className="ghost-button" type="button" onClick={() => window.location.assign("/legacy/")}>
-            Open Legacy UI
-          </button>
           <button className="ghost-button" type="button" onClick={handleLogout}>
             Log out
           </button>

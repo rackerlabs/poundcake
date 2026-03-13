@@ -22,9 +22,6 @@ FROM nginx:alpine
 # Copy the new React application.
 COPY --from=build /app/ui/dist /usr/share/nginx/html
 
-# Keep the legacy static UI reachable during migration.
-COPY ui/static /usr/share/nginx/html/legacy
-
 # Copy managed UI entrypoint.
 COPY ui/docker-entrypoint.sh /app/ui/docker-entrypoint.sh
 RUN chmod +x /app/ui/docker-entrypoint.sh
