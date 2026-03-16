@@ -395,7 +395,7 @@ def test_overview_aggregates_existing_endpoints_in_table_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_api = FakeAPI()
-    fake_api.add_json("GET", "/api/v1/health", {"status": "healthy", "version": "2.0.134"})
+    fake_api.add_json("GET", "/api/v1/health", {"status": "healthy", "version": "2.0.135"})
     fake_api.add_json(
         "GET",
         "/api/v1/stats",
