@@ -236,12 +236,8 @@ function SessionGate() {
 
   if (bootstrapQuery.isError || !bootstrapQuery.data) {
     if (bootstrapQuery.error instanceof ApiError && bootstrapQuery.error.status === 401) {
-      return (
-        <FullscreenState
-          title="Redirecting to sign in"
-          message="Your session is missing or expired. Taking you back to the login screen."
-        />
-      );
+      const nextTarget = `${location.pathname}${location.search}${location.hash}`;
+      return <Navigate to={`/login?next=${encodeURIComponent(nextTarget)}`} replace />;
     }
     return (
       <FullscreenState
