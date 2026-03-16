@@ -94,6 +94,8 @@ spec:
               value: stackstorm-redis
             - name: REDIS_PORT
               value: "6379"
+            - name: POUNDCAKE_REDIS_URL
+              value: redis://$(REDIS_HOST):$(REDIS_PORT)/0
             - name: RABBITMQ_USER
               valueFrom:
                 secretKeyRef:

@@ -9,11 +9,21 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from api.version import __version__
+
+
+def _default_redis_url() -> str:
+    host = os.getenv("REDIS_HOST", "poundcake-redis").strip() or "poundcake-redis"
+    port = os.getenv("REDIS_PORT", "6379").strip() or "6379"
+    db = os.getenv("REDIS_DB", "0").strip() or "0"
+    password = os.getenv("REDIS_PASSWORD", "").strip()
+    auth = f":{quote(password)}@" if password else ""
+    return f"redis://{auth}{host}:{port}/{db}"
 
 
 class Settings(BaseSettings):
@@ -53,7 +63,7 @@ class Settings(BaseSettings):
     # Redis Settings
     # ==========================================================================
     # Default to in-cluster Redis service (overridden by Helm env var in production).
-    redis_url: str = "redis://poundcake-redis:6379/0"
+    redis_url: str = Field(default_factory=_default_redis_url)
     redis_password: str = ""
     alert_ttl_hours: int = 24
     lock_timeout_seconds: int = 300

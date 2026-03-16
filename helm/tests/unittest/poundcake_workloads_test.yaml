@@ -162,23 +162,23 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.136
+          value: ghcr.io/rackerlabs/poundcake:2.0.137
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.136
+          value: ghcr.io/rackerlabs/poundcake:2.0.137
         documentIndex: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.136
+          value: ghcr.io/rackerlabs/poundcake:2.0.137
         documentIndex: 3
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.136
+          value: ghcr.io/rackerlabs/poundcake:2.0.137
         documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.136
+          value: ghcr.io/rackerlabs/poundcake:2.0.137
         documentIndex: 5
 
   - it: reports API version from the deployed PoundCake image tag
@@ -502,12 +502,18 @@ tests:
           path: spec.template.spec.containers[0].env[13].value
           value: "6379"
         documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].env[14].valueFrom.secretKeyRef.name
-          value: stackstorm-secrets
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_REDIS_URL
+            value: redis://$(REDIS_HOST):$(REDIS_PORT)/0
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].env[15].valueFrom.secretKeyRef.name
+          value: stackstorm-secrets
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].env[16].valueFrom.secretKeyRef.name
           value: stackstorm-secrets
         documentIndex: 0
 
