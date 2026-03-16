@@ -7,7 +7,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
@@ -27,6 +27,12 @@ from bakery.schemas import (
     TicketOperationResponse,
     TicketResponse,
     TicketUpdateRequest,
+)
+from contracts.common import ProviderReference, SafeErrorDetail, SyncMetadata
+from contracts.communications import (
+    CommunicationMessageSummary,
+    CommunicationSummary,
+    OperationResultSummary,
 )
 
 router = APIRouter(dependencies=[Depends(require_hmac_auth)])
@@ -69,6 +75,12 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _message_created_at(value: Any, default: datetime) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return default
+
+
 def _canonical_hash(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -84,9 +96,10 @@ def _assert_idempotency_key(value: str | None) -> str:
 
 
 def _op_response(operation: TicketOperation) -> TicketOperationResponse:
+    result = operation.provider_response if isinstance(operation.provider_response, dict) else {}
     return TicketOperationResponse(
         operation_id=operation.operation_id,
-        ticket_id=operation.internal_ticket_id,
+        communication_id=operation.internal_ticket_id,
         action=operation.action,
         status=operation.status,
         attempt_count=operation.attempt_count,
@@ -94,8 +107,31 @@ def _op_response(operation: TicketOperation) -> TicketOperationResponse:
         next_attempt_at=operation.next_attempt_at,
         started_at=operation.started_at,
         completed_at=operation.completed_at,
-        last_error=operation.last_error,
-        provider_response=operation.provider_response,
+        last_error=SafeErrorDetail(message=operation.last_error) if operation.last_error else None,
+        result=(
+            OperationResultSummary(
+                success=result.get("success") if isinstance(result.get("success"), bool) else None,
+                source="provider" if result else None,
+                state=_stringify(result.get("state")),
+                message=_stringify(result.get("message") or result.get("error")),
+                result_count=(
+                    len(result["data"]["results"])
+                    if isinstance(result.get("data"), dict)
+                    and isinstance(result["data"].get("results"), list)
+                    else None
+                ),
+                provider_reference=(
+                    ProviderReference(
+                        provider_type=_stringify(result.get("provider_type")) or "unknown",
+                        reference_id=_stringify(result.get("reference_id")),
+                    )
+                    if result
+                    else None
+                ),
+            )
+            if result
+            else None
+        ),
         created_at=operation.created_at,
         updated_at=operation.updated_at,
     )
@@ -103,7 +139,7 @@ def _op_response(operation: TicketOperation) -> TicketOperationResponse:
 
 def _accepted(operation: TicketOperation) -> OperationAcceptedResponse:
     return OperationAcceptedResponse(
-        ticket_id=operation.internal_ticket_id,
+        communication_id=operation.internal_ticket_id,
         operation_id=operation.operation_id,
         action=operation.action,
         status=operation.status,
@@ -323,7 +359,7 @@ def _build_local_ticket_data(ticket: Ticket, operations: list[TicketOperation]) 
             if _is_non_empty(comment_text):
                 projection["comments"].append(
                     {
-                        "comment": comment_text,
+                        "message": comment_text,
                         "visibility": payload.get("visibility"),
                         "created_at": operation.completed_at or operation.created_at,
                     }
@@ -437,23 +473,78 @@ def _ticket_response(
     ticket: Ticket,
     operations: list[TicketOperation],
     *,
-    data_source: str,
+    data_source: Literal["local_cache", "provider_sync", "dry_run"],
     last_sync_operation: TicketOperation | None,
 ) -> TicketResponse:
+    ticket_data = _build_local_ticket_data(ticket, operations)
+    summary = CommunicationSummary(
+        title=_stringify(ticket_data.get("title")),
+        description=_stringify(ticket_data.get("description")),
+        severity=_stringify(ticket_data.get("severity")),
+        category=_stringify(ticket_data.get("category")),
+        source=_stringify(ticket_data.get("source")),
+        resolution_code=_stringify(ticket_data.get("resolution_code")),
+        resolution_notes=_stringify(ticket_data.get("resolution_notes")),
+        messages=[
+            CommunicationMessageSummary(
+                message=str(item.get("message") or ""),
+                visibility=_stringify(item.get("visibility")),
+                created_at=_message_created_at(item.get("created_at"), ticket.updated_at),
+            )
+            for item in ticket_data.get("comments", [])
+            if isinstance(item, dict) and item.get("message")
+        ],
+        provider_reference=(
+            ProviderReference(
+                provider_type=ticket.provider_type,
+                reference_id=ticket.provider_ticket_id,
+                state=ticket.state,
+            )
+            if ticket.provider_type
+            else None
+        ),
+        metadata={
+            key: value
+            for key, value in ticket_data.items()
+            if key
+            not in {
+                "title",
+                "description",
+                "severity",
+                "category",
+                "source",
+                "resolution_code",
+                "resolution_notes",
+                "comments",
+            }
+        },
+    )
     return TicketResponse(
-        ticket_id=ticket.internal_ticket_id,
+        communication_id=ticket.internal_ticket_id,
         provider_type=ticket.provider_type,
-        provider_ticket_id=ticket.provider_ticket_id,
+        provider_reference=(
+            ProviderReference(
+                provider_type=ticket.provider_type,
+                reference_id=ticket.provider_ticket_id,
+                state=ticket.state,
+            )
+            if ticket.provider_type
+            else None
+        ),
         state=ticket.state,
-        latest_error=ticket.latest_error,
+        latest_error=SafeErrorDetail(message=ticket.latest_error) if ticket.latest_error else None,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
         data_source=data_source,
-        ticket_data=_build_local_ticket_data(ticket, operations),
-        last_sync_operation_id=(
-            last_sync_operation.operation_id if last_sync_operation is not None else None
+        summary=summary,
+        last_sync=(
+            SyncMetadata(
+                operation_id=last_sync_operation.operation_id,
+                synced_at=last_sync_operation.completed_at or last_sync_operation.updated_at,
+            )
+            if last_sync_operation is not None
+            else None
         ),
-        last_sync_at=last_sync_operation.completed_at if last_sync_operation is not None else None,
     )
 
 
@@ -668,7 +759,7 @@ async def find_ticket(ticket_id: str, db: Session = Depends(get_db)) -> TicketRe
         return _ticket_response(
             ticket,
             operations,
-            data_source="dry_run_local_cache",
+            data_source="dry_run",
             last_sync_operation=sync_op,
         )
 
@@ -742,7 +833,7 @@ async def find_ticket(ticket_id: str, db: Session = Depends(get_db)) -> TicketRe
     BAKERY_OPERATIONS_TOTAL.labels(action="find", status=status_value).inc()
 
     operations = _load_ticket_operations(db, ticket_id, limit=500)
-    data_source = "provider" if is_success else "local_cache"
+    data_source = "provider_sync" if is_success else "local_cache"
     return _ticket_response(
         ticket,
         operations,
@@ -762,7 +853,7 @@ async def get_ticket_operations(
         raise HTTPException(status_code=404, detail="Ticket not found")
     operations = _load_ticket_operations(db, ticket_id, limit=limit)
     return TicketOperationListResponse(
-        ticket_id=ticket_id,
+        communication_id=ticket_id,
         operations=[_op_response(op) for op in operations],
         count=len(operations),
     )

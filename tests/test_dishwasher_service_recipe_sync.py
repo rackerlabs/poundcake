@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from api.models.models import RecipeIngredient
+from api.models.models import Recipe, RecipeIngredient
 from api.services.dishwasher_service import sync_recipe_ingredients_from_yaml
 
 
@@ -22,7 +23,7 @@ class _ScalarResult:
 
 @pytest.mark.asyncio
 async def test_sync_recipe_ingredients_from_yaml_detaches_historical_dish_refs():
-    recipe = SimpleNamespace(id=12)
+    recipe = cast(Recipe, SimpleNamespace(id=12))
     ingredient = SimpleNamespace(id=41, execution_target="core.test")
     added: list[object] = []
 

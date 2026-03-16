@@ -379,12 +379,13 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
             if suppression.summary_ticket_enabled and not summary.bakery_ticket_id:
                 create_payload = build_summary_ticket_payload(suppression, summary)
                 accepted = await create_ticket(req_id=req_id, payload=create_payload)
-                summary.bakery_ticket_id = accepted.get("ticket_id")
+                summary.bakery_ticket_id = accepted.get("communication_id")
                 summary.bakery_create_operation_id = accepted.get("operation_id")
                 summary.state = "created"
                 record_suppression_summary_ticket("create_accepted")
-                if summary.bakery_create_operation_id:
-                    create_op = await poll_operation(summary.bakery_create_operation_id)
+                create_operation_id = summary.bakery_create_operation_id
+                if create_operation_id:
+                    create_op = await poll_operation(create_operation_id)
                     if create_op.get("status") not in {"succeeded"}:
                         raise RuntimeError(f"Bakery create operation failed: {create_op}")
                     record_suppression_summary_ticket("create_succeeded")
@@ -414,8 +415,9 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
                 )
                 summary.bakery_close_operation_id = close_accepted.get("operation_id")
                 record_suppression_summary_ticket("close_accepted")
-                if summary.bakery_close_operation_id:
-                    close_op = await poll_operation(summary.bakery_close_operation_id)
+                close_operation_id = summary.bakery_close_operation_id
+                if close_operation_id:
+                    close_op = await poll_operation(close_operation_id)
                     if close_op.get("status") not in {"succeeded"}:
                         raise RuntimeError(f"Bakery close operation failed: {close_op}")
                     record_suppression_summary_ticket("close_succeeded")

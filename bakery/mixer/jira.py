@@ -8,6 +8,12 @@ from bakery.config import settings
 from bakery.mixer.base import BaseMixer
 
 
+def _auth_credentials(username: str | None, token: str | None) -> tuple[str, str]:
+    if not username or not token:
+        raise ValueError("Jira credentials not configured")
+    return username, token
+
+
 class JiraMixer(BaseMixer):
     """Mixer for Jira ticketing system."""
 
@@ -75,7 +81,7 @@ class JiraMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/rest/api/3/issue",
-                auth=(self.username, self.api_token),
+                auth=_auth_credentials(self.username, self.api_token),
                 json={
                     "fields": {
                         "project": {"key": data.get("project_key")},
@@ -103,7 +109,7 @@ class JiraMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.put(
                 f"{self.base_url}/rest/api/3/issue/{ticket_id}",
-                auth=(self.username, self.api_token),
+                auth=_auth_credentials(self.username, self.api_token),
                 json={"fields": data.get("updates", {})},
             )
             response.raise_for_status()
@@ -134,7 +140,7 @@ class JiraMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/rest/api/3/issue/{ticket_id}/transitions",
-                auth=(self.username, self.api_token),
+                auth=_auth_credentials(self.username, self.api_token),
                 json={"transition": {"id": data.get("transition_id", "2")}},
             )
             response.raise_for_status()
@@ -168,7 +174,7 @@ class JiraMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/rest/api/3/issue/{ticket_id}/comment",
-                auth=(self.username, self.api_token),
+                auth=_auth_credentials(self.username, self.api_token),
                 json={"body": body},
             )
             response.raise_for_status()
@@ -205,7 +211,7 @@ class JiraMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/rest/api/3/search",
-                auth=(self.username, self.api_token),
+                auth=_auth_credentials(self.username, self.api_token),
                 json=payload,
             )
             response.raise_for_status()

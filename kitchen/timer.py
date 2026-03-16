@@ -168,8 +168,9 @@ def update_dish(
             duration = (now - start_dt).total_seconds()
             payload["actual_duration_sec"] = int(duration)
 
+    start_time = time.time()
+    resp = None
     try:
-        start_time = time.time()
         resp = request_with_retry_sync(
             "PUT",
             f"{API_BASE_URL}/dishes/{dish_id}",
@@ -184,7 +185,7 @@ def update_dish(
     except Exception as e:
         latency_ms = int((time.time() - start_time) * 1000)
         extra.update({"method": "PUT", "latency_ms": latency_ms})
-        if "resp" in locals():
+        if resp is not None:
             extra["status_code"] = resp.status_code
         extra.update({"dish_id": dish_id, "error": str(e)})
         logger.error("Failed to update dish", extra=extra)
@@ -455,8 +456,9 @@ def _execute_pending_bakery_ingredients(
 
 def cancel_execution(execution_id: str, req_id: str) -> bool:
     """Instructs API to stop an execution."""
+    start_time = time.time()
+    resp = None
     try:
-        start_time = time.time()
         resp = request_with_retry_sync(
             "PUT",
             f"{API_BASE_URL}/cook/executions/{execution_id}",
@@ -475,7 +477,7 @@ def cancel_execution(execution_id: str, req_id: str) -> bool:
                 "req_id": req_id,
                 "method": "PUT",
                 "latency_ms": latency_ms,
-                "status_code": resp.status_code if "resp" in locals() else None,
+                "status_code": resp.status_code if resp is not None else None,
                 "execution_id": execution_id,
                 "error": str(e),
             },
@@ -545,6 +547,7 @@ def check_for_timeouts(dish: dict[str, Any], req_id: str) -> bool:
 def monitor_dishes() -> None:
     """Polls for processing dishes and updates terminal states."""
     global API_UNAVAILABLE_SINCE
+    start_time = time.time()
     try:
         dishes: list[dict[str, Any]] = []
         for status in ("processing", "finalizing"):

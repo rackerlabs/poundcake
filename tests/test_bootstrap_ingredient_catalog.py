@@ -26,7 +26,7 @@ class _ScalarResult:
 def test_load_bootstrap_ingredient_catalog_accepts_valid_yaml(
     tmp_path: pytest.TempPathFactory,
 ) -> None:
-    catalog = tmp_path / "catalog.yaml"
+    catalog = tmp_path.mktemp("catalog-valid") / "catalog.yaml"
     catalog.write_text(
         """
 apiVersion: poundcake/v1
@@ -60,7 +60,7 @@ ingredients:
 def test_load_bootstrap_ingredient_catalog_rejects_noncanonical_target(
     tmp_path: pytest.TempPathFactory,
 ) -> None:
-    catalog = tmp_path / "catalog.yaml"
+    catalog = tmp_path.mktemp("catalog-invalid") / "catalog.yaml"
     catalog.write_text(
         """
 apiVersion: poundcake/v1

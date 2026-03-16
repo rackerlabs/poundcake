@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
-import structlog
+from bakery.structlog_compat import structlog
 
 from bakery.api.communications import router as communications_router
 from bakery.config import settings

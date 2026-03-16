@@ -45,6 +45,23 @@ import {
   statusTone,
   titleize,
 } from "./format";
+import {
+  appSettingsSchema,
+  communicationActivityRecordSchema,
+  communicationPolicySchema as communicationPolicyResponseSchema,
+  deleteResponseSchema,
+  dishRecordSchema,
+  healthResponseSchema,
+  incidentTimelineResponseSchema,
+  ingredientRecordSchema,
+  observabilityActivityRecordSchema,
+  observabilityOverviewResponseSchema,
+  orderResponseSchema,
+  prometheusRuleListResponseSchema,
+  recipeRecordSchema,
+  suppressionRecordSchema,
+  statsResponseSchema,
+} from "./contracts";
 import type {
   AppSettings,
   CommunicationActivityRecord,
@@ -69,11 +86,6 @@ const SettingsContext = createContext<AppSettings | null>(null);
 const ToastContext = createContext<(tone: "success" | "error", message: string) => void>(
   () => undefined,
 );
-
-interface DeleteResponse {
-  status: string;
-  message?: string | null;
-}
 
 interface ToastMessage {
   id: number;
@@ -216,7 +228,7 @@ function SessionGate() {
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
-    queryFn: () => apiGet<AppSettings>("/api/v1/settings"),
+    queryFn: () => apiGet("/api/v1/settings", appSettingsSchema),
   });
 
   if (settingsQuery.isLoading) {
@@ -524,13 +536,13 @@ function OverviewPage() {
     queryFn: async () => {
       const [health, stats, overview, activity, incidents, communications, suppressions] =
         await Promise.all([
-          apiGet<HealthResponse>("/api/v1/health"),
-          apiGet<StatsResponse>("/api/v1/stats"),
-          apiGet<ObservabilityOverviewResponse>("/api/v1/observability/overview"),
-          apiGet<ObservabilityActivityRecord[]>("/api/v1/observability/activity?limit=10"),
-          apiGet<OrderResponse[]>("/api/v1/orders?limit=8"),
-          apiGet<CommunicationActivityRecord[]>("/api/v1/communications/activity?limit=8"),
-          apiGet<SuppressionRecord[]>("/api/v1/suppressions?limit=8"),
+          apiGet("/api/v1/health", healthResponseSchema),
+          apiGet("/api/v1/stats", statsResponseSchema),
+          apiGet("/api/v1/observability/overview", observabilityOverviewResponseSchema),
+          apiGet("/api/v1/observability/activity?limit=10", observabilityActivityRecordSchema.array()),
+          apiGet("/api/v1/orders?limit=8", orderResponseSchema.array()),
+          apiGet("/api/v1/communications/activity?limit=8", communicationActivityRecordSchema.array()),
+          apiGet("/api/v1/suppressions?limit=8", suppressionRecordSchema.array()),
         ]);
       return { health, stats, overview, activity, incidents, communications, suppressions };
     },
@@ -684,7 +696,7 @@ function IncidentsPage() {
 
   const incidentsQuery = useQuery({
     queryKey: ["incidents"],
-    queryFn: () => apiGet<OrderResponse[]>("/api/v1/orders?limit=100"),
+    queryFn: () => apiGet("/api/v1/orders?limit=100", orderResponseSchema.array()),
   });
 
   const selectedId = incidentId ? Number(incidentId) : null;
@@ -695,7 +707,7 @@ function IncidentsPage() {
   const selectedIncidentQuery = useQuery({
     queryKey: ["incident", selectedId],
     enabled: Boolean(selectedId) && Boolean(incidentsQuery.data) && !selectedFromRoute,
-    queryFn: () => apiGet<OrderResponse>(`/api/v1/orders/${selectedId}`),
+    queryFn: () => apiGet(`/api/v1/orders/${selectedId}`, orderResponseSchema),
   });
 
   const incidentRows = incidentsQuery.data || [];
@@ -723,7 +735,8 @@ function IncidentsPage() {
   const timelineQuery = useQuery({
     queryKey: ["incident-timeline", timelineTargetId],
     enabled: Boolean(timelineTargetId),
-    queryFn: () => apiGet<IncidentTimelineResponse>(`/api/v1/orders/${timelineTargetId}/timeline`),
+    queryFn: () =>
+      apiGet(`/api/v1/orders/${timelineTargetId}/timeline`, incidentTimelineResponseSchema),
   });
 
   useEffect(() => {
@@ -943,7 +956,8 @@ function CommunicationsPage() {
 
   const query = useQuery({
     queryKey: ["communications-activity"],
-    queryFn: () => apiGet<CommunicationActivityRecord[]>("/api/v1/communications/activity?limit=200"),
+    queryFn: () =>
+      apiGet("/api/v1/communications/activity?limit=200", communicationActivityRecordSchema.array()),
   });
 
   if (query.isLoading) {
@@ -1077,7 +1091,7 @@ function SuppressionsPage() {
 
   const suppressionsQuery = useQuery({
     queryKey: ["suppressions"],
-    queryFn: () => apiGet<SuppressionRecord[]>("/api/v1/suppressions?limit=100"),
+    queryFn: () => apiGet("/api/v1/suppressions?limit=100", suppressionRecordSchema.array()),
   });
 
   const form = useForm<z.infer<typeof suppressionSchema>>({
@@ -1096,8 +1110,8 @@ function SuppressionsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (values: z.infer<typeof suppressionSchema>) =>
-      apiPost<SuppressionRecord>("/api/v1/suppressions", {
+    mutationFn: async (values: z.infer<typeof suppressionSchema>) => {
+      const payload = {
         name: values.name,
         reason: values.reason || null,
         starts_at: values.starts_at,
@@ -1116,7 +1130,9 @@ function SuppressionsPage() {
                 },
               ]
             : [],
-      }),
+      };
+      return apiPost("/api/v1/suppressions", suppressionRecordSchema, payload);
+    },
     onSuccess: async () => {
       notify("success", "Suppression created.");
       form.reset();
@@ -1126,7 +1142,8 @@ function SuppressionsPage() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: (id: number) => apiPost<SuppressionRecord>(`/api/v1/suppressions/${id}/cancel`),
+    mutationFn: (id: number) =>
+      apiPost(`/api/v1/suppressions/${id}/cancel`, suppressionRecordSchema),
     onSuccess: async () => {
       notify("success", "Suppression canceled.");
       await queryClient.invalidateQueries({ queryKey: ["suppressions"] });
@@ -1254,7 +1271,7 @@ function ActivityPage() {
   const deferredSearch = useDeferredValue(search);
   const query = useQuery({
     queryKey: ["activity-dishes"],
-    queryFn: () => apiGet<DishRecord[]>("/api/v1/dishes?limit=100"),
+    queryFn: () => apiGet("/api/v1/dishes?limit=100", dishRecordSchema.array()),
   });
 
   const selectedDishId = searchParams.get("dish");
@@ -1452,7 +1469,7 @@ function AlertRulesPage() {
 
   const rulesQuery = useQuery({
     queryKey: ["prometheus-rules"],
-    queryFn: () => apiGet<PrometheusRuleListResponse>("/api/v1/prometheus/rules"),
+    queryFn: () => apiGet("/api/v1/prometheus/rules", prometheusRuleListResponseSchema),
   });
 
   const form = useForm<z.infer<typeof ruleSchema>>({
@@ -1495,11 +1512,13 @@ function AlertRulesPage() {
       if (editingRule) {
         return apiPut(
           `/api/v1/prometheus/rules/${encodeURIComponent(values.name)}?group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+          deleteResponseSchema,
           body,
         );
       }
       return apiPost(
         `/api/v1/prometheus/rules?rule_name=${encodeURIComponent(values.name)}&group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+        deleteResponseSchema,
         body,
       );
     },
@@ -1516,6 +1535,7 @@ function AlertRulesPage() {
     mutationFn: (rule: PrometheusRule) =>
       apiDelete(
         `/api/v1/prometheus/rules/${encodeURIComponent(rule.name)}?group_name=${encodeURIComponent(rule.group)}&file_name=${encodeURIComponent(rule.crd || rule.file || "")}`,
+        deleteResponseSchema,
       ),
     onSuccess: async () => {
       notify("success", "Alert rule deleted.");
@@ -1664,7 +1684,7 @@ function GlobalCommunicationsPage() {
 
   const policyQuery = useQuery({
     queryKey: ["communications-policy"],
-    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+    queryFn: () => apiGet("/api/v1/communications/policy", communicationPolicyResponseSchema),
   });
 
   const form = useForm<z.infer<typeof communicationsPolicySchema>>({
@@ -1698,7 +1718,7 @@ function GlobalCommunicationsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof communicationsPolicySchema>) => {
-      return apiPut<CommunicationPolicyRecord>("/api/v1/communications/policy", {
+      return apiPut("/api/v1/communications/policy", communicationPolicyResponseSchema, {
         routes: values.routes.map((route, index) => ({
           id: route.id || undefined,
           label: route.label,
@@ -1874,15 +1894,15 @@ function WorkflowsPage() {
 
   const recipesQuery = useQuery({
     queryKey: ["workflows"],
-    queryFn: () => apiGet<RecipeRecord[]>("/api/v1/recipes/?limit=200"),
+    queryFn: () => apiGet("/api/v1/recipes/?limit=200", recipeRecordSchema.array()),
   });
   const actionsQuery = useQuery({
     queryKey: ["actions"],
-    queryFn: () => apiGet<IngredientRecord[]>("/api/v1/ingredients/?limit=500"),
+    queryFn: () => apiGet("/api/v1/ingredients/?limit=500", ingredientRecordSchema.array()),
   });
   const policyQuery = useQuery({
     queryKey: ["communications-policy"],
-    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+    queryFn: () => apiGet("/api/v1/communications/policy", communicationPolicyResponseSchema),
   });
 
   const form = useForm<z.infer<typeof workflowSchema>>({
@@ -2007,9 +2027,9 @@ function WorkflowsPage() {
         })),
       };
       if (editingWorkflow) {
-        return apiPut<RecipeRecord>(`/api/v1/recipes/${editingWorkflow.id}`, payload);
+        return apiPut(`/api/v1/recipes/${editingWorkflow.id}`, recipeRecordSchema, payload);
       }
-      return apiPost<RecipeRecord>("/api/v1/recipes/", payload);
+      return apiPost("/api/v1/recipes/", recipeRecordSchema, payload);
     },
     onSuccess: async () => {
       notify("success", editingWorkflow ? "Workflow updated." : "Workflow created.");
@@ -2024,7 +2044,7 @@ function WorkflowsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (workflowId: number) => apiDelete<DeleteResponse>(`/api/v1/recipes/${workflowId}`),
+    mutationFn: (workflowId: number) => apiDelete(`/api/v1/recipes/${workflowId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Workflow deleted.");
       setEditingWorkflow(null);
@@ -2445,7 +2465,7 @@ function ActionsPage() {
 
   const actionsQuery = useQuery({
     queryKey: ["actions"],
-    queryFn: () => apiGet<IngredientRecord[]>("/api/v1/ingredients/?limit=500"),
+    queryFn: () => apiGet("/api/v1/ingredients/?limit=500", ingredientRecordSchema.array()),
   });
 
   const form = useForm<z.infer<typeof actionSchema>>({
@@ -2538,9 +2558,9 @@ function ActionsPage() {
         on_failure: values.on_failure,
       };
       if (editingAction) {
-        return apiPut<IngredientRecord>(`/api/v1/ingredients/${editingAction.id}`, payload);
+        return apiPut(`/api/v1/ingredients/${editingAction.id}`, ingredientRecordSchema, payload);
       }
-      return apiPost<IngredientRecord>("/api/v1/ingredients/", payload);
+      return apiPost("/api/v1/ingredients/", ingredientRecordSchema, payload);
     },
     onSuccess: async () => {
       notify("success", editingAction ? "Action updated." : "Action created.");
@@ -2552,7 +2572,7 @@ function ActionsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (actionId: number) => apiDelete<DeleteResponse>(`/api/v1/ingredients/${actionId}`),
+    mutationFn: (actionId: number) => apiDelete(`/api/v1/ingredients/${actionId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Action deleted.");
       setEditingAction(null);

@@ -77,7 +77,7 @@ def _session_file(config_home: Path) -> Path:
     return config_home / "poundcake" / "session.json"
 
 
-def _write_session(config_home: Path, base_url: str, payload: dict[str, Any]) -> None:
+def _write_session(config_home: Path, base_url: str, payload: dict[str, Any]) -> SessionStore:
     store = SessionStore(path=_session_file(config_home))
     _session_file(config_home).parent.mkdir(parents=True, exist_ok=True)
     data = {base_url: payload}

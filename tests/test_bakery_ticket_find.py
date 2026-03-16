@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bakery.schemas import TicketResponse
+from contracts.common import ProviderReference, SyncMetadata
+from contracts.communications import CommunicationSummary
 
 
 def _tickets_source() -> str:
@@ -19,18 +21,25 @@ def test_find_endpoint_queries_provider_search_when_not_dry_run() -> None:
 def test_ticket_response_supports_cached_ticket_data_metadata() -> None:
     now = datetime.now(timezone.utc)
     payload = TicketResponse(
-        ticket_id="8f5e2dd8-42a2-4a57-b1dc-2dd14d4236fa",
+        communication_id="8f5e2dd8-42a2-4a57-b1dc-2dd14d4236fa",
         provider_type="rackspace_core",
-        provider_ticket_id="240101-00001",
+        provider_reference=ProviderReference(
+            provider_type="rackspace_core",
+            reference_id="240101-00001",
+        ),
         state="open",
         latest_error=None,
         created_at=now,
         updated_at=now,
         data_source="local_cache",
-        ticket_data={"title": "Disk alert"},
-        last_sync_operation_id="0e8fcb26-95bd-4d77-93c4-b91978e47bd0",
-        last_sync_at=now,
+        summary=CommunicationSummary(title="Disk alert", metadata={}),
+        last_sync=SyncMetadata(
+            operation_id="0e8fcb26-95bd-4d77-93c4-b91978e47bd0",
+            synced_at=now,
+        ),
     )
     assert payload.data_source == "local_cache"
-    assert payload.ticket_data == {"title": "Disk alert"}
-    assert payload.last_sync_operation_id == "0e8fcb26-95bd-4d77-93c4-b91978e47bd0"
+    assert payload.summary is not None
+    assert payload.summary.title == "Disk alert"
+    assert payload.last_sync is not None
+    assert payload.last_sync.operation_id == "0e8fcb26-95bd-4d77-93c4-b91978e47bd0"

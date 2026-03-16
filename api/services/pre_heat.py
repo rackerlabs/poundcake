@@ -7,6 +7,8 @@
 """Pre-heat service - Creates new orders or increments existing ones."""
 
 import inspect
+from collections.abc import Awaitable
+from typing import cast
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -27,7 +29,7 @@ async def _in_transaction(db: AsyncSession) -> bool:
     """Return transaction state for real sessions and async-mocked sessions."""
     in_tx = db.in_transaction()
     if inspect.isawaitable(in_tx):
-        in_tx = await in_tx
+        in_tx = await cast(Awaitable[object], in_tx)
     return bool(in_tx)
 
 

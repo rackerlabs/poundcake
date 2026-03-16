@@ -115,4 +115,6 @@ def test_put_communications_policy_accepts_teams_only_policy_and_syncs_fallback(
     assert body["routes"][0]["label"] == "Teams war room"
     sync_global.assert_awaited_once()
     sync_fallback.assert_awaited_once()
-    assert sync_fallback.await_args.kwargs["routes"] == synced_routes
+    await_args = sync_fallback.await_args
+    assert await_args is not None
+    assert await_args.kwargs["routes"] == synced_routes

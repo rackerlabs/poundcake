@@ -4,213 +4,55 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field
 
+from contracts.base import ContractModel
+from contracts.common import ComponentHealth, ErrorEnvelope
+from contracts.communications import (
+    CommunicationAcceptedResponse,
+    CommunicationCloseRequest,
+    CommunicationContext,
+    CommunicationCreateRequest,
+    CommunicationNotifyRequest,
+    CommunicationOperationListResponse,
+    CommunicationOperationResponse,
+    CommunicationResponse,
+    CommunicationSummary,
+    CommunicationUpdateRequest,
+)
 
-class TicketCreateRequest(BaseModel):
-    """Create a new logical ticket."""
-
-    title: str = Field(..., min_length=1, max_length=512)
-    description: str = Field(..., min_length=1)
-    severity: Optional[str] = Field(default=None, max_length=50)
-    category: Optional[str] = Field(default=None, max_length=100)
-    source: Optional[str] = Field(default=None, max_length=100)
-    context: Dict[str, Any] = Field(default_factory=dict)
-
-
-class TicketUpdateRequest(BaseModel):
-    """Update mutable ticket fields."""
-
-    title: Optional[str] = Field(default=None, min_length=1, max_length=512)
-    description: Optional[str] = Field(default=None, min_length=1)
-    severity: Optional[str] = Field(default=None, max_length=50)
-    category: Optional[str] = Field(default=None, max_length=100)
-    state: Optional[str] = Field(default=None, max_length=50)
-    context: Dict[str, Any] = Field(default_factory=dict)
-
-
-class TicketCommentRequest(BaseModel):
-    """Add a comment to a ticket."""
-
-    comment: str = Field(..., min_length=1)
-    visibility: Optional[str] = Field(default=None, max_length=50)
-    context: Dict[str, Any] = Field(default_factory=dict)
+# Canonical contract exports
+OperationAcceptedResponse = CommunicationAcceptedResponse
+TicketContext = CommunicationContext
+TicketCreateRequest = CommunicationCreateRequest
+TicketUpdateRequest = CommunicationUpdateRequest
+TicketCommentRequest = CommunicationNotifyRequest
+TicketCloseRequest = CommunicationCloseRequest
+TicketResponse = CommunicationResponse
+TicketSummary = CommunicationSummary
+TicketOperationResponse = CommunicationOperationResponse
+TicketOperationListResponse = CommunicationOperationListResponse
 
 
-class TicketCloseRequest(BaseModel):
-    """Close a ticket."""
-
-    resolution_code: Optional[str] = Field(default=None, max_length=100)
-    resolution_notes: Optional[str] = Field(default=None, max_length=4096)
-    state: Optional[str] = Field(default="closed", max_length=50)
-    context: Dict[str, Any] = Field(default_factory=dict)
-
-
-class OperationAcceptedResponse(BaseModel):
-    """Accepted async operation response."""
-
-    ticket_id: str
-    operation_id: str
-    action: str
-    status: str
-    created_at: datetime
-
-
-class TicketResponse(BaseModel):
-    """Logical ticket status."""
-
-    ticket_id: str
-    provider_type: str
-    provider_ticket_id: Optional[str] = None
-    state: str
-    latest_error: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
-    data_source: str = "local_cache"
-    ticket_data: Optional[Dict[str, Any]] = None
-    last_sync_operation_id: Optional[str] = None
-    last_sync_at: Optional[datetime] = None
-
-
-class TicketOperationResponse(BaseModel):
-    """Detailed ticket operation state."""
-
-    operation_id: str
-    ticket_id: str
-    action: str
-    status: str
-    attempt_count: int
-    max_attempts: int
-    next_attempt_at: Optional[datetime] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    last_error: Optional[str] = None
-    provider_response: Optional[Dict[str, Any]] = None
-    created_at: datetime
-    updated_at: datetime
-
-
-class TicketOperationListResponse(BaseModel):
-    """List of operations for a ticket."""
-
-    ticket_id: str
-    operations: List[TicketOperationResponse]
-    count: int
-
-
-class CommunicationOpenRequest(TicketCreateRequest):
-    """Open a new logical communication."""
-
-
-class CommunicationUpdateRequest(TicketUpdateRequest):
-    """Update a logical communication."""
-
-
-class CommunicationNotifyRequest(BaseModel):
-    """Send a message/notification to an existing communication."""
-
-    message: Optional[str] = Field(default=None, min_length=1)
-    comment: Optional[str] = Field(default=None, min_length=1)
-    visibility: Optional[str] = Field(default=None, max_length=50)
-    context: Dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _coalesce_message_and_comment(self) -> "CommunicationNotifyRequest":
-        if self.message is None and self.comment is not None:
-            self.message = self.comment
-        if self.comment is None and self.message is not None:
-            self.comment = self.message
-        if self.message is None:
-            raise ValueError("message is required")
-        return self
-
-
-class CommunicationCloseRequest(TicketCloseRequest):
-    """Close a logical communication."""
-
-
-class CommunicationAcceptedResponse(BaseModel):
-    """Accepted async communication operation response."""
-
-    communication_id: str
-    operation_id: str
-    action: str
-    status: str
-    created_at: datetime
-
-
-class CommunicationResponse(BaseModel):
-    """Logical communication status."""
-
-    communication_id: str
-    provider_type: str
-    provider_reference_id: Optional[str] = None
-    state: str
-    latest_error: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
-    data_source: str = "local_cache"
-    communication_data: Optional[Dict[str, Any]] = None
-    last_sync_operation_id: Optional[str] = None
-    last_sync_at: Optional[datetime] = None
-
-
-class CommunicationOperationResponse(BaseModel):
-    """Detailed communication operation state."""
-
-    operation_id: str
-    communication_id: str
-    action: str
-    status: str
-    attempt_count: int
-    max_attempts: int
-    next_attempt_at: Optional[datetime] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    last_error: Optional[str] = None
-    provider_response: Optional[Dict[str, Any]] = None
-    created_at: datetime
-    updated_at: datetime
-
-
-class CommunicationOperationListResponse(BaseModel):
-    """List of operations for a communication."""
-
-    communication_id: str
-    operations: List[CommunicationOperationResponse]
-    count: int
-
-
-class ComponentHealth(BaseModel):
-    """Health status of a single component."""
-
-    status: str = Field(..., description="healthy, degraded, unhealthy")
-    message: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
-
-
-class HealthResponse(BaseModel):
+class HealthResponse(ContractModel):
     """Health check response."""
 
     status: str = Field(..., description="Overall system health status")
     version: str = Field(..., description="Bakery version")
     instance_id: str = Field(..., description="Unique instance identifier")
     timestamp: datetime = Field(..., description="Health check timestamp")
-    components: Dict[str, ComponentHealth] = Field(
+    components: dict[str, ComponentHealth] = Field(
         ..., description="Health status of individual components"
     )
 
 
-class ErrorResponse(BaseModel):
+class ErrorResponse(ErrorEnvelope):
     """Standard error response."""
 
-    error: str
-    detail: Optional[str] = None
 
-
-class MixerInfo(BaseModel):
+class MixerInfo(ContractModel):
     """Information about a single mixer."""
 
     mixer_type: str = Field(..., description="Mixer identifier")
@@ -220,14 +62,14 @@ class MixerInfo(BaseModel):
     )
 
 
-class MixerListResponse(BaseModel):
+class MixerListResponse(ContractModel):
     """Response for listing available mixers."""
 
     mixers: List[MixerInfo]
     count: int = Field(..., description="Number of registered mixers")
 
 
-class MixerValidateResponse(BaseModel):
+class MixerValidateResponse(ContractModel):
     """Response for mixer credential validation."""
 
     mixer_type: str = Field(..., description="Mixer that was validated")

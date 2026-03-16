@@ -64,7 +64,9 @@ def test_monitor_dishes__task_payload_with_name_and_action_executions__normalize
 
     def _request(method: str, url: str, **kwargs):
         if method == "POST" and str(url).endswith("/ingredients/bulk"):
-            ingredient_bulk_posts.append(kwargs.get("json"))
+            payload = kwargs.get("json")
+            if isinstance(payload, dict):
+                ingredient_bulk_posts.append(payload)
         return next(steps)
 
     monkeypatch.setattr(timer, "update_dish", _update)

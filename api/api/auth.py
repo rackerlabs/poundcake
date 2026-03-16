@@ -18,6 +18,7 @@ from fastapi import Cookie, HTTPException, Request, status, APIRouter, Response
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.schemas.schemas import SessionResponse
+from contracts.poundcake import StatusResponse
 
 logger = get_logger(__name__)
 
@@ -246,8 +247,8 @@ async def login(request: Request, response: Response) -> SessionResponse:
         raise HTTPException(status_code=400, detail="Malformed request")
 
 
-@router.post("/auth/logout")
-async def logout(request: Request, response: Response) -> dict[str, str]:
+@router.post("/auth/logout", response_model=StatusResponse)
+async def logout(request: Request, response: Response) -> StatusResponse:
     """Logout and destroy session."""
     req_id = request.state.req_id
     session_token = request.cookies.get("session_token")
@@ -262,4 +263,4 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
     # Clear the session cookie
     response.delete_cookie(key="session_token", path="/")
 
-    return {"message": "Logged out successfully"}
+    return StatusResponse(status="logged_out", message="Logged out successfully")

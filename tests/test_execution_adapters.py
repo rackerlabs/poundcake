@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
 
 from api.services.execution_adapters.bakery import BakeryExecutionAdapter
 from api.services.execution_adapters.stackstorm import StackStormExecutionAdapter
+from api.services.stackstorm_service import StackStormActionManager
 from api.services.execution_types import ExecutionContext
 
 
@@ -19,7 +21,7 @@ async def test_stackstorm_adapter_maps_running_status():
             )
         )
     )
-    adapter = StackStormExecutionAdapter(manager=manager)
+    adapter = StackStormExecutionAdapter(manager=cast(StackStormActionManager, manager))
     result = await adapter.execute_once(
         ExecutionContext(
             engine="stackstorm",

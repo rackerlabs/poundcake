@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.orm import Session
 
 from api.services import bakery_client
 from bakery.api import communications
@@ -12,6 +14,8 @@ from bakery.schemas import (
     CommunicationResponse,
     OperationAcceptedResponse,
 )
+from contracts.common import ProviderReference, SyncMetadata
+from contracts.communications import CommunicationSummary
 
 
 @pytest.mark.asyncio
@@ -22,7 +26,7 @@ async def test_open_communication_maps_ticket_create_response(monkeypatch: pytes
         "create_ticket",
         AsyncMock(
             return_value=OperationAcceptedResponse(
-                ticket_id="comm-1",
+                communication_id="comm-1",
                 operation_id="op-1",
                 action="create",
                 status="queued",
@@ -32,9 +36,11 @@ async def test_open_communication_maps_ticket_create_response(monkeypatch: pytes
     )
 
     response = await communications.open_communication(
-        payload=communications.CommunicationOpenRequest(title="Disk alert", description="details"),
+        payload=communications.CommunicationCreateRequest(
+            title="Disk alert", description="details"
+        ),
         idempotency_key="idem-1",
-        db=None,
+        db=cast(Session, None),
     )
 
     assert response.communication_id == "comm-1"
@@ -47,7 +53,7 @@ async def test_notify_communication_maps_message_to_comment(monkeypatch: pytest.
     now = datetime.now(timezone.utc)
     add_comment = AsyncMock(
         return_value=OperationAcceptedResponse(
-            ticket_id="comm-2",
+            communication_id="comm-2",
             operation_id="op-2",
             action="comment",
             status="queued",
@@ -60,12 +66,14 @@ async def test_notify_communication_maps_message_to_comment(monkeypatch: pytest.
         communication_id="comm-2",
         payload=CommunicationNotifyRequest(message="manual action required"),
         idempotency_key="idem-2",
-        db=None,
+        db=cast(Session, None),
     )
 
     assert response.communication_id == "comm-2"
-    sent_payload = add_comment.await_args.kwargs["payload"]
-    assert sent_payload.comment == "manual action required"
+    await_args = add_comment.await_args
+    assert await_args is not None
+    sent_payload = await_args.kwargs["payload"]
+    assert sent_payload.message == "manual action required"
 
 
 def test_communication_response_supports_agnostic_metadata() -> None:
@@ -73,18 +81,23 @@ def test_communication_response_supports_agnostic_metadata() -> None:
     payload = CommunicationResponse(
         communication_id="comm-3",
         provider_type="rackspace_core",
-        provider_reference_id="240101-00001",
+        provider_reference=ProviderReference(
+            provider_type="rackspace_core",
+            reference_id="240101-00001",
+            state="open",
+        ),
         state="open",
         latest_error=None,
         created_at=now,
         updated_at=now,
         data_source="local_cache",
-        communication_data={"title": "Disk alert"},
-        last_sync_operation_id="op-3",
-        last_sync_at=now,
+        summary=CommunicationSummary(title="Disk alert", metadata={}),
+        last_sync=SyncMetadata(operation_id="op-3", synced_at=now),
     )
-    assert payload.communication_data == {"title": "Disk alert"}
-    assert payload.provider_reference_id == "240101-00001"
+    assert payload.summary is not None
+    assert payload.summary.title == "Disk alert"
+    assert payload.provider_reference is not None
+    assert payload.provider_reference.reference_id == "240101-00001"
 
 
 @pytest.mark.asyncio
@@ -92,7 +105,15 @@ async def test_ticket_wrappers_normalize_communication_payloads(monkeypatch: pyt
     monkeypatch.setattr(
         bakery_client,
         "open_communication_with_key",
-        AsyncMock(return_value={"communication_id": "comm-4", "operation_id": "op-4"}),
+        AsyncMock(
+            return_value={
+                "communication_id": "comm-4",
+                "operation_id": "op-4",
+                "action": "create",
+                "status": "queued",
+                "created_at": datetime.now(timezone.utc),
+            }
+        ),
     )
     monkeypatch.setattr(
         bakery_client,
@@ -100,9 +121,16 @@ async def test_ticket_wrappers_normalize_communication_payloads(monkeypatch: pyt
         AsyncMock(
             return_value={
                 "communication_id": "comm-4",
-                "provider_reference_id": "INC0004",
+                "provider_reference": {
+                    "provider_type": "rackspace_core",
+                    "reference_id": "INC0004",
+                },
                 "state": "open",
-                "communication_data": {"title": "Alert"},
+                "provider_type": "rackspace_core",
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "data_source": "local_cache",
+                "summary": {"title": "Alert", "metadata": {}},
             }
         ),
     )
@@ -117,6 +145,8 @@ async def test_ticket_wrappers_normalize_communication_payloads(monkeypatch: pyt
                 "action": "open",
                 "attempt_count": 0,
                 "max_attempts": 5,
+                "last_error": None,
+                "result": None,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
             }
@@ -131,7 +161,7 @@ async def test_ticket_wrappers_normalize_communication_payloads(monkeypatch: pyt
     ticket = await bakery_client.get_ticket("comm-4")
     operation = await bakery_client.get_operation("op-4")
 
-    assert accepted["ticket_id"] == "comm-4"
-    assert ticket["provider_ticket_id"] == "INC0004"
-    assert ticket["ticket_data"] == {"title": "Alert"}
-    assert operation["ticket_id"] == "comm-4"
+    assert accepted["communication_id"] == "comm-4"
+    assert ticket["provider_reference"]["reference_id"] == "INC0004"
+    assert ticket["summary"]["title"] == "Alert"
+    assert operation["communication_id"] == "comm-4"

@@ -6,16 +6,24 @@ import types
 from unittest.mock import Mock
 
 structlog_stub = types.ModuleType("structlog")
-structlog_stub.configure = lambda **_: None
-structlog_stub.get_logger = lambda: Mock()
-structlog_stub.stdlib = types.SimpleNamespace(
-    add_log_level=object(),
-    BoundLogger=object,
-    LoggerFactory=lambda: object(),
+setattr(structlog_stub, "configure", lambda **_: None)
+setattr(structlog_stub, "get_logger", lambda: Mock())
+setattr(
+    structlog_stub,
+    "stdlib",
+    types.SimpleNamespace(
+        add_log_level=object(),
+        BoundLogger=object,
+        LoggerFactory=lambda: object(),
+    ),
 )
-structlog_stub.processors = types.SimpleNamespace(
-    TimeStamper=lambda **_: object(),
-    JSONRenderer=lambda: object(),
+setattr(
+    structlog_stub,
+    "processors",
+    types.SimpleNamespace(
+        TimeStamper=lambda **_: object(),
+        JSONRenderer=lambda: object(),
+    ),
 )
 sys.modules.setdefault("structlog", structlog_stub)
 

@@ -8,6 +8,12 @@ from bakery.config import settings
 from bakery.mixer.base import BaseMixer
 
 
+def _auth_credentials(username: str | None, password: str | None) -> tuple[str, str]:
+    if not username or not password:
+        raise ValueError("ServiceNow credentials not configured")
+    return username, password
+
+
 class ServiceNowMixer(BaseMixer):
     """Mixer for ServiceNow ticketing system."""
 
@@ -58,7 +64,7 @@ class ServiceNowMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/api/now/table/incident",
-                auth=(self.username, self.password),
+                auth=_auth_credentials(self.username, self.password),
                 json={
                     "short_description": data.get("title", ""),
                     "description": data.get("description", ""),
@@ -84,7 +90,7 @@ class ServiceNowMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.patch(
                 f"{self.base_url}/api/now/table/incident/{ticket_id}",
-                auth=(self.username, self.password),
+                auth=_auth_credentials(self.username, self.password),
                 json=data.get("updates", {}),
             )
             response.raise_for_status()
@@ -105,7 +111,7 @@ class ServiceNowMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.patch(
                 f"{self.base_url}/api/now/table/incident/{ticket_id}",
-                auth=(self.username, self.password),
+                auth=_auth_credentials(self.username, self.password),
                 json={
                     "state": "7",  # Closed
                     "close_notes": data.get("close_notes", "Closed by automation"),
@@ -129,7 +135,7 @@ class ServiceNowMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.patch(
                 f"{self.base_url}/api/now/table/incident/{ticket_id}",
-                auth=(self.username, self.password),
+                auth=_auth_credentials(self.username, self.password),
                 json={"comments": comment},
             )
             response.raise_for_status()
@@ -166,7 +172,7 @@ class ServiceNowMixer(BaseMixer):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(
                 f"{self.base_url}/api/now/table/incident",
-                auth=(self.username, self.password),
+                auth=_auth_credentials(self.username, self.password),
                 params=params,
             )
             response.raise_for_status()
@@ -193,7 +199,7 @@ class ServiceNowMixer(BaseMixer):
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
                     f"{self.base_url}/api/now/table/incident",
-                    auth=(self.username, self.password),
+                    auth=_auth_credentials(self.username, self.password),
                     params={"sysparm_limit": 1},
                 )
                 return response.status_code == 200

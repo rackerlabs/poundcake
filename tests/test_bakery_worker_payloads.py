@@ -4,13 +4,17 @@ import sys
 import types
 
 if "structlog" not in sys.modules:
-    sys.modules["structlog"] = types.SimpleNamespace(
-        get_logger=lambda *args, **kwargs: types.SimpleNamespace(
+    structlog_stub = types.ModuleType("structlog")
+    setattr(
+        structlog_stub,
+        "get_logger",
+        lambda *args, **kwargs: types.SimpleNamespace(
             info=lambda *a, **k: None,
             error=lambda *a, **k: None,
             exception=lambda *a, **k: None,
-        )
+        ),
     )
+    sys.modules["structlog"] = structlog_stub
 
 from bakery.models import Ticket
 from bakery.worker import _build_provider_payload

@@ -1,5 +1,7 @@
 from types import SimpleNamespace
+from typing import cast
 
+from api.models.models import Recipe
 from api.services.dish_planner import seed_dish_ingredients_for_phase
 
 
@@ -30,16 +32,19 @@ def _recipe_ingredient(
 
 
 def test_seed_dish_ingredients_for_phase__resolving_excludes_stackstorm_even_when_both():
-    recipe = SimpleNamespace(
-        recipe_ingredients=[
-            _recipe_ingredient(
-                ri_id=1,
-                run_phase="both",
-                engine="stackstorm",
-                purpose="remediation",
-                task_key_template="local",
-            )
-        ]
+    recipe = cast(
+        Recipe,
+        SimpleNamespace(
+            recipe_ingredients=[
+                _recipe_ingredient(
+                    ri_id=1,
+                    run_phase="both",
+                    engine="stackstorm",
+                    purpose="remediation",
+                    task_key_template="local",
+                )
+            ],
+        ),
     )
 
     rows = seed_dish_ingredients_for_phase(dish_id=101, recipe=recipe, phase="resolving")
@@ -48,25 +53,28 @@ def test_seed_dish_ingredients_for_phase__resolving_excludes_stackstorm_even_whe
 
 
 def test_seed_dish_ingredients_for_phase__resolving_keeps_only_bakery_comms():
-    recipe = SimpleNamespace(
-        recipe_ingredients=[
-            _recipe_ingredient(
-                ri_id=1,
-                run_phase="both",
-                engine="bakery",
-                purpose="comms",
-                target="core",
-                task_key_template="core",
-            ),
-            _recipe_ingredient(
-                ri_id=2,
-                run_phase="both",
-                engine="bakery",
-                purpose="utility",
-                target="core",
-                task_key_template="core_util",
-            ),
-        ]
+    recipe = cast(
+        Recipe,
+        SimpleNamespace(
+            recipe_ingredients=[
+                _recipe_ingredient(
+                    ri_id=1,
+                    run_phase="both",
+                    engine="bakery",
+                    purpose="comms",
+                    target="core",
+                    task_key_template="core",
+                ),
+                _recipe_ingredient(
+                    ri_id=2,
+                    run_phase="both",
+                    engine="bakery",
+                    purpose="utility",
+                    target="core",
+                    task_key_template="core_util",
+                ),
+            ],
+        ),
     )
 
     rows = seed_dish_ingredients_for_phase(dish_id=101, recipe=recipe, phase="resolving")

@@ -16,23 +16,29 @@ def _reload_prep_chef(monkeypatch: pytest.MonkeyPatch):
         del sys.modules[module_name]
 
     fake_http_client = types.ModuleType("api.core.http_client")
-    fake_http_client.request_with_retry_sync = lambda *_args, **_kwargs: SimpleNamespace(
-        status_code=200, json=lambda: [], text=""
+    setattr(
+        fake_http_client,
+        "request_with_retry_sync",
+        lambda *_args, **_kwargs: SimpleNamespace(status_code=200, json=lambda: [], text=""),
     )
 
     fake_logging = types.ModuleType("api.core.logging")
-    fake_logging.setup_logging = lambda: None
-    fake_logging.get_logger = lambda _name: SimpleNamespace(
-        info=lambda *_args, **_kwargs: None,
-        error=lambda *_args, **_kwargs: None,
-        debug=lambda *_args, **_kwargs: None,
+    setattr(fake_logging, "setup_logging", lambda: None)
+    setattr(
+        fake_logging,
+        "get_logger",
+        lambda _name: SimpleNamespace(
+            info=lambda *_args, **_kwargs: None,
+            error=lambda *_args, **_kwargs: None,
+            debug=lambda *_args, **_kwargs: None,
+        ),
     )
 
     fake_config = types.ModuleType("api.core.config")
-    fake_config.get_settings = lambda: SimpleNamespace(poller_http_retries=3)
+    setattr(fake_config, "get_settings", lambda: SimpleNamespace(poller_http_retries=3))
 
     fake_service_helpers = types.ModuleType("kitchen.service_helpers")
-    fake_service_helpers.wait_for_api = lambda *_args, **_kwargs: None
+    setattr(fake_service_helpers, "wait_for_api", lambda *_args, **_kwargs: None)
 
     monkeypatch.setitem(sys.modules, "api.core.http_client", fake_http_client)
     monkeypatch.setitem(sys.modules, "api.core.logging", fake_logging)

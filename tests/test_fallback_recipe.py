@@ -40,8 +40,10 @@ async def test_ensure_fallback_recipe_syncs_global_policy_routes() -> None:
     assert result is fallback_recipe
     get_routes.assert_awaited_once_with(db)
     sync_fallback.assert_awaited_once()
-    assert sync_fallback.await_args.args[0] is db
-    assert sync_fallback.await_args.kwargs["routes"] == routes
+    await_args = sync_fallback.await_args
+    assert await_args is not None
+    assert await_args.args[0] is db
+    assert await_args.kwargs["routes"] == routes
 
 
 @pytest.mark.asyncio
@@ -64,4 +66,6 @@ async def test_ensure_fallback_recipe_allows_empty_global_policy() -> None:
     assert result is disabled_recipe
     get_routes.assert_awaited_once_with(db)
     sync_fallback.assert_awaited_once()
-    assert sync_fallback.await_args.kwargs["routes"] == []
+    await_args = sync_fallback.await_args
+    assert await_args is not None
+    assert await_args.kwargs["routes"] == []

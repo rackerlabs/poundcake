@@ -55,7 +55,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["api*", "bakery*", "cli*", "shared*"]
+include = ["api*", "bakery*", "cli*", "contracts*", "shared*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "shared.version.__version__"}

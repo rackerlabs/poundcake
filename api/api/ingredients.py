@@ -93,7 +93,7 @@ async def create_ingredient(
     await db.commit()
     await db.refresh(db_ingredient)
 
-    return db_ingredient
+    return IngredientResponse.model_validate(db_ingredient)
 
 
 @router.get("/ingredients/", response_model=List[IngredientResponse])
@@ -112,7 +112,7 @@ async def list_ingredients(
 
     query = query.limit(params.limit).offset(params.offset)
     result = await db.execute(query)
-    return result.scalars().all()
+    return [IngredientResponse.model_validate(item) for item in result.scalars().all()]
 
 
 @router.get("/ingredients/{ingredient_id}", response_model=IngredientResponse)
@@ -122,7 +122,7 @@ async def get_ingredient(ingredient_id: int, db: AsyncSession = Depends(get_db))
     ingredient = result.scalars().first()
     if not ingredient or is_managed_communications_ingredient(ingredient):
         raise HTTPException(status_code=404, detail="Ingredient not found")
-    return ingredient
+    return IngredientResponse.model_validate(ingredient)
 
 
 @router.delete("/ingredients/{ingredient_id}", response_model=DeleteResponse)
@@ -166,7 +166,11 @@ async def get_ingredients_by_recipe_name(recipe_name: str, db: AsyncSession = De
     if not recipe:
         raise HTTPException(status_code=404, detail=f"Recipe '{recipe_name}' not found")
 
-    return [ri.ingredient for ri in recipe.recipe_ingredients if ri.ingredient is not None]
+    return [
+        IngredientResponse.model_validate(ri.ingredient)
+        for ri in recipe.recipe_ingredients
+        if ri.ingredient is not None
+    ]
 
 
 @router.get("/ingredients/by-recipe/{recipe_id}", response_model=List[IngredientResponse])
@@ -181,7 +185,11 @@ async def get_ingredients_by_recipe_id(recipe_id: int, db: AsyncSession = Depend
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
-    return [ri.ingredient for ri in recipe.recipe_ingredients if ri.ingredient is not None]
+    return [
+        IngredientResponse.model_validate(ri.ingredient)
+        for ri in recipe.recipe_ingredients
+        if ri.ingredient is not None
+    ]
 
 
 @router.patch("/ingredients/{ingredient_id}", response_model=IngredientResponse)
@@ -211,4 +219,4 @@ async def update_ingredient(
         raise HTTPException(status_code=500, detail="Ingredient update failed")
     await db.refresh(ingredient)
 
-    return ingredient
+    return IngredientResponse.model_validate(ingredient)

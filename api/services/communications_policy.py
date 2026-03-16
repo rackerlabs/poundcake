@@ -6,7 +6,7 @@ import re
 import uuid
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +86,12 @@ def _metadata_from_payload(execution_payload: dict[str, Any] | None) -> dict[str
         return {}
     metadata = context.get(POLICY_METADATA_KEY)
     return metadata if isinstance(metadata, dict) else {}
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
+    return {}
 
 
 def is_managed_communications_ingredient(ingredient: Ingredient | None) -> bool:
@@ -656,12 +662,13 @@ def _legacy_provider_config_from_payload(
     execution_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
     payload = execution_payload if isinstance(execution_payload, dict) else {}
-    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    context = _mapping(payload.get("context"))
 
-    if isinstance(context.get("provider_config"), dict):
+    provider_config = _mapping(context.get("provider_config"))
+    if provider_config:
         return normalize_route_provider_config(
             execution_target,
-            context.get("provider_config"),
+            provider_config,
             require_required=False,
         )
 

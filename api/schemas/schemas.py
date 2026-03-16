@@ -91,8 +91,6 @@ class CommunicationRouteCreate(CommunicationRouteBase):
 
 
 class CommunicationRouteResponse(CommunicationRouteBase):
-    id: str
-
     @model_validator(mode="after")
     def _normalize_provider_config(self) -> "CommunicationRouteResponse":
         self.provider_config = normalize_route_provider_config(

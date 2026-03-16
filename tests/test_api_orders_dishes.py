@@ -619,7 +619,9 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__injects_global_policy
     assert body["status"] == "dispatched"
     assert body["run_phase"] == "resolving"
     expected_duration.assert_awaited_once()
-    assert expected_duration.await_args.kwargs["extra_recipe_ingredients"] == [policy_step]
+    await_args = expected_duration.await_args
+    assert await_args is not None
+    assert await_args.kwargs["extra_recipe_ingredients"] == [policy_step]
     added = [call.args[0] for call in mock_db_session.add.call_args_list]
     seeded = [row for row in added if isinstance(row, DishIngredient)]
     assert len(seeded) == 1

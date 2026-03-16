@@ -13,7 +13,8 @@ import time
 import os
 import re
 import tarfile
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, cast
 
 import yaml
 
@@ -621,20 +622,21 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
     task_defs: list[dict[str, Any]] = []
 
     for i, ri in enumerate(sorted_steps):
-        if isinstance(recipe_object, dict):
-            run_phase = (ri.get("run_phase") or "both").lower()
+        step = cast(dict[str, Any], ri) if isinstance(recipe_object, dict) else None
+        if step is not None:
+            run_phase = str(step.get("run_phase") or "both").lower()
         else:
             run_phase = (ri.run_phase or "both").lower()
         if run_phase not in ("firing", "both"):
             continue
 
-        if isinstance(recipe_object, dict):
-            ingredient = ri.get("ingredient") or {}
-            step_order = ri.get("step_order")
-            depth = ri.get("depth") or 0
+        if step is not None:
+            ingredient = cast(dict[str, Any], step.get("ingredient") or {})
+            step_order = step.get("step_order")
+            depth = step.get("depth") or 0
             task_name_raw = ingredient.get("task_key_template", "task")
             task_id = ingredient.get("execution_target")
-            input_parameters = ri.get("execution_parameters_override") or {}
+            input_parameters = cast(dict[str, Any], step.get("execution_parameters_override") or {})
             retry_count = ingredient.get("retry_count") or 0
             retry_delay = ingredient.get("retry_delay")
             is_blocking = ingredient.get("is_blocking", True)
@@ -772,7 +774,7 @@ def _normalize_execution_parameters(recipe: Recipe | dict[str, Any]) -> dict[str
 
 
 def build_stackstorm_pack_files(
-    recipes: list[Recipe | dict[str, Any]],
+    recipes: Sequence[Recipe | dict[str, Any]],
     pack_name: str | None = None,
 ) -> dict[str, bytes]:
     """Build an in-memory StackStorm pack file tree from recipe workflow sources."""
@@ -806,7 +808,7 @@ def build_stackstorm_pack_files(
 
 
 def build_stackstorm_pack_artifact(
-    recipes: list[Recipe | dict[str, Any]],
+    recipes: Sequence[Recipe | dict[str, Any]],
     pack_name: str | None = None,
 ) -> tuple[bytes, str]:
     """Create a deterministic tar.gz payload and etag for StackStorm pack sync."""

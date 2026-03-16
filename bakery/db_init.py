@@ -5,13 +5,13 @@ from collections.abc import Iterable
 from pathlib import Path
 import sys
 import time
-import structlog
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 
 from bakery.config import settings
+from bakery.structlog_compat import structlog
 
 # Configure logging
 structlog.configure(

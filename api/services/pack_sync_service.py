@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Sequence
+from typing import cast
 
 from fastapi import HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -52,7 +54,7 @@ async def get_pack_sync_artifact_response(
         .where(Recipe.enabled.is_(True))
     )
     recipes = result.unique().scalars().all()
-    artifact_bytes, etag = build_stackstorm_pack_artifact(recipes=recipes)
+    artifact_bytes, etag = build_stackstorm_pack_artifact(recipes=cast(Sequence[Recipe], recipes))
 
     headers = {"ETag": etag, "Cache-Control": "no-cache"}
     request_etag = request.headers.get("if-none-match", "").strip()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from api.models.models import DishIngredient, Order
 from api.services.communications import (
@@ -52,6 +52,12 @@ def _first_text(*values: Any) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
+    return {}
 
 
 def _collapse_line(value: Any) -> str:
@@ -178,13 +184,10 @@ def _step_sort_key(step: DishIngredient) -> tuple[str, str, int]:
 
 
 def _step_label(step: DishIngredient) -> str:
+    ingredient = getattr(getattr(step, "recipe_ingredient", None), "ingredient", None)
     return _first_text(
         step.task_key,
-        (
-            getattr(getattr(step, "recipe_ingredient", None), "ingredient", None).task_key_template
-            if getattr(getattr(step, "recipe_ingredient", None), "ingredient", None) is not None
-            else None
-        ),
+        ingredient.task_key_template if ingredient is not None else None,
         step.execution_target,
         f"step-{getattr(step, 'id', 'unknown')}",
     )
@@ -295,21 +298,13 @@ def build_canonical_communication_context(
     execution_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
     payload = execution_payload if isinstance(execution_payload, dict) else {}
-    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    context = _mapping(payload.get("context"))
     labels = dict(order.labels or {})
     annotations = dict(order.annotations or {})
     raw_data = dict(order.raw_data or {})
-    metadata = (
-        context.get(POLICY_METADATA_KEY)
-        if isinstance(context.get(POLICY_METADATA_KEY), dict)
-        else {}
-    )
-    semantic_text = (
-        context.get("semantic_text") if isinstance(context.get("semantic_text"), dict) else {}
-    )
-    provider_config = (
-        context.get("provider_config") if isinstance(context.get("provider_config"), dict) else {}
-    )
+    metadata = _mapping(context.get(POLICY_METADATA_KEY))
+    semantic_text = _mapping(context.get("semantic_text"))
+    provider_config = _mapping(context.get("provider_config"))
 
     links: list[dict[str, str]] = []
     generator_url = _first_text(raw_data.get("generatorURL"))

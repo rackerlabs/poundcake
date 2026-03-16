@@ -66,8 +66,9 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         payload = ctx.execution_payload if isinstance(ctx.execution_payload, dict) else {}
         parameters = ctx.execution_parameters if isinstance(ctx.execution_parameters, dict) else {}
         ticket_id = str(
-            payload.get("ticket_id")
+            payload.get("communication_id")
             or ctx.context.get("ticket_id")
+            or ctx.context.get("communication_id")
             or ctx.context.get("bakery_ticket_id")
             or ""
         ).strip()
@@ -94,8 +95,9 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         )
 
         ticket_id = str(
-            payload.get("ticket_id")
+            payload.get("communication_id")
             or ctx.context.get("ticket_id")
+            or ctx.context.get("communication_id")
             or ctx.context.get("bakery_ticket_id")
             or ""
         ).strip()
@@ -125,9 +127,10 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                         payload=payload,
                         idempotency_key=idem_key,
                     )
-                    created_ticket_id = str(accepted.get("ticket_id") or "").strip()
+                    created_ticket_id = str(accepted.get("communication_id") or "").strip()
                     if created_ticket_id:
                         context_updates["bakery_ticket_id"] = created_ticket_id
+                        context_updates["communication_id"] = created_ticket_id
                         ticket_id = created_ticket_id
             elif operation == "update":
                 accepted = await update_ticket_with_key(
@@ -138,7 +141,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                 )
             elif operation == "notify":
                 comment_payload = (
-                    payload if "comment" in payload else {"comment": self._payload_comment(payload)}
+                    payload if "message" in payload else {"message": self._payload_comment(payload)}
                 )
                 accepted = await add_ticket_comment_with_key(
                     req_id=ctx.req_id,
@@ -159,9 +162,10 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                     payload=payload,
                     idempotency_key=idem_key,
                 )
-                created_ticket_id = str(accepted.get("ticket_id") or "").strip()
+                created_ticket_id = str(accepted.get("communication_id") or "").strip()
                 if created_ticket_id:
                     context_updates["bakery_ticket_id"] = created_ticket_id
+                    context_updates["communication_id"] = created_ticket_id
                     ticket_id = created_ticket_id
             elif bakery_action == "update":
                 accepted = await update_ticket_with_key(
@@ -171,7 +175,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                     idempotency_key=idem_key,
                 )
             elif bakery_action == "comment":
-                comment_payload = payload if "comment" in payload else {"comment": str(payload)}
+                comment_payload = payload if "message" in payload else {"message": str(payload)}
                 accepted = await add_ticket_comment_with_key(
                     req_id=ctx.req_id,
                     ticket_id=ticket_id,

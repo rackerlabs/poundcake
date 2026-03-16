@@ -6,22 +6,24 @@
 #
 """Pydantic models for query parameter validation."""
 
-from typing import Optional, Type, Callable
+from typing import Optional, Type, Callable, TypeVar
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi import Request, HTTPException
 
 from api.types import DishProcessingStatus, OrderProcessingStatus, AlertStatus
 from api.types import SuppressionStatus
 
+TQueryParams = TypeVar("TQueryParams", bound=BaseModel)
 
-def validate_query_params(model_class: Type[BaseModel]) -> Callable[[Request], BaseModel]:
+
+def validate_query_params(model_class: Type[TQueryParams]) -> Callable[[Request], TQueryParams]:
     """
     Dependency factory that validates query parameters against a Pydantic model.
 
     Rejects unknown query parameters with 422 error.
     """
 
-    def dependency(request: Request) -> BaseModel:
+    def dependency(request: Request) -> TQueryParams:
         # Get allowed field names from Pydantic model
         allowed_params = set(model_class.model_fields.keys())
 

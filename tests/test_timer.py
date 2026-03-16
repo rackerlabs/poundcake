@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 import pytest
 
@@ -85,7 +86,7 @@ def test_check_for_timeouts__hard_timeout__cancels_and_fails_dish(
 
     assert timed_out is True
     assert called["cancel"] == ("exec-9", "REQ-9")
-    _dish, req_id, kwargs = called["update"]
+    _dish, req_id, kwargs = cast(tuple[object, str, dict[str, object]], called["update"])
     assert req_id == "REQ-9"
     assert kwargs["processing_status"] == "failed"
     assert kwargs["execution_status"] == "timeout"
@@ -186,7 +187,9 @@ def test_monitor_dishes__terminal_success__persists_ingredients_and_completes(
 
     def _request(method: str, url: str, **kwargs):
         if method == "POST" and str(url).endswith("/ingredients/bulk"):
-            ingredient_bulk_posts.append(kwargs.get("json"))
+            payload = kwargs.get("json")
+            if isinstance(payload, dict):
+                ingredient_bulk_posts.append(payload)
         return next(steps)
 
     monkeypatch.setattr(timer, "update_dish", _update)

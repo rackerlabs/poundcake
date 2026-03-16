@@ -98,7 +98,7 @@ async def _validate_ingredient_ids(db: AsyncSession, *, step_specs: list[dict[st
         raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
 
 
-async def _serialize_recipe(db: AsyncSession, recipe: Recipe) -> dict[str, Any]:
+async def _serialize_recipe(db: AsyncSession, recipe: Recipe) -> RecipeDetailResponse:
     visible_steps = get_visible_recipe_steps(recipe)
     local_routes = get_recipe_local_routes(recipe)
     if local_routes:
@@ -115,19 +115,21 @@ async def _serialize_recipe(db: AsyncSession, recipe: Recipe) -> dict[str, Any]:
             routes=global_routes,
         )
 
-    return {
-        "id": recipe.id,
-        "name": recipe.name,
-        "description": recipe.description,
-        "enabled": recipe.enabled,
-        "clear_timeout_sec": recipe.clear_timeout_sec,
-        "created_at": recipe.created_at,
-        "updated_at": recipe.updated_at,
-        "deleted": recipe.deleted,
-        "deleted_at": recipe.deleted_at,
-        "recipe_ingredients": visible_steps,
-        "communications": communications,
-    }
+    return RecipeDetailResponse.model_validate(
+        {
+            "id": recipe.id,
+            "name": recipe.name,
+            "description": recipe.description,
+            "enabled": recipe.enabled,
+            "clear_timeout_sec": recipe.clear_timeout_sec,
+            "created_at": recipe.created_at,
+            "updated_at": recipe.updated_at,
+            "deleted": recipe.deleted,
+            "deleted_at": recipe.deleted_at,
+            "recipe_ingredients": visible_steps,
+            "communications": communications,
+        }
+    )
 
 
 async def _validate_effective_communications(

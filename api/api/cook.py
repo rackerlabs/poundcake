@@ -8,7 +8,7 @@
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any
+from typing import Any, cast
 from api.core.logging import get_logger
 from api.core.config import get_settings
 from api.core.database import get_db
@@ -31,9 +31,38 @@ from api.services.dishwasher_service import sync_stackstorm
 from api.services.pack_sync_service import get_pack_sync_artifact_response
 from api.api.auth import require_auth_if_enabled
 from api.validation.execution import validate_execution_request
+from contracts.poundcake import (
+    DeleteExecutionResponse,
+    StackStormExecutionListResponse,
+    StackStormExecutionResponse,
+    StackStormTaskListResponse,
+    SyncCatalogStats,
+    SyncStackStormResponse,
+    WorkflowRegistrationRequest,
+    WorkflowRegistrationResponse,
+)
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
+    return {}
+
+
+def _execution_response(payload: dict[str, Any]) -> StackStormExecutionResponse:
+    return StackStormExecutionResponse(
+        id=str(payload.get("id") or payload.get("execution_id") or ""),
+        status=payload.get("status"),
+        action=payload.get("action"),
+        context=_mapping(payload.get("context")),
+        result=_mapping(payload.get("result")),
+        parameters=_mapping(payload.get("parameters")),
+        start_timestamp=payload.get("start_timestamp"),
+        end_timestamp=payload.get("end_timestamp"),
+    )
 
 
 @router.post("/cook/execute", response_model=ExecutionEnvelopeResponse)
@@ -200,7 +229,7 @@ async def execute_ingredient(
         raise HTTPException(status_code=502, detail=f"Execution gateway error: {str(e)}")
 
 
-@router.get("/cook/executions/{execution_id}")
+@router.get("/cook/executions/{execution_id}", response_model=StackStormExecutionResponse)
 async def get_st2_execution(
     execution_id: str,
     request: Request,
@@ -211,7 +240,7 @@ async def get_st2_execution(
     req_id = request.state.req_id
     try:
         result = await manager._client.get_execution(execution_id)
-        return result
+        return _execution_response(result)
     except StackStormError as e:
         logger.error(
             "Failed to get StackStorm execution",
@@ -220,7 +249,7 @@ async def get_st2_execution(
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.get("/cook/executions")
+@router.get("/cook/executions", response_model=StackStormExecutionListResponse)
 async def list_st2_executions(
     request: Request,
     parent: str | None = Query(None, description="Filter by parent execution id"),
@@ -231,7 +260,10 @@ async def list_st2_executions(
     """List StackStorm executions (optional parent filter)."""
     req_id = request.state.req_id
     try:
-        return await manager.get_execution_history(limit=limit, parent=parent)
+        history = await manager.get_execution_history(limit=limit, parent=parent)
+        return StackStormExecutionListResponse(
+            executions=[_execution_response(item) for item in history]
+        )
     except StackStormError as e:
         logger.error(
             "Failed to list StackStorm executions",
@@ -240,7 +272,7 @@ async def list_st2_executions(
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.get("/cook/executions/{execution_id}/tasks")
+@router.get("/cook/executions/{execution_id}/tasks", response_model=StackStormTaskListResponse)
 async def get_st2_execution_tasks(
     execution_id: str,
     request: Request,
@@ -251,7 +283,7 @@ async def get_st2_execution_tasks(
     req_id = request.state.req_id
     try:
         result = await manager._client.get_execution_tasks(execution_id)
-        return result
+        return StackStormTaskListResponse(tasks=result)
     except StackStormError as e:
         logger.error(
             "Failed to get StackStorm execution tasks",
@@ -260,7 +292,7 @@ async def get_st2_execution_tasks(
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.put("/cook/executions/{execution_id}")
+@router.put("/cook/executions/{execution_id}", response_model=DeleteExecutionResponse)
 async def cancel_st2_execution(
     execution_id: str,
     request: Request,
@@ -271,7 +303,9 @@ async def cancel_st2_execution(
     req_id = request.state.req_id
     try:
         ok = await manager._client.cancel_execution(execution_id)
-        return {"status": "canceled" if ok else "failed", "execution_id": execution_id}
+        return DeleteExecutionResponse(
+            status="canceled" if ok else "failed", execution_id=execution_id
+        )
     except StackStormError as e:
         logger.error(
             "Failed to cancel StackStorm execution",
@@ -280,7 +314,7 @@ async def cancel_st2_execution(
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.delete("/cook/executions/{execution_id}")
+@router.delete("/cook/executions/{execution_id}", response_model=DeleteExecutionResponse)
 async def delete_st2_execution(
     execution_id: str,
     request: Request,
@@ -291,7 +325,9 @@ async def delete_st2_execution(
     req_id = request.state.req_id
     try:
         ok = await manager._client.delete_execution(execution_id)
-        return {"status": "deleted" if ok else "failed", "execution_id": execution_id}
+        return DeleteExecutionResponse(
+            status="deleted" if ok else "failed", execution_id=execution_id
+        )
     except StackStormError as e:
         logger.error(
             "Failed to delete StackStorm execution",
@@ -300,10 +336,10 @@ async def delete_st2_execution(
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.post("/cook/workflows/register")
+@router.post("/cook/workflows/register", response_model=WorkflowRegistrationResponse)
 async def register_st2_workflow(
     request: Request,
-    payload: Dict[str, Any],
+    payload: WorkflowRegistrationRequest,
     _user: str | None = Depends(require_auth_if_enabled),
 ):
     """Register an Orquesta workflow in StackStorm."""
@@ -314,8 +350,12 @@ async def register_st2_workflow(
         raise HTTPException(status_code=503, detail="StackStorm API key not available")
 
     try:
-        workflow_id = await register_workflow_to_st2(settings.stackstorm_url, api_key, payload)
-        return {"workflow_id": workflow_id}
+        workflow_id = await register_workflow_to_st2(
+            settings.stackstorm_url,
+            api_key,
+            payload.model_dump(),
+        )
+        return WorkflowRegistrationResponse(workflow_id=workflow_id)
     except ValueError as e:
         logger.warning(
             "Invalid workflow registration payload",
@@ -330,7 +370,7 @@ async def register_st2_workflow(
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.post("/cook/sync")
+@router.post("/cook/sync", response_model=SyncStackStormResponse)
 async def sync_stackstorm_to_poundcake(
     request: Request,
     mark_bootstrap: bool = Query(False, description="Mark bootstrap completion"),
@@ -344,7 +384,20 @@ async def sync_stackstorm_to_poundcake(
             "StackStorm sync complete",
             extra={"req_id": req_id, "stats": stats},
         )
-        return stats
+        bootstrap_catalog = stats.get("bootstrap_catalog") if isinstance(stats, dict) else {}
+        typed_catalog = {}
+        if isinstance(bootstrap_catalog, dict):
+            for key, value in bootstrap_catalog.items():
+                if isinstance(value, dict):
+                    typed_catalog[key] = SyncCatalogStats(**value)
+        return SyncStackStormResponse(
+            actions_created=int(stats.get("actions_created", 0)),
+            actions_updated=int(stats.get("actions_updated", 0)),
+            workflows_created=int(stats.get("workflows_created", 0)),
+            workflows_updated=int(stats.get("workflows_updated", 0)),
+            bootstrap_catalog=typed_catalog,
+            mark_bootstrap=mark_bootstrap,
+        )
     except Exception as e:
         logger.error(
             "StackStorm sync failed",

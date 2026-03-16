@@ -7,9 +7,8 @@ import asyncio
 import math
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
-import structlog
 from sqlalchemy import and_, or_
 
 from bakery.config import settings
@@ -23,6 +22,7 @@ from bakery.metrics import (
 )
 from bakery.mixer.factory import get_mixer
 from bakery.models import Ticket, TicketOperation
+from bakery.structlog_compat import structlog
 
 logger = structlog.get_logger()
 
@@ -48,13 +48,19 @@ def _first_non_empty(*values: Any) -> Any:
     return None
 
 
+def _mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
+    return {}
+
+
 def _build_provider_payload(
     action: str,
     ticket: Ticket,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     provider = str(ticket.provider_type or settings.active_provider or "").strip().lower()
-    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    context = _mapping(payload.get("context"))
     provider_payload = provider_config_from_context(provider, payload)
 
     for key in ("source", "visibility"):

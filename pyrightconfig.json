@@ -1,5 +1,26 @@
 {
   "include": [
-    "api"
-  ]
+    "api",
+    "bakery",
+    "cli",
+    "contracts",
+    "kitchen",
+    "shared",
+    "tests",
+    "alembic"
+  ],
+  "exclude": [
+    ".venv",
+    "build",
+    "ui",
+    "docker",
+    "helm",
+    "install",
+    "temp",
+    "poundcake_api.egg-info"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "standard"
 }

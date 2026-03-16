@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.models import Order, OrderCommunication
 from api.services import order_communications
@@ -77,7 +79,8 @@ async def test_apply_execution_result_refreshes_remote_state_after_successful_cl
 ) -> None:
     order = _make_order()
     communication = _make_communication(order=order, remote_state="open")
-    db = SimpleNamespace(flush=AsyncMock())
+    db_stub = SimpleNamespace(flush=AsyncMock())
+    db = cast(AsyncSession, db_stub)
 
     monkeypatch.setattr(
         order_communications,
@@ -105,7 +108,7 @@ async def test_apply_execution_result_refreshes_remote_state_after_successful_cl
     assert communication.writable is True
     assert communication.reopenable is True
     assert order.bakery_ticket_state == "confirmed_solved"
-    db.flush.assert_awaited_once()
+    db_stub.flush.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -120,7 +123,8 @@ async def test_apply_execution_result_refreshes_remote_state_for_new_successful_
         bakery_ticket_id=None,
         remote_state=None,
     )
-    db = SimpleNamespace(flush=AsyncMock())
+    db_stub = SimpleNamespace(flush=AsyncMock())
+    db = cast(AsyncSession, db_stub)
 
     monkeypatch.setattr(
         order_communications,
@@ -149,4 +153,4 @@ async def test_apply_execution_result_refreshes_remote_state_for_new_successful_
     assert communication.writable is True
     assert communication.reopenable is False
     assert order.bakery_ticket_state is None
-    db.flush.assert_awaited_once()
+    db_stub.flush.assert_awaited_once()

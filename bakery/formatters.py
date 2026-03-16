@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 URL_RE = re.compile(r"(https?://[^\s<>\]]+)")
 AUTH_HEADER_RE = re.compile(r"(?im)\b(authorization\s*:\s*(?:bearer|basic)\s+)[^\s]+")
@@ -38,6 +38,12 @@ def _text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return cast(dict[str, Any], value)
+    return {}
 
 
 def _collapse_line(value: Any) -> str:
@@ -152,9 +158,9 @@ def _split_text_with_urls(text: str) -> list[tuple[str, bool]]:
 
 
 def _build_fallback_canonical(action: str, payload: dict[str, Any]) -> dict[str, Any]:
-    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
-    labels = context.get("labels") if isinstance(context.get("labels"), dict) else {}
-    annotations = context.get("annotations") if isinstance(context.get("annotations"), dict) else {}
+    context = _mapping(payload.get("context"))
+    labels = _mapping(context.get("labels"))
+    annotations = _mapping(context.get("annotations"))
     route_label = _text(context.get("route_label"))
     links: list[dict[str, str]] = []
     generator_url = _text(context.get("generatorURL") or payload.get("generatorURL"))
@@ -184,11 +190,7 @@ def _build_fallback_canonical(action: str, payload: dict[str, Any]) -> dict[str,
             "label": route_label,
             "execution_target": _text(context.get("provider_type")),
             "destination_target": _text(context.get("destination_target")),
-            "provider_config": (
-                context.get("provider_config")
-                if isinstance(context.get("provider_config"), dict)
-                else {}
-            ),
+            "provider_config": _mapping(context.get("provider_config")),
         },
         "order": {
             "id": context.get("order_id"),
@@ -240,20 +242,16 @@ def _build_fallback_canonical(action: str, payload: dict[str, Any]) -> dict[str,
 
 
 def canonical_from_payload(action: str, payload: dict[str, Any]) -> dict[str, Any]:
-    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    context = _mapping(payload.get("context"))
     canonical = context.get("_canonical")
     if isinstance(canonical, dict):
-        return canonical
+        return cast(dict[str, Any], canonical)
     return _build_fallback_canonical(action, payload)
 
 
 def provider_config_from_context(provider: str, payload: dict[str, Any]) -> dict[str, Any]:
-    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
-    provider_config = (
-        dict(context.get("provider_config"))
-        if isinstance(context.get("provider_config"), dict)
-        else {}
-    )
+    context = _mapping(payload.get("context"))
+    provider_config = dict(_mapping(context.get("provider_config")))
     legacy_context = {
         "rackspace_core": (
             (
@@ -301,24 +299,24 @@ def provider_config_from_context(provider: str, payload: dict[str, Any]) -> dict
 
 
 def _known_links(canonical: dict[str, Any]) -> list[dict[str, str]]:
-    raw_links = canonical.get("links") if isinstance(canonical.get("links"), list) else []
+    raw_links = canonical.get("links")
+    link_items = (
+        [cast(dict[str, Any], item) for item in raw_links if isinstance(item, dict)]
+        if isinstance(raw_links, list)
+        else []
+    )
     normalized = [
-        {"label": _text(item.get("label")), "url": _text(item.get("url"))}
-        for item in raw_links
-        if isinstance(item, dict)
+        {"label": _text(item.get("label")), "url": _text(item.get("url"))} for item in link_items
     ]
     return _dedupe_links(normalized)
 
 
 def _title_from_canonical(canonical: dict[str, Any]) -> str:
-    text = canonical.get("text") if isinstance(canonical.get("text"), dict) else {}
-    alert = canonical.get("alert") if isinstance(canonical.get("alert"), dict) else {}
+    text = _mapping(canonical.get("text"))
+    alert = _mapping(canonical.get("alert"))
+    annotations = _mapping(alert.get("annotations"))
     headline = _text(text.get("headline"))
-    summary = _text(
-        alert.get("annotations", {}).get("summary")
-        if isinstance(alert.get("annotations"), dict)
-        else ""
-    )
+    summary = _text(annotations.get("summary"))
     base = summary or _text(alert.get("group_name")) or headline or "PoundCake communication"
     instance = _text(alert.get("instance"))
     if instance:
@@ -433,28 +431,27 @@ def _build_remediation_model(
     *,
     compact: bool,
 ) -> dict[str, Any]:
-    remediation = (
-        canonical.get("remediation") if isinstance(canonical.get("remediation"), dict) else {}
+    remediation = _mapping(canonical.get("remediation"))
+    order = _mapping(canonical.get("order"))
+    summary = _mapping(remediation.get("summary"))
+    raw_steps = (
+        cast(list[Any], remediation.get("steps"))
+        if isinstance(remediation.get("steps"), list)
+        else []
     )
-    order = canonical.get("order") if isinstance(canonical.get("order"), dict) else {}
-    summary = remediation.get("summary") if isinstance(remediation.get("summary"), dict) else {}
-    raw_steps = remediation.get("steps") if isinstance(remediation.get("steps"), list) else []
+    step_items = [cast(dict[str, Any], step) for step in raw_steps if isinstance(step, dict)]
     latest_completed_step = (
-        remediation.get("latest_completed_step")
+        _mapping(remediation.get("latest_completed_step"))
         if isinstance(remediation.get("latest_completed_step"), dict)
-        else None
+        else {}
     )
 
     step_limit = COMPACT_STEP_LIMIT if compact else FULL_STEP_LIMIT
     outcome_limit = COMPACT_STEP_OUTCOME_LIMIT if compact else FULL_STEP_OUTCOME_LIMIT
     excerpt_limit = COMPACT_EXCERPT_LIMIT if compact else FULL_EXCERPT_LIMIT
 
-    step_lines = [
-        _step_line(step, outcome_limit=outcome_limit)
-        for step in raw_steps[:step_limit]
-        if isinstance(step, dict)
-    ]
-    hidden_steps = max(len(raw_steps) - len(step_lines), 0)
+    step_lines = [_step_line(step, outcome_limit=outcome_limit) for step in step_items[:step_limit]]
+    hidden_steps = max(len(step_items) - len(step_lines), 0)
     if hidden_steps:
         step_lines.append(f"- ... {_pluralize(hidden_steps, 'more step')}")
 
@@ -480,11 +477,11 @@ def _build_remediation_model(
 
 
 def _section_model(canonical: dict[str, Any], action: str, *, compact: bool) -> dict[str, Any]:
-    text = canonical.get("text") if isinstance(canonical.get("text"), dict) else {}
-    alert = canonical.get("alert") if isinstance(canonical.get("alert"), dict) else {}
-    annotations = alert.get("annotations") if isinstance(alert.get("annotations"), dict) else {}
-    order = canonical.get("order") if isinstance(canonical.get("order"), dict) else {}
-    event = canonical.get("event") if isinstance(canonical.get("event"), dict) else {}
+    text = _mapping(canonical.get("text"))
+    alert = _mapping(canonical.get("alert"))
+    annotations = _mapping(alert.get("annotations"))
+    order = _mapping(canonical.get("order"))
+    event = _mapping(canonical.get("event"))
 
     headline = _sanitize_line(_text(text.get("headline")) or _title_from_canonical(canonical), 255)
     overview_lines: list[str] = []

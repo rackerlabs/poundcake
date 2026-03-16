@@ -30,6 +30,7 @@ from api.schemas.schemas import (
     DishIngredientResponse,
 )
 from api.schemas.query_params import DishQueryParams, validate_query_params
+from contracts.poundcake import BulkUpsertResponse
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -110,7 +111,7 @@ async def fetch_dishes(
 
     logger.debug("Dishes fetched", extra={"req_id": request_id, "count": len(dishes)})
 
-    return dishes
+    return [DishDetailResponse.model_validate(dish) for dish in dishes]
 
 
 @router.post("/dishes/{dish_id}/claim", response_model=DishDetailResponse)
@@ -154,7 +155,7 @@ async def claim_dish(
 
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
-    return dish
+    return DishDetailResponse.model_validate(dish)
 
 
 @router.post("/dishes/{dish_id}/finalize-claim", response_model=DishDetailResponse)
@@ -205,16 +206,16 @@ async def claim_dish_for_finalize(
 
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
-    return dish
+    return DishDetailResponse.model_validate(dish)
 
 
-@router.post("/dishes/{dish_id}/ingredients/bulk")
+@router.post("/dishes/{dish_id}/ingredients/bulk", response_model=BulkUpsertResponse)
 async def upsert_dish_ingredients(
     request: Request,
     dish_id: int,
     payload: DishIngredientBulkUpsert,
     db: AsyncSession = Depends(get_db),
-):
+) -> BulkUpsertResponse:
     """Upsert dish ingredient executions for a dish."""
     req_id = request.state.req_id
 
@@ -339,7 +340,7 @@ async def upsert_dish_ingredients(
             "updated_count": updated,
         },
     )
-    return {"created": created, "updated": updated}
+    return BulkUpsertResponse(created=created, updated=updated)
 
 
 @router.get("/dishes/{dish_id}/ingredients", response_model=List[DishIngredientResponse])

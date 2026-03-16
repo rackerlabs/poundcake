@@ -16,10 +16,12 @@ class _DummyAdapter(ExecutionAdapter):
     results: list[ExecutionResult]
     validation_error: str | None = None
 
-    def validate(self, _ctx: ExecutionContext) -> str | None:
+    def validate(self, ctx: ExecutionContext) -> str | None:
+        _ = ctx
         return self.validation_error
 
-    async def execute_once(self, _ctx: ExecutionContext) -> ExecutionResult:
+    async def execute_once(self, ctx: ExecutionContext) -> ExecutionResult:
+        _ = ctx
         if self.results:
             return self.results.pop(0)
         return ExecutionResult(engine=self.engine, status="failed", error_message="exhausted")

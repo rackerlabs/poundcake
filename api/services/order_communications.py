@@ -159,7 +159,7 @@ async def refresh_remote_state(
     else:
         remote_state = str(
             remote.get("state")
-            or (remote.get("communication_data") or {}).get("state")
+            or ((remote.get("summary") or {}).get("metadata") or {}).get("state")
             or communication.remote_state
             or ""
         )
@@ -286,8 +286,8 @@ async def apply_execution_result(
     if isinstance(result_payload, dict):
         remote_state = (
             result_payload.get("state")
-            or (result_payload.get("ticket_data") or {}).get("state")
-            or (result_payload.get("provider_response") or {}).get("state")
+            or (((result_payload.get("summary") or {}).get("metadata") or {}).get("state"))
+            or ((result_payload.get("result") or {}).get("state"))
         )
     if remote_state is not None:
         communication.remote_state = normalize_remote_state(remote_state)

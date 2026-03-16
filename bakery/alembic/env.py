@@ -2,6 +2,7 @@
 """Alembic environment configuration for Bakery."""
 
 from logging.config import fileConfig
+from typing import Any, cast
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -62,7 +63,7 @@ def run_migrations_online() -> None:
 
     """
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
+        cast(dict[str, Any], config.get_section(config.config_ini_section) or {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
