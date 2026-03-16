@@ -11,6 +11,10 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from api.types import (
+    AuthBindingType,
+    AuthPrincipalType,
+    AuthProvider,
+    AuthRole,
     DishProcessingStatus,
     OrderProcessingStatus,
     AlertStatus,
@@ -876,7 +880,135 @@ class SessionResponse(BaseModel):
     session_id: str
     username: str
     expires_at: str  # ISO format datetime
+    provider: AuthProvider
+    role: AuthRole
+    display_name: Optional[str] = None
+    is_superuser: bool = False
+    permissions: List[str] = Field(default_factory=list)
     token_type: str = "Bearer"
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuthLoginRequest(BaseModel):
+    """Password login request."""
+
+    provider: Optional[AuthProvider] = None
+    username: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=1, max_length=255)
+
+
+class AuthProviderResponse(BaseModel):
+    """Enabled auth provider metadata for UI and CLI discovery."""
+
+    name: AuthProvider
+    label: str
+    login_mode: str
+    cli_login_mode: str
+    browser_login: bool = False
+    device_login: bool = False
+    password_login: bool = False
+
+
+class AuthMeResponse(BaseModel):
+    """Current authenticated principal metadata."""
+
+    username: str
+    display_name: Optional[str] = None
+    provider: AuthProvider
+    role: AuthRole
+    principal_type: AuthPrincipalType
+    principal_id: Optional[int] = None
+    is_superuser: bool = False
+    permissions: List[str] = Field(default_factory=list)
+    groups: List[str] = Field(default_factory=list)
+    expires_at: Optional[str] = None
+
+
+class DeviceAuthorizationStartResponse(BaseModel):
+    """Auth0 device login start payload."""
+
+    provider: AuthProvider = "auth0"
+    device_code: str
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: Optional[str] = None
+    expires_in: int
+    interval: int
+
+
+class DeviceAuthorizationPollRequest(BaseModel):
+    """Auth0 device authorization poll request."""
+
+    provider: AuthProvider = "auth0"
+    device_code: str = Field(..., min_length=1)
+
+
+class DeviceAuthorizationPollResponse(BaseModel):
+    """Auth0 device authorization status response."""
+
+    status: str
+    interval: Optional[int] = None
+    detail: Optional[str] = None
+    session: Optional[SessionResponse] = None
+
+
+class AuthPrincipalResponse(BaseModel):
+    """Observed principal metadata for access management."""
+
+    id: int
+    provider: AuthProvider
+    subject_id: str
+    username: str
+    display_name: Optional[str] = None
+    principal_type: AuthPrincipalType
+    groups: List[str] = Field(default_factory=list)
+    last_seen_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuthRoleBindingCreate(BaseModel):
+    """Create a new RBAC binding."""
+
+    provider: AuthProvider
+    binding_type: AuthBindingType
+    role: AuthRole
+    principal_id: Optional[int] = None
+    external_group: Optional[str] = Field(default=None, max_length=255)
+    created_by: Optional[str] = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def _validate_target(self) -> "AuthRoleBindingCreate":
+        if self.binding_type == "user" and self.principal_id is None:
+            raise ValueError("principal_id is required for user bindings")
+        if self.binding_type == "group" and not str(self.external_group or "").strip():
+            raise ValueError("external_group is required for group bindings")
+        return self
+
+
+class AuthRoleBindingUpdate(BaseModel):
+    """Update an existing RBAC binding."""
+
+    role: Optional[AuthRole] = None
+    external_group: Optional[str] = Field(default=None, max_length=255)
+
+
+class AuthRoleBindingResponse(BaseModel):
+    """RBAC binding details."""
+
+    id: int
+    provider: AuthProvider
+    binding_type: AuthBindingType
+    role: AuthRole
+    principal_id: Optional[int] = None
+    external_group: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    principal: Optional[AuthPrincipalResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 

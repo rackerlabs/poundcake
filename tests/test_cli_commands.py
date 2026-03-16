@@ -106,12 +106,32 @@ def test_auth_login_persists_session_and_logout_clears_it(
 ) -> None:
     fake_api = FakeAPI()
     fake_api.add_json(
+        "GET",
+        "/api/v1/auth/providers",
+        [
+            {
+                "name": "local",
+                "label": "Local Superuser",
+                "login_mode": "password",
+                "cli_login_mode": "password",
+                "browser_login": False,
+                "device_login": False,
+                "password_login": True,
+            }
+        ],
+    )
+    fake_api.add_json(
         "POST",
         "/api/v1/auth/login",
         {
             "session_id": "session-123",
             "username": "alice",
             "expires_at": "2099-01-01T00:00:00+00:00",
+            "provider": "local",
+            "role": "admin",
+            "display_name": "Alice",
+            "is_superuser": True,
+            "permissions": ["read", "manage_access", "superuser"],
             "token_type": "Bearer",
         },
     )
@@ -141,7 +161,14 @@ def test_auth_login_persists_session_and_logout_clears_it(
     assert oct(session_path.stat().st_mode & 0o777) == "0o600"
     saved = json.loads(session_path.read_text(encoding="utf-8"))
     assert saved["http://example.test"]["session_id"] == "session-123"
+    assert saved["http://example.test"]["provider"] == "local"
+    assert saved["http://example.test"]["role"] == "admin"
     assert fake_api.requests[0]["cookies"] is None
+    assert fake_api.requests[1]["json"] == {
+        "provider": "local",
+        "username": "alice",
+        "password": "secret",
+    }
 
     logout_result = runner.invoke(
         cli,
@@ -150,7 +177,7 @@ def test_auth_login_persists_session_and_logout_clears_it(
     assert logout_result.exit_code == 0, logout_result.output
     saved_after = json.loads(session_path.read_text(encoding="utf-8"))
     assert "http://example.test" not in saved_after
-    assert fake_api.requests[1]["cookies"] == {"session_token": "session-123"}
+    assert fake_api.requests[2]["cookies"] == {"session_token": "session-123"}
 
 
 def test_api_key_takes_precedence_over_stored_session(
@@ -189,6 +216,149 @@ def test_api_key_takes_precedence_over_stored_session(
     request = fake_api.requests[0]
     assert request["headers"]["Authorization"] == "Bearer internal-key"
     assert request["cookies"] is None
+
+
+def test_auth0_device_login_persists_session(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "GET",
+        "/api/v1/auth/providers",
+        [
+            {
+                "name": "auth0",
+                "label": "Auth0",
+                "login_mode": "oidc",
+                "cli_login_mode": "device",
+                "browser_login": True,
+                "device_login": True,
+                "password_login": False,
+            }
+        ],
+    )
+    fake_api.add_json(
+        "POST",
+        "/api/v1/auth/device/start",
+        {
+            "provider": "auth0",
+            "device_code": "device-123",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://example.auth0.test/activate",
+            "verification_uri_complete": "https://example.auth0.test/activate?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 1,
+        },
+    )
+    fake_api.add_json(
+        "POST",
+        "/api/v1/auth/device/poll",
+        {
+            "status": "authorized",
+            "session": {
+                "session_id": "session-device",
+                "username": "alice@example.com",
+                "expires_at": "2099-01-01T00:00:00+00:00",
+                "provider": "auth0",
+                "role": "operator",
+                "display_name": "Alice Example",
+                "is_superuser": False,
+                "permissions": ["read", "manage_recipes"],
+                "token_type": "Bearer",
+            },
+        },
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+    monkeypatch.setattr("cli.commands.auth.time.sleep", lambda _seconds: None)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+    result = runner.invoke(
+        cli,
+        [
+            "--url",
+            "http://example.test",
+            "--format",
+            "json",
+            "auth",
+            "login",
+            "--provider",
+            "auth0",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    saved = json.loads(_session_file(tmp_path).read_text(encoding="utf-8"))
+    assert saved["http://example.test"]["session_id"] == "session-device"
+    assert saved["http://example.test"]["provider"] == "auth0"
+    assert fake_api.requests[2]["json"] == {"provider": "auth0", "device_code": "device-123"}
+
+
+def test_auth_bindings_create_maps_payload(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "POST",
+        "/api/v1/auth/bindings",
+        {
+            "id": 17,
+            "provider": "auth0",
+            "binding_type": "group",
+            "role": "operator",
+            "principal_id": None,
+            "external_group": "monitoring-operators",
+            "created_by": "alice",
+            "created_at": "2099-01-01T00:00:00+00:00",
+            "updated_at": "2099-01-01T00:00:00+00:00",
+            "principal": None,
+        },
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    _write_session(
+        tmp_path,
+        "http://example.test",
+        {
+            "session_id": "session-123",
+            "username": "alice",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+            "provider": "auth0",
+            "role": "admin",
+        },
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--url",
+            "http://example.test",
+            "--format",
+            "json",
+            "auth",
+            "bindings",
+            "create",
+            "--provider",
+            "auth0",
+            "--type",
+            "group",
+            "--role",
+            "operator",
+            "--group",
+            "monitoring-operators",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert fake_api.requests[0]["json"] == {
+        "provider": "auth0",
+        "binding_type": "group",
+        "role": "operator",
+        "external_group": "monitoring-operators",
+        "principal_id": None,
+    }
+    assert fake_api.requests[0]["cookies"] == {"session_token": "session-123"}
 
 
 def test_expired_session_is_removed_before_request(

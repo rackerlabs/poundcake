@@ -1,5 +1,56 @@
+export interface AuthProviderRecord {
+  name: "local" | "active_directory" | "auth0" | "service";
+  label: string;
+  login_mode: string;
+  cli_login_mode: string;
+  browser_login: boolean;
+  device_login: boolean;
+  password_login: boolean;
+}
+
+export interface AuthMeRecord {
+  username: string;
+  display_name?: string | null;
+  provider: "local" | "active_directory" | "auth0" | "service";
+  role: "reader" | "operator" | "admin" | "service";
+  principal_type: "user" | "service";
+  principal_id?: number | null;
+  is_superuser: boolean;
+  permissions: string[];
+  groups: string[];
+  expires_at?: string | null;
+}
+
+export interface AuthPrincipalRecord {
+  id: number;
+  provider: "local" | "active_directory" | "auth0" | "service";
+  subject_id: string;
+  username: string;
+  display_name?: string | null;
+  principal_type: "user" | "service";
+  groups: string[];
+  last_seen_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthRoleBindingRecord {
+  id: number;
+  provider: "local" | "active_directory" | "auth0" | "service";
+  binding_type: "user" | "group";
+  role: "reader" | "operator" | "admin" | "service";
+  principal_id?: number | null;
+  external_group?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  principal?: AuthPrincipalRecord | null;
+}
+
 export interface AppSettings {
   auth_enabled: boolean;
+  rbac_enabled: boolean;
+  auth_providers: AuthProviderRecord[];
   prometheus_use_crds: boolean;
   prometheus_crd_namespace: string;
   prometheus_url: string;

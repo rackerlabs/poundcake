@@ -110,28 +110,17 @@ def test_wait_for_api_returns_false_after_max_attempts(monkeypatch: pytest.Monke
     logger.warning.assert_called_once()
 
 
-def test_get_service_headers_without_internal_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("POUNDCAKE_AUTH_INTERNAL_API_KEY", raising=False)
-    monkeypatch.delenv("POUNDCAKE_INTERNAL_API_KEY", raising=False)
+def test_get_service_headers_without_service_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("POUNDCAKE_AUTH_SERVICE_TOKEN", raising=False)
 
     headers = service_helpers.get_service_headers("REQ-1")
 
     assert headers == {"X-Request-ID": "REQ-1"}
 
 
-def test_get_service_headers_uses_internal_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("POUNDCAKE_AUTH_INTERNAL_API_KEY", raising=False)
-    monkeypatch.setenv("POUNDCAKE_INTERNAL_API_KEY", "worker-key")
+def test_get_service_headers_uses_service_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POUNDCAKE_AUTH_SERVICE_TOKEN", "worker-token")
 
     headers = service_helpers.get_service_headers("REQ-2")
 
-    assert headers == {"X-Request-ID": "REQ-2", "X-Internal-API-Key": "worker-key"}
-
-
-def test_get_service_headers_prefers_auth_internal_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("POUNDCAKE_AUTH_INTERNAL_API_KEY", "auth-key")
-    monkeypatch.setenv("POUNDCAKE_INTERNAL_API_KEY", "worker-key")
-
-    headers = service_helpers.get_service_headers("REQ-3")
-
-    assert headers == {"X-Request-ID": "REQ-3", "X-Internal-API-Key": "auth-key"}
+    assert headers == {"X-Request-ID": "REQ-2", "X-Auth-Token": "worker-token"}

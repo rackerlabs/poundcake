@@ -841,7 +841,7 @@ spec:
             - name: POUNDCAKE_AUTH_ENABLED
               value: {{ .Values.auth.enabled | quote }}
             {{- if .Values.auth.enabled }}
-            - name: POUNDCAKE_INTERNAL_API_KEY
+            - name: POUNDCAKE_AUTH_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin

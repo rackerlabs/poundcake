@@ -210,3 +210,31 @@ CanonicalExecutionStatus = Literal[
     "failed",
     "canceled",
 ]
+
+# =============================================================================
+# Authentication & Authorization Types
+# =============================================================================
+
+AuthRole = Literal[
+    "reader",
+    "operator",
+    "admin",
+    "service",
+]
+
+AuthProvider = Literal[
+    "local",
+    "active_directory",
+    "auth0",
+    "service",
+]
+
+AuthPrincipalType = Literal[
+    "user",
+    "service",
+]
+
+AuthBindingType = Literal[
+    "user",
+    "group",
+]

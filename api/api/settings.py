@@ -13,6 +13,7 @@ from api.core.database import get_db
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.api.auth import require_auth_if_enabled
+from api.services.auth_service import get_enabled_provider_metadata
 from api.services.communications_policy import global_policy_configured
 
 logger = get_logger(__name__)
@@ -39,6 +40,8 @@ async def get_application_settings(
     return {
         # Authentication
         "auth_enabled": settings.auth_enabled,
+        "rbac_enabled": settings.auth_rbac_enabled,
+        "auth_providers": get_enabled_provider_metadata(),
         # Prometheus configuration
         "prometheus_use_crds": settings.prometheus_use_crds,
         "prometheus_crd_namespace": settings.prometheus_crd_namespace,

@@ -142,7 +142,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin
                   key: password
-            - name: POUNDCAKE_AUTH_INTERNAL_API_KEY
+            - name: POUNDCAKE_AUTH_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin
@@ -315,7 +315,7 @@ spec:
             - name: SERVICE_NAME
               value: chef
             {{- if .Values.auth.enabled }}
-            - name: POUNDCAKE_INTERNAL_API_KEY
+            - name: POUNDCAKE_AUTH_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin
@@ -493,7 +493,7 @@ spec:
             - name: SERVICE_NAME
               value: prep-chef
             {{- if .Values.auth.enabled }}
-            - name: POUNDCAKE_INTERNAL_API_KEY
+            - name: POUNDCAKE_AUTH_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin
@@ -579,7 +579,7 @@ spec:
             - name: PREP_INTERVAL
               value: {{ .Values.intervals.prepInterval | quote }}
             {{- if .Values.auth.enabled }}
-            - name: POUNDCAKE_INTERNAL_API_KEY
+            - name: POUNDCAKE_AUTH_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin
@@ -670,7 +670,7 @@ spec:
             - name: SERVICE_NAME
               value: dishwasher
             {{- if .Values.auth.enabled }}
-            - name: POUNDCAKE_INTERNAL_API_KEY
+            - name: POUNDCAKE_AUTH_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin

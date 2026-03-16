@@ -244,7 +244,7 @@ curl http://localhost:8000/api/v1/health
 
 ## Alertmanager Webhook Auth (Kubernetes)
 
-When auth is enabled, inbound `/api/v1/webhook` requests must send `X-Internal-API-Key`.
+When auth is enabled, inbound `/api/v1/webhook` requests must send `X-Auth-Token`.
 
 ```bash
 kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d

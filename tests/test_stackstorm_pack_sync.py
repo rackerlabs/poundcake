@@ -139,7 +139,7 @@ def test_pack_artifact_endpoint_bypasses_session_auth_with_global_dependency(mon
     auth_settings = SimpleNamespace(
         testing=False,
         auth_enabled=True,
-        auth_internal_api_key="",
+        auth_service_token="",
     )
     pack_sync_settings = SimpleNamespace(pack_sync_token="token123")
 

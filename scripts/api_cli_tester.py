@@ -372,7 +372,7 @@ def make_request(
     url = f"{base_url.rstrip('/')}{path}"
     headers = {"X-Request-ID": f"CLI-{uuid.uuid4()}"}
     if internal_api_key:
-        headers["X-Internal-API-Key"] = internal_api_key
+        headers["X-Auth-Token"] = internal_api_key
 
     print(f"\n-> {method.upper()} {url}")
     if params:
@@ -483,7 +483,7 @@ def main() -> int:
     while True:
         print("\nMain Menu")
         print("  1. Set base URL")
-        print("  2. Set/clear X-Internal-API-Key")
+        print("  2. Set/clear X-Auth-Token")
         print("  3. Show session info")
         print("  4. Endpoint groups")
         print("  5. Custom request")

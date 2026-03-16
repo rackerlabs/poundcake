@@ -26,7 +26,53 @@ class LoginResult:
     session_id: str
     username: str
     expires_at: str
+    provider: str
+    role: str
+    display_name: str | None = None
+    is_superuser: bool = False
+    permissions: list[str] | None = None
     token_type: str = "Bearer"
+
+
+@dataclass
+class ProviderInfo:
+    """Enabled auth provider metadata."""
+
+    name: str
+    label: str
+    login_mode: str
+    cli_login_mode: str
+    browser_login: bool = False
+    device_login: bool = False
+    password_login: bool = False
+
+
+@dataclass
+class AuthMeResult:
+    """Current principal metadata."""
+
+    username: str
+    display_name: str | None
+    provider: str
+    role: str
+    principal_type: str
+    principal_id: int | None
+    is_superuser: bool
+    permissions: list[str]
+    groups: list[str]
+    expires_at: str | None = None
+
+
+@dataclass
+class DeviceAuthorizationStart:
+    """CLI device authorization bootstrap payload."""
+
+    device_code: str
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: str | None
+    expires_in: int
+    interval: int
 
 
 class PoundCakeClient:
@@ -112,30 +158,45 @@ class PoundCakeClient:
         self.session_store.delete(self.base_url)
         self.session = None
 
-    def login(self, username: str, password: str) -> LoginResult:
-        """Authenticate with username/password and persist the session locally."""
-        payload = self._request(
-            "POST",
-            "/api/v1/auth/login",
-            json={"username": username, "password": password},
-            use_session=False,
-        )
+    def _store_login_payload(self, payload: Any) -> LoginResult:
         if not isinstance(payload, dict):
             raise PoundCakeClientError("Unexpected login response format")
         result = LoginResult(
             session_id=str(payload["session_id"]),
             username=str(payload["username"]),
             expires_at=str(payload["expires_at"]),
+            provider=str(payload["provider"]),
+            role=str(payload["role"]),
+            display_name=(
+                None if payload.get("display_name") is None else str(payload.get("display_name"))
+            ),
+            is_superuser=bool(payload.get("is_superuser")),
+            permissions=[str(item) for item in payload.get("permissions") or []] or None,
             token_type=str(payload.get("token_type") or "Bearer"),
         )
         session = StoredSession(
             session_id=result.session_id,
             username=result.username,
             expires_at=result.expires_at,
+            provider=result.provider,
+            role=result.role,
+            display_name=result.display_name,
+            is_superuser=result.is_superuser,
+            permissions=result.permissions,
         )
         self.session_store.save(self.base_url, session)
         self.session = session
         return result
+
+    def login(self, provider: str, username: str, password: str) -> LoginResult:
+        """Authenticate with username/password and persist the session locally."""
+        payload = self._request(
+            "POST",
+            "/api/v1/auth/login",
+            json={"provider": provider, "username": username, "password": password},
+            use_session=False,
+        )
+        return self._store_login_payload(payload)
 
     def logout(self) -> bool:
         """Attempt remote logout when a session exists, then clear the local session."""
@@ -153,6 +214,121 @@ class PoundCakeClient:
         if isinstance(payload, dict):
             return cast(dict[str, Any], payload)
         raise PoundCakeClientError("Unexpected settings response format")
+
+    def get_auth_providers(self) -> list[ProviderInfo]:
+        payload = self._request("GET", "/api/v1/auth/providers", use_session=False)
+        if not isinstance(payload, list):
+            raise PoundCakeClientError("Unexpected auth providers response format")
+        return [
+            ProviderInfo(
+                name=str(item["name"]),
+                label=str(item["label"]),
+                login_mode=str(item["login_mode"]),
+                cli_login_mode=str(item["cli_login_mode"]),
+                browser_login=bool(item.get("browser_login")),
+                device_login=bool(item.get("device_login")),
+                password_login=bool(item.get("password_login")),
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ]
+
+    def auth_me(self) -> AuthMeResult:
+        payload = self._request("GET", "/api/v1/auth/me")
+        if not isinstance(payload, dict):
+            raise PoundCakeClientError("Unexpected auth me response format")
+        return AuthMeResult(
+            username=str(payload["username"]),
+            display_name=(
+                None if payload.get("display_name") is None else str(payload.get("display_name"))
+            ),
+            provider=str(payload["provider"]),
+            role=str(payload["role"]),
+            principal_type=str(payload["principal_type"]),
+            principal_id=(int(payload["principal_id"]) if payload.get("principal_id") else None),
+            is_superuser=bool(payload.get("is_superuser")),
+            permissions=[str(item) for item in payload.get("permissions") or []],
+            groups=[str(item) for item in payload.get("groups") or []],
+            expires_at=(
+                None if payload.get("expires_at") is None else str(payload.get("expires_at"))
+            ),
+        )
+
+    def start_device_login(self) -> DeviceAuthorizationStart:
+        payload = self._request("POST", "/api/v1/auth/device/start", use_session=False)
+        if not isinstance(payload, dict):
+            raise PoundCakeClientError("Unexpected device authorization response format")
+        return DeviceAuthorizationStart(
+            device_code=str(payload["device_code"]),
+            user_code=str(payload["user_code"]),
+            verification_uri=str(payload["verification_uri"]),
+            verification_uri_complete=(
+                None
+                if payload.get("verification_uri_complete") is None
+                else str(payload.get("verification_uri_complete"))
+            ),
+            expires_in=int(payload.get("expires_in") or 0),
+            interval=int(payload.get("interval") or 5),
+        )
+
+    def poll_device_login(self, device_code: str) -> dict[str, Any]:
+        payload = self._request(
+            "POST",
+            "/api/v1/auth/device/poll",
+            json={"provider": "auth0", "device_code": device_code},
+            use_session=False,
+        )
+        if isinstance(payload, dict):
+            session = payload.get("session")
+            if isinstance(session, dict):
+                self._store_login_payload(session)
+            return cast(dict[str, Any], payload)
+        raise PoundCakeClientError("Unexpected device poll response format")
+
+    def list_auth_principals(
+        self,
+        *,
+        provider: str | None = None,
+        search: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if provider:
+            params["provider"] = provider
+        if search:
+            params["search"] = search
+        payload = self._request("GET", "/api/v1/auth/principals", params=params)
+        if isinstance(payload, list):
+            return cast(list[dict[str, Any]], payload)
+        raise PoundCakeClientError("Unexpected auth principals response format")
+
+    def list_auth_bindings(self, *, provider: str | None = None) -> list[dict[str, Any]]:
+        params: dict[str, Any] | None = None
+        if provider:
+            params = {"provider": provider}
+        payload = self._request("GET", "/api/v1/auth/bindings", params=params)
+        if isinstance(payload, list):
+            return cast(list[dict[str, Any]], payload)
+        raise PoundCakeClientError("Unexpected auth bindings response format")
+
+    def create_auth_binding(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self._request("POST", "/api/v1/auth/bindings", json=payload)
+        if isinstance(result, dict):
+            return cast(dict[str, Any], result)
+        raise PoundCakeClientError("Unexpected auth binding response format")
+
+    def update_auth_binding(self, binding_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self._request("PATCH", f"/api/v1/auth/bindings/{binding_id}", json=payload)
+        if isinstance(result, dict):
+            return cast(dict[str, Any], result)
+        raise PoundCakeClientError("Unexpected auth binding response format")
+
+    def delete_auth_binding(self, binding_id: int) -> dict[str, Any]:
+        result = self._request("DELETE", f"/api/v1/auth/bindings/{binding_id}")
+        if isinstance(result, dict):
+            return cast(dict[str, Any], result)
+        raise PoundCakeClientError("Unexpected auth binding delete response format")
 
     # Health and overview
     def health(self) -> dict[str, Any]:

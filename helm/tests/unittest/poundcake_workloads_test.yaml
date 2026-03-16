@@ -557,7 +557,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_AUTH_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-poundcake-admin
@@ -566,7 +566,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-poundcake-admin
@@ -575,7 +575,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-poundcake-admin
@@ -584,7 +584,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-poundcake-admin
@@ -593,7 +593,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-poundcake-admin
@@ -613,7 +613,7 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_AUTH_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
         documentIndex: 0
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -638,22 +638,22 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
         documentIndex: 1
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
         documentIndex: 3
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
         documentIndex: 4
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_INTERNAL_API_KEY
+            name: POUNDCAKE_AUTH_SERVICE_TOKEN
         documentIndex: 5
 
   - it: injects bakery client env vars into poundcake-api with integrated defaults

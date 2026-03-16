@@ -219,14 +219,48 @@ class Settings(BaseSettings):
     )
     auth_session_timeout: int = 86400
     auth_secret_key: str = Field(default_factory=lambda: os.urandom(32).hex())
-    auth_internal_api_key: str = ""
-    # Preferred in-cluster credential source (injected from Secret via env vars).
+    auth_oidc_state_ttl: int = 600
+    auth_redis_prefix: str = "poundcake:auth"
+    auth_rbac_enabled: bool = True
+    auth_service_token: str = ""
+
+    # Local bootstrap superuser.
+    auth_local_enabled: bool = True
     auth_username: str = ""
     auth_password: str = ""
-
-    # Development/local auth fallback
     auth_dev_username: str = ""
     auth_dev_password: str = ""
+
+    # Active Directory / LDAP.
+    auth_ad_enabled: bool = False
+    auth_ad_server_uri: str = ""
+    auth_ad_bind_dn: str = ""
+    auth_ad_bind_password: str = ""
+    auth_ad_user_base_dn: str = ""
+    auth_ad_user_filter: str = "(&(objectClass=user)(sAMAccountName={username}))"
+    auth_ad_group_attribute: str = "memberOf"
+    auth_ad_display_name_attribute: str = "displayName"
+    auth_ad_username_attribute: str = "sAMAccountName"
+    auth_ad_subject_attribute: str = "distinguishedName"
+    auth_ad_use_ssl: bool = True
+    auth_ad_validate_tls: bool = True
+    auth_ad_ca_certs_file: str = ""
+    auth_ad_group_name_regex: str = r"CN=([^,]+)"
+
+    # Auth0.
+    auth_auth0_enabled: bool = False
+    auth_auth0_domain: str = ""
+    auth_auth0_client_id: str = ""
+    auth_auth0_client_secret: str = ""
+    auth_auth0_audience: str = ""
+    auth_auth0_scope: str = "openid profile email"
+    auth_auth0_callback_url: str = ""
+    auth_auth0_organization: str = ""
+    auth_auth0_connection: str = ""
+    auth_auth0_username_claim: str = "email"
+    auth_auth0_display_name_claim: str = "name"
+    auth_auth0_groups_claim: str = "groups"
+    auth_auth0_subject_claim: str = "sub"
 
     # ==========================================================================
     # Bakery Integration Settings

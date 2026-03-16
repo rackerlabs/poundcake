@@ -19,24 +19,49 @@ poundcake --url http://localhost:8000 communications list
 
 ### Authentication
 
-If API auth is enabled and you have the internal API key, pass it explicitly:
+List the enabled auth providers first:
 
 ```bash
-poundcake --url http://localhost:8000 --api-key "$POUNDCAKE_API_KEY" incidents list
+poundcake --url http://localhost:8000 auth providers
 ```
 
-You can also store a session locally for username/password operator access:
+If API auth is enabled and you have the service token, pass it explicitly:
 
 ```bash
-poundcake --url http://localhost:8000 auth login --username admin
+poundcake --url http://localhost:8000 --api-key "$POUNDCAKE_AUTH_SERVICE_TOKEN" incidents list
+```
+
+For local or Active Directory logins, store a session locally:
+
+```bash
+poundcake --url http://localhost:8000 auth login --provider local --username admin
+poundcake --url http://localhost:8000 auth me
 poundcake --url http://localhost:8000 overview
 poundcake --url http://localhost:8000 auth logout
+```
+
+For Auth0, the CLI uses the API-brokered device flow:
+
+```bash
+poundcake --url http://localhost:8000 auth login --provider auth0
 ```
 
 Stored sessions live under `${XDG_CONFIG_HOME:-~/.config}/poundcake/session.json`.
 If `--api-key` is provided, it takes precedence over any stored session.
 
 The installer also provides `poundcake-cli` as an equivalent command name.
+
+Admins can inspect observed principals and manage role bindings:
+
+```bash
+poundcake --url http://localhost:8000 auth principals list --provider auth0
+poundcake --url http://localhost:8000 auth bindings list
+poundcake --url http://localhost:8000 auth bindings create \
+  --provider auth0 \
+  --type group \
+  --role operator \
+  --group monitoring-operators
+```
 
 ### Canonical Commands
 

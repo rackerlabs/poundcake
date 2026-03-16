@@ -20,7 +20,7 @@ sequenceDiagram
     participant DW as Dishwasher
 
     Note over AM, API: Phase 1: Intake (pre_heat)
-    AM->>API: POST /api/v1/webhook (with X-Internal-API-Key header)
+    AM->>API: POST /api/v1/webhook (with X-Auth-Token header)
     API->>DB: Store Order (processing_status: new)
     API-->>AM: 202 Accepted
 
@@ -565,7 +565,7 @@ UI remains built from `/Users/chris.breu/code/poundcake/ui/Dockerfile` and publi
 
 ## Alertmanager Integration (Kubernetes)
 
-When PoundCake auth is enabled, Alertmanager must send the `X-Internal-API-Key` header.
+When PoundCake auth is enabled, Alertmanager must send the `X-Auth-Token` header.
 
 Get the key:
 
@@ -589,7 +589,7 @@ receivers:
         send_resolved: true
         http_config:
           headers:
-            X-Internal-API-Key: "<internal-api-key>"
+            X-Auth-Token: "<internal-api-key>"
 ```
 
 Example Prometheus Operator `AlertmanagerConfig` receiver:
@@ -611,7 +611,7 @@ spec:
           sendResolved: true
           httpConfig:
             headers:
-              X-Internal-API-Key: "<internal-api-key>"
+              X-Auth-Token: "<internal-api-key>"
 ```
 
 If the header/key is missing, PoundCake returns `401` for `/api/v1/webhook`.
