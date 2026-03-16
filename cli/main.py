@@ -6,9 +6,11 @@
 #
 """Main CLI entry point for PoundCake CLI."""
 
+from __future__ import annotations
+
 import sys
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
 import click
 
@@ -17,7 +19,18 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cli.client import PoundCakeClient
-from cli.commands import ingredients, orders, recipes, rules
+from cli.commands import (
+    actions,
+    activity,
+    alert_rules,
+    auth,
+    communications,
+    global_communications,
+    incidents,
+    overview,
+    suppressions,
+    workflows,
+)
 
 
 @click.group()
@@ -55,26 +68,37 @@ def cli(
     format: str,
     verbose: bool,
 ) -> None:
-    """PoundCake CLI - Manage orders, rules, and remediations."""
+    """PoundCake CLI - operate incidents, workflows, and communications."""
     ctx.ensure_object(dict)
     ctx.obj["client"] = PoundCakeClient(url, api_key)
     ctx.obj["format"] = format
     ctx.obj["verbose"] = verbose
 
 
-# Register subcommands
-cli.add_command(orders.orders)
-cli.add_command(ingredients.ingredients)
-cli.add_command(recipes.recipes)
-cli.add_command(rules.rules)
+cli.add_command(auth.auth)
+cli.add_command(overview.overview)
+cli.add_command(incidents.incidents)
+cli.add_command(communications.communications)
+cli.add_command(suppressions.suppressions)
+cli.add_command(activity.activity)
+cli.add_command(alert_rules.alert_rules)
+cli.add_command(global_communications.global_communications)
+cli.add_command(workflows.workflows)
+cli.add_command(actions.actions)
+
+# Backward-compatible aliases
+cli.add_command(incidents.incidents, name="orders")
+cli.add_command(alert_rules.alert_rules, name="rules")
+cli.add_command(workflows.workflows, name="recipes")
+cli.add_command(actions.actions, name="ingredients")
 
 
 def main() -> None:
     """Main entry point for the CLI."""
     try:
         cli(obj={})
-    except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
 
