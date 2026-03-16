@@ -14,7 +14,7 @@ from typing import Optional
 
 import click
 
-# Support both `python -m cli.main` and `python cli/main.py`.
+# Support installed console scripts plus legacy module/direct-script execution.
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

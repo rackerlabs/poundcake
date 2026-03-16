@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -82,6 +83,20 @@ def _write_session(config_home: Path, base_url: str, payload: dict[str, Any]) ->
     data = {base_url: payload}
     _session_file(config_home).write_text(json.dumps(data), encoding="utf-8")
     return store
+
+
+def test_cli_is_packaged_as_console_application() -> None:
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    scripts = pyproject["project"]["scripts"]
+    include = pyproject["tool"]["setuptools"]["packages"]["find"]["include"]
+    dependencies = pyproject["project"]["dependencies"]
+
+    assert scripts["poundcake"] == "cli.main:main"
+    assert scripts["poundcake-cli"] == "cli.main:main"
+    assert "cli*" in include
+    assert any(dependency.startswith("click") for dependency in dependencies)
 
 
 def test_auth_login_persists_session_and_logout_clears_it(
