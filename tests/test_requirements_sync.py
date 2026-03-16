@@ -12,9 +12,7 @@ def _dependency_name(spec: str) -> str:
 def test_api_runtime_requirements_cover_project_dependencies():
     repo_root = Path(__file__).resolve().parents[1]
     pyproject = tomllib.loads((repo_root / "pyproject.toml").read_text())
-    project_dependencies = {
-        _dependency_name(spec) for spec in pyproject["project"]["dependencies"]
-    }
+    project_dependencies = {_dependency_name(spec) for spec in pyproject["project"]["dependencies"]}
 
     requirements = {
         _dependency_name(line)
