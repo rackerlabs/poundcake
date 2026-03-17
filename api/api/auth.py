@@ -36,6 +36,7 @@ from api.schemas.schemas import (
 from api.services.auth_service import (
     AccessDeniedError,
     AuthContext,
+    AuthIdentity,
     DeviceAuthorizationExpired,
     DeviceAuthorizationPending,
     InvalidCredentialsError,
@@ -61,6 +62,7 @@ from api.services.auth_service import (
     rehydrate_session_context,
     service_token_context,
     start_auth0_device_authorization,
+    upsert_principal,
     update_role_binding,
 )
 
@@ -144,6 +146,17 @@ def _binding_response(binding: Any) -> AuthRoleBindingResponse:
         updated_at=binding.updated_at,
         principal=(None if binding.principal is None else _principal_response(binding.principal)),
     )
+
+
+async def _remember_observed_principal(
+    db: AsyncSession,
+    identity: AuthIdentity | None,
+) -> None:
+    """Persist an external principal so admins can bind it after first login."""
+    if identity is None or identity.provider in {"local", "service"}:
+        return
+    await upsert_principal(db, identity)
+    await db.commit()
 
 
 async def _persist_session(
@@ -292,6 +305,7 @@ async def login(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except AccessDeniedError as exc:
         await db.rollback()
+        await _remember_observed_principal(db, locals().get("identity"))
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:
         await db.rollback()
@@ -377,6 +391,7 @@ async def oidc_callback(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except AccessDeniedError as exc:
         await db.rollback()
+        await _remember_observed_principal(db, locals().get("identity"))
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     redirect = RedirectResponse(
@@ -432,6 +447,7 @@ async def device_poll(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except AccessDeniedError as exc:
         await db.rollback()
+        await _remember_observed_principal(db, locals().get("identity"))
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
