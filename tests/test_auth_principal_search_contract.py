@@ -33,4 +33,3 @@ async def test_principal_search_matches_display_name_and_username() -> None:
     assert "auth_principals.provider = 'auth0'" in compiled
     assert "auth_principals.username" in compiled
     assert "auth_principals.display_name" in compiled
-
