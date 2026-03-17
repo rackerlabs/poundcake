@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from redis.asyncio import Redis
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -803,7 +803,12 @@ async def list_principals(
         statement = statement.where(AuthPrincipal.provider == provider)
     if search:
         pattern = f"%{search.strip()}%"
-        statement = statement.where(AuthPrincipal.username.ilike(pattern))
+        statement = statement.where(
+            or_(
+                AuthPrincipal.username.ilike(pattern),
+                AuthPrincipal.display_name.ilike(pattern),
+            )
+        )
     statement = statement.offset(offset).limit(limit)
     return list((await db.execute(statement)).scalars().all())
 

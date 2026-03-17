@@ -2889,6 +2889,7 @@ function AccessPage() {
   const [externalGroup, setExternalGroup] = useState("");
   const [selectedPrincipalId, setSelectedPrincipalId] = useState("");
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
 
   const providers = settings.auth_providers.filter((item) => item.name !== "service");
   const externalProviders = providers.filter((item) => item.name !== "local");
@@ -2904,11 +2905,12 @@ function AccessPage() {
   }, [externalProviders, provider]);
 
   const principalsQuery = useQuery({
-    queryKey: ["auth-principals", search],
+    queryKey: ["auth-principals", provider, deferredSearch],
     queryFn: () =>
       apiGet<AuthPrincipalRecord[]>(
-        `/api/v1/auth/principals?limit=200${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+        `/api/v1/auth/principals?limit=200${provider ? `&provider=${encodeURIComponent(provider)}` : ""}${deferredSearch ? `&search=${encodeURIComponent(deferredSearch)}` : ""}`,
       ),
+    placeholderData: (previousData) => previousData,
     enabled: canManageAccess(principal),
   });
   const bindingsQuery = useQuery({
@@ -2970,7 +2972,7 @@ function AccessPage() {
     return <PageError message="You do not have access to manage PoundCake role bindings." />;
   }
 
-  if (principalsQuery.isLoading || bindingsQuery.isLoading) {
+  if (bindingsQuery.isLoading || (principalsQuery.isLoading && !principalsQuery.data)) {
     return <PageLoading message="Loading provider status, observed principals, and role bindings." />;
   }
 
@@ -2978,7 +2980,17 @@ function AccessPage() {
     return <PageError message={getErrorMessage(principalsQuery.error || bindingsQuery.error)} />;
   }
 
-  const visiblePrincipals = principalsQuery.data.filter((item) => item.provider === provider);
+  const principalFilter = search.trim().toLowerCase();
+  const visiblePrincipals = (principalsQuery.data || []).filter((item) => {
+    if (!principalFilter) {
+      return true;
+    }
+    const haystack = [item.username, item.display_name, item.subject_id]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(principalFilter);
+  });
   const hasExternalProviders = externalProviders.length > 0;
   const createDisabled =
     createMutation.isPending

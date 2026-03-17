@@ -14,3 +14,9 @@ def test_access_page_describes_split_browser_and_device_provider_modes() -> None
     content = APP_TSX.read_text(encoding="utf-8")
     assert "Browser login and CLI device login enabled." in content
     assert "No external auth providers are enabled yet." in content
+
+
+def test_access_page_keeps_principal_search_stable_while_refreshing() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert "const deferredSearch = useDeferredValue(search);" in content
+    assert "placeholderData: (previousData) => previousData" in content
