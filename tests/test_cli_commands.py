@@ -294,6 +294,83 @@ def test_auth0_device_login_persists_session(
     assert fake_api.requests[2]["json"] == {"provider": "auth0", "device_code": "device-123"}
 
 
+def test_azure_ad_device_login_persists_session(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "GET",
+        "/api/v1/auth/providers",
+        [
+            {
+                "name": "azure_ad",
+                "label": "Azure AD",
+                "login_mode": "oidc",
+                "cli_login_mode": "device",
+                "browser_login": True,
+                "device_login": True,
+                "password_login": False,
+            }
+        ],
+    )
+    fake_api.add_json(
+        "POST",
+        "/api/v1/auth/device/start",
+        {
+            "provider": "azure_ad",
+            "device_code": "device-456",
+            "user_code": "WXYZ-1234",
+            "verification_uri": "https://microsoft.example/device",
+            "verification_uri_complete": "https://microsoft.example/device?user_code=WXYZ-1234",
+            "expires_in": 600,
+            "interval": 1,
+        },
+    )
+    fake_api.add_json(
+        "POST",
+        "/api/v1/auth/device/poll",
+        {
+            "status": "authorized",
+            "session": {
+                "session_id": "session-azure",
+                "username": "alice@example.com",
+                "expires_at": "2099-01-01T00:00:00+00:00",
+                "provider": "azure_ad",
+                "role": "admin",
+                "display_name": "Alice Example",
+                "is_superuser": False,
+                "permissions": ["read", "manage_access"],
+                "token_type": "Bearer",
+            },
+        },
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+    monkeypatch.setattr("cli.commands.auth.time.sleep", lambda _seconds: None)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+    result = runner.invoke(
+        cli,
+        [
+            "--url",
+            "http://example.test",
+            "--format",
+            "json",
+            "auth",
+            "login",
+            "--provider",
+            "azure_ad",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    saved = json.loads(_session_file(tmp_path).read_text(encoding="utf-8"))
+    assert saved["http://example.test"]["session_id"] == "session-azure"
+    assert saved["http://example.test"]["provider"] == "azure_ad"
+    assert fake_api.requests[1]["json"] == {"provider": "azure_ad"}
+    assert fake_api.requests[2]["json"] == {"provider": "azure_ad", "device_code": "device-456"}
+
+
 def test_auth0_login_fails_when_device_flow_is_not_configured(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
@@ -435,7 +512,7 @@ def test_overview_aggregates_existing_endpoints_in_table_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_api = FakeAPI()
-    fake_api.add_json("GET", "/api/v1/health", {"status": "healthy", "version": "2.0.138"})
+    fake_api.add_json("GET", "/api/v1/health", {"status": "healthy", "version": "2.0.142"})
     fake_api.add_json(
         "GET",
         "/api/v1/stats",

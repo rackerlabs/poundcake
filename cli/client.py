@@ -67,6 +67,7 @@ class AuthMeResult:
 class DeviceAuthorizationStart:
     """CLI device authorization bootstrap payload."""
 
+    provider: str
     device_code: str
     user_code: str
     verification_uri: str
@@ -254,11 +255,17 @@ class PoundCakeClient:
             ),
         )
 
-    def start_device_login(self) -> DeviceAuthorizationStart:
-        payload = self._request("POST", "/api/v1/auth/device/start", use_session=False)
+    def start_device_login(self, provider: str) -> DeviceAuthorizationStart:
+        payload = self._request(
+            "POST",
+            "/api/v1/auth/device/start",
+            json={"provider": provider},
+            use_session=False,
+        )
         if not isinstance(payload, dict):
             raise PoundCakeClientError("Unexpected device authorization response format")
         return DeviceAuthorizationStart(
+            provider=str(payload.get("provider") or provider),
             device_code=str(payload["device_code"]),
             user_code=str(payload["user_code"]),
             verification_uri=str(payload["verification_uri"]),
@@ -271,11 +278,11 @@ class PoundCakeClient:
             interval=int(payload.get("interval") or 5),
         )
 
-    def poll_device_login(self, device_code: str) -> dict[str, Any]:
+    def poll_device_login(self, provider: str, device_code: str) -> dict[str, Any]:
         payload = self._request(
             "POST",
             "/api/v1/auth/device/poll",
-            json={"provider": "auth0", "device_code": device_code},
+            json={"provider": provider, "device_code": device_code},
             use_session=False,
         )
         if isinstance(payload, dict):

@@ -42,10 +42,11 @@ poundcake --url http://localhost:8000 overview
 poundcake --url http://localhost:8000 auth logout
 ```
 
-For Auth0, the CLI uses the API-brokered device flow:
+For Auth0 and Azure AD, the CLI uses the API-brokered device flow:
 
 ```bash
 poundcake --url http://localhost:8000 auth login --provider auth0
+poundcake --url http://localhost:8000 auth login --provider azure_ad
 ```
 
 Stored sessions live under `${XDG_CONFIG_HOME:-~/.config}/poundcake/session.json`.
@@ -57,6 +58,7 @@ Admins can inspect observed principals and manage role bindings:
 
 ```bash
 poundcake --url http://localhost:8000 auth principals list --provider auth0
+poundcake --url http://localhost:8000 auth principals list --provider azure_ad
 poundcake --url http://localhost:8000 auth bindings list
 poundcake --url http://localhost:8000 auth bindings create \
   --provider auth0 \

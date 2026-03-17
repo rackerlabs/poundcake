@@ -1,5 +1,5 @@
 export interface AuthProviderRecord {
-  name: "local" | "active_directory" | "auth0" | "service";
+  name: "local" | "active_directory" | "auth0" | "azure_ad" | "service";
   label: string;
   login_mode: string;
   cli_login_mode: string;
@@ -11,7 +11,7 @@ export interface AuthProviderRecord {
 export interface AuthMeRecord {
   username: string;
   display_name?: string | null;
-  provider: "local" | "active_directory" | "auth0" | "service";
+  provider: "local" | "active_directory" | "auth0" | "azure_ad" | "service";
   role: "reader" | "operator" | "admin" | "service";
   principal_type: "user" | "service";
   principal_id?: number | null;
@@ -23,7 +23,7 @@ export interface AuthMeRecord {
 
 export interface AuthPrincipalRecord {
   id: number;
-  provider: "local" | "active_directory" | "auth0" | "service";
+  provider: "local" | "active_directory" | "auth0" | "azure_ad" | "service";
   subject_id: string;
   username: string;
   display_name?: string | null;
@@ -36,7 +36,7 @@ export interface AuthPrincipalRecord {
 
 export interface AuthRoleBindingRecord {
   id: number;
-  provider: "local" | "active_directory" | "auth0" | "service";
+  provider: "local" | "active_directory" | "auth0" | "azure_ad" | "service";
   binding_type: "user" | "group";
   role: "reader" | "operator" | "admin" | "service";
   principal_id?: number | null;

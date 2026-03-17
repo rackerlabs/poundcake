@@ -2,7 +2,7 @@
 
 A standalone Helm chart for running PoundCake with StackStorm in Kubernetes. This chart is generated from the Docker Compose configuration and provides a production-ready deployment.
 
-Auth provider setup for local superuser, Active Directory, and Auth0 is documented in [docs/AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+Auth provider setup for local superuser, Active Directory, Auth0, and Azure AD is documented in [docs/AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
 
 ## Table of Contents
 

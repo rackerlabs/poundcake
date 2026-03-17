@@ -234,6 +234,39 @@ spec:
                   name: {{ .Values.auth.auth0.cli.existingSecret }}
                   key: {{ .Values.auth.auth0.cli.secretKeys.clientSecret }}
             {{- end }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_ENABLED
+              value: {{ .Values.auth.azureAd.enabled | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_TENANT
+              value: {{ .Values.auth.azureAd.shared.tenant | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_AUDIENCE
+              value: {{ .Values.auth.azureAd.shared.audience | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_SCOPE
+              value: {{ .Values.auth.azureAd.shared.scope | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_USERNAME_CLAIM
+              value: {{ .Values.auth.azureAd.shared.usernameClaim | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_DISPLAY_NAME_CLAIM
+              value: {{ .Values.auth.azureAd.shared.displayNameClaim | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_GROUPS_CLAIM
+              value: {{ .Values.auth.azureAd.shared.groupsClaim | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_SUBJECT_CLAIM
+              value: {{ .Values.auth.azureAd.shared.subjectClaim | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_UI_ENABLED
+              value: {{ .Values.auth.azureAd.ui.enabled | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_ID
+              value: {{ .Values.auth.azureAd.ui.clientId | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_UI_CALLBACK_URL
+              value: {{ .Values.auth.azureAd.ui.callbackUrl | quote }}
+            {{- if .Values.auth.azureAd.ui.existingSecret }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.azureAd.ui.existingSecret }}
+                  key: {{ .Values.auth.azureAd.ui.secretKeys.clientSecret }}
+            {{- end }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_CLI_ENABLED
+              value: {{ .Values.auth.azureAd.cli.enabled | quote }}
+            - name: POUNDCAKE_AUTH_AZURE_AD_CLI_CLIENT_ID
+              value: {{ .Values.auth.azureAd.cli.clientId | quote }}
             {{- end }}
             - name: POUNDCAKE_STACKSTORM_API_KEY
               valueFrom:

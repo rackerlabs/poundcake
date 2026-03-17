@@ -30,6 +30,7 @@ from api.schemas.schemas import (
     DeleteResponse,
     DeviceAuthorizationPollRequest,
     DeviceAuthorizationPollResponse,
+    DeviceAuthorizationStartRequest,
     DeviceAuthorizationStartResponse,
     SessionResponse,
 )
@@ -40,18 +41,19 @@ from api.services.auth_service import (
     DeviceAuthorizationExpired,
     DeviceAuthorizationPending,
     InvalidCredentialsError,
-    auth0_browser_login_enabled,
-    auth0_device_login_enabled,
-    authenticate_auth0_authorization_code,
-    authenticate_auth0_device_code,
+    ProviderConfigurationError,
     authenticate_password_provider,
+    authenticate_device_code,
+    authenticate_oidc_authorization_code,
+    browser_login_provider_names,
     build_auth_callback_url,
     build_login_context,
     create_role_binding,
+    device_login_provider_names,
     delete_role_binding,
     ensure_request_authorized,
     get_enabled_provider_metadata,
-    get_auth0_authorize_url,
+    get_oidc_authorize_url,
     get_principal_by_id,
     get_role_binding,
     get_session_store,
@@ -59,9 +61,10 @@ from api.services.auth_service import (
     is_request_public,
     list_principals,
     list_role_bindings,
+    provider_label,
     rehydrate_session_context,
     service_token_context,
-    start_auth0_device_authorization,
+    start_device_authorization,
     upsert_principal,
     update_role_binding,
 )
@@ -102,6 +105,50 @@ def _normalize_next_target(target: str | None) -> str:
     if target == "/login" or target.startswith("/login?"):
         return "/overview"
     return target
+
+
+def _resolve_sso_provider(requested_provider: str | None, *, mode: str) -> str:
+    settings = get_settings()
+    capability = "browser login" if mode == "browser" else "CLI device login"
+    enabled = (
+        browser_login_provider_names(settings)
+        if mode == "browser"
+        else device_login_provider_names(settings)
+    )
+    provider = str(requested_provider or "").strip().lower()
+
+    if provider:
+        if provider not in {"auth0", "azure_ad"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Provider '{provider}' does not support {capability}",
+            )
+        if provider not in enabled:
+            raise HTTPException(
+                status_code=404,
+                detail=f"{provider_label(provider)} {capability} is not enabled",
+            )
+        return provider
+
+    if len(enabled) == 1:
+        return enabled[0]
+    if len(enabled) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"provider is required when multiple {capability} providers are enabled",
+        )
+
+    configured_candidates: list[str] = []
+    if settings.auth_auth0_enabled:
+        configured_candidates.append("auth0")
+    if settings.auth_azure_ad_enabled:
+        configured_candidates.append("azure_ad")
+    if len(configured_candidates) == 1:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{provider_label(configured_candidates[0])} {capability} is not enabled",
+        )
+    raise HTTPException(status_code=404, detail=f"No {capability} providers are enabled")
 
 
 def _session_response(context: AuthContext) -> SessionResponse:
@@ -348,24 +395,31 @@ async def logout(
 async def oidc_login(
     request: Request,
     next: str = Query(default="/overview"),
+    provider: str | None = Query(default=None),
 ) -> RedirectResponse:
-    """Start the Auth0 browser login flow."""
-    if not auth0_browser_login_enabled():
-        raise HTTPException(status_code=404, detail="Auth0 browser login is not enabled")
+    """Start an external browser login flow."""
+    resolved_provider = _resolve_sso_provider(provider, mode="browser")
     state = secrets.token_urlsafe(24)
+    nonce = secrets.token_urlsafe(24) if resolved_provider == "azure_ad" else ""
     target = _normalize_next_target(next)
-    callback_url = build_auth_callback_url(str(request.base_url).rstrip("/"))
+    callback_url = build_auth_callback_url(str(request.base_url).rstrip("/"), resolved_provider)
+    try:
+        url = await get_oidc_authorize_url(
+            resolved_provider,
+            state=state,
+            redirect_uri=callback_url,
+            nonce=(nonce or None),
+        )
+    except ProviderConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     store = get_session_store()
     await store.put_state(
         "oidc_state",
         state,
-        {"next": target},
+        {"next": target, "provider": resolved_provider, "nonce": nonce},
         ttl_seconds=get_settings().auth_oidc_state_ttl,
     )
-    return RedirectResponse(
-        url=await get_auth0_authorize_url(state, callback_url),
-        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
-    )
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.get("/auth/oidc/callback")
@@ -375,15 +429,22 @@ async def oidc_callback(
     state: str = Query(..., min_length=1),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
-    """Complete the Auth0 browser login flow and redirect back to the UI."""
+    """Complete an external browser login flow and redirect back to the UI."""
     store = get_session_store()
     state_payload = await store.pop_state("oidc_state", state)
     if not state_payload:
         raise HTTPException(status_code=400, detail="Invalid or expired login state")
 
-    callback_url = build_auth_callback_url(str(request.base_url).rstrip("/"))
+    provider = str(state_payload.get("provider") or "auth0").strip().lower()
+    nonce = str(state_payload.get("nonce") or "").strip() or None
+    callback_url = build_auth_callback_url(str(request.base_url).rstrip("/"), provider)
     try:
-        identity = await authenticate_auth0_authorization_code(code, callback_url)
+        identity = await authenticate_oidc_authorization_code(
+            provider,
+            code=code,
+            redirect_uri=callback_url,
+            nonce=nonce,
+        )
         context = await build_login_context(db, identity)
         await db.commit()
     except InvalidCredentialsError as exc:
@@ -393,6 +454,9 @@ async def oidc_callback(
         await db.rollback()
         await _remember_observed_principal(db, locals().get("identity"))
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ProviderConfigurationError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     redirect = RedirectResponse(
         url=_normalize_next_target(str(state_payload.get("next") or "/overview")),
@@ -405,12 +469,20 @@ async def oidc_callback(
 
 
 @router.post("/auth/device/start", response_model=DeviceAuthorizationStartResponse)
-async def device_start() -> DeviceAuthorizationStartResponse:
-    """Start an Auth0 device login flow for CLI users."""
-    if not auth0_device_login_enabled():
-        raise HTTPException(status_code=404, detail="Auth0 CLI device login is not enabled")
-    result = await start_auth0_device_authorization()
+async def device_start(
+    payload: DeviceAuthorizationStartRequest | None = None,
+) -> DeviceAuthorizationStartResponse:
+    """Start an external device login flow for CLI users."""
+    resolved_provider = _resolve_sso_provider(
+        None if payload is None else payload.provider,
+        mode="device",
+    )
+    try:
+        result = await start_device_authorization(resolved_provider)
+    except ProviderConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DeviceAuthorizationStartResponse(
+        provider=result.provider,
         device_code=result.device_code,
         user_code=result.user_code,
         verification_uri=result.verification_uri,
@@ -427,11 +499,10 @@ async def device_poll(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> DeviceAuthorizationPollResponse:
-    """Poll an Auth0 device flow until the user approves it."""
-    if payload.provider != "auth0":
-        raise HTTPException(status_code=400, detail="Only auth0 supports device login")
+    """Poll an external device flow until the user approves it."""
+    resolved_provider = _resolve_sso_provider(payload.provider, mode="device")
     try:
-        identity = await authenticate_auth0_device_code(payload.device_code)
+        identity = await authenticate_device_code(resolved_provider, payload.device_code)
         context = await build_login_context(db, identity)
         await db.commit()
         session = await _persist_session(request, response, context)
@@ -449,6 +520,9 @@ async def device_poll(
         await db.rollback()
         await _remember_observed_principal(db, locals().get("identity"))
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ProviderConfigurationError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/auth/principals", response_model=list[AuthPrincipalResponse])
@@ -489,9 +563,10 @@ async def create_binding(
     db: AsyncSession = Depends(get_db),
 ) -> AuthRoleBindingResponse:
     """Create a new RBAC binding."""
-    if payload.provider not in {"auth0", "active_directory"}:
+    if payload.provider not in {"auth0", "active_directory", "azure_ad"}:
         raise HTTPException(
-            status_code=400, detail="Bindings are only supported for Auth0 and Active Directory"
+            status_code=400,
+            detail="Bindings are only supported for Auth0, Azure AD, and Active Directory",
         )
     if payload.binding_type == "user":
         principal = await get_principal_by_id(db, int(payload.principal_id or 0))

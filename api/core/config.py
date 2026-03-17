@@ -301,6 +301,44 @@ class Settings(BaseSettings):
         or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_SECRET", "")
     )
 
+    # Azure AD / Microsoft Entra ID.
+    auth_azure_ad_enabled: bool = False
+    auth_azure_ad_tenant: str = ""
+    auth_azure_ad_audience: str = ""
+    auth_azure_ad_scope: str = "openid profile email"
+    auth_azure_ad_username_claim: str = "preferred_username"
+    auth_azure_ad_display_name_claim: str = "name"
+    auth_azure_ad_groups_claim: str = "groups"
+    auth_azure_ad_subject_claim: str = "sub"
+    auth_azure_ad_ui_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID")
+        )
+    )
+    auth_azure_ad_ui_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID", "")
+    )
+    auth_azure_ad_ui_client_secret: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_SECRET", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_SECRET", "")
+    )
+    auth_azure_ad_ui_callback_url: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CALLBACK_URL", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CALLBACK_URL", "")
+    )
+    auth_azure_ad_cli_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID")
+        )
+    )
+    auth_azure_ad_cli_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID", "")
+    )
+
     # ==========================================================================
     # Bakery Integration Settings
     # ==========================================================================

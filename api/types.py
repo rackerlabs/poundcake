@@ -226,6 +226,7 @@ AuthProvider = Literal[
     "local",
     "active_directory",
     "auth0",
+    "azure_ad",
     "service",
 ]
 

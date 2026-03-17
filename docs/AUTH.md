@@ -5,6 +5,7 @@ PoundCake supports these auth sources at the same time in one install:
 - Local superuser
 - Active Directory
 - Auth0
+- Azure AD
 
 The local superuser is the immutable recovery account. It is always managed from the PoundCake admin secret and is not controlled through normal RBAC bindings.
 
@@ -176,6 +177,57 @@ For first lab validation, start with an Auth0 database connection and create thr
 
 Those are Auth0 users only. PoundCake roles are granted later through Access bindings.
 
+### Azure AD
+
+PoundCake uses one single-tenant Azure AD / Microsoft Entra app registration set:
+
+- UI/browser login: confidential web app registration
+- CLI/device login: public/native client registration
+
+Minimal split-client configuration:
+
+```yaml
+auth:
+  azureAd:
+    enabled: true
+    shared:
+      tenant: "11111111-1111-1111-1111-111111111111"
+      scope: "openid profile email"
+      audience: ""
+    ui:
+      enabled: true
+      clientId: "<web-client-id>"
+      callbackUrl: "https://poundcake.example.com/api/v1/auth/oidc/callback"
+      existingSecret: "poundcake-azure-ui"
+    cli:
+      enabled: true
+      clientId: "<native-client-id>"
+```
+
+Create the optional UI client-secret secret when your Azure web app is confidential:
+
+```bash
+kubectl -n <namespace> create secret generic poundcake-azure-ui \
+  --from-literal=client-secret='<client-secret>'
+```
+
+Useful Azure AD knobs:
+
+- `tenant`
+- `scope`
+- `audience`
+- `usernameClaim`
+- `displayNameClaim`
+- `groupsClaim`
+- `subjectClaim`
+
+Important Azure AD notes:
+
+- v1 is single-tenant only. Do not use `common` or `organizations`.
+- Group-backed RBAC depends on the `groups` claim being emitted in the token.
+- PoundCake does not call Microsoft Graph for group overage fallback in this version.
+- If Azure AD omits group claims or returns overage markers, explicit user bindings still work after first login, but group bindings will not match.
+
 ### Combined Example
 
 ```yaml
@@ -207,6 +259,19 @@ auth:
       enabled: true
       clientId: "<native-client-id>"
       existingSecret: ""
+  azureAd:
+    enabled: true
+    shared:
+      tenant: "11111111-1111-1111-1111-111111111111"
+      scope: "openid profile email"
+    ui:
+      enabled: true
+      clientId: "<web-client-id>"
+      callbackUrl: "https://poundcake.example.com/api/v1/auth/oidc/callback"
+      existingSecret: "poundcake-azure-ui"
+    cli:
+      enabled: true
+      clientId: "<native-client-id>"
 ```
 
 Apply provider overrides using the normal install flow:
@@ -248,6 +313,7 @@ Or inspect observed users first:
 
 ```bash
 poundcake --url https://poundcake.example.com auth principals list --provider auth0
+poundcake --url https://poundcake.example.com auth principals list --provider azure_ad
 ```
 
 ## UI And CLI Login
@@ -256,6 +322,8 @@ poundcake --url https://poundcake.example.com auth principals list --provider au
 - Active Directory: username/password form
 - Auth0 in UI: browser redirect flow through the Auth0 regular web app
 - Auth0 in CLI: device login flow through the Auth0 native app
+- Azure AD in UI: browser redirect flow through the Azure AD web app
+- Azure AD in CLI: device login flow through the Azure AD native app
 
 Useful CLI commands:
 
@@ -264,6 +332,7 @@ poundcake --url https://poundcake.example.com auth providers
 poundcake --url https://poundcake.example.com auth login --provider local --username admin
 poundcake --url https://poundcake.example.com auth login --provider active_directory --username alice
 poundcake --url https://poundcake.example.com auth login --provider auth0
+poundcake --url https://poundcake.example.com auth login --provider azure_ad
 poundcake --url https://poundcake.example.com auth me
 ```
 
@@ -279,10 +348,13 @@ kubectl get secret <release>-poundcake-admin -n <namespace> -o jsonpath='{.data.
 
 ## Troubleshooting
 
-- If Access shows no external providers, check your deployed `auth.activeDirectory.*` and `auth.auth0.shared.*` / `auth.auth0.ui.*` / `auth.auth0.cli.*` Helm values.
+- If Access shows no external providers, check your deployed `auth.activeDirectory.*`, `auth.auth0.*`, and `auth.azureAd.*` Helm values.
 - If Access shows no observed users, the user has not logged in successfully yet.
 - If the UI does not show an Auth0 button, confirm `auth.auth0.ui.enabled=true` and `auth.auth0.ui.clientId` are set.
 - If `poundcake auth login --provider auth0` is rejected, confirm `auth.auth0.cli.enabled=true` and `auth.auth0.cli.clientId` are set.
 - If Auth0 browser login loops, verify the public host, callback URL, and Auth0 application type.
+- If the UI does not show an Azure AD button, confirm `auth.azureAd.ui.enabled=true`, `auth.azureAd.ui.clientId`, and `auth.azureAd.shared.tenant` are set.
+- If `poundcake auth login --provider azure_ad` is rejected, confirm `auth.azureAd.cli.enabled=true`, `auth.azureAd.cli.clientId`, and `auth.azureAd.shared.tenant` are set.
+- If Azure AD group bindings never match, verify the app registration is emitting `groups` claims and the token is not returning group overage markers.
 - If AD login fails, verify `serverUri`, `userBaseDn`, bind credentials, and CA bundle/TLS settings.
 - If workers return `401`, confirm `POUNDCAKE_AUTH_SERVICE_TOKEN` is wired to every PoundCake worker and the API.

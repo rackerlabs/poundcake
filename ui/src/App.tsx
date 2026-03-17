@@ -282,8 +282,7 @@ function LoginPage() {
     queryFn: () => apiFetch<AppSettings["auth_providers"]>("/api/v1/auth/providers", {}, { allowUnauthorized: true }),
   });
   const passwordProviders = (providersQuery.data || []).filter((provider) => provider.password_login);
-  const auth0Provider =
-    (providersQuery.data || []).find((provider) => provider.name === "auth0" && provider.browser_login) || null;
+  const browserProviders = (providersQuery.data || []).filter((provider) => provider.browser_login);
   const [provider, setProvider] = useState<string>("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -385,8 +384,10 @@ function LoginPage() {
         ? "Username and password are required."
         : undefined;
 
-  function handleAuth0Login() {
-    window.location.assign(`/api/v1/auth/oidc/login?next=${encodeURIComponent(nextTarget)}`);
+  function handleBrowserLogin(providerName: string) {
+    window.location.assign(
+      `/api/v1/auth/oidc/login?provider=${encodeURIComponent(providerName)}&next=${encodeURIComponent(nextTarget)}`,
+    );
   }
 
   return (
@@ -498,18 +499,25 @@ function LoginPage() {
             </form>
           ) : null}
 
-          {auth0Provider ? (
+          {browserProviders.length ? (
             <div className="form-stack">
               {passwordProviders.length ? <div className="login-note">Or continue with single sign-on.</div> : null}
               <div className="form-actions">
-                <button className="ghost-button" type="button" onClick={handleAuth0Login}>
-                  Sign in with {auth0Provider.label}
-                </button>
+                {browserProviders.map((browserProvider) => (
+                  <button
+                    className="ghost-button"
+                    key={browserProvider.name}
+                    type="button"
+                    onClick={() => handleBrowserLogin(browserProvider.name)}
+                  >
+                    Sign in with {browserProvider.label}
+                  </button>
+                ))}
               </div>
             </div>
           ) : null}
 
-          {!providersQuery.isError && !passwordProviders.length && !auth0Provider ? (
+          {!providersQuery.isError && !passwordProviders.length && !browserProviders.length ? (
             <div className="login-note">No browser-capable login providers are configured right now.</div>
           ) : null}
         </section>
@@ -3016,7 +3024,7 @@ function AccessPage() {
         <Panel title="Create role binding" subtitle="Bind either an observed user or an external group to a PoundCake role.">
           <div className="form-stack">
             {!hasExternalProviders ? (
-              <EmptyState message="No external auth providers are enabled yet. Add Active Directory or Auth0 in Helm auth values, redeploy PoundCake, then create bindings here." />
+              <EmptyState message="No external auth providers are enabled yet. Add Active Directory, Auth0, or Azure AD in Helm auth values, redeploy PoundCake, then create bindings here." />
             ) : null}
             <div className="grid-two">
               <FormField
@@ -3058,7 +3066,7 @@ function AccessPage() {
               </FormField>
               <FormField
                 label="Principal search"
-                help="Observed users appear here after a successful login through Auth0 or Active Directory. Search narrows the stored principal list before you choose a user binding."
+                help="Observed users appear here after a successful login through Auth0, Azure AD, or Active Directory. Search narrows the stored principal list before you choose a user binding."
               >
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter observed users" />
               </FormField>
@@ -3067,7 +3075,7 @@ function AccessPage() {
             {bindingType === "group" ? (
               <FormField
                 label="External group"
-                help="Enter the group name exactly as PoundCake sees it after provider normalization. For Active Directory this is usually the extracted CN, such as monitoring-operators."
+                help="Enter the group name exactly as PoundCake sees it after provider normalization. For Active Directory this is usually the extracted CN; for Auth0 and Azure AD it is usually the exact group claim value."
               >
                 <input
                   value={externalGroup}
@@ -3125,7 +3133,7 @@ function AccessPage() {
             },
             {
               label: "Adding providers",
-              description: "Auth0 and Active Directory are enabled through Helm auth settings and secrets, then they appear here for binding management. This page does not create provider connections by itself.",
+              description: "Auth0, Azure AD, and Active Directory are enabled through Helm auth settings and secrets, then they appear here for binding management. This page does not create provider connections by itself.",
             },
           ]}
         />

@@ -926,9 +926,9 @@ class AuthMeResponse(BaseModel):
 
 
 class DeviceAuthorizationStartResponse(BaseModel):
-    """Auth0 device login start payload."""
+    """Device login start payload."""
 
-    provider: AuthProvider = "auth0"
+    provider: AuthProvider
     device_code: str
     user_code: str
     verification_uri: str
@@ -937,15 +937,21 @@ class DeviceAuthorizationStartResponse(BaseModel):
     interval: int
 
 
-class DeviceAuthorizationPollRequest(BaseModel):
-    """Auth0 device authorization poll request."""
+class DeviceAuthorizationStartRequest(BaseModel):
+    """Device login start request."""
 
-    provider: AuthProvider = "auth0"
+    provider: Optional[AuthProvider] = None
+
+
+class DeviceAuthorizationPollRequest(BaseModel):
+    """Device authorization poll request."""
+
+    provider: Optional[AuthProvider] = None
     device_code: str = Field(..., min_length=1)
 
 
 class DeviceAuthorizationPollResponse(BaseModel):
-    """Auth0 device authorization status response."""
+    """Device authorization status response."""
 
     status: str
     interval: Optional[int] = None

@@ -67,6 +67,16 @@ HUMAN_ROLES: set[AuthRole] = {"reader", "operator", "admin"}
 _MEMORY_STATE: dict[str, tuple[dict[str, Any], datetime]] = {}
 _SESSION_STORE: SessionStore | None = None
 _SESSION_STORE_KEY: tuple[Any, ...] | None = None
+_OIDC_DISCOVERY_CACHE: dict[str, dict[str, Any]] = {}
+_OIDC_JWKS_CACHE: dict[str, dict[str, Any]] = {}
+
+AUTH_PROVIDER_LABELS: dict[str, str] = {
+    "local": "Local Superuser",
+    "active_directory": "Active Directory",
+    "auth0": "Auth0",
+    "azure_ad": "Azure AD",
+    "service": "Internal Service",
+}
 
 
 def utc_now() -> datetime:
@@ -150,8 +160,9 @@ class AuthContext:
 
 @dataclass
 class DeviceAuthorizationStart:
-    """Auth0 device authorization payload."""
+    """External device authorization payload."""
 
+    provider: AuthProvider
     device_code: str
     user_code: str
     verification_uri: str
@@ -177,11 +188,11 @@ class AccessDeniedError(AuthError):
 
 
 class DeviceAuthorizationPending(AuthError):
-    """Raised when an Auth0 device flow has not completed yet."""
+    """Raised when an external device flow has not completed yet."""
 
 
 class DeviceAuthorizationExpired(AuthError):
-    """Raised when an Auth0 device flow expired."""
+    """Raised when an external device flow expired."""
 
 
 class SessionStore:
@@ -365,7 +376,7 @@ def get_enabled_provider_metadata() -> list[dict[str, Any]]:
         providers.append(
             {
                 "name": "local",
-                "label": "Local Superuser",
+                "label": AUTH_PROVIDER_LABELS["local"],
                 "login_mode": "password",
                 "cli_login_mode": "password",
                 "browser_login": False,
@@ -378,7 +389,7 @@ def get_enabled_provider_metadata() -> list[dict[str, Any]]:
         providers.append(
             {
                 "name": "active_directory",
-                "label": "Active Directory",
+                "label": AUTH_PROVIDER_LABELS["active_directory"],
                 "login_mode": "password",
                 "cli_login_mode": "password",
                 "browser_login": False,
@@ -393,11 +404,26 @@ def get_enabled_provider_metadata() -> list[dict[str, Any]]:
         providers.append(
             {
                 "name": "auth0",
-                "label": "Auth0",
+                "label": AUTH_PROVIDER_LABELS["auth0"],
                 "login_mode": "oidc" if auth0_browser else "device",
                 "cli_login_mode": "device" if auth0_device else "unavailable",
                 "browser_login": auth0_browser,
                 "device_login": auth0_device,
+                "password_login": False,
+            }
+        )
+
+    azure_browser = azure_ad_browser_login_enabled(settings)
+    azure_device = azure_ad_device_login_enabled(settings)
+    if azure_browser or azure_device:
+        providers.append(
+            {
+                "name": "azure_ad",
+                "label": AUTH_PROVIDER_LABELS["azure_ad"],
+                "login_mode": "oidc" if azure_browser else "device",
+                "cli_login_mode": "device" if azure_device else "unavailable",
+                "browser_login": azure_browser,
+                "device_login": azure_device,
                 "password_login": False,
             }
         )
@@ -408,6 +434,33 @@ def get_enabled_provider_metadata() -> list[dict[str, Any]]:
 def provider_names() -> list[str]:
     """Return enabled provider names."""
     return [str(item["name"]) for item in get_enabled_provider_metadata()]
+
+
+def provider_label(provider: str) -> str:
+    """Return the human label for an auth provider."""
+    return AUTH_PROVIDER_LABELS.get(provider, provider)
+
+
+def browser_login_provider_names(settings: Any | None = None) -> list[str]:
+    """Return enabled browser-capable SSO providers."""
+    settings = settings or get_settings()
+    providers: list[str] = []
+    if auth0_browser_login_enabled(settings):
+        providers.append("auth0")
+    if azure_ad_browser_login_enabled(settings):
+        providers.append("azure_ad")
+    return providers
+
+
+def device_login_provider_names(settings: Any | None = None) -> list[str]:
+    """Return enabled CLI device-login providers."""
+    settings = settings or get_settings()
+    providers: list[str] = []
+    if auth0_device_login_enabled(settings):
+        providers.append("auth0")
+    if azure_ad_device_login_enabled(settings):
+        providers.append("azure_ad")
+    return providers
 
 
 def auth0_browser_login_enabled(settings: Any | None = None) -> bool:
@@ -429,6 +482,28 @@ def auth0_device_login_enabled(settings: Any | None = None) -> bool:
         and settings.auth_auth0_domain
         and settings.auth_auth0_cli_enabled
         and settings.auth_auth0_cli_client_id
+    )
+
+
+def azure_ad_browser_login_enabled(settings: Any | None = None) -> bool:
+    """Return whether Azure AD browser login is configured."""
+    settings = settings or get_settings()
+    return bool(
+        settings.auth_azure_ad_enabled
+        and settings.auth_azure_ad_tenant
+        and settings.auth_azure_ad_ui_enabled
+        and settings.auth_azure_ad_ui_client_id
+    )
+
+
+def azure_ad_device_login_enabled(settings: Any | None = None) -> bool:
+    """Return whether Azure AD CLI device login is configured."""
+    settings = settings or get_settings()
+    return bool(
+        settings.auth_azure_ad_enabled
+        and settings.auth_azure_ad_tenant
+        and settings.auth_azure_ad_cli_enabled
+        and settings.auth_azure_ad_cli_client_id
     )
 
 
@@ -590,79 +665,89 @@ def _auth0_common_form_fields(*, client_id: str, client_secret: str = "") -> dic
     return payload
 
 
-async def get_auth0_authorize_url(state: str, redirect_uri: str) -> str:
-    """Construct the Auth0 browser login URL."""
+def _azure_ad_tenant() -> str:
     settings = get_settings()
-    if not auth0_browser_login_enabled(settings):
-        raise ProviderConfigurationError("Auth0 browser login is not enabled")
-    params = {
-        "response_type": "code",
-        "client_id": settings.auth_auth0_ui_client_id,
-        "redirect_uri": redirect_uri,
-        "scope": settings.auth_auth0_scope,
-        "state": state,
-    }
-    if settings.auth_auth0_audience:
-        params["audience"] = settings.auth_auth0_audience
-    if settings.auth_auth0_organization:
-        params["organization"] = settings.auth_auth0_organization
-    if settings.auth_auth0_connection:
-        params["connection"] = settings.auth_auth0_connection
-    return f"{_auth0_base_url()}/authorize?{urlencode(params)}"
+    if not (settings.auth_azure_ad_enabled and settings.auth_azure_ad_tenant):
+        raise ProviderConfigurationError("Azure AD is not enabled")
+    tenant = settings.auth_azure_ad_tenant.strip().strip("/")
+    if tenant.lower() in {"common", "organizations", "consumers"}:
+        raise ProviderConfigurationError("Azure AD tenant must be a single-tenant identifier")
+    return tenant
 
 
-async def start_auth0_device_authorization() -> DeviceAuthorizationStart:
-    """Begin an Auth0 device flow."""
+def _azure_ad_authority_base() -> str:
+    return f"https://login.microsoftonline.com/{_azure_ad_tenant()}"
+
+
+def _azure_ad_scope() -> str:
     settings = get_settings()
-    if not auth0_device_login_enabled(settings):
-        raise ProviderConfigurationError("Auth0 CLI device login is not enabled")
-    payload = _auth0_common_form_fields(
-        client_id=settings.auth_auth0_cli_client_id,
-        client_secret=settings.auth_auth0_cli_client_secret,
-    )
-    response = await request_with_retry(
-        "POST",
-        f"{_auth0_base_url()}/oauth/device/code",
-        data=payload,
-    )
-    if response.status_code >= 400:
-        raise ProviderConfigurationError("Auth0 device authorization could not be started")
-    data = response.json()
-    return DeviceAuthorizationStart(
-        device_code=str(data["device_code"]),
-        user_code=str(data["user_code"]),
-        verification_uri=str(data["verification_uri"]),
-        verification_uri_complete=(
-            None
-            if data.get("verification_uri_complete") is None
-            else str(data.get("verification_uri_complete"))
-        ),
-        expires_in=int(data.get("expires_in") or 0),
-        interval=int(data.get("interval") or 5),
-    )
+    configured_items = [item for item in str(settings.auth_azure_ad_scope or "").split() if item]
+    existing = {item.casefold() for item in configured_items}
+    for required in ("openid", "profile", "email"):
+        if required.casefold() not in existing:
+            configured_items.append(required)
+    return " ".join(configured_items)
 
 
-async def _auth0_fetch_userinfo(access_token: str) -> dict[str, Any]:
+async def _azure_ad_discovery_document() -> dict[str, Any]:
+    authority = _azure_ad_authority_base()
+    cached = _OIDC_DISCOVERY_CACHE.get(authority)
+    if cached is not None:
+        return dict(cached)
+
     response = await request_with_retry(
         "GET",
-        f"{_auth0_base_url()}/userinfo",
-        headers={"Authorization": f"Bearer {access_token}"},
+        f"{authority}/v2.0/.well-known/openid-configuration",
     )
     if response.status_code >= 400:
-        raise InvalidCredentialsError("Auth0 user profile lookup failed")
+        raise ProviderConfigurationError("Azure AD OIDC discovery failed")
     data = response.json()
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        raise ProviderConfigurationError("Azure AD OIDC discovery returned an invalid payload")
+
+    for required_key in (
+        "issuer",
+        "authorization_endpoint",
+        "token_endpoint",
+        "jwks_uri",
+        "device_authorization_endpoint",
+    ):
+        if not data.get(required_key):
+            raise ProviderConfigurationError("Azure AD OIDC discovery response was incomplete")
+
+    _OIDC_DISCOVERY_CACHE[authority] = dict(data)
+    return dict(data)
+
+
+async def _azure_ad_jwks() -> dict[str, Any]:
+    discovery = await _azure_ad_discovery_document()
+    jwks_uri = str(discovery["jwks_uri"])
+    cached = _OIDC_JWKS_CACHE.get(jwks_uri)
+    if cached is not None:
+        return dict(cached)
+
+    response = await request_with_retry("GET", jwks_uri)
+    if response.status_code >= 400:
+        raise ProviderConfigurationError("Azure AD JWKS lookup failed")
+    data = response.json()
+    if not isinstance(data, dict) or not isinstance(data.get("keys"), list):
+        raise ProviderConfigurationError("Azure AD JWKS response was invalid")
+
+    _OIDC_JWKS_CACHE[jwks_uri] = dict(data)
+    return dict(data)
+
+
+def _normalize_claim_groups(groups_value: Any) -> list[str]:
+    if isinstance(groups_value, str):
+        return normalize_groups([groups_value])
+    if isinstance(groups_value, list):
+        return normalize_groups([str(item) for item in groups_value])
+    return []
 
 
 def _auth0_identity_from_profile(profile: dict[str, Any]) -> AuthIdentity:
     settings = get_settings()
-    groups_value = profile.get(settings.auth_auth0_groups_claim) or []
-    if isinstance(groups_value, str):
-        groups = [groups_value]
-    elif isinstance(groups_value, list):
-        groups = [str(item) for item in groups_value]
-    else:
-        groups = []
+    groups = _normalize_claim_groups(profile.get(settings.auth_auth0_groups_claim) or [])
 
     username = str(
         profile.get(settings.auth_auth0_username_claim)
@@ -687,10 +772,211 @@ def _auth0_identity_from_profile(profile: dict[str, Any]) -> AuthIdentity:
         subject_id=subject_id,
         username=username,
         display_name=display_name or username,
-        groups=normalize_groups(groups),
+        groups=groups,
         principal_type="user",
         is_superuser=False,
     )
+
+
+def _azure_ad_groups_from_claims(claims: dict[str, Any]) -> list[str]:
+    settings = get_settings()
+    groups_claim = settings.auth_azure_ad_groups_claim
+    claim_names = claims.get("_claim_names")
+    if claims.get("hasgroups"):
+        return []
+    if isinstance(claim_names, dict) and (groups_claim in claim_names or "groups" in claim_names):
+        return []
+    return _normalize_claim_groups(claims.get(groups_claim) or claims.get("groups") or [])
+
+
+def _azure_ad_identity_from_claims(
+    claims: dict[str, Any],
+    *,
+    expected_nonce: str | None = None,
+) -> AuthIdentity:
+    settings = get_settings()
+
+    if expected_nonce is not None:
+        token_nonce = str(claims.get("nonce") or "").strip()
+        if not token_nonce or not secrets.compare_digest(token_nonce, expected_nonce):
+            raise InvalidCredentialsError("Azure AD token nonce did not match the login request")
+
+    configured_tenant = _azure_ad_tenant()
+    token_tenant = str(claims.get("tid") or "").strip()
+    if re.fullmatch(r"[0-9a-fA-F-]{36}", configured_tenant) and token_tenant:
+        if token_tenant.casefold() != configured_tenant.casefold():
+            raise InvalidCredentialsError(
+                "Azure AD token tenant did not match the configured tenant"
+            )
+
+    username = str(
+        claims.get(settings.auth_azure_ad_username_claim)
+        or claims.get("email")
+        or claims.get("upn")
+        or claims.get("preferred_username")
+        or claims.get("name")
+        or claims.get("sub")
+        or ""
+    ).strip()
+    subject_id = str(
+        claims.get(settings.auth_azure_ad_subject_claim) or claims.get("sub") or ""
+    ).strip()
+    if not username or not subject_id:
+        raise InvalidCredentialsError("Azure AD token did not include a usable identity")
+
+    display_name = str(
+        claims.get(settings.auth_azure_ad_display_name_claim) or claims.get("name") or username
+    ).strip()
+
+    return AuthIdentity(
+        provider="azure_ad",
+        subject_id=subject_id,
+        username=username,
+        display_name=display_name or username,
+        groups=_azure_ad_groups_from_claims(claims),
+        principal_type="user",
+        is_superuser=False,
+    )
+
+
+async def get_auth0_authorize_url(state: str, redirect_uri: str) -> str:
+    """Construct the Auth0 browser login URL."""
+    settings = get_settings()
+    if not auth0_browser_login_enabled(settings):
+        raise ProviderConfigurationError("Auth0 browser login is not enabled")
+    params = {
+        "response_type": "code",
+        "client_id": settings.auth_auth0_ui_client_id,
+        "redirect_uri": redirect_uri,
+        "scope": settings.auth_auth0_scope,
+        "state": state,
+    }
+    if settings.auth_auth0_audience:
+        params["audience"] = settings.auth_auth0_audience
+    if settings.auth_auth0_organization:
+        params["organization"] = settings.auth_auth0_organization
+    if settings.auth_auth0_connection:
+        params["connection"] = settings.auth_auth0_connection
+    return f"{_auth0_base_url()}/authorize?{urlencode(params)}"
+
+
+async def get_azure_ad_authorize_url(state: str, redirect_uri: str, nonce: str) -> str:
+    """Construct the Azure AD browser login URL."""
+    settings = get_settings()
+    if not azure_ad_browser_login_enabled(settings):
+        raise ProviderConfigurationError("Azure AD browser login is not enabled")
+    discovery = await _azure_ad_discovery_document()
+    params = {
+        "response_type": "code",
+        "client_id": settings.auth_azure_ad_ui_client_id,
+        "redirect_uri": redirect_uri,
+        "scope": _azure_ad_scope(),
+        "state": state,
+        "nonce": nonce,
+    }
+    return f"{str(discovery['authorization_endpoint'])}?{urlencode(params)}"
+
+
+async def get_oidc_authorize_url(
+    provider: str,
+    *,
+    state: str,
+    redirect_uri: str,
+    nonce: str | None = None,
+) -> str:
+    """Construct the provider-specific browser login URL."""
+    if provider == "auth0":
+        return await get_auth0_authorize_url(state, redirect_uri)
+    if provider == "azure_ad":
+        if not nonce:
+            raise ProviderConfigurationError("Azure AD browser login requires a nonce")
+        return await get_azure_ad_authorize_url(state, redirect_uri, nonce)
+    raise ProviderConfigurationError(f"Provider '{provider}' does not support browser login")
+
+
+async def start_auth0_device_authorization() -> DeviceAuthorizationStart:
+    """Begin an Auth0 device flow."""
+    settings = get_settings()
+    if not auth0_device_login_enabled(settings):
+        raise ProviderConfigurationError("Auth0 CLI device login is not enabled")
+    payload = _auth0_common_form_fields(
+        client_id=settings.auth_auth0_cli_client_id,
+        client_secret=settings.auth_auth0_cli_client_secret,
+    )
+    response = await request_with_retry(
+        "POST",
+        f"{_auth0_base_url()}/oauth/device/code",
+        data=payload,
+    )
+    if response.status_code >= 400:
+        raise ProviderConfigurationError("Auth0 device authorization could not be started")
+    data = response.json()
+    return DeviceAuthorizationStart(
+        provider="auth0",
+        device_code=str(data["device_code"]),
+        user_code=str(data["user_code"]),
+        verification_uri=str(data["verification_uri"]),
+        verification_uri_complete=(
+            None
+            if data.get("verification_uri_complete") is None
+            else str(data.get("verification_uri_complete"))
+        ),
+        expires_in=int(data.get("expires_in") or 0),
+        interval=int(data.get("interval") or 5),
+    )
+
+
+async def start_azure_ad_device_authorization() -> DeviceAuthorizationStart:
+    """Begin an Azure AD device flow."""
+    settings = get_settings()
+    if not azure_ad_device_login_enabled(settings):
+        raise ProviderConfigurationError("Azure AD CLI device login is not enabled")
+    discovery = await _azure_ad_discovery_document()
+    response = await request_with_retry(
+        "POST",
+        str(discovery["device_authorization_endpoint"]),
+        data={
+            "client_id": settings.auth_azure_ad_cli_client_id,
+            "scope": _azure_ad_scope(),
+        },
+    )
+    if response.status_code >= 400:
+        raise ProviderConfigurationError("Azure AD device authorization could not be started")
+    data = response.json()
+    return DeviceAuthorizationStart(
+        provider="azure_ad",
+        device_code=str(data["device_code"]),
+        user_code=str(data["user_code"]),
+        verification_uri=str(data["verification_uri"]),
+        verification_uri_complete=(
+            None
+            if data.get("verification_uri_complete") is None
+            else str(data.get("verification_uri_complete"))
+        ),
+        expires_in=int(data.get("expires_in") or 0),
+        interval=int(data.get("interval") or 5),
+    )
+
+
+async def start_device_authorization(provider: str) -> DeviceAuthorizationStart:
+    """Begin a provider-specific device login flow."""
+    if provider == "auth0":
+        return await start_auth0_device_authorization()
+    if provider == "azure_ad":
+        return await start_azure_ad_device_authorization()
+    raise ProviderConfigurationError(f"Provider '{provider}' does not support device login")
+
+
+async def _auth0_fetch_userinfo(access_token: str) -> dict[str, Any]:
+    response = await request_with_retry(
+        "GET",
+        f"{_auth0_base_url()}/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    if response.status_code >= 400:
+        raise InvalidCredentialsError("Auth0 user profile lookup failed")
+    data = response.json()
+    return data if isinstance(data, dict) else {}
 
 
 async def authenticate_auth0_authorization_code(code: str, redirect_uri: str) -> AuthIdentity:
@@ -718,6 +1004,101 @@ async def authenticate_auth0_authorization_code(code: str, redirect_uri: str) ->
         raise InvalidCredentialsError("Auth0 response did not include an access token")
     profile = await _auth0_fetch_userinfo(access_token)
     return _auth0_identity_from_profile(profile)
+
+
+async def authenticate_azure_ad_authorization_code(
+    code: str,
+    redirect_uri: str,
+    *,
+    nonce: str,
+) -> AuthIdentity:
+    """Exchange an Azure AD browser auth code for an identity."""
+    settings = get_settings()
+    if not azure_ad_browser_login_enabled(settings):
+        raise ProviderConfigurationError("Azure AD browser login is not enabled")
+    discovery = await _azure_ad_discovery_document()
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": settings.auth_azure_ad_ui_client_id,
+        "code": code,
+        "redirect_uri": redirect_uri,
+    }
+    if settings.auth_azure_ad_ui_client_secret:
+        payload["client_secret"] = settings.auth_azure_ad_ui_client_secret
+    response = await request_with_retry(
+        "POST",
+        str(discovery["token_endpoint"]),
+        data=payload,
+    )
+    if response.status_code >= 400:
+        raise InvalidCredentialsError("Azure AD code exchange failed")
+    data = response.json()
+    id_token = str(data.get("id_token") or "").strip() if isinstance(data, dict) else ""
+    if not id_token:
+        raise InvalidCredentialsError("Azure AD response did not include an id_token")
+    return await _decode_azure_ad_id_token(
+        id_token,
+        client_id=settings.auth_azure_ad_ui_client_id,
+        expected_nonce=nonce,
+    )
+
+
+async def authenticate_oidc_authorization_code(
+    provider: str,
+    *,
+    code: str,
+    redirect_uri: str,
+    nonce: str | None = None,
+) -> AuthIdentity:
+    """Exchange a provider-specific browser auth code for an identity."""
+    if provider == "auth0":
+        return await authenticate_auth0_authorization_code(code, redirect_uri)
+    if provider == "azure_ad":
+        if not nonce:
+            raise ProviderConfigurationError("Azure AD browser login requires a nonce")
+        return await authenticate_azure_ad_authorization_code(
+            code,
+            redirect_uri,
+            nonce=nonce,
+        )
+    raise ProviderConfigurationError(f"Provider '{provider}' does not support browser login")
+
+
+async def _decode_azure_ad_id_token(
+    id_token: str,
+    *,
+    client_id: str,
+    expected_nonce: str | None = None,
+) -> AuthIdentity:
+    discovery = await _azure_ad_discovery_document()
+    jwks = await _azure_ad_jwks()
+
+    from jose import jwt  # type: ignore[import-untyped]
+    from jose.exceptions import (  # type: ignore[import-untyped]
+        ExpiredSignatureError,
+        JWTClaimsError,
+        JWTError,
+    )
+
+    try:
+        claims = jwt.decode(
+            id_token,
+            jwks,
+            algorithms=["RS256"],
+            audience=client_id,
+            issuer=str(discovery["issuer"]),
+            options={"verify_at_hash": False},
+        )
+    except ExpiredSignatureError as exc:
+        raise InvalidCredentialsError("Azure AD token has expired") from exc
+    except JWTClaimsError as exc:
+        raise InvalidCredentialsError(str(exc)) from exc
+    except JWTError as exc:
+        raise InvalidCredentialsError("Azure AD token validation failed") from exc
+
+    if not isinstance(claims, dict):
+        raise InvalidCredentialsError("Azure AD token validation failed")
+    return _azure_ad_identity_from_claims(claims, expected_nonce=expected_nonce)
 
 
 async def authenticate_auth0_device_code(device_code: str) -> AuthIdentity:
@@ -752,6 +1133,49 @@ async def authenticate_auth0_device_code(device_code: str) -> AuthIdentity:
         raise InvalidCredentialsError("Auth0 response did not include an access token")
     profile = await _auth0_fetch_userinfo(access_token)
     return _auth0_identity_from_profile(profile)
+
+
+async def authenticate_azure_ad_device_code(device_code: str) -> AuthIdentity:
+    """Poll an Azure AD device code until the user authorizes it."""
+    settings = get_settings()
+    if not azure_ad_device_login_enabled(settings):
+        raise ProviderConfigurationError("Azure AD CLI device login is not enabled")
+    discovery = await _azure_ad_discovery_document()
+    response = await request_with_retry(
+        "POST",
+        str(discovery["token_endpoint"]),
+        data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            "device_code": device_code,
+            "client_id": settings.auth_azure_ad_cli_client_id,
+        },
+        retries=0,
+    )
+    if response.status_code >= 400:
+        data = response.json()
+        error = str(data.get("error") or "").strip().lower() if isinstance(data, dict) else ""
+        if error in {"authorization_pending", "slow_down"}:
+            raise DeviceAuthorizationPending("Waiting for Azure AD approval")
+        if error in {"expired_token", "authorization_declined", "bad_verification_code"}:
+            raise DeviceAuthorizationExpired("The Azure AD device login expired or was denied")
+        raise InvalidCredentialsError("Azure AD device authorization failed")
+    data = response.json()
+    id_token = str(data.get("id_token") or "").strip() if isinstance(data, dict) else ""
+    if not id_token:
+        raise InvalidCredentialsError("Azure AD response did not include an id_token")
+    return await _decode_azure_ad_id_token(
+        id_token,
+        client_id=settings.auth_azure_ad_cli_client_id,
+    )
+
+
+async def authenticate_device_code(provider: str, device_code: str) -> AuthIdentity:
+    """Poll a provider-specific device code until the user authorizes it."""
+    if provider == "auth0":
+        return await authenticate_auth0_device_code(device_code)
+    if provider == "azure_ad":
+        return await authenticate_azure_ad_device_code(device_code)
+    raise ProviderConfigurationError(f"Provider '{provider}' does not support device login")
 
 
 async def upsert_principal(db: AsyncSession, identity: AuthIdentity) -> AuthPrincipal:
@@ -1117,9 +1541,15 @@ def ensure_request_authorized(context: AuthContext, path: str, method: str) -> N
         raise AccessDeniedError(f"{context.role} role cannot access {method.upper()} {path}")
 
 
-def build_auth_callback_url(base_url: str) -> str:
-    """Return the Auth0 callback URL for this deployment."""
+def build_auth_callback_url(base_url: str, provider: str = "auth0") -> str:
+    """Return the external auth callback URL for this deployment."""
     settings = get_settings()
-    if settings.auth_auth0_ui_callback_url:
-        return settings.auth_auth0_ui_callback_url
+    if provider == "auth0":
+        if settings.auth_auth0_ui_callback_url:
+            return settings.auth_auth0_ui_callback_url
+        return f"{base_url.rstrip('/')}/api/v1/auth/oidc/callback"
+    if provider == "azure_ad":
+        if settings.auth_azure_ad_ui_callback_url:
+            return settings.auth_azure_ad_ui_callback_url
+        return f"{base_url.rstrip('/')}/api/v1/auth/oidc/callback"
     return f"{base_url.rstrip('/')}/api/v1/auth/oidc/callback"

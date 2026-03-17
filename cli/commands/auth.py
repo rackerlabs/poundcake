@@ -48,18 +48,18 @@ def _login_capable_providers(providers: list[ProviderInfo]) -> list[ProviderInfo
     return [provider for provider in providers if provider.password_login or provider.device_login]
 
 
-def _run_device_flow(ctx: click.Context) -> None:
+def _run_device_flow(ctx: click.Context, provider: ProviderInfo) -> None:
     client = get_client(ctx)
     output_format = get_output_format(ctx)
     try:
-        start = client.start_device_login()
+        start = client.start_device_login(provider.name)
         print_info(
             f"Open {start.verification_uri_complete or start.verification_uri} and approve code {start.user_code}."
         )
         deadline = time.time() + max(start.expires_in, start.interval)
         while time.time() < deadline:
             time.sleep(max(start.interval, 1))
-            poll = client.poll_device_login(start.device_code)
+            poll = client.poll_device_login(provider.name, start.device_code)
             status = str(poll.get("status") or "").strip().lower()
             if status == "pending":
                 continue
@@ -145,12 +145,14 @@ def login_cmd(
         selected_info = next((item for item in providers if item.name == selected_provider), None)
         if selected_info is None:
             raise PoundCakeClientError(f"Provider '{selected_provider}' is not enabled")
-        if selected_info.name == "auth0":
-            if not selected_info.device_login:
-                raise PoundCakeClientError("Auth0 CLI device login is not configured")
-            _run_device_flow(ctx)
+        if selected_info.device_login and not selected_info.password_login:
+            _run_device_flow(ctx, selected_info)
             return
         if not selected_info.password_login:
+            if selected_info.name in {"auth0", "azure_ad"}:
+                raise PoundCakeClientError(
+                    f"{selected_info.label} CLI device login is not configured"
+                )
             raise PoundCakeClientError(f"Provider '{selected_provider}' does not support CLI login")
         final_username = username or click.prompt("Username", type=str)
         final_password = password or click.prompt("Password", hide_input=True, type=str)

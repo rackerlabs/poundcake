@@ -500,7 +500,7 @@ auth:
   enabled: true
   # Session timeout in seconds (default: 24 hours)
   sessionTimeout: 86400
-  # OIDC state token lifetime in seconds for Auth0 browser login.
+  # OIDC state token lifetime in seconds for browser login providers.
   oidcStateTtl: 600
   # Shared internal API key for service-to-service auth (API <-> workers).
   # If empty, Helm will generate one and persist it in the admin secret.
@@ -561,6 +561,27 @@ auth:
       existingSecret: ""
       secretKeys:
         clientSecret: "client-secret"
+
+  azureAd:
+    enabled: false
+    shared:
+      tenant: ""
+      audience: ""
+      scope: "openid profile email"
+      usernameClaim: "preferred_username"
+      displayNameClaim: "name"
+      groupsClaim: "groups"
+      subjectClaim: "sub"
+    ui:
+      enabled: false
+      clientId: ""
+      callbackUrl: ""
+      existingSecret: ""
+      secretKeys:
+        clientSecret: "client-secret"
+    cli:
+      enabled: false
+      clientId: ""
 
 # Database configuration (MySQL/MariaDB) for PoundCake API only.
 # Bakery uses a separate database contract under bakery.database.
