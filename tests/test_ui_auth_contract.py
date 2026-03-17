@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_TSX = REPO_ROOT / "ui" / "src" / "App.tsx"
 
