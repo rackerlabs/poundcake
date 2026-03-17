@@ -127,6 +127,12 @@ spec:
             - name: POUNDCAKE_AUTH_ENABLED
               value: {{ .Values.auth.enabled | quote }}
             {{- if .Values.auth.enabled }}
+            - name: POUNDCAKE_AUTH_SESSION_TIMEOUT
+              value: {{ .Values.auth.sessionTimeout | quote }}
+            - name: POUNDCAKE_AUTH_OIDC_STATE_TTL
+              value: {{ .Values.auth.oidcStateTtl | quote }}
+            - name: POUNDCAKE_AUTH_LOCAL_ENABLED
+              value: {{ .Values.auth.local.enabled | quote }}
             - name: POUNDCAKE_AUTH_SECRET_NAME
               value: {{ include "poundcake.fullname" . }}-admin
             - name: POUNDCAKE_AUTH_SECRET_NAMESPACE
@@ -149,6 +155,85 @@ spec:
                 secretKeyRef:
                   name: {{ include "poundcake.fullname" . }}-admin
                   key: internal-api-key
+            - name: POUNDCAKE_AUTH_AD_ENABLED
+              value: {{ .Values.auth.activeDirectory.enabled | quote }}
+            - name: POUNDCAKE_AUTH_AD_SERVER_URI
+              value: {{ .Values.auth.activeDirectory.serverUri | quote }}
+            - name: POUNDCAKE_AUTH_AD_USER_BASE_DN
+              value: {{ .Values.auth.activeDirectory.userBaseDn | quote }}
+            - name: POUNDCAKE_AUTH_AD_BIND_DN
+              value: {{ .Values.auth.activeDirectory.bindDn | quote }}
+            - name: POUNDCAKE_AUTH_AD_USER_FILTER
+              value: {{ .Values.auth.activeDirectory.userFilter | quote }}
+            - name: POUNDCAKE_AUTH_AD_GROUP_ATTRIBUTE
+              value: {{ .Values.auth.activeDirectory.groupAttribute | quote }}
+            - name: POUNDCAKE_AUTH_AD_DISPLAY_NAME_ATTRIBUTE
+              value: {{ .Values.auth.activeDirectory.displayNameAttribute | quote }}
+            - name: POUNDCAKE_AUTH_AD_USERNAME_ATTRIBUTE
+              value: {{ .Values.auth.activeDirectory.usernameAttribute | quote }}
+            - name: POUNDCAKE_AUTH_AD_SUBJECT_ATTRIBUTE
+              value: {{ .Values.auth.activeDirectory.subjectAttribute | quote }}
+            - name: POUNDCAKE_AUTH_AD_USE_SSL
+              value: {{ .Values.auth.activeDirectory.useSsl | quote }}
+            - name: POUNDCAKE_AUTH_AD_VALIDATE_TLS
+              value: {{ .Values.auth.activeDirectory.validateTls | quote }}
+            - name: POUNDCAKE_AUTH_AD_GROUP_NAME_REGEX
+              value: {{ .Values.auth.activeDirectory.groupNameRegex | quote }}
+            {{- if .Values.auth.activeDirectory.existingSecret }}
+            - name: POUNDCAKE_AUTH_AD_BIND_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.activeDirectory.existingSecret }}
+                  key: {{ .Values.auth.activeDirectory.secretKeys.bindPassword }}
+            {{- end }}
+            {{- if .Values.auth.activeDirectory.caBundle.existingSecret }}
+            - name: POUNDCAKE_AUTH_AD_CA_CERTS_FILE
+              value: {{ printf "%s/%s" .Values.auth.activeDirectory.caBundle.mountPath .Values.auth.activeDirectory.caBundle.fileName | quote }}
+            {{- end }}
+            - name: POUNDCAKE_AUTH_AUTH0_ENABLED
+              value: {{ .Values.auth.auth0.enabled | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_DOMAIN
+              value: {{ .Values.auth.auth0.shared.domain | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_AUDIENCE
+              value: {{ .Values.auth.auth0.shared.audience | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_SCOPE
+              value: {{ .Values.auth.auth0.shared.scope | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_ORGANIZATION
+              value: {{ .Values.auth.auth0.shared.organization | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_CONNECTION
+              value: {{ .Values.auth.auth0.shared.connection | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_USERNAME_CLAIM
+              value: {{ .Values.auth.auth0.shared.usernameClaim | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_DISPLAY_NAME_CLAIM
+              value: {{ .Values.auth.auth0.shared.displayNameClaim | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_GROUPS_CLAIM
+              value: {{ .Values.auth.auth0.shared.groupsClaim | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_SUBJECT_CLAIM
+              value: {{ .Values.auth.auth0.shared.subjectClaim | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_UI_ENABLED
+              value: {{ .Values.auth.auth0.ui.enabled | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_UI_CLIENT_ID
+              value: {{ .Values.auth.auth0.ui.clientId | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_UI_CALLBACK_URL
+              value: {{ .Values.auth.auth0.ui.callbackUrl | quote }}
+            {{- if .Values.auth.auth0.ui.existingSecret }}
+            - name: POUNDCAKE_AUTH_AUTH0_UI_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.auth0.ui.existingSecret }}
+                  key: {{ .Values.auth.auth0.ui.secretKeys.clientSecret }}
+            {{- end }}
+            - name: POUNDCAKE_AUTH_AUTH0_CLI_ENABLED
+              value: {{ .Values.auth.auth0.cli.enabled | quote }}
+            - name: POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_ID
+              value: {{ .Values.auth.auth0.cli.clientId | quote }}
+            {{- if .Values.auth.auth0.cli.existingSecret }}
+            - name: POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.auth0.cli.existingSecret }}
+                  key: {{ .Values.auth.auth0.cli.secretKeys.clientSecret }}
+            {{- end }}
             {{- end }}
             - name: POUNDCAKE_STACKSTORM_API_KEY
               valueFrom:
@@ -218,6 +303,11 @@ spec:
             - name: st2-apikey
               mountPath: /run/secrets/st2
               readOnly: true
+            {{- if and .Values.auth.enabled .Values.auth.activeDirectory.caBundle.existingSecret }}
+            - name: poundcake-auth-ad-ca
+              mountPath: {{ .Values.auth.activeDirectory.caBundle.mountPath | quote }}
+              readOnly: true
+            {{- end }}
             - name: poundcake-alembic
               mountPath: /app/alembic.ini
               subPath: alembic.ini
@@ -237,6 +327,14 @@ spec:
             items:
               - key: st2_api_key
                 path: st2_api_key
+        {{- if and .Values.auth.enabled .Values.auth.activeDirectory.caBundle.existingSecret }}
+        - name: poundcake-auth-ad-ca
+          secret:
+            secretName: {{ .Values.auth.activeDirectory.caBundle.existingSecret }}
+            items:
+              - key: {{ .Values.auth.activeDirectory.caBundle.key }}
+                path: {{ .Values.auth.activeDirectory.caBundle.fileName }}
+        {{- end }}
         - name: poundcake-alembic
           configMap:
             name: poundcake-alembic

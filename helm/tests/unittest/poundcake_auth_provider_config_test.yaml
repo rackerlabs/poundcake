@@ -1,0 +1,213 @@
+suite: poundcake-auth-provider-config
+templates:
+  - templates/poundcake-workloads.yaml
+  - templates/poundcake-required.yaml
+tests:
+  - it: wires active directory settings and CA bundle into the api deployment
+    set:
+      auth.enabled: true
+      auth.activeDirectory.enabled: true
+      auth.activeDirectory.serverUri: ldaps://ad.example.com:636
+      auth.activeDirectory.userBaseDn: DC=example,DC=com
+      auth.activeDirectory.bindDn: CN=poundcake,OU=Service Accounts,DC=example,DC=com
+      auth.activeDirectory.existingSecret: poundcake-ad-auth
+      auth.activeDirectory.caBundle.existingSecret: poundcake-ad-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AD_ENABLED
+            value: "true"
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AD_SERVER_URI
+            value: ldaps://ad.example.com:636
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AD_USER_BASE_DN
+            value: DC=example,DC=com
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AD_BIND_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-ad-auth
+                key: bind-password
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AD_CA_CERTS_FILE
+            value: /run/secrets/poundcake-ad/ca.crt
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: poundcake-auth-ad-ca
+            mountPath: /run/secrets/poundcake-ad
+            readOnly: true
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: poundcake-auth-ad-ca
+            secret:
+              secretName: poundcake-ad-ca
+              items:
+                - key: ca.crt
+                  path: ca.crt
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+
+  - it: wires auth0 settings into the api deployment
+    set:
+      auth.enabled: true
+      auth.auth0.enabled: true
+      auth.auth0.shared.domain: tenant.us.auth0.com
+      auth.auth0.shared.audience: https://poundcake-api
+      auth.auth0.shared.organization: org_123
+      auth.auth0.shared.connection: Username-Password-Authentication
+      auth.auth0.ui.enabled: true
+      auth.auth0.ui.clientId: auth0-web-client
+      auth.auth0.ui.existingSecret: poundcake-auth0-web
+      auth.auth0.cli.enabled: true
+      auth.auth0.cli.clientId: auth0-native-client
+      auth.auth0.cli.existingSecret: poundcake-auth0-cli
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AUTH0_ENABLED
+            value: "true"
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AUTH0_DOMAIN
+            value: tenant.us.auth0.com
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AUTH0_UI_CLIENT_ID
+            value: auth0-web-client
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AUTH0_AUDIENCE
+            value: https://poundcake-api
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AUTH0_UI_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-auth0-web
+                key: client-secret
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_ID
+            value: auth0-native-client
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-auth0-cli
+                key: client-secret
+        template: templates/poundcake-workloads.yaml
+        documentIndex: 0
+
+  - it: fails fast when active directory is enabled without a server uri
+    set:
+      auth.enabled: true
+      auth.activeDirectory.enabled: true
+      auth.activeDirectory.serverUri: ""
+      auth.activeDirectory.userBaseDn: DC=example,DC=com
+    asserts:
+      - failedTemplate:
+          errorMessage: "auth.activeDirectory.serverUri is required when auth.activeDirectory.enabled=true."
+        template: templates/poundcake-required.yaml
+
+  - it: fails fast when active directory is enabled without a user base dn
+    set:
+      auth.enabled: true
+      auth.activeDirectory.enabled: true
+      auth.activeDirectory.serverUri: ldaps://ad.example.com:636
+      auth.activeDirectory.userBaseDn: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "auth.activeDirectory.userBaseDn is required when auth.activeDirectory.enabled=true."
+        template: templates/poundcake-required.yaml
+
+  - it: fails fast when auth0 is enabled without a domain
+    set:
+      auth.enabled: true
+      auth.auth0.enabled: true
+      auth.auth0.shared.domain: ""
+      auth.auth0.ui.enabled: true
+      auth.auth0.ui.clientId: auth0-client
+    asserts:
+      - failedTemplate:
+          errorMessage: "auth.auth0.shared.domain is required when auth.auth0.enabled=true."
+        template: templates/poundcake-required.yaml
+
+  - it: fails fast when auth0 is enabled without any UI or CLI mode
+    set:
+      auth.enabled: true
+      auth.auth0.enabled: true
+      auth.auth0.shared.domain: tenant.us.auth0.com
+      auth.auth0.ui.enabled: false
+      auth.auth0.cli.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "auth.auth0.ui.enabled or auth.auth0.cli.enabled must be true when auth.auth0.enabled=true."
+        template: templates/poundcake-required.yaml
+
+  - it: fails fast when auth0 ui is enabled without a client id
+    set:
+      auth.enabled: true
+      auth.auth0.enabled: true
+      auth.auth0.shared.domain: tenant.us.auth0.com
+      auth.auth0.ui.enabled: true
+      auth.auth0.ui.clientId: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "auth.auth0.ui.clientId is required when auth.auth0.ui.enabled=true."
+        template: templates/poundcake-required.yaml
+
+  - it: fails fast when auth0 cli is enabled without a client id
+    set:
+      auth.enabled: true
+      auth.auth0.enabled: true
+      auth.auth0.shared.domain: tenant.us.auth0.com
+      auth.auth0.cli.enabled: true
+      auth.auth0.cli.clientId: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "auth.auth0.cli.clientId is required when auth.auth0.cli.enabled=true."
+        template: templates/poundcake-required.yaml

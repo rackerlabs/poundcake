@@ -1,0 +1,23 @@
+{{- if and .Values.auth.enabled .Values.auth.activeDirectory.enabled (not .Values.auth.activeDirectory.serverUri) -}}
+{{- fail "auth.activeDirectory.serverUri is required when auth.activeDirectory.enabled=true." -}}
+{{- end -}}
+
+{{- if and .Values.auth.enabled .Values.auth.activeDirectory.enabled (not .Values.auth.activeDirectory.userBaseDn) -}}
+{{- fail "auth.activeDirectory.userBaseDn is required when auth.activeDirectory.enabled=true." -}}
+{{- end -}}
+
+{{- if and .Values.auth.enabled .Values.auth.auth0.enabled (not .Values.auth.auth0.shared.domain) -}}
+{{- fail "auth.auth0.shared.domain is required when auth.auth0.enabled=true." -}}
+{{- end -}}
+
+{{- if and .Values.auth.enabled .Values.auth.auth0.enabled (not (or .Values.auth.auth0.ui.enabled .Values.auth.auth0.cli.enabled)) -}}
+{{- fail "auth.auth0.ui.enabled or auth.auth0.cli.enabled must be true when auth.auth0.enabled=true." -}}
+{{- end -}}
+
+{{- if and .Values.auth.enabled .Values.auth.auth0.enabled .Values.auth.auth0.ui.enabled (not .Values.auth.auth0.ui.clientId) -}}
+{{- fail "auth.auth0.ui.clientId is required when auth.auth0.ui.enabled=true." -}}
+{{- end -}}
+
+{{- if and .Values.auth.enabled .Values.auth.auth0.enabled .Values.auth.auth0.cli.enabled (not .Values.auth.auth0.cli.clientId) -}}
+{{- fail "auth.auth0.cli.clientId is required when auth.auth0.cli.enabled=true." -}}
+{{- end -}}

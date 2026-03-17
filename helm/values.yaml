@@ -500,12 +500,67 @@ auth:
   enabled: true
   # Session timeout in seconds (default: 24 hours)
   sessionTimeout: 86400
+  # OIDC state token lifetime in seconds for Auth0 browser login.
+  oidcStateTtl: 600
   # Shared internal API key for service-to-service auth (API <-> workers).
   # If empty, Helm will generate one and persist it in the admin secret.
   internalApiKey: ""
   # Secret name will be: <release-name>-poundcake-admin
   # Get password with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.password}' | base64 -d
   # Get internal key with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d
+  # Access page manages role bindings only. Provider enablement happens here at deploy time.
+
+  local:
+    # Keep the bootstrap superuser enabled as the recovery account.
+    enabled: true
+
+  activeDirectory:
+    enabled: false
+    serverUri: ""
+    userBaseDn: ""
+    bindDn: ""
+    userFilter: "(&(objectClass=user)(sAMAccountName={username}))"
+    groupAttribute: "memberOf"
+    displayNameAttribute: "displayName"
+    usernameAttribute: "sAMAccountName"
+    subjectAttribute: "distinguishedName"
+    useSsl: true
+    validateTls: true
+    groupNameRegex: "CN=([^,]+)"
+    existingSecret: ""
+    secretKeys:
+      bindPassword: "bind-password"
+    caBundle:
+      existingSecret: ""
+      key: "ca.crt"
+      mountPath: "/run/secrets/poundcake-ad"
+      fileName: "ca.crt"
+
+  auth0:
+    enabled: false
+    shared:
+      domain: ""
+      audience: ""
+      scope: "openid profile email"
+      organization: ""
+      connection: ""
+      usernameClaim: "email"
+      displayNameClaim: "name"
+      groupsClaim: "groups"
+      subjectClaim: "sub"
+    ui:
+      enabled: false
+      clientId: ""
+      callbackUrl: ""
+      existingSecret: ""
+      secretKeys:
+        clientSecret: "client-secret"
+    cli:
+      enabled: false
+      clientId: ""
+      existingSecret: ""
+      secretKeys:
+        clientSecret: "client-secret"
 
 # Database configuration (MySQL/MariaDB) for PoundCake API only.
 # Bakery uses a separate database contract under bakery.database.

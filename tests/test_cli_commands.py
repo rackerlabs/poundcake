@@ -294,6 +294,46 @@ def test_auth0_device_login_persists_session(
     assert fake_api.requests[2]["json"] == {"provider": "auth0", "device_code": "device-123"}
 
 
+def test_auth0_login_fails_when_device_flow_is_not_configured(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "GET",
+        "/api/v1/auth/providers",
+        [
+            {
+                "name": "auth0",
+                "label": "Auth0",
+                "login_mode": "oidc",
+                "cli_login_mode": "unavailable",
+                "browser_login": True,
+                "device_login": False,
+                "password_login": False,
+            }
+        ],
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+    result = runner.invoke(
+        cli,
+        [
+            "--url",
+            "http://example.test",
+            "auth",
+            "login",
+            "--provider",
+            "auth0",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Auth0 CLI device login is not configured" in result.output
+
+
 def test_auth_bindings_create_maps_payload(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,

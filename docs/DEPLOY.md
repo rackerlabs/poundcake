@@ -1,5 +1,8 @@
 # Deployment
 
+Auth provider and RBAC setup is documented in [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+Use that guide for enabling local superuser, Active Directory, and Auth0 together, plus post-deploy access binding.
+
 ## Helm (Kubernetes)
 
 Two install commands are supported:

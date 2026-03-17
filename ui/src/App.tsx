@@ -50,6 +50,7 @@ import type {
   AppSettings,
   AuthMeRecord,
   AuthPrincipalRecord,
+  AuthProviderRecord,
   AuthRoleBindingRecord,
   CommunicationActivityRecord,
   CommunicationPolicyRecord,
@@ -281,7 +282,8 @@ function LoginPage() {
     queryFn: () => apiFetch<AppSettings["auth_providers"]>("/api/v1/auth/providers", {}, { allowUnauthorized: true }),
   });
   const passwordProviders = (providersQuery.data || []).filter((provider) => provider.password_login);
-  const auth0Provider = (providersQuery.data || []).find((provider) => provider.name === "auth0") || null;
+  const auth0Provider =
+    (providersQuery.data || []).find((provider) => provider.name === "auth0" && provider.browser_login) || null;
   const [provider, setProvider] = useState<string>("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -505,6 +507,10 @@ function LoginPage() {
                 </button>
               </div>
             </div>
+          ) : null}
+
+          {!providersQuery.isError && !passwordProviders.length && !auth0Provider ? (
+            <div className="login-note">No browser-capable login providers are configured right now.</div>
           ) : null}
         </section>
       </div>
@@ -2876,7 +2882,7 @@ function AccessPage() {
   const notify = useToast();
   const queryClient = useQueryClient();
   const [provider, setProvider] = useState<string>(
-    settings.auth_providers.find((item) => item.name !== "local" && item.name !== "service")?.name || "auth0",
+    settings.auth_providers.find((item) => item.name !== "local" && item.name !== "service")?.name || "",
   );
   const [bindingType, setBindingType] = useState<"group" | "user">("group");
   const [role, setRole] = useState<"reader" | "operator" | "admin">("reader");
@@ -2885,6 +2891,18 @@ function AccessPage() {
   const [search, setSearch] = useState("");
 
   const providers = settings.auth_providers.filter((item) => item.name !== "service");
+  const externalProviders = providers.filter((item) => item.name !== "local");
+
+  useEffect(() => {
+    if (externalProviders.length === 0) {
+      if (provider) setProvider("");
+      return;
+    }
+    if (!provider || !externalProviders.some((item) => item.name === provider)) {
+      setProvider(externalProviders[0].name);
+    }
+  }, [externalProviders, provider]);
+
   const principalsQuery = useQuery({
     queryKey: ["auth-principals", search],
     queryFn: () =>
@@ -2961,18 +2979,23 @@ function AccessPage() {
   }
 
   const visiblePrincipals = principalsQuery.data.filter((item) => item.provider === provider);
+  const hasExternalProviders = externalProviders.length > 0;
+  const createDisabled =
+    createMutation.isPending
+    || !hasExternalProviders
+    || (bindingType === "group" ? !externalGroup.trim() : !selectedPrincipalId);
 
   return (
     <div className="page-stack">
       <PageHeader
         title="Access"
-        description="Manage provider-backed RBAC bindings for readers, operators, and admins while keeping the local superuser as the immutable recovery account."
+        description="Manage provider-backed RBAC bindings for readers, operators, and admins. External providers are enabled at deploy time; this page manages who gets access after they appear in PoundCake."
       />
 
       <div className="status-grid">
         {providers.map((item) => (
           <MetricCard key={item.name} title={item.label} value={titleize(item.login_mode)} tone="active">
-            {item.password_login ? "Password login enabled." : item.browser_login ? "Browser login enabled." : "Provider available."}
+            {describeAuthProviderModes(item)}
           </MetricCard>
         ))}
       </div>
@@ -2980,19 +3003,30 @@ function AccessPage() {
       <div className="editor-grid">
         <Panel title="Create role binding" subtitle="Bind either an observed user or an external group to a PoundCake role.">
           <div className="form-stack">
+            {!hasExternalProviders ? (
+              <EmptyState message="No external auth providers are enabled yet. Add Active Directory or Auth0 in Helm auth values, redeploy PoundCake, then create bindings here." />
+            ) : null}
             <div className="grid-two">
-              <FormField label="Provider">
-                <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-                  {providers
-                    .filter((item) => item.name !== "local")
-                    .map((item) => (
-                      <option key={item.name} value={item.name}>
-                        {item.label}
-                      </option>
-                    ))}
+              <FormField
+                label="Provider"
+                help="Providers are enabled in Helm and appear here after redeploy. The local superuser is always available for recovery, but role bindings only apply to external providers."
+              >
+                <select
+                  disabled={!hasExternalProviders}
+                  value={provider}
+                  onChange={(event) => setProvider(event.target.value)}
+                >
+                  {externalProviders.map((item) => (
+                    <option key={item.name} value={item.name}>
+                      {item.label}
+                    </option>
+                  ))}
                 </select>
               </FormField>
-              <FormField label="Binding type">
+              <FormField
+                label="Binding type"
+                help="Use group bindings to pre-provision access before a user logs in. Use observed user bindings after someone has already authenticated successfully."
+              >
                 <select value={bindingType} onChange={(event) => setBindingType(event.target.value as "group" | "user")}>
                   <option value="group">Group</option>
                   <option value="user">Observed user</option>
@@ -3000,20 +3034,29 @@ function AccessPage() {
               </FormField>
             </div>
             <div className="grid-two">
-              <FormField label="Role">
+              <FormField
+                label="Role"
+                help="Readers are read-only. Operators can manage workflows, actions, suppressions, and alert rules. Admins can also manage access and all remaining configuration."
+              >
                 <select value={role} onChange={(event) => setRole(event.target.value as "reader" | "operator" | "admin")}>
                   <option value="reader">Reader</option>
                   <option value="operator">Operator</option>
                   <option value="admin">Admin</option>
                 </select>
               </FormField>
-              <FormField label="Principal search">
+              <FormField
+                label="Principal search"
+                help="Observed users appear here after a successful login through Auth0 or Active Directory. Search narrows the stored principal list before you choose a user binding."
+              >
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter observed users" />
               </FormField>
             </div>
 
             {bindingType === "group" ? (
-              <FormField label="External group">
+              <FormField
+                label="External group"
+                help="Enter the group name exactly as PoundCake sees it after provider normalization. For Active Directory this is usually the extracted CN, such as monitoring-operators."
+              >
                 <input
                   value={externalGroup}
                   onChange={(event) => setExternalGroup(event.target.value)}
@@ -3021,8 +3064,15 @@ function AccessPage() {
                 />
               </FormField>
             ) : (
-              <FormField label="Observed user">
-                <select value={selectedPrincipalId} onChange={(event) => setSelectedPrincipalId(event.target.value)}>
+              <FormField
+                label="Observed user"
+                help="Choose a user who has already logged in and been recorded by PoundCake. If the person is missing here, have them authenticate once or create a group binding instead."
+              >
+                <select
+                  disabled={!hasExternalProviders}
+                  value={selectedPrincipalId}
+                  onChange={(event) => setSelectedPrincipalId(event.target.value)}
+                >
                   <option value="">Choose a user</option>
                   {visiblePrincipals.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -3036,10 +3086,7 @@ function AccessPage() {
             <div className="form-actions">
               <button
                 className="primary-button"
-                disabled={
-                  createMutation.isPending
-                  || (bindingType === "group" ? !externalGroup.trim() : !selectedPrincipalId)
-                }
+                disabled={createDisabled}
                 type="button"
                 onClick={() => createMutation.mutate()}
               >
@@ -3063,6 +3110,10 @@ function AccessPage() {
             {
               label: "Superuser safety",
               description: "The local superuser remains outside normal RBAC binding changes so there is always a recovery path.",
+            },
+            {
+              label: "Adding providers",
+              description: "Auth0 and Active Directory are enabled through Helm auth settings and secrets, then they appear here for binding management. This page does not create provider connections by itself.",
             },
           ]}
         />
@@ -3482,6 +3533,22 @@ function getErrorMessage(error: unknown): string {
     return String((error as { message: unknown }).message);
   }
   return "Something went wrong.";
+}
+
+function describeAuthProviderModes(provider: AuthProviderRecord): string {
+  if (provider.password_login) {
+    return "Password login enabled.";
+  }
+  if (provider.browser_login && provider.device_login) {
+    return "Browser login and CLI device login enabled.";
+  }
+  if (provider.browser_login) {
+    return "Browser login enabled.";
+  }
+  if (provider.device_login) {
+    return "CLI device login enabled.";
+  }
+  return "Provider available.";
 }
 
 function parseJsonObject(value?: string, label?: string): Record<string, unknown> | undefined {

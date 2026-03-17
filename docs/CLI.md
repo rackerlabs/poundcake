@@ -2,6 +2,8 @@
 
 ## PoundCake CLI
 
+Full auth and RBAC setup, including how providers are enabled in Helm before they appear in the CLI, is documented in [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+
 Install the CLI from the repo root:
 
 ```bash

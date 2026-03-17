@@ -387,15 +387,17 @@ def get_enabled_provider_metadata() -> list[dict[str, Any]]:
             }
         )
 
-    if settings.auth_auth0_enabled and settings.auth_auth0_domain and settings.auth_auth0_client_id:
+    auth0_browser = auth0_browser_login_enabled(settings)
+    auth0_device = auth0_device_login_enabled(settings)
+    if auth0_browser or auth0_device:
         providers.append(
             {
                 "name": "auth0",
                 "label": "Auth0",
-                "login_mode": "oidc",
-                "cli_login_mode": "device",
-                "browser_login": True,
-                "device_login": True,
+                "login_mode": "oidc" if auth0_browser else "device",
+                "cli_login_mode": "device" if auth0_device else "unavailable",
+                "browser_login": auth0_browser,
+                "device_login": auth0_device,
                 "password_login": False,
             }
         )
@@ -406,6 +408,28 @@ def get_enabled_provider_metadata() -> list[dict[str, Any]]:
 def provider_names() -> list[str]:
     """Return enabled provider names."""
     return [str(item["name"]) for item in get_enabled_provider_metadata()]
+
+
+def auth0_browser_login_enabled(settings: Any | None = None) -> bool:
+    """Return whether Auth0 browser login is configured."""
+    settings = settings or get_settings()
+    return bool(
+        settings.auth_auth0_enabled
+        and settings.auth_auth0_domain
+        and settings.auth_auth0_ui_enabled
+        and settings.auth_auth0_ui_client_id
+    )
+
+
+def auth0_device_login_enabled(settings: Any | None = None) -> bool:
+    """Return whether Auth0 CLI device login is configured."""
+    settings = settings or get_settings()
+    return bool(
+        settings.auth_auth0_enabled
+        and settings.auth_auth0_domain
+        and settings.auth_auth0_cli_enabled
+        and settings.auth_auth0_cli_client_id
+    )
 
 
 async def authenticate_password_provider(
@@ -546,9 +570,7 @@ async def authenticate_active_directory(username: str, password: str) -> AuthIde
 
 def _auth0_base_url() -> str:
     settings = get_settings()
-    if not (
-        settings.auth_auth0_enabled and settings.auth_auth0_domain and settings.auth_auth0_client_id
-    ):
+    if not (settings.auth_auth0_enabled and settings.auth_auth0_domain):
         raise ProviderConfigurationError("Auth0 is not enabled")
     domain = settings.auth_auth0_domain.strip().rstrip("/")
     if domain.startswith("https://"):
@@ -556,11 +578,11 @@ def _auth0_base_url() -> str:
     return f"https://{domain}"
 
 
-def _auth0_common_form_fields() -> dict[str, str]:
+def _auth0_common_form_fields(*, client_id: str, client_secret: str = "") -> dict[str, str]:
     settings = get_settings()
-    payload = {"client_id": settings.auth_auth0_client_id}
-    if settings.auth_auth0_client_secret:
-        payload["client_secret"] = settings.auth_auth0_client_secret
+    payload = {"client_id": client_id}
+    if client_secret:
+        payload["client_secret"] = client_secret
     if settings.auth_auth0_audience:
         payload["audience"] = settings.auth_auth0_audience
     if settings.auth_auth0_scope:
@@ -571,9 +593,11 @@ def _auth0_common_form_fields() -> dict[str, str]:
 async def get_auth0_authorize_url(state: str, redirect_uri: str) -> str:
     """Construct the Auth0 browser login URL."""
     settings = get_settings()
+    if not auth0_browser_login_enabled(settings):
+        raise ProviderConfigurationError("Auth0 browser login is not enabled")
     params = {
         "response_type": "code",
-        "client_id": settings.auth_auth0_client_id,
+        "client_id": settings.auth_auth0_ui_client_id,
         "redirect_uri": redirect_uri,
         "scope": settings.auth_auth0_scope,
         "state": state,
@@ -589,7 +613,13 @@ async def get_auth0_authorize_url(state: str, redirect_uri: str) -> str:
 
 async def start_auth0_device_authorization() -> DeviceAuthorizationStart:
     """Begin an Auth0 device flow."""
-    payload = _auth0_common_form_fields()
+    settings = get_settings()
+    if not auth0_device_login_enabled(settings):
+        raise ProviderConfigurationError("Auth0 CLI device login is not enabled")
+    payload = _auth0_common_form_fields(
+        client_id=settings.auth_auth0_cli_client_id,
+        client_secret=settings.auth_auth0_cli_client_secret,
+    )
     response = await request_with_retry(
         "POST",
         f"{_auth0_base_url()}/oauth/device/code",
@@ -666,10 +696,12 @@ def _auth0_identity_from_profile(profile: dict[str, Any]) -> AuthIdentity:
 async def authenticate_auth0_authorization_code(code: str, redirect_uri: str) -> AuthIdentity:
     """Exchange an Auth0 browser auth code for an identity."""
     settings = get_settings()
+    if not auth0_browser_login_enabled(settings):
+        raise ProviderConfigurationError("Auth0 browser login is not enabled")
     payload = {
         "grant_type": "authorization_code",
-        "client_id": settings.auth_auth0_client_id,
-        "client_secret": settings.auth_auth0_client_secret,
+        "client_id": settings.auth_auth0_ui_client_id,
+        "client_secret": settings.auth_auth0_ui_client_secret,
         "code": code,
         "redirect_uri": redirect_uri,
     }
@@ -691,13 +723,15 @@ async def authenticate_auth0_authorization_code(code: str, redirect_uri: str) ->
 async def authenticate_auth0_device_code(device_code: str) -> AuthIdentity:
     """Poll an Auth0 device code until the user authorizes it."""
     settings = get_settings()
+    if not auth0_device_login_enabled(settings):
+        raise ProviderConfigurationError("Auth0 CLI device login is not enabled")
     payload = {
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         "device_code": device_code,
-        "client_id": settings.auth_auth0_client_id,
+        "client_id": settings.auth_auth0_cli_client_id,
     }
-    if settings.auth_auth0_client_secret:
-        payload["client_secret"] = settings.auth_auth0_client_secret
+    if settings.auth_auth0_cli_client_secret:
+        payload["client_secret"] = settings.auth_auth0_cli_client_secret
     response = await request_with_retry(
         "POST",
         f"{_auth0_base_url()}/oauth/token",
@@ -1081,6 +1115,6 @@ def ensure_request_authorized(context: AuthContext, path: str, method: str) -> N
 def build_auth_callback_url(base_url: str) -> str:
     """Return the Auth0 callback URL for this deployment."""
     settings = get_settings()
-    if settings.auth_auth0_callback_url:
-        return settings.auth_auth0_callback_url
+    if settings.auth_auth0_ui_callback_url:
+        return settings.auth_auth0_ui_callback_url
     return f"{base_url.rstrip('/')}/api/v1/auth/oidc/callback"

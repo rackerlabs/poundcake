@@ -44,6 +44,10 @@ def _choose_provider(providers: list[ProviderInfo]) -> str:
     return str(selected)
 
 
+def _login_capable_providers(providers: list[ProviderInfo]) -> list[ProviderInfo]:
+    return [provider for provider in providers if provider.password_login or provider.device_login]
+
+
 def _run_device_flow(ctx: click.Context) -> None:
     client = get_client(ctx)
     output_format = get_output_format(ctx)
@@ -131,10 +135,23 @@ def login_cmd(
         providers = client.get_auth_providers()
         if not providers:
             raise PoundCakeClientError("No auth providers are enabled")
-        selected_provider = provider or _choose_provider(providers)
-        if selected_provider == "auth0":
+        login_providers = _login_capable_providers(providers)
+        if provider:
+            selected_provider = provider
+        else:
+            if not login_providers:
+                raise PoundCakeClientError("No CLI-capable auth providers are configured")
+            selected_provider = _choose_provider(login_providers)
+        selected_info = next((item for item in providers if item.name == selected_provider), None)
+        if selected_info is None:
+            raise PoundCakeClientError(f"Provider '{selected_provider}' is not enabled")
+        if selected_info.name == "auth0":
+            if not selected_info.device_login:
+                raise PoundCakeClientError("Auth0 CLI device login is not configured")
             _run_device_flow(ctx)
             return
+        if not selected_info.password_login:
+            raise PoundCakeClientError(f"Provider '{selected_provider}' does not support CLI login")
         final_username = username or click.prompt("Username", type=str)
         final_password = password or click.prompt("Password", hide_input=True, type=str)
         result = client.login(selected_provider, final_username, final_password)

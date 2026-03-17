@@ -9,8 +9,19 @@ This document reflects the current PoundCake API surface.
 ## Versioned API (prefix: `/api/v1`)
 
 ### Auth
+- `GET /auth/providers`
 - `POST /auth/login`
+- `GET /auth/me`
 - `POST /auth/logout`
+- `GET /auth/oidc/login`
+- `GET /auth/oidc/callback`
+- `POST /auth/device/start`
+- `POST /auth/device/poll`
+- `GET /auth/principals`
+- `GET /auth/bindings`
+- `POST /auth/bindings`
+- `PATCH /auth/bindings/{binding_id}`
+- `DELETE /auth/bindings/{binding_id}`
 
 ### System & Monitoring
 - `GET /live`

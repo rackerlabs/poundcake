@@ -260,17 +260,46 @@ class Settings(BaseSettings):
     # Auth0.
     auth_auth0_enabled: bool = False
     auth_auth0_domain: str = ""
-    auth_auth0_client_id: str = ""
-    auth_auth0_client_secret: str = ""
     auth_auth0_audience: str = ""
     auth_auth0_scope: str = "openid profile email"
-    auth_auth0_callback_url: str = ""
     auth_auth0_organization: str = ""
     auth_auth0_connection: str = ""
     auth_auth0_username_claim: str = "email"
     auth_auth0_display_name_claim: str = "name"
     auth_auth0_groups_claim: str = "groups"
     auth_auth0_subject_claim: str = "sub"
+    auth_auth0_ui_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID")
+        )
+    )
+    auth_auth0_ui_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID", "")
+    )
+    auth_auth0_ui_client_secret: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CLIENT_SECRET", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_SECRET", "")
+    )
+    auth_auth0_ui_callback_url: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CALLBACK_URL", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CALLBACK_URL", "")
+    )
+    auth_auth0_cli_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID")
+        )
+    )
+    auth_auth0_cli_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID", "")
+    )
+    auth_auth0_cli_client_secret: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_SECRET", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_SECRET", "")
+    )
 
     # ==========================================================================
     # Bakery Integration Settings

@@ -39,6 +39,8 @@ from api.services.auth_service import (
     DeviceAuthorizationExpired,
     DeviceAuthorizationPending,
     InvalidCredentialsError,
+    auth0_browser_login_enabled,
+    auth0_device_login_enabled,
     authenticate_auth0_authorization_code,
     authenticate_auth0_device_code,
     authenticate_password_provider,
@@ -56,7 +58,6 @@ from api.services.auth_service import (
     is_request_public,
     list_principals,
     list_role_bindings,
-    provider_names,
     rehydrate_session_context,
     service_token_context,
     start_auth0_device_authorization,
@@ -335,8 +336,8 @@ async def oidc_login(
     next: str = Query(default="/overview"),
 ) -> RedirectResponse:
     """Start the Auth0 browser login flow."""
-    if "auth0" not in provider_names():
-        raise HTTPException(status_code=404, detail="Auth0 is not enabled")
+    if not auth0_browser_login_enabled():
+        raise HTTPException(status_code=404, detail="Auth0 browser login is not enabled")
     state = secrets.token_urlsafe(24)
     target = _normalize_next_target(next)
     callback_url = build_auth_callback_url(str(request.base_url).rstrip("/"))
@@ -391,8 +392,8 @@ async def oidc_callback(
 @router.post("/auth/device/start", response_model=DeviceAuthorizationStartResponse)
 async def device_start() -> DeviceAuthorizationStartResponse:
     """Start an Auth0 device login flow for CLI users."""
-    if "auth0" not in provider_names():
-        raise HTTPException(status_code=404, detail="Auth0 is not enabled")
+    if not auth0_device_login_enabled():
+        raise HTTPException(status_code=404, detail="Auth0 CLI device login is not enabled")
     result = await start_auth0_device_authorization()
     return DeviceAuthorizationStartResponse(
         device_code=result.device_code,

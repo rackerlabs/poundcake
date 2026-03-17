@@ -1,5 +1,7 @@
 # Troubleshooting
 
+For auth provider setup and access-binding workflows, see [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+
 ## API not ready
 
 Check logs:
