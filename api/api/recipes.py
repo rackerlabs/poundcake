@@ -329,6 +329,7 @@ async def delete_recipe(
         if not recipe or is_hidden_workflow_recipe(recipe):
             raise HTTPException(status_code=404, detail="Recipe not found")
         recipe_name = recipe.name
+        await delete_recipe_ingredients_safely(db, recipe_id=recipe.id)
         await db.delete(recipe)
 
     return DeleteResponse(

@@ -156,29 +156,94 @@ tests:
             value: "true"
         documentIndex: 0
 
+  - it: wires git repo sync env and mounts credentials when configured
+    set:
+      git.enabled: true
+      git.repoUrl: https://github.com/example/config.git
+      git.branch: config-main
+      git.rulesPath: prometheus/rules
+      git.workflowsPath: poundcake/workflows
+      git.actionsPath: poundcake/actions
+      git.filePerAlert: true
+      git.filePattern: "{alert_name}.yaml"
+      git.userName: Repo Bot
+      git.userEmail: repo-bot@example.com
+      git.provider: github
+      git.existingSecret: poundcake-git
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_GIT_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_GIT_REPO_URL
+            value: "https://github.com/example/config.git"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_GIT_WORKFLOWS_PATH
+            value: "poundcake/workflows"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_GIT_ACTIONS_PATH
+            value: "poundcake/actions"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-git
+                key: git-token
+                optional: true
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: poundcake-git
+            mountPath: /run/secrets/poundcake-git
+            readOnly: true
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: poundcake-git
+            secret:
+              secretName: poundcake-git
+              optional: true
+        documentIndex: 0
+
   - it: defaults PoundCake workload image tag to chart appVersion when unset
     set:
       poundcakeImage.tag: ""
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.142
+          value: ghcr.io/rackerlabs/poundcake:2.0.143
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.142
+          value: ghcr.io/rackerlabs/poundcake:2.0.143
         documentIndex: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.142
+          value: ghcr.io/rackerlabs/poundcake:2.0.143
         documentIndex: 3
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.142
+          value: ghcr.io/rackerlabs/poundcake:2.0.143
         documentIndex: 4
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.142
+          value: ghcr.io/rackerlabs/poundcake:2.0.143
         documentIndex: 5
 
   - it: reports API version from the deployed PoundCake image tag

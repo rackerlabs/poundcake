@@ -27,6 +27,9 @@ def test_request_role_requirement_maps_expected_routes() -> None:
     assert request_role_requirement("/api/v1/orders", "POST") == "service"
     assert request_role_requirement("/api/v1/suppressions/12/cancel", "POST") == "operator"
     assert request_role_requirement("/api/v1/prometheus/reload", "POST") == "operator"
+    assert (
+        request_role_requirement("/api/v1/repo-sync/workflow-actions/import", "POST") == "operator"
+    )
     assert request_role_requirement("/api/v1/communications/policy", "PUT") == "admin"
     assert request_role_requirement("/api/v1/auth/providers", "GET") is None
 

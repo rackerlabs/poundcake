@@ -56,9 +56,27 @@ export interface AppSettings {
   prometheus_url: string;
   git_enabled: boolean;
   git_provider: string | null;
+  git_repo_url: string | null;
+  git_branch: string | null;
+  git_rules_path: string | null;
+  git_workflows_path: string | null;
+  git_actions_path: string | null;
   stackstorm_enabled: boolean;
   version: string;
   global_communications_configured: boolean;
+}
+
+export interface RepoSyncResponse {
+  status: string;
+  message: string;
+  branch?: string | null;
+  pull_request?: {
+    number?: number | string | null;
+    url?: string | null;
+  } | null;
+  exported?: Record<string, string | number | null> | null;
+  imported?: Record<string, number> | null;
+  cleared?: Record<string, number> | null;
 }
 
 export interface CommunicationRouteRecord {

@@ -30,6 +30,7 @@ from api.api.ingredients import router as ingredients_router
 from api.api.communications_policy import router as communications_policy_router
 from api.api.webhook import router as webhook_router
 from api.api.observability import router as observability_router
+from api.api.repo_sync import router as repo_sync_router
 from api.api.suppressions import router as suppressions_router
 
 # Configure logging with custom formatter that includes req_id
@@ -86,6 +87,7 @@ app.include_router(health_router, prefix="/api/v1", tags=["system"])
 app.include_router(settings_router, prefix="/api/v1", tags=["system"])
 app.include_router(communications_policy_router, prefix="/api/v1", tags=["communications"])
 app.include_router(prometheus_router, prefix="/api/v1", tags=["prometheus"])
+app.include_router(repo_sync_router, prefix="/api/v1", tags=["repo-sync"])
 app.include_router(observability_router, prefix="/api/v1", tags=["observability"])
 
 # Security / Authentication

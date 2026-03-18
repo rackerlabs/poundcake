@@ -37,3 +37,7 @@
 {{- if and .Values.auth.enabled .Values.auth.azureAd.enabled .Values.auth.azureAd.cli.enabled (not .Values.auth.azureAd.cli.clientId) -}}
 {{- fail "auth.azureAd.cli.clientId is required when auth.azureAd.cli.enabled=true." -}}
 {{- end -}}
+
+{{- if and .Values.git.enabled (not .Values.git.repoUrl) -}}
+{{- fail "git.repoUrl is required when git.enabled=true." -}}
+{{- end -}}

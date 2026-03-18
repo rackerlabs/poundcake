@@ -1503,6 +1503,9 @@ def request_role_requirement(path: str, method: str) -> AuthRole | None:
     if path.startswith("/api/v1/prometheus") and normalized_method != "GET":
         return "operator"
 
+    if path.startswith("/api/v1/repo-sync") and normalized_method != "GET":
+        return "operator"
+
     if path.startswith("/api/v1/suppressions") and normalized_method != "GET":
         return "operator"
 

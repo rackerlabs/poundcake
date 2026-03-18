@@ -464,6 +464,12 @@ git:
   # Path to Prometheus rules directory in repo
   rulesPath: prometheus/rules
 
+  # Path to workflow export/import directory in repo
+  workflowsPath: poundcake/workflows
+
+  # Path to action export/import directory in repo
+  actionsPath: poundcake/actions
+
   # File organization strategy
   # When true, each alert gets its own file (recommended)
   # When false, orders are grouped in files by CRD name

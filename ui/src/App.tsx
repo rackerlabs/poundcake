@@ -64,6 +64,7 @@ import type {
   OrderResponse,
   PrometheusRule,
   PrometheusRuleListResponse,
+  RepoSyncResponse,
   RecipeRecord,
   StatsResponse,
   SuppressionRecord,
@@ -1548,6 +1549,7 @@ function ActivityPage() {
 function AlertRulesPage() {
   const notify = useToast();
   const principal = usePrincipal();
+  const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingRule, setEditingRule] = useState<PrometheusRule | null>(null);
   const canEdit = canManageAlertRules(principal);
@@ -1628,6 +1630,34 @@ function AlertRulesPage() {
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
+  const exportMutation = useMutation({
+    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/alert-rules/export"),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/alert-rules/import"),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingRule(null);
+      form.reset();
+      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => apiDelete<RepoSyncResponse>("/api/v1/repo-sync/alert-rules"),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingRule(null);
+      form.reset();
+      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
   if (rulesQuery.isLoading) {
     return <PageLoading message="Loading alert rules and editing controls." />;
   }
@@ -1641,6 +1671,15 @@ function AlertRulesPage() {
       <PageHeader
         title="Alert Rules"
         description="Create, update, and retire alert definitions with monitoring-first labels and inline PromQL help."
+      />
+      <AlertRuleRepoSyncPanel
+        canEdit={canEdit}
+        canImport={settings.prometheus_use_crds}
+        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
+        onClear={() => clearMutation.mutate()}
+        onExport={() => exportMutation.mutate()}
+        onImport={() => importMutation.mutate()}
+        settings={settings}
       />
       <div className="editor-grid">
         <Panel title={editingRule ? `Edit ${editingRule.name}` : "Create alert rule"} subtitle="Prometheus details stay available, but the workflow is written for operators.">
@@ -2158,6 +2197,40 @@ function WorkflowsPage() {
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
+  const exportMutation = useMutation({
+    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/export"),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/import"),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingWorkflow(null);
+      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => apiDelete<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions"),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingWorkflow(null);
+      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
   if (recipesQuery.isLoading || actionsQuery.isLoading || policyQuery.isLoading) {
     return <PageLoading message="Loading workflows, actions, and builder controls." />;
   }
@@ -2183,6 +2256,14 @@ function WorkflowsPage() {
       <PageHeader
         title="Workflows"
         description="Build remediation and utility workflows, then choose whether they inherit global communications or define a workflow-specific override."
+      />
+      <WorkflowActionRepoSyncPanel
+        canEdit={canEdit}
+        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
+        onClear={() => clearMutation.mutate()}
+        onExport={() => exportMutation.mutate()}
+        onImport={() => importMutation.mutate()}
+        settings={settings}
       />
       <div className="editor-grid">
         <Panel title={editingWorkflow ? `Edit ${editingWorkflow.name}` : "Create workflow"} subtitle="Simple mode keeps the common path short. Advanced mode exposes execution plumbing when you need it.">
@@ -2574,6 +2655,7 @@ function WorkflowsPage() {
 function ActionsPage() {
   const notify = useToast();
   const principal = usePrincipal();
+  const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingAction, setEditingAction] = useState<IngredientRecord | null>(null);
   const canEdit = canManageActions(principal);
@@ -2697,6 +2779,40 @@ function ActionsPage() {
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
+  const exportMutation = useMutation({
+    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/export"),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/import"),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingAction(null);
+      form.reset();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => apiDelete<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions"),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingAction(null);
+      form.reset();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
   if (actionsQuery.isLoading) {
     return <PageLoading message="Loading reusable actions and templates." />;
   }
@@ -2710,6 +2826,14 @@ function ActionsPage() {
       <PageHeader
         title="Actions"
         description="Reusable remediation and utility actions for workflows. Communication routes now live in Global Communications and the workflow communications section."
+      />
+      <WorkflowActionRepoSyncPanel
+        canEdit={canEdit}
+        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
+        onClear={() => clearMutation.mutate()}
+        onExport={() => exportMutation.mutate()}
+        onImport={() => importMutation.mutate()}
+        settings={settings}
       />
       <div className="editor-grid">
         <Panel title={editingAction ? `Edit ${editingAction.task_key_template}` : "Create action"} subtitle="Start with remediation or custom automation templates. Ticket and chat actions remain available only for legacy compatibility.">
@@ -3255,6 +3379,139 @@ function PageHeader({ title, description }: { title: string; description: string
   );
 }
 
+function AlertRuleRepoSyncPanel({
+  settings,
+  canEdit,
+  canImport,
+  isPending,
+  onExport,
+  onImport,
+  onClear,
+}: {
+  settings: AppSettings;
+  canEdit: boolean;
+  canImport: boolean;
+  isPending: boolean;
+  onExport: () => void;
+  onImport: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <Panel
+      title="Repo sync"
+      subtitle="Export the live rule set to Git, clear the current in-cluster rules when you want a fresh slate, then import from the repo."
+    >
+      {!settings.git_enabled ? (
+        <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, and the repo directories in Helm before using repo import/export." />
+      ) : (
+        <div className="form-stack">
+          <div className="helper-card">
+            <strong>Configured repository</strong>
+            <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
+            <p>Alert rules directory: {settings.git_rules_path || "-"}</p>
+          </div>
+          {!canImport ? (
+            <div className="helper-card">
+              <strong>CRD mode required for import and clear</strong>
+              <p>
+                Export can still write the current rules to Git, but clear and import require
+                `prometheus.useCrds=true` so PoundCake can apply changes back into the cluster.
+              </p>
+            </div>
+          ) : null}
+          <div className="form-actions">
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
+              {isPending ? "Working..." : "Export to repo"}
+            </button>
+            <button
+              className="ghost-button"
+              disabled={!canEdit || !canImport || isPending}
+              type="button"
+              onClick={onImport}
+            >
+              {isPending ? "Working..." : "Import from repo"}
+            </button>
+            <button
+              className="danger-button"
+              disabled={!canEdit || !canImport || isPending}
+              type="button"
+              onClick={() => {
+                if (window.confirm("Clear all live alert rules? Import from repo does not delete missing rules automatically.")) {
+                  onClear();
+                }
+              }}
+            >
+              {isPending ? "Working..." : "Clear alert rules"}
+            </button>
+          </div>
+          <div className="login-note">
+            Import upserts what is in Git. Use clear first when you want the repo to become the full live rule set.
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function WorkflowActionRepoSyncPanel({
+  settings,
+  canEdit,
+  isPending,
+  onExport,
+  onImport,
+  onClear,
+}: {
+  settings: AppSettings;
+  canEdit: boolean;
+  isPending: boolean;
+  onExport: () => void;
+  onImport: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <Panel
+      title="Repo sync"
+      subtitle="Version workflows and actions together in Git so the same action catalog and workflow graph can be promoted into other environments."
+    >
+      {!settings.git_enabled ? (
+        <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, git.workflowsPath, and git.actionsPath in Helm before using repo import/export." />
+      ) : (
+        <div className="form-stack">
+          <div className="helper-card">
+            <strong>Configured repository</strong>
+            <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
+            <p>Workflows directory: {settings.git_workflows_path || "-"}</p>
+            <p>Actions directory: {settings.git_actions_path || "-"}</p>
+          </div>
+          <div className="form-actions">
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
+              {isPending ? "Working..." : "Export to repo"}
+            </button>
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onImport}>
+              {isPending ? "Working..." : "Import from repo"}
+            </button>
+            <button
+              className="danger-button"
+              disabled={!canEdit || isPending}
+              type="button"
+              onClick={() => {
+                if (window.confirm("Clear all user-visible workflows and actions? Import from repo does not delete missing items automatically.")) {
+                  onClear();
+                }
+              }}
+            >
+              {isPending ? "Working..." : "Clear workflows and actions"}
+            </button>
+          </div>
+          <div className="login-note">
+            Import upserts repo-backed actions first, then resolves workflow steps against those actions. Use clear first for a full replace.
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function HelpRail({
   title,
   items,
@@ -3553,6 +3810,23 @@ function getErrorMessage(error: unknown): string {
     return String((error as { message: unknown }).message);
   }
   return "Something went wrong.";
+}
+
+function formatRepoLocation(repoUrl: string | null, branch: string | null): string {
+  if (!repoUrl) {
+    return "Repository URL is not configured.";
+  }
+  return branch ? `${repoUrl} • branch ${branch}` : repoUrl;
+}
+
+function formatRepoSyncMessage(result: RepoSyncResponse): string {
+  if (result.pull_request?.url) {
+    return `${result.message} Pull request created.`;
+  }
+  if (result.branch) {
+    return `${result.message} Branch ${result.branch} created.`;
+  }
+  return result.message;
 }
 
 function describeAuthProviderModes(provider: AuthProviderRecord): string {
