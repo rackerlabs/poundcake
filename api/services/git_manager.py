@@ -50,16 +50,19 @@ class GitManager:
             self.work_dir.mkdir(parents=True, exist_ok=True)
             repo_name = self.settings.git_repo_url.split("/")[-1].replace(".git", "")
             self.repo_path = self.work_dir / repo_name
+            repo_url = self._credentialed_repo_url()
 
             if self.repo_path.exists():
                 repo = git.Repo(self.repo_path)
                 origin = repo.remotes.origin
-                origin.pull(self.settings.git_branch)
+                if repo_url != self.settings.git_repo_url:
+                    origin.set_url(repo_url)
+                origin.pull(self.settings.git_branch, env=self._get_git_env())
                 logger.info("Pulled latest changes", extra={"repo": str(self.repo_path)})
             else:
                 env = self._get_git_env()
                 git.Repo.clone_from(
-                    self.settings.git_repo_url,
+                    repo_url,
                     self.repo_path,
                     branch=self.settings.git_branch,
                     env=env,
@@ -96,6 +99,18 @@ class GitManager:
             )
 
         return env
+
+    def _credentialed_repo_url(self) -> str:
+        """Embed HTTPS token credentials into the repo URL when supported."""
+        repo_url = str(self.settings.git_repo_url or "").strip()
+        token = str(self.settings.git_token or "").strip()
+        if not token or not repo_url.startswith("https://"):
+            return repo_url
+        if "github.com" in repo_url:
+            return repo_url.replace("https://", f"https://x-access-token:{token}@")
+        if "gitlab.com" in repo_url:
+            return repo_url.replace("https://", f"https://oauth2:{token}@")
+        return repo_url
 
     def _load_git_module(self) -> Any | None:
         """Load GitPython and surface the real import failure when unavailable."""
@@ -211,11 +226,9 @@ class GitManager:
             repo.index.commit(commit_message)
 
             env = self._get_git_env()
-            if self.settings.git_token and "github.com" in self.settings.git_repo_url:
-                url = self.settings.git_repo_url.replace(
-                    "https://", f"https://oauth2:{self.settings.git_token}@"
-                )
-                repo.remotes.origin.set_url(url)
+            credentialed_url = self._credentialed_repo_url()
+            if credentialed_url != self.settings.git_repo_url:
+                repo.remotes.origin.set_url(credentialed_url)
 
             repo.git.push("--set-upstream", "origin", branch_name, env=env)
             repo.git.checkout(current_ref)

@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from api.services.repo_sync_service import RepoSyncService
+from api.services.git_manager import GitManager
 
 
 class _ScalarResult:
@@ -335,6 +336,34 @@ def test_api_runtime_image_installs_git_binary() -> None:
     install_block = runtime_section.split("RUN useradd", 1)[0]
 
     assert "git \\" in install_block
+
+
+def test_git_manager_embeds_github_pat_in_clone_url() -> None:
+    manager = GitManager()
+    manager.settings = SimpleNamespace(
+        git_repo_url="https://github.com/example/config.git",
+        git_token="secret-token",
+        git_ssh_key_path="",
+    )
+
+    assert (
+        manager._credentialed_repo_url()
+        == "https://x-access-token:secret-token@github.com/example/config.git"
+    )
+
+
+def test_git_manager_embeds_gitlab_pat_in_clone_url() -> None:
+    manager = GitManager()
+    manager.settings = SimpleNamespace(
+        git_repo_url="https://gitlab.com/example/config.git",
+        git_token="secret-token",
+        git_ssh_key_path="",
+    )
+
+    assert (
+        manager._credentialed_repo_url()
+        == "https://oauth2:secret-token@gitlab.com/example/config.git"
+    )
 
 
 @pytest.mark.asyncio

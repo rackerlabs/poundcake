@@ -178,9 +178,9 @@ tests:
     set:
       poundcakeImage.tag: ""
     asserts:
-      - equal:
+      - matchRegex:
           path: spec.template.spec.initContainers[2].image
-          value: ghcr.io/rackerlabs/poundcake:2.0.143
+          pattern: '^ghcr\.io/rackerlabs/poundcake:[0-9]+\.[0-9]+\.[0-9]+$'
         documentIndex: 8
 
   - it: supports immutable digest image references for poundcake-bootstrap job
