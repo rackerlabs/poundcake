@@ -376,7 +376,7 @@ class RecipeBase(BaseModel):
 class RecipeCreate(RecipeBase):
     """Schema for creating a recipe with recipe_ingredients."""
 
-    recipe_ingredients: List[RecipeIngredientCreate] = Field(..., min_length=1)
+    recipe_ingredients: List[RecipeIngredientCreate] = Field(...)
     communications: RecipeCommunicationsConfig = Field(default_factory=RecipeCommunicationsConfig)
 
 
@@ -387,7 +387,7 @@ class RecipeUpdate(BaseModel):
     description: Optional[str] = None
     enabled: Optional[bool] = None
     clear_timeout_sec: Optional[int] = Field(default=None, gt=0)
-    recipe_ingredients: Optional[List[RecipeIngredientCreate]] = Field(default=None, min_length=1)
+    recipe_ingredients: Optional[List[RecipeIngredientCreate]] = None
     communications: Optional[RecipeCommunicationsConfig] = None
 
 

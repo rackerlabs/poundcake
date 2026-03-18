@@ -90,7 +90,7 @@ class RepoWorkflowDocument(BaseModel):
     communications: dict[str, Any] = Field(
         default_factory=lambda: {"mode": "inherit", "routes": []}
     )
-    recipe_ingredients: list[RepoWorkflowStep] = Field(..., min_length=1)
+    recipe_ingredients: list[RepoWorkflowStep] = Field(...)
 
 
 def _fake_request(req_id: str = REPO_SYNC_REQ_ID) -> Any:

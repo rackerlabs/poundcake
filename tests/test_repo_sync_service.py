@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -132,6 +133,45 @@ async def test_export_workflow_actions_writes_portable_yaml(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_export_workflow_actions_handles_zero_step_workflow(tmp_path: Path) -> None:
+    workflow = SimpleNamespace(
+        id=21,
+        name="Communications only workflow",
+        description="No visible action steps yet",
+        enabled=True,
+        clear_timeout_sec=300,
+        recipe_ingredients=[],
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[_ScalarResult([]), _ScalarResult([workflow])])
+
+    service = RepoSyncService(db)
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_branch="main",
+        git_actions_path="poundcake/actions",
+        git_workflows_path="poundcake/workflows",
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+
+    result = await service.export_workflow_actions()
+
+    assert result["status"] == "success"
+    assert result["exported"]["actions"] == 0
+    assert result["exported"]["workflows"] == 1
+    assert service.git_manager.last_changes is not None
+    workflow_paths = [
+        path for path in service.git_manager.last_changes if path.startswith("poundcake/workflows/")
+    ]
+    assert len(workflow_paths) == 1
+
+    workflow_doc = yaml.safe_load(service.git_manager.last_changes[workflow_paths[0]])
+    assert workflow_doc["kind"] == "workflow"
+    assert workflow_doc["workflow"]["recipe_ingredients"] == []
+
+
+@pytest.mark.asyncio
 async def test_import_workflow_actions_resolves_portable_action_refs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -230,6 +270,63 @@ async def test_import_workflow_actions_resolves_portable_action_refs(
     create_recipe_mock.assert_awaited_once()
     recipe_payload = create_recipe_mock.await_args.args[1]
     assert recipe_payload.recipe_ingredients[0].ingredient_id == 44
+
+
+@pytest.mark.asyncio
+async def test_import_workflow_actions_allows_zero_step_workflow(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    workflow_dir = tmp_path / "workflows"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "communications_only.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "kind": "workflow",
+                "workflow": {
+                    "name": "Communications only workflow",
+                    "description": "No visible action steps yet",
+                    "enabled": True,
+                    "clear_timeout_sec": 300,
+                    "communications": {"mode": "inherit", "routes": []},
+                    "recipe_ingredients": [],
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[_ScalarResult([]), _ScalarResult([])])
+    service = RepoSyncService(db)
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_actions_path="actions",
+        git_workflows_path="workflows",
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+
+    create_recipe_mock = AsyncMock()
+    monkeypatch.setattr("api.services.repo_sync_service.create_recipe", create_recipe_mock)
+
+    result = await service.import_workflow_actions()
+
+    assert result["status"] == "success"
+    assert result["imported"]["actions_created"] == 0
+    assert result["imported"]["workflows_created"] == 1
+    create_recipe_mock.assert_awaited_once()
+    recipe_payload = create_recipe_mock.await_args.args[1]
+    assert recipe_payload.recipe_ingredients == []
+
+
+def test_runtime_dependencies_include_gitpython() -> None:
+    pyproject = Path("pyproject.toml")
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    dependencies = config["project"]["dependencies"]
+
+    assert any(str(dep).lower().startswith("gitpython") for dep in dependencies)
 
 
 @pytest.mark.asyncio
