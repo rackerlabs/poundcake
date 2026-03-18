@@ -114,9 +114,7 @@ async def test_export_workflow_actions_writes_portable_yaml(tmp_path: Path) -> N
         path for path in service.git_manager.last_changes if path.startswith("poundcake/actions/")
     ]
     workflow_paths = [
-        path
-        for path in service.git_manager.last_changes
-        if path.startswith("poundcake/workflows/")
+        path for path in service.git_manager.last_changes if path.startswith("poundcake/workflows/")
     ]
     assert len(action_paths) == 1
     assert len(workflow_paths) == 1
@@ -126,7 +124,10 @@ async def test_export_workflow_actions_writes_portable_yaml(tmp_path: Path) -> N
     assert action_doc["kind"] == "action"
     assert action_doc["action"]["task_key_template"] == "restart_service"
     assert workflow_doc["kind"] == "workflow"
-    assert workflow_doc["workflow"]["recipe_ingredients"][0]["action"]["task_key_template"] == "restart_service"
+    assert (
+        workflow_doc["workflow"]["recipe_ingredients"][0]["action"]["task_key_template"]
+        == "restart_service"
+    )
     assert "ingredient_id" not in workflow_doc["workflow"]["recipe_ingredients"][0]
 
 
@@ -262,7 +263,9 @@ async def test_export_alert_rules_writes_files_into_rules_directory(tmp_path: Pa
     assert result["status"] == "success"
     assert result["exported"]["alert_rules"] == 1
     assert service.git_manager.last_changes is not None
-    paths = [path for path in service.git_manager.last_changes if path.startswith("prometheus/rules/")]
+    paths = [
+        path for path in service.git_manager.last_changes if path.startswith("prometheus/rules/")
+    ]
     assert len(paths) == 1
     payload = yaml.safe_load(service.git_manager.last_changes[paths[0]])
     assert payload["groups"][0]["name"] == "node-filesystem"
@@ -328,7 +331,10 @@ async def test_export_workflow_actions_supports_shared_directory(tmp_path: Path)
     await service.export_workflow_actions()
 
     assert service.git_manager.last_changes is not None
-    assert any(path.endswith(".yaml") and content is not None for path, content in service.git_manager.last_changes.items())
+    assert any(
+        path.endswith(".yaml") and content is not None
+        for path, content in service.git_manager.last_changes.items()
+    )
     assert "workflows/obsolete.yaml" in service.git_manager.last_changes
     assert service.git_manager.last_changes["workflows/obsolete.yaml"] is None
     assert any(

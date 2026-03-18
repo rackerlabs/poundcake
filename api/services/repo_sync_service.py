@@ -436,15 +436,18 @@ class RepoSyncService:
     async def _load_actions(self) -> list[Ingredient]:
         db = self._require_db()
         result = await db.execute(
-            select(Ingredient).where(not_(Ingredient.task_key_template.like(f"{MANAGED_TASK_PREFIX}%")))
+            select(Ingredient).where(
+                not_(Ingredient.task_key_template.like(f"{MANAGED_TASK_PREFIX}%"))
+            )
         )
         return result.scalars().all()
 
     async def _load_workflows(self) -> list[Recipe]:
         db = self._require_db()
         result = await db.execute(
-            select(Recipe)
-            .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
+            select(Recipe).options(
+                joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient)
+            )
         )
         return [
             recipe
@@ -596,7 +599,9 @@ class RepoSyncService:
                     action_ref = step.action.model_dump()
                     action = actions_by_identity.get(_action_identity_from_payload(action_ref))
                     if action is None:
-                        same_name = actions_by_task_key.get(str(action_ref["task_key_template"]), [])
+                        same_name = actions_by_task_key.get(
+                            str(action_ref["task_key_template"]), []
+                        )
                         if len(same_name) == 1:
                             action = same_name[0]
                     if action is None:
@@ -622,7 +627,9 @@ class RepoSyncService:
                     "description": workflow_payload.get("description"),
                     "enabled": workflow_payload.get("enabled", True),
                     "clear_timeout_sec": workflow_payload.get("clear_timeout_sec"),
-                    "communications": workflow_payload.get("communications", {"mode": "inherit", "routes": []}),
+                    "communications": workflow_payload.get(
+                        "communications", {"mode": "inherit", "routes": []}
+                    ),
                     "recipe_ingredients": resolved_steps,
                 }
                 existing = existing_workflows.get(str(payload["name"]))
@@ -758,7 +765,9 @@ class RepoSyncService:
                     group = {"name": group_name, "rules": []}
                     groups.append(group)
                 group["rules"].append(item["rule"])
-            files = {f"{rules_dir}/{name}": _yaml_text(payload) for name, payload in grouped.items()}
+            files = {
+                f"{rules_dir}/{name}": _yaml_text(payload) for name, payload in grouped.items()
+            }
 
         changes = await self._build_export_changes(relative_dir=rules_dir, new_files=files)
         return await self._finalize_git_export(
@@ -804,7 +813,9 @@ class RepoSyncService:
                         normalize_rule_data(rule_name, raw_rule),
                     )
                     if result.get("status") == "error":
-                        raise RepoSyncError(str(result.get("message") or "Alert-rule import failed"))
+                        raise RepoSyncError(
+                            str(result.get("message") or "Alert-rule import failed")
+                        )
                     imported += 1
 
         return {
