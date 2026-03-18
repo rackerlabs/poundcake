@@ -329,6 +329,14 @@ def test_runtime_dependencies_include_gitpython() -> None:
     assert any(str(dep).lower().startswith("gitpython") for dep in dependencies)
 
 
+def test_api_runtime_image_installs_git_binary() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+    runtime_section = dockerfile.split("FROM python:3.11-slim AS python-runtime-base", 1)[1]
+    install_block = runtime_section.split("RUN useradd", 1)[0]
+
+    assert "git \\" in install_block
+
+
 @pytest.mark.asyncio
 async def test_export_alert_rules_writes_files_into_rules_directory(tmp_path: Path) -> None:
     service = RepoSyncService()

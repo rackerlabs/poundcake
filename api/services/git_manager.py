@@ -42,10 +42,8 @@ class GitManager:
             logger.warning("Git not enabled or repo URL not configured")
             return False
 
-        try:
-            git = importlib.import_module("git")
-        except ImportError:
-            logger.error("GitPython not installed. Install with: pip install GitPython")
+        git = self._load_git_module()
+        if git is None:
             return False
 
         try:
@@ -98,6 +96,14 @@ class GitManager:
             )
 
         return env
+
+    def _load_git_module(self) -> Any | None:
+        """Load GitPython and surface the real import failure when unavailable."""
+        try:
+            return importlib.import_module("git")
+        except ImportError as exc:
+            logger.error("Git repository support unavailable", extra={"error": str(exc)})
+            return None
 
     async def commit_and_push_deletion(
         self,
@@ -159,10 +165,8 @@ class GitManager:
             if not await self.clone_or_pull():
                 return False, ""
 
-        try:
-            git = importlib.import_module("git")
-        except ImportError:
-            logger.error("GitPython not installed")
+        git = self._load_git_module()
+        if git is None:
             return False, ""
 
         try:
