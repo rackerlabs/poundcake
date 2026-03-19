@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from api.services.auth_service import (
+    AccessDeniedError,
     AuthContext,
     ensure_request_authorized,
     is_authorized_for_role,
@@ -30,6 +33,8 @@ def test_request_role_requirement_maps_expected_routes() -> None:
     assert (
         request_role_requirement("/api/v1/repo-sync/workflow-actions/import", "POST") == "operator"
     )
+    assert request_role_requirement("/api/v1/repo-sync/workflow-actions", "DELETE") == "admin"
+    assert request_role_requirement("/api/v1/repo-sync/alert-rules", "DELETE") == "admin"
     assert request_role_requirement("/api/v1/communications/policy", "PUT") == "admin"
     assert request_role_requirement("/api/v1/auth/providers", "GET") is None
 
@@ -69,6 +74,9 @@ def test_operator_and_admin_role_checks() -> None:
 def test_request_authorization_uses_role_matrix() -> None:
     operator = _human_context("operator")
     ensure_request_authorized(operator, "/api/v1/recipes/1", "PUT")
+    with pytest.raises(AccessDeniedError):
+        ensure_request_authorized(operator, "/api/v1/repo-sync/workflow-actions", "DELETE")
 
     admin = _human_context("admin")
     ensure_request_authorized(admin, "/api/v1/communications/policy", "PUT")
+    ensure_request_authorized(admin, "/api/v1/repo-sync/workflow-actions", "DELETE")

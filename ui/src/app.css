@@ -719,6 +719,34 @@ pre {
   transform: translateY(-1px);
 }
 
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 12, 18, 0.76);
+  backdrop-filter: blur(8px);
+}
+
+.dialog-card {
+  width: min(520px, 100%);
+  border-radius: 24px;
+  padding: 24px;
+  border: 1px solid rgba(230, 103, 103, 0.26);
+  background: linear-gradient(180deg, rgba(20, 26, 33, 0.98), rgba(10, 16, 22, 0.98));
+  box-shadow: var(--shadow-lg);
+}
+
+.dialog-input {
+  width: 100%;
+}
+
+.danger-note {
+  color: #ffb1b1;
+}
+
 .help-rail {
   border-radius: 24px;
   padding: 22px;

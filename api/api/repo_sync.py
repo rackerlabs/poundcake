@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.api.auth import require_auth_if_enabled
+from api.api.auth import require_admin, require_auth_if_enabled
 from api.core.database import get_db
 from api.core.logging import get_logger
 from api.services.repo_sync_service import RepoSyncError, RepoSyncService
@@ -53,7 +53,7 @@ async def import_alert_rules(
 @router.delete("/repo-sync/alert-rules")
 async def clear_alert_rules(
     request: Request,
-    _user: str | None = Depends(require_auth_if_enabled),
+    _context=Depends(require_admin),
 ):
     """Clear all alert rules currently managed by PoundCake."""
     try:
@@ -110,7 +110,7 @@ async def import_workflow_actions(
 async def clear_workflow_actions(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _user: str | None = Depends(require_auth_if_enabled),
+    _context=Depends(require_admin),
 ):
     """Clear all user-visible workflows and actions from PoundCake."""
     try:

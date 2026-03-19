@@ -1553,6 +1553,7 @@ function AlertRulesPage() {
   const queryClient = useQueryClient();
   const [editingRule, setEditingRule] = useState<PrometheusRule | null>(null);
   const canEdit = canManageAlertRules(principal);
+  const canClear = canManageRepoSyncClear(principal);
 
   const rulesQuery = useQuery({
     queryKey: ["prometheus-rules"],
@@ -1673,6 +1674,7 @@ function AlertRulesPage() {
         description="Create, update, and retire alert definitions with monitoring-first labels and inline PromQL help."
       />
       <AlertRuleRepoSyncPanel
+        canClear={canClear}
         canEdit={canEdit}
         canImport={settings.prometheus_use_crds}
         isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
@@ -2034,6 +2036,7 @@ function WorkflowsPage() {
   const [editingWorkflow, setEditingWorkflow] = useState<RecipeRecord | null>(null);
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const canEdit = canManageWorkflows(principal);
+  const canClear = canManageRepoSyncClear(principal);
 
   const recipesQuery = useQuery({
     queryKey: ["workflows"],
@@ -2258,6 +2261,7 @@ function WorkflowsPage() {
         description="Build remediation and utility workflows, then choose whether they inherit global communications or define a workflow-specific override."
       />
       <WorkflowActionRepoSyncPanel
+        canClear={canClear}
         canEdit={canEdit}
         isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
         onClear={() => clearMutation.mutate()}
@@ -2659,6 +2663,7 @@ function ActionsPage() {
   const queryClient = useQueryClient();
   const [editingAction, setEditingAction] = useState<IngredientRecord | null>(null);
   const canEdit = canManageActions(principal);
+  const canClear = canManageRepoSyncClear(principal);
 
   const actionsQuery = useQuery({
     queryKey: ["actions"],
@@ -2828,6 +2833,7 @@ function ActionsPage() {
         description="Reusable remediation and utility actions for workflows. Communication routes now live in Global Communications and the workflow communications section."
       />
       <WorkflowActionRepoSyncPanel
+        canClear={canClear}
         canEdit={canEdit}
         isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
         onClear={() => clearMutation.mutate()}
@@ -3380,6 +3386,7 @@ function PageHeader({ title, description }: { title: string; description: string
 }
 
 function AlertRuleRepoSyncPanel({
+  canClear,
   settings,
   canEdit,
   canImport,
@@ -3389,6 +3396,7 @@ function AlertRuleRepoSyncPanel({
   onClear,
 }: {
   settings: AppSettings;
+  canClear: boolean;
   canEdit: boolean;
   canImport: boolean;
   isPending: boolean;
@@ -3419,6 +3427,12 @@ function AlertRuleRepoSyncPanel({
               </p>
             </div>
           ) : null}
+          {!canClear ? (
+            <div className="helper-card">
+              <strong>Admin access required for clear</strong>
+              <p>Only admins can clear live alert rules.</p>
+            </div>
+          ) : null}
           <div className="form-actions">
             <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
               {isPending ? "Working..." : "Export to repo"}
@@ -3431,18 +3445,14 @@ function AlertRuleRepoSyncPanel({
             >
               {isPending ? "Working..." : "Import from repo"}
             </button>
-            <button
-              className="danger-button"
-              disabled={!canEdit || !canImport || isPending}
-              type="button"
-              onClick={() => {
-                if (window.confirm("Clear all live alert rules? Import from repo does not delete missing rules automatically.")) {
-                  onClear();
-                }
-              }}
-            >
-              {isPending ? "Working..." : "Clear alert rules"}
-            </button>
+            <DangerConfirmButton
+              dangerMessage="This removes every live alert rule currently managed by PoundCake. Import from repo does not delete missing rules automatically."
+              disabled={!canClear || !canImport || isPending}
+              isPending={isPending}
+              label="Clear alert rules"
+              title="Clear alert rules?"
+              onConfirm={onClear}
+            />
           </div>
           <div className="login-note">
             Import upserts what is in Git. Use clear first when you want the repo to become the full live rule set.
@@ -3454,6 +3464,7 @@ function AlertRuleRepoSyncPanel({
 }
 
 function WorkflowActionRepoSyncPanel({
+  canClear,
   settings,
   canEdit,
   isPending,
@@ -3462,6 +3473,7 @@ function WorkflowActionRepoSyncPanel({
   onClear,
 }: {
   settings: AppSettings;
+  canClear: boolean;
   canEdit: boolean;
   isPending: boolean;
   onExport: () => void;
@@ -3483,6 +3495,12 @@ function WorkflowActionRepoSyncPanel({
             <p>Workflows directory: {settings.git_workflows_path || "-"}</p>
             <p>Actions directory: {settings.git_actions_path || "-"}</p>
           </div>
+          {!canClear ? (
+            <div className="helper-card">
+              <strong>Admin access required for clear</strong>
+              <p>Only admins can clear workflows and actions.</p>
+            </div>
+          ) : null}
           <div className="form-actions">
             <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
               {isPending ? "Working..." : "Export to repo"}
@@ -3490,18 +3508,14 @@ function WorkflowActionRepoSyncPanel({
             <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onImport}>
               {isPending ? "Working..." : "Import from repo"}
             </button>
-            <button
-              className="danger-button"
-              disabled={!canEdit || isPending}
-              type="button"
-              onClick={() => {
-                if (window.confirm("Clear all user-visible workflows and actions? Import from repo does not delete missing items automatically.")) {
-                  onClear();
-                }
-              }}
-            >
-              {isPending ? "Working..." : "Clear workflows and actions"}
-            </button>
+            <DangerConfirmButton
+              dangerMessage="This removes every user-visible workflow and action currently stored in PoundCake. Import from repo does not delete missing items automatically."
+              disabled={!canClear || isPending}
+              isPending={isPending}
+              label="Clear workflows and actions"
+              title="Clear workflows and actions?"
+              onConfirm={onClear}
+            />
           </div>
           <div className="login-note">
             Import upserts repo-backed actions first, then resolves workflow steps against those actions. Use clear first for a full replace.
@@ -3509,6 +3523,81 @@ function WorkflowActionRepoSyncPanel({
         </div>
       )}
     </Panel>
+  );
+}
+
+function DangerConfirmButton({
+  title,
+  label,
+  dangerMessage,
+  disabled,
+  isPending,
+  onConfirm,
+}: {
+  title: string;
+  label: string;
+  dangerMessage: string;
+  disabled: boolean;
+  isPending: boolean;
+  onConfirm: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
+  const confirmed = confirmation.trim().toLowerCase() === "yes";
+
+  function closeDialog() {
+    setOpen(false);
+    setConfirmation("");
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!confirmed || isPending) {
+      return;
+    }
+    closeDialog();
+    onConfirm();
+  }
+
+  return (
+    <>
+      <button className="danger-button" disabled={disabled} type="button" onClick={() => setOpen(true)}>
+        {isPending ? "Working..." : label}
+      </button>
+      {open ? (
+        <div aria-modal="true" className="dialog-backdrop" role="dialog">
+          <div className="dialog-card">
+            <div className="panel-head">
+              <div>
+                <h4>{title}</h4>
+                <p className="danger-note">{dangerMessage}</p>
+              </div>
+            </div>
+            <form className="form-stack" onSubmit={handleSubmit}>
+              <div className="helper-card">
+                <strong>Danger zone</strong>
+                <p>Type "yes" to continue.</p>
+              </div>
+              <input
+                autoFocus
+                className="dialog-input"
+                onChange={(event) => setConfirmation(event.target.value)}
+                placeholder="yes"
+                value={confirmation}
+              />
+              <div className="form-actions">
+                <button className="ghost-button" type="button" onClick={closeDialog}>
+                  Cancel
+                </button>
+                <button className="danger-button" disabled={!confirmed || isPending} type="submit">
+                  {isPending ? "Working..." : label}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -3748,6 +3837,10 @@ function canManageWorkflows(principal: AuthMeRecord) {
 
 function canManageActions(principal: AuthMeRecord) {
   return hasRole(principal, "operator");
+}
+
+function canManageRepoSyncClear(principal: AuthMeRecord) {
+  return hasRole(principal, "admin");
 }
 
 function canManageGlobalCommunications(principal: AuthMeRecord) {

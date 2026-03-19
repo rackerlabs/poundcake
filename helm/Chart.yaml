@@ -10,11 +10,11 @@ description: Auto-remediation platform bridging Prometheus Alertmanager with Sta
 type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the chart's dependencies.
-version: 0.2.45
+version: 0.2.46
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application.
-appVersion: "2.0.146"
+appVersion: "2.0.147"
 maintainers:
   - name: Jake Briggs
 keywords:
