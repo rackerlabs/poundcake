@@ -35,6 +35,7 @@ class TicketCreateRequest(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=512)
     description: str = Field(..., min_length=1)
+    message: Optional[str] = Field(default=None, min_length=1)
     severity: Optional[str] = Field(default=None, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
     source: Optional[str] = Field(default=None, max_length=100)
@@ -63,6 +64,10 @@ class TicketCommentRequest(BaseModel):
 class TicketCloseRequest(BaseModel):
     """Close a ticket."""
 
+    title: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    description: Optional[str] = Field(default=None, min_length=1)
+    message: Optional[str] = Field(default=None, min_length=1)
+    source: Optional[str] = Field(default=None, max_length=100)
     resolution_code: Optional[str] = Field(default=None, max_length=100)
     resolution_notes: Optional[str] = Field(default=None, max_length=4096)
     state: Optional[str] = Field(default="closed", max_length=50)

@@ -19,6 +19,7 @@ class CommunicationOpenRequest(_BakeryContractModel):
 
     title: str = Field(..., min_length=1, max_length=512)
     description: str = Field(..., min_length=1)
+    message: str | None = Field(default=None, min_length=1)
     severity: str | None = Field(default=None, max_length=50)
     category: str | None = Field(default=None, max_length=100)
     source: str | None = Field(default=None, max_length=100)
@@ -58,6 +59,10 @@ class CommunicationNotifyRequest(_BakeryContractModel):
 class CommunicationCloseRequest(_BakeryContractModel):
     """Close a logical communication."""
 
+    title: str | None = Field(default=None, min_length=1, max_length=512)
+    description: str | None = Field(default=None, min_length=1)
+    message: str | None = Field(default=None, min_length=1)
+    source: str | None = Field(default=None, max_length=100)
     resolution_code: str | None = Field(default=None, max_length=100)
     resolution_notes: str | None = Field(default=None, max_length=4096)
     state: str | None = Field(default="closed", max_length=50)
