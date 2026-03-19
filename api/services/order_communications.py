@@ -158,8 +158,8 @@ async def refresh_remote_state(
         remote_state = communication.remote_state
     else:
         remote_state = str(
-            remote.get("state")
-            or (remote.get("communication_data") or {}).get("state")
+            remote.state
+            or (remote.communication_data or {}).get("state")
             or communication.remote_state
             or ""
         )

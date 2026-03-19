@@ -19,6 +19,12 @@ from bakery.api.tickets import (
 from bakery.auth import require_hmac_auth
 from bakery.database import get_db
 from bakery.schemas import (
+    TicketCloseRequest,
+    TicketCommentRequest,
+    TicketCreateRequest,
+    TicketUpdateRequest,
+)
+from shared.bakery_contract import (
     CommunicationAcceptedResponse,
     CommunicationCloseRequest,
     CommunicationNotifyRequest,
@@ -27,10 +33,6 @@ from bakery.schemas import (
     CommunicationOperationResponse,
     CommunicationResponse,
     CommunicationUpdateRequest,
-    TicketCloseRequest,
-    TicketCommentRequest,
-    TicketCreateRequest,
-    TicketUpdateRequest,
 )
 
 router = APIRouter(dependencies=[Depends(require_hmac_auth)])

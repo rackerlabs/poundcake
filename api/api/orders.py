@@ -531,8 +531,8 @@ async def get_order_timeline(
         if communication.bakery_operation_id:
             try:
                 op_payload = await get_operation(communication.bakery_operation_id)
-                bakery_status = str(op_payload.get("status") or bakery_status)
-                bakery_details["operation"] = op_payload
+                bakery_status = op_payload.status or bakery_status
+                bakery_details["operation"] = op_payload.model_dump(mode="json")
             except Exception:
                 bakery_status = communication.lifecycle_state or "unavailable"
         events.append(
@@ -561,8 +561,8 @@ async def get_order_timeline(
         if order.bakery_operation_id:
             try:
                 op_payload = await get_operation(order.bakery_operation_id)
-                bakery_status = str(op_payload.get("status") or "unknown")
-                bakery_details = op_payload
+                bakery_status = op_payload.status or "unknown"
+                bakery_details = op_payload.model_dump(mode="json")
             except Exception:
                 bakery_status = "unavailable"
         events.append(

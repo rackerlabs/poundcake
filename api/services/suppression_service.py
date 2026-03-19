@@ -379,14 +379,17 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
             if suppression.summary_ticket_enabled and not summary.bakery_ticket_id:
                 create_payload = build_summary_ticket_payload(suppression, summary)
                 accepted = await create_ticket(req_id=req_id, payload=create_payload)
-                summary.bakery_ticket_id = accepted.get("ticket_id")
-                summary.bakery_create_operation_id = accepted.get("operation_id")
+                summary.bakery_ticket_id = accepted.ticket_id
+                summary.bakery_create_operation_id = accepted.operation_id
                 summary.state = "created"
                 record_suppression_summary_ticket("create_accepted")
                 if summary.bakery_create_operation_id:
                     create_op = await poll_operation(summary.bakery_create_operation_id)
-                    if create_op.get("status") not in {"succeeded"}:
-                        raise RuntimeError(f"Bakery create operation failed: {create_op}")
+                    if create_op.status not in {"succeeded"}:
+                        raise RuntimeError(
+                            "Bakery create operation failed: "
+                            f"{create_op.model_dump(mode='json')}"
+                        )
                     record_suppression_summary_ticket("create_succeeded")
 
             if (
@@ -412,12 +415,14 @@ async def finalize_expired_suppressions(db: AsyncSession, req_id: str) -> int:
                     ticket_id=summary.bakery_ticket_id,
                     payload=close_payload,
                 )
-                summary.bakery_close_operation_id = close_accepted.get("operation_id")
+                summary.bakery_close_operation_id = close_accepted.operation_id
                 record_suppression_summary_ticket("close_accepted")
                 if summary.bakery_close_operation_id:
                     close_op = await poll_operation(summary.bakery_close_operation_id)
-                    if close_op.get("status") not in {"succeeded"}:
-                        raise RuntimeError(f"Bakery close operation failed: {close_op}")
+                    if close_op.status not in {"succeeded"}:
+                        raise RuntimeError(
+                            "Bakery close operation failed: " f"{close_op.model_dump(mode='json')}"
+                        )
                     record_suppression_summary_ticket("close_succeeded")
 
             summary.state = "closed"
