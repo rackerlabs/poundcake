@@ -21,7 +21,10 @@ from cli.utils import (
 
 
 def _print_git_result(result: dict[str, Any]) -> None:
-    pr = result.get("git", {}).get("pull_request", {})
+    git_result = result.get("git")
+    if not isinstance(git_result, dict):
+        return
+    pr = git_result.get("pull_request", {})
     if isinstance(pr, dict) and pr.get("url"):
         print_info(f"Pull request created: {pr['url']}")
 

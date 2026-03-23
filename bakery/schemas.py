@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field
 from shared.bakery_contract import (
     CommunicationAcceptedResponse,
     CommunicationCloseRequest,
@@ -28,6 +28,12 @@ __all__ = [
     "CommunicationResponse",
     "CommunicationUpdateRequest",
 ]
+
+
+class BaseModel(PydanticBaseModel):
+    """Strict base model for Bakery-owned DTOs."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class TicketCreateRequest(BaseModel):

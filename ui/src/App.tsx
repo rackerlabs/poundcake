@@ -55,32 +55,64 @@ import type {
   CommunicationActivityRecord,
   CommunicationPolicyRecord,
   CommunicationRouteRecord,
+  DeleteResponse,
   DishRecord,
   HealthResponse,
-  IncidentTimelineResponse,
   IncidentTimelineEvent,
+  IncidentTimelineResponse,
+  IngredientRecord,
   ObservabilityActivityRecord,
   ObservabilityOverviewResponse,
   OrderResponse,
   PrometheusRule,
-  PrometheusRuleListResponse,
   RepoSyncResponse,
   RecipeRecord,
   StatsResponse,
   SuppressionRecord,
-  IngredientRecord,
-} from "./types";
+} from "./contracts";
+import {
+  appSettingsSchema,
+  authMeRecordSchema,
+  authProviderRecordArraySchema,
+  authPrincipalRecordArraySchema,
+  authRoleBindingCreateRequestSchema,
+  authRoleBindingRecordArraySchema,
+  authRoleBindingRecordSchema,
+  authRoleBindingUpdateRequestSchema,
+  communicationActivityRecordArraySchema,
+  communicationPolicyRecordSchema,
+  communicationPolicyUpdateRequestSchema,
+  deleteResponseSchema,
+  dishRecordArraySchema,
+  healthResponseSchema,
+  incidentTimelineResponseSchema,
+  ingredientCreateRequestSchema,
+  ingredientRecordArraySchema,
+  ingredientRecordSchema,
+  ingredientUpdateRequestSchema,
+  observabilityActivityRecordArraySchema,
+  observabilityOverviewResponseSchema,
+  orderResponseArraySchema,
+  orderResponseSchema,
+  prometheusRuleListResponseSchema,
+  prometheusRuleMutationResponseSchema,
+  prometheusRuleWriteRequestSchema,
+  recipeCreateRequestSchema,
+  recipeRecordArraySchema,
+  recipeRecordSchema,
+  recipeUpdateRequestSchema,
+  repoSyncResponseSchema,
+  statsResponseSchema,
+  suppressionCreateRequestSchema,
+  suppressionRecordArraySchema,
+  suppressionRecordSchema,
+} from "./contracts";
 
 const SettingsContext = createContext<AppSettings | null>(null);
 const PrincipalContext = createContext<AuthMeRecord | null>(null);
 const ToastContext = createContext<(tone: "success" | "error", message: string) => void>(
   () => undefined,
 );
-
-interface DeleteResponse {
-  status: string;
-  message?: string | null;
-}
 
 interface ToastMessage {
   id: number;
@@ -225,8 +257,8 @@ function SessionGate() {
     queryKey: ["settings", "auth-me"],
     queryFn: async () => {
       const [settings, principal] = await Promise.all([
-        apiGet<AppSettings>("/api/v1/settings"),
-        apiGet<AuthMeRecord>("/api/v1/auth/me"),
+        apiGet("/api/v1/settings", appSettingsSchema),
+        apiGet("/api/v1/auth/me", authMeRecordSchema),
       ]);
       return { settings, principal };
     },
@@ -280,7 +312,8 @@ function LoginPage() {
   const nextTarget = getLoginNextTarget(searchParams);
   const providersQuery = useQuery({
     queryKey: ["auth-providers"],
-    queryFn: () => apiFetch<AppSettings["auth_providers"]>("/api/v1/auth/providers", {}, { allowUnauthorized: true }),
+    queryFn: () =>
+      apiFetch("/api/v1/auth/providers", authProviderRecordArraySchema, {}, { allowUnauthorized: true }),
   });
   const passwordProviders = (providersQuery.data || []).filter((provider) => provider.password_login);
   const browserProviders = (providersQuery.data || []).filter((provider) => provider.browser_login);
@@ -615,13 +648,13 @@ function OverviewPage() {
     queryFn: async () => {
       const [health, stats, overview, activity, incidents, communications, suppressions] =
         await Promise.all([
-          apiGet<HealthResponse>("/api/v1/health"),
-          apiGet<StatsResponse>("/api/v1/stats"),
-          apiGet<ObservabilityOverviewResponse>("/api/v1/observability/overview"),
-          apiGet<ObservabilityActivityRecord[]>("/api/v1/observability/activity?limit=10"),
-          apiGet<OrderResponse[]>("/api/v1/orders?limit=8"),
-          apiGet<CommunicationActivityRecord[]>("/api/v1/communications/activity?limit=8"),
-          apiGet<SuppressionRecord[]>("/api/v1/suppressions?limit=8"),
+          apiGet("/api/v1/health", healthResponseSchema),
+          apiGet("/api/v1/stats", statsResponseSchema),
+          apiGet("/api/v1/observability/overview", observabilityOverviewResponseSchema),
+          apiGet("/api/v1/observability/activity?limit=10", observabilityActivityRecordArraySchema),
+          apiGet("/api/v1/orders?limit=8", orderResponseArraySchema),
+          apiGet("/api/v1/communications/activity?limit=8", communicationActivityRecordArraySchema),
+          apiGet("/api/v1/suppressions?limit=8", suppressionRecordArraySchema),
         ]);
       return { health, stats, overview, activity, incidents, communications, suppressions };
     },
@@ -775,7 +808,7 @@ function IncidentsPage() {
 
   const incidentsQuery = useQuery({
     queryKey: ["incidents"],
-    queryFn: () => apiGet<OrderResponse[]>("/api/v1/orders?limit=100"),
+    queryFn: () => apiGet("/api/v1/orders?limit=100", orderResponseArraySchema),
   });
 
   const selectedId = incidentId ? Number(incidentId) : null;
@@ -786,7 +819,7 @@ function IncidentsPage() {
   const selectedIncidentQuery = useQuery({
     queryKey: ["incident", selectedId],
     enabled: Boolean(selectedId) && Boolean(incidentsQuery.data) && !selectedFromRoute,
-    queryFn: () => apiGet<OrderResponse>(`/api/v1/orders/${selectedId}`),
+    queryFn: () => apiGet(`/api/v1/orders/${selectedId}`, orderResponseSchema),
   });
 
   const incidentRows = incidentsQuery.data || [];
@@ -814,7 +847,7 @@ function IncidentsPage() {
   const timelineQuery = useQuery({
     queryKey: ["incident-timeline", timelineTargetId],
     enabled: Boolean(timelineTargetId),
-    queryFn: () => apiGet<IncidentTimelineResponse>(`/api/v1/orders/${timelineTargetId}/timeline`),
+    queryFn: () => apiGet(`/api/v1/orders/${timelineTargetId}/timeline`, incidentTimelineResponseSchema),
   });
 
   useEffect(() => {
@@ -1034,7 +1067,7 @@ function CommunicationsPage() {
 
   const query = useQuery({
     queryKey: ["communications-activity"],
-    queryFn: () => apiGet<CommunicationActivityRecord[]>("/api/v1/communications/activity?limit=200"),
+    queryFn: () => apiGet("/api/v1/communications/activity?limit=200", communicationActivityRecordArraySchema),
   });
 
   if (query.isLoading) {
@@ -1170,7 +1203,7 @@ function SuppressionsPage() {
 
   const suppressionsQuery = useQuery({
     queryKey: ["suppressions"],
-    queryFn: () => apiGet<SuppressionRecord[]>("/api/v1/suppressions?limit=100"),
+    queryFn: () => apiGet("/api/v1/suppressions?limit=100", suppressionRecordArraySchema),
   });
 
   const form = useForm<z.infer<typeof suppressionSchema>>({
@@ -1189,8 +1222,8 @@ function SuppressionsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (values: z.infer<typeof suppressionSchema>) =>
-      apiPost<SuppressionRecord>("/api/v1/suppressions", {
+    mutationFn: async (values: z.infer<typeof suppressionSchema>) => {
+      const request = suppressionCreateRequestSchema.parse({
         name: values.name,
         reason: values.reason || null,
         starts_at: values.starts_at,
@@ -1209,7 +1242,9 @@ function SuppressionsPage() {
                 },
               ]
             : [],
-      }),
+      });
+      return apiPost("/api/v1/suppressions", suppressionRecordSchema, request);
+    },
     onSuccess: async () => {
       notify("success", "Suppression created.");
       form.reset();
@@ -1219,7 +1254,7 @@ function SuppressionsPage() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: (id: number) => apiPost<SuppressionRecord>(`/api/v1/suppressions/${id}/cancel`),
+    mutationFn: (id: number) => apiPost(`/api/v1/suppressions/${id}/cancel`, suppressionRecordSchema),
     onSuccess: async () => {
       notify("success", "Suppression canceled.");
       await queryClient.invalidateQueries({ queryKey: ["suppressions"] });
@@ -1355,7 +1390,7 @@ function ActivityPage() {
   const deferredSearch = useDeferredValue(search);
   const query = useQuery({
     queryKey: ["activity-dishes"],
-    queryFn: () => apiGet<DishRecord[]>("/api/v1/dishes?limit=100"),
+    queryFn: () => apiGet("/api/v1/dishes?limit=100", dishRecordArraySchema),
   });
 
   const selectedDishId = searchParams.get("dish");
@@ -1557,7 +1592,7 @@ function AlertRulesPage() {
 
   const rulesQuery = useQuery({
     queryKey: ["prometheus-rules"],
-    queryFn: () => apiGet<PrometheusRuleListResponse>("/api/v1/prometheus/rules"),
+    queryFn: () => apiGet("/api/v1/prometheus/rules", prometheusRuleListResponseSchema),
   });
 
   const form = useForm<z.infer<typeof ruleSchema>>({
@@ -1590,21 +1625,23 @@ function AlertRulesPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof ruleSchema>) => {
-      const body = {
+      const body = prometheusRuleWriteRequestSchema.parse({
         alert: values.name,
         expr: values.expr,
         for: values.duration || undefined,
         labels: parseJsonObject(values.labels, "Labels"),
         annotations: parseJsonObject(values.annotations, "Annotations"),
-      };
+      });
       if (editingRule) {
         return apiPut(
           `/api/v1/prometheus/rules/${encodeURIComponent(values.name)}?group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+          prometheusRuleMutationResponseSchema,
           body,
         );
       }
       return apiPost(
         `/api/v1/prometheus/rules?rule_name=${encodeURIComponent(values.name)}&group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+        prometheusRuleMutationResponseSchema,
         body,
       );
     },
@@ -1621,6 +1658,7 @@ function AlertRulesPage() {
     mutationFn: (rule: PrometheusRule) =>
       apiDelete(
         `/api/v1/prometheus/rules/${encodeURIComponent(rule.name)}?group_name=${encodeURIComponent(rule.group)}&file_name=${encodeURIComponent(rule.crd || rule.file || "")}`,
+        prometheusRuleMutationResponseSchema,
       ),
     onSuccess: async () => {
       notify("success", "Alert rule deleted.");
@@ -1632,13 +1670,13 @@ function AlertRulesPage() {
   });
 
   const exportMutation = useMutation({
-    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/alert-rules/export"),
+    mutationFn: () => apiPost("/api/v1/repo-sync/alert-rules/export", repoSyncResponseSchema),
     onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const importMutation = useMutation({
-    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/alert-rules/import"),
+    mutationFn: () => apiPost("/api/v1/repo-sync/alert-rules/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
       setEditingRule(null);
@@ -1649,7 +1687,7 @@ function AlertRulesPage() {
   });
 
   const clearMutation = useMutation({
-    mutationFn: () => apiDelete<RepoSyncResponse>("/api/v1/repo-sync/alert-rules"),
+    mutationFn: () => apiDelete("/api/v1/repo-sync/alert-rules", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
       setEditingRule(null);
@@ -1818,7 +1856,7 @@ function GlobalCommunicationsPage() {
 
   const policyQuery = useQuery({
     queryKey: ["communications-policy"],
-    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+    queryFn: () => apiGet("/api/v1/communications/policy", communicationPolicyRecordSchema),
   });
 
   const form = useForm<z.infer<typeof communicationsPolicySchema>>({
@@ -1852,7 +1890,7 @@ function GlobalCommunicationsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof communicationsPolicySchema>) => {
-      return apiPut<CommunicationPolicyRecord>("/api/v1/communications/policy", {
+      const request = communicationPolicyUpdateRequestSchema.parse({
         routes: values.routes.map((route, index) => ({
           id: route.id || undefined,
           label: route.label,
@@ -1863,6 +1901,7 @@ function GlobalCommunicationsPage() {
           position: index + 1,
         })),
       });
+      return apiPut("/api/v1/communications/policy", communicationPolicyRecordSchema, request);
     },
     onSuccess: async () => {
       notify("success", "Global communications policy updated.");
@@ -2040,15 +2079,15 @@ function WorkflowsPage() {
 
   const recipesQuery = useQuery({
     queryKey: ["workflows"],
-    queryFn: () => apiGet<RecipeRecord[]>("/api/v1/recipes/?limit=200"),
+    queryFn: () => apiGet("/api/v1/recipes/?limit=200", recipeRecordArraySchema),
   });
   const actionsQuery = useQuery({
     queryKey: ["actions"],
-    queryFn: () => apiGet<IngredientRecord[]>("/api/v1/ingredients/?limit=500"),
+    queryFn: () => apiGet("/api/v1/ingredients/?limit=500", ingredientRecordArraySchema),
   });
   const policyQuery = useQuery({
     queryKey: ["communications-policy"],
-    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+    queryFn: () => apiGet("/api/v1/communications/policy", communicationPolicyRecordSchema),
   });
 
   const form = useForm<z.infer<typeof workflowSchema>>({
@@ -2173,9 +2212,13 @@ function WorkflowsPage() {
         })),
       };
       if (editingWorkflow) {
-        return apiPut<RecipeRecord>(`/api/v1/recipes/${editingWorkflow.id}`, payload);
+        return apiPut(
+          `/api/v1/recipes/${editingWorkflow.id}`,
+          recipeRecordSchema,
+          recipeUpdateRequestSchema.parse(payload),
+        );
       }
-      return apiPost<RecipeRecord>("/api/v1/recipes/", payload);
+      return apiPost("/api/v1/recipes/", recipeRecordSchema, recipeCreateRequestSchema.parse(payload));
     },
     onSuccess: async () => {
       notify("success", editingWorkflow ? "Workflow updated." : "Workflow created.");
@@ -2190,7 +2233,7 @@ function WorkflowsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (workflowId: number) => apiDelete<DeleteResponse>(`/api/v1/recipes/${workflowId}`),
+    mutationFn: (workflowId: number) => apiDelete(`/api/v1/recipes/${workflowId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Workflow deleted.");
       setEditingWorkflow(null);
@@ -2201,13 +2244,13 @@ function WorkflowsPage() {
   });
 
   const exportMutation = useMutation({
-    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/export"),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/export", repoSyncResponseSchema),
     onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const importMutation = useMutation({
-    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/import"),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
       setEditingWorkflow(null);
@@ -2221,7 +2264,7 @@ function WorkflowsPage() {
   });
 
   const clearMutation = useMutation({
-    mutationFn: () => apiDelete<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions"),
+    mutationFn: () => apiDelete("/api/v1/repo-sync/workflow-actions", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
       setEditingWorkflow(null);
@@ -2667,7 +2710,7 @@ function ActionsPage() {
 
   const actionsQuery = useQuery({
     queryKey: ["actions"],
-    queryFn: () => apiGet<IngredientRecord[]>("/api/v1/ingredients/?limit=500"),
+    queryFn: () => apiGet("/api/v1/ingredients/?limit=500", ingredientRecordArraySchema),
   });
 
   const form = useForm<z.infer<typeof actionSchema>>({
@@ -2760,9 +2803,17 @@ function ActionsPage() {
         on_failure: values.on_failure,
       };
       if (editingAction) {
-        return apiPut<IngredientRecord>(`/api/v1/ingredients/${editingAction.id}`, payload);
+        return apiPut(
+          `/api/v1/ingredients/${editingAction.id}`,
+          ingredientRecordSchema,
+          ingredientUpdateRequestSchema.parse(payload),
+        );
       }
-      return apiPost<IngredientRecord>("/api/v1/ingredients/", payload);
+      return apiPost(
+        "/api/v1/ingredients/",
+        ingredientRecordSchema,
+        ingredientCreateRequestSchema.parse(payload),
+      );
     },
     onSuccess: async () => {
       notify("success", editingAction ? "Action updated." : "Action created.");
@@ -2774,7 +2825,7 @@ function ActionsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (actionId: number) => apiDelete<DeleteResponse>(`/api/v1/ingredients/${actionId}`),
+    mutationFn: (actionId: number) => apiDelete(`/api/v1/ingredients/${actionId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Action deleted.");
       setEditingAction(null);
@@ -2785,13 +2836,13 @@ function ActionsPage() {
   });
 
   const exportMutation = useMutation({
-    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/export"),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/export", repoSyncResponseSchema),
     onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const importMutation = useMutation({
-    mutationFn: () => apiPost<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions/import"),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
       setEditingAction(null);
@@ -2805,7 +2856,7 @@ function ActionsPage() {
   });
 
   const clearMutation = useMutation({
-    mutationFn: () => apiDelete<RepoSyncResponse>("/api/v1/repo-sync/workflow-actions"),
+    mutationFn: () => apiDelete("/api/v1/repo-sync/workflow-actions", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
       setEditingAction(null);
@@ -3045,15 +3096,16 @@ function AccessPage() {
   const principalsQuery = useQuery({
     queryKey: ["auth-principals", provider, deferredSearch],
     queryFn: () =>
-      apiGet<AuthPrincipalRecord[]>(
+      apiGet(
         `/api/v1/auth/principals?limit=200${provider ? `&provider=${encodeURIComponent(provider)}` : ""}${deferredSearch ? `&search=${encodeURIComponent(deferredSearch)}` : ""}`,
+        authPrincipalRecordArraySchema,
       ),
     placeholderData: (previousData) => previousData,
     enabled: canManageAccess(principal),
   });
   const bindingsQuery = useQuery({
     queryKey: ["auth-bindings"],
-    queryFn: () => apiGet<AuthRoleBindingRecord[]>("/api/v1/auth/bindings"),
+    queryFn: () => apiGet("/api/v1/auth/bindings", authRoleBindingRecordArraySchema),
     enabled: canManageAccess(principal),
   });
 
@@ -3073,7 +3125,11 @@ function AccessPage() {
               role,
               principal_id: Number(selectedPrincipalId),
             };
-      return apiPost<AuthRoleBindingRecord>("/api/v1/auth/bindings", payload);
+      return apiPost(
+        "/api/v1/auth/bindings",
+        authRoleBindingRecordSchema,
+        authRoleBindingCreateRequestSchema.parse(payload),
+      );
     },
     onSuccess: async () => {
       notify("success", "Role binding created.");
@@ -3089,7 +3145,11 @@ function AccessPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, nextRole }: { id: number; nextRole: string }) =>
-      apiPatch<AuthRoleBindingRecord>(`/api/v1/auth/bindings/${id}`, { role: nextRole }),
+      apiPatch(
+        `/api/v1/auth/bindings/${id}`,
+        authRoleBindingRecordSchema,
+        authRoleBindingUpdateRequestSchema.parse({ role: nextRole }),
+      ),
     onSuccess: async () => {
       notify("success", "Role binding updated.");
       await queryClient.invalidateQueries({ queryKey: ["auth-bindings"] });
@@ -3098,7 +3158,7 @@ function AccessPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => apiDelete<DeleteResponse>(`/api/v1/auth/bindings/${id}`),
+    mutationFn: (id: number) => apiDelete(`/api/v1/auth/bindings/${id}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Role binding deleted.");
       await queryClient.invalidateQueries({ queryKey: ["auth-bindings"] });

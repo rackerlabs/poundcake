@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field
 from sqlalchemy import not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -52,6 +52,12 @@ logger = get_logger(__name__)
 
 REPO_SYNC_REQ_ID = "SYSTEM-REPO-SYNC"
 REPO_FILE_SUFFIXES = {".yaml", ".yml", ".json"}
+
+
+class BaseModel(PydanticBaseModel):
+    """Strict base model for repo-sync documents owned by PoundCake."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class RepoSyncError(RuntimeError):

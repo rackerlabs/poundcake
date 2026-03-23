@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.config import get_settings
 from api.core.http_client import request_with_retry
-from api.schemas.schemas import HealthResponse, ComponentHealth, StatsResponse
+from api.schemas.schemas import ComponentHealth, HealthResponse, LivenessResponse, StatsResponse
 from api.models.models import Order, Recipe, Dish
 from api.services.stackstorm_service import get_stackstorm_client
 from api.core.logging import get_logger
@@ -228,10 +228,10 @@ async def _build_health_response(db: AsyncSession) -> HealthResponse:
     )
 
 
-@router.get("/live")
-async def liveness_check() -> dict[str, str]:
+@router.get("/live", response_model=LivenessResponse)
+async def liveness_check() -> LivenessResponse:
     """Liveness endpoint for kubelet process checks."""
-    return {"status": "alive", "version": settings.app_version}
+    return LivenessResponse(status="alive", version=settings.app_version)
 
 
 @router.get("/ready", response_model=HealthResponse)

@@ -85,6 +85,171 @@ def _write_session(config_home: Path, base_url: str, payload: dict[str, Any]) ->
     return store
 
 
+def _ingredient_payload(
+    *,
+    ingredient_id: int,
+    execution_target: str,
+    task_key_template: str,
+    execution_engine: str = "stackstorm",
+    execution_purpose: str = "remediation",
+    destination_target: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": ingredient_id,
+        "execution_target": execution_target,
+        "destination_target": destination_target,
+        "task_key_template": task_key_template,
+        "execution_id": None,
+        "action_id": None,
+        "execution_payload": None,
+        "execution_parameters": None,
+        "execution_engine": execution_engine,
+        "execution_purpose": execution_purpose,
+        "ingredient_kind": execution_purpose,
+        "is_default": False,
+        "is_blocking": True,
+        "expected_duration_sec": 60,
+        "timeout_duration_sec": 300,
+        "retry_count": 0,
+        "retry_delay": 5,
+        "on_failure": "stop",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+        "deleted": False,
+        "deleted_at": None,
+    }
+
+
+def _recipe_payload(*, recipe_id: int, name: str) -> dict[str, Any]:
+    return {
+        "id": recipe_id,
+        "name": name,
+        "description": None,
+        "enabled": True,
+        "clear_timeout_sec": None,
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+        "deleted": False,
+        "deleted_at": None,
+        "recipe_ingredients": [],
+        "communications": {"mode": "inherit", "routes": []},
+    }
+
+
+def _dish_payload(
+    *, dish_id: int, recipe_id: int, recipe_name: str, order_id: int
+) -> dict[str, Any]:
+    return {
+        "id": dish_id,
+        "req_id": "req-1",
+        "order_id": order_id,
+        "recipe_id": recipe_id,
+        "recipe": _recipe_payload(recipe_id=recipe_id, name=recipe_name),
+        "execution_ref": "st2-1",
+        "execution_status": "running",
+        "processing_status": "processing",
+        "run_phase": "firing",
+        "expected_duration_sec": 60,
+        "actual_duration_sec": None,
+        "result": None,
+        "error_message": None,
+        "retry_attempt": 0,
+        "started_at": "2026-01-01T00:00:00+00:00",
+        "completed_at": None,
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:05:00+00:00",
+    }
+
+
+def _order_communication_payload(*, communication_id: int, order_id: int) -> dict[str, Any]:
+    return {
+        "id": communication_id,
+        "order_id": order_id,
+        "execution_target": "rackspace_core",
+        "destination_target": "",
+        "bakery_ticket_id": "T-1",
+        "bakery_operation_id": "op-1",
+        "lifecycle_state": "open",
+        "remote_state": "open",
+        "writable": True,
+        "reopenable": False,
+        "last_error": None,
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:05:00+00:00",
+    }
+
+
+def _order_payload(*, order_id: int, alert_group_name: str) -> dict[str, Any]:
+    return {
+        "id": order_id,
+        "req_id": "req-1",
+        "fingerprint": "fp-1",
+        "alert_status": "firing",
+        "alert_group_name": alert_group_name,
+        "processing_status": "processing",
+        "is_active": True,
+        "remediation_outcome": "pending",
+        "clear_timeout_sec": None,
+        "clear_deadline_at": None,
+        "clear_timed_out_at": None,
+        "auto_close_eligible": False,
+        "severity": "critical",
+        "instance": "node-1",
+        "counter": 1,
+        "bakery_ticket_id": None,
+        "bakery_operation_id": None,
+        "bakery_ticket_state": None,
+        "bakery_permanent_failure": False,
+        "bakery_last_error": None,
+        "bakery_comms_id": None,
+        "labels": {"alertname": "DiskFull"},
+        "annotations": None,
+        "raw_data": None,
+        "starts_at": "2026-01-01T00:00:00+00:00",
+        "ends_at": None,
+        "communications": [_order_communication_payload(communication_id=1, order_id=order_id)],
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:05:00+00:00",
+    }
+
+
+def _suppression_payload(
+    *, suppression_id: int, name: str, include_detail: bool = False
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": suppression_id,
+        "name": name,
+        "reason": "Patch window",
+        "scope": "matchers",
+        "status": "active",
+        "enabled": True,
+        "starts_at": "2026-01-01T00:00:00+00:00",
+        "ends_at": "2026-01-01T01:00:00+00:00",
+        "canceled_at": None,
+        "created_by": "cli-user",
+        "summary_ticket_enabled": True,
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:05:00+00:00",
+        "matchers": [{"label_key": "alertname", "operator": "eq", "value": "DiskFull"}],
+    }
+    if include_detail:
+        payload["counters"] = {
+            "suppression_id": suppression_id,
+            "total_suppressed": 4,
+            "by_alertname": {"DiskFull": 4},
+            "by_severity": {"critical": 4},
+            "first_seen_at": None,
+            "last_seen_at": None,
+        }
+        payload["summary"] = {
+            "state": "open",
+            "total_suppressed": 4,
+            "total_cleared": 0,
+            "total_still_firing": 0,
+        }
+    return payload
+
+
 def test_cli_is_packaged_as_console_application() -> None:
     pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
@@ -473,7 +638,6 @@ def test_auth_bindings_create_maps_payload(
         "binding_type": "group",
         "role": "operator",
         "external_group": "monitoring-operators",
-        "principal_id": None,
     }
     assert fake_api.requests[0]["cookies"] == {"session_token": "session-123"}
 
@@ -512,35 +676,62 @@ def test_overview_aggregates_existing_endpoints_in_table_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_api = FakeAPI()
-    fake_api.add_json("GET", "/api/v1/health", {"status": "healthy", "version": "2.0.142"})
+    fake_api.add_json(
+        "GET",
+        "/api/v1/health",
+        {
+            "status": "healthy",
+            "version": "2.0.142",
+            "instance_id": "poundcake-api-0",
+            "timestamp": "2026-01-01T00:00:00+00:00",
+            "components": {},
+        },
+    )
     fake_api.add_json(
         "GET",
         "/api/v1/stats",
-        {"total_alerts": 5, "recent_alerts": 2, "total_recipes": 3, "total_executions": 9},
+        {
+            "total_alerts": 5,
+            "recent_alerts": 2,
+            "total_recipes": 3,
+            "total_executions": 9,
+            "alerts_by_processing_status": {},
+            "alerts_by_alert_status": {},
+            "executions_by_status": {},
+        },
     )
     fake_api.add_json(
         "GET",
         "/api/v1/observability/overview",
-        {"failures": {"orders_failed": 1, "dishes_failed": 2}, "suppressions": {"active": 1}},
+        {
+            "health": {},
+            "queue": {},
+            "failures": {
+                "orders_failed": 1,
+                "dishes_failed": 2,
+                "top_errors": [],
+                "runbook_hints": [],
+            },
+            "bakery": {"summary_failures": 0, "order_dead_letters": 0},
+            "suppressions": {"active": 1, "retrying_operations": 0, "dead_letter": 0},
+        },
     )
     fake_api.add_json(
         "GET",
         "/api/v1/observability/activity",
-        [{"type": "incident", "title": "Disk Full", "status": "processing", "target_id": "7"}],
-    )
-    fake_api.add_json(
-        "GET",
-        "/api/v1/orders",
         [
             {
-                "id": 7,
-                "alert_group_name": "Disk Full",
-                "processing_status": "processing",
-                "alert_status": "firing",
-                "severity": "critical",
-                "communications": [],
+                "type": "incident",
+                "title": "Disk Full",
+                "status": "processing",
+                "target_kind": "order",
+                "target_id": "7",
+                "metadata": {},
             }
         ],
+    )
+    fake_api.add_json(
+        "GET", "/api/v1/orders", [_order_payload(order_id=7, alert_group_name="Disk Full")]
     )
     fake_api.add_json(
         "GET",
@@ -548,6 +739,8 @@ def test_overview_aggregates_existing_endpoints_in_table_mode(
         [
             {
                 "communication_id": "comm-1",
+                "reference_type": "incident",
+                "reference_id": "7",
                 "reference_name": "Disk Full",
                 "channel": "rackspace_core",
                 "lifecycle_state": "open",
@@ -556,16 +749,7 @@ def test_overview_aggregates_existing_endpoints_in_table_mode(
         ],
     )
     fake_api.add_json(
-        "GET",
-        "/api/v1/suppressions",
-        [
-            {
-                "id": 9,
-                "name": "Maintenance",
-                "status": "scheduled",
-                "ends_at": "2099-01-01T01:00:00+00:00",
-            }
-        ],
+        "GET", "/api/v1/suppressions", [_suppression_payload(suppression_id=9, name="Maintenance")]
     )
     monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
 
@@ -645,16 +829,11 @@ def test_legacy_alias_matches_canonical_actions_output(
         "GET",
         "/api/v1/ingredients/",
         [
-            {
-                "id": 1,
-                "task_key_template": "demo.action",
-                "execution_target": "stackstorm",
-                "destination_target": "",
-                "execution_engine": "stackstorm",
-                "execution_purpose": "remediation",
-                "is_blocking": True,
-                "updated_at": "2026-01-01T00:00:00+00:00",
-            }
+            _ingredient_payload(
+                ingredient_id=1,
+                execution_target="stackstorm",
+                task_key_template="demo.action",
+            )
         ],
     )
     monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
@@ -678,23 +857,39 @@ def test_workflows_create_builds_local_comms_payload(
     fake_api.add_json(
         "GET",
         "/api/v1/ingredients/42",
-        {
-            "id": 42,
-            "execution_engine": "stackstorm",
-            "execution_purpose": "remediation",
-        },
+        _ingredient_payload(
+            ingredient_id=42,
+            execution_target="stackstorm",
+            task_key_template="demo.action",
+        ),
     )
 
     def create_handler(request: dict[str, Any]) -> httpx.Response:
         body = dict(request["json"] or {})
+        recipe_id = 12
+        recipe_steps = []
+        for index, step in enumerate(body.get("recipe_ingredients") or [], start=1):
+            enriched_step = dict(step)
+            enriched_step["id"] = index
+            enriched_step["recipe_id"] = recipe_id
+            recipe_steps.append(enriched_step)
+        routes = []
+        for index, route in enumerate(body.get("communications", {}).get("routes") or [], start=1):
+            enriched_route = dict(route)
+            enriched_route["id"] = f"route-{index}"
+            routes.append(enriched_route)
         body.update(
             {
-                "id": 12,
+                "id": recipe_id,
                 "created_at": "2026-01-01T00:00:00+00:00",
                 "updated_at": "2026-01-01T00:00:00+00:00",
                 "deleted": False,
                 "deleted_at": None,
-                "communications": body["communications"],
+                "recipe_ingredients": recipe_steps,
+                "communications": {
+                    "mode": body["communications"]["mode"],
+                    "routes": routes,
+                },
             }
         )
         return httpx.Response(
@@ -736,11 +931,13 @@ def test_workflows_reject_managed_communication_actions(
     fake_api.add_json(
         "GET",
         "/api/v1/ingredients/99",
-        {
-            "id": 99,
-            "execution_engine": "bakery",
-            "execution_purpose": "comms",
-        },
+        _ingredient_payload(
+            ingredient_id=99,
+            execution_target="rackspace_core",
+            task_key_template="bakery.ticket",
+            execution_engine="bakery",
+            execution_purpose="comms",
+        ),
     )
     monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
 
@@ -770,7 +967,18 @@ def test_global_communications_set_uses_existing_policy_endpoint(
 
     def put_handler(request: dict[str, Any]) -> httpx.Response:
         body = dict(request["json"] or {})
-        body.update({"configured": True, "lifecycle_summary": {"open": "open on escalation"}})
+        routes = []
+        for index, route in enumerate(body.get("routes") or [], start=1):
+            enriched_route = dict(route)
+            enriched_route["id"] = f"route-{index}"
+            routes.append(enriched_route)
+        body.update(
+            {
+                "configured": True,
+                "routes": routes,
+                "lifecycle_summary": {"open": "open on escalation"},
+            }
+        )
         return httpx.Response(
             200, json=body, request=httpx.Request(request["method"], request["url"])
         )
@@ -788,7 +996,7 @@ def test_global_communications_set_uses_existing_policy_endpoint(
             "global-communications",
             "set",
             "--route-json",
-            '{"label":"Core","execution_target":"rackspace_core"}',
+            '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"1781738"}}',
             "--route-json",
             '{"label":"Discord","execution_target":"discord","destination_target":"ops-alerts"}',
         ],
@@ -804,7 +1012,11 @@ def test_alert_rules_create_merges_json_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_api = FakeAPI()
-    fake_api.add_json("POST", "/api/v1/prometheus/rules", {"status": "ok"})
+    fake_api.add_json(
+        "POST",
+        "/api/v1/prometheus/rules",
+        {"status": "ok", "message": "Rule created"},
+    )
     monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
 
     result = runner.invoke(
@@ -900,33 +1112,7 @@ def test_incidents_get_renders_detail_sections(
     fake_api.add_json(
         "GET",
         "/api/v1/orders/7",
-        {
-            "id": 7,
-            "alert_group_name": "Disk Full",
-            "processing_status": "processing",
-            "alert_status": "firing",
-            "severity": "critical",
-            "instance": "node-1",
-            "req_id": "req-1",
-            "counter": 1,
-            "remediation_outcome": "pending",
-            "auto_close_eligible": False,
-            "starts_at": "2026-01-01T00:00:00+00:00",
-            "ends_at": None,
-            "updated_at": "2026-01-01T00:05:00+00:00",
-            "communications": [
-                {
-                    "id": 1,
-                    "execution_target": "rackspace_core",
-                    "destination_target": "",
-                    "bakery_ticket_id": "T-1",
-                    "bakery_operation_id": "op-1",
-                    "lifecycle_state": "open",
-                    "writable": True,
-                    "reopenable": False,
-                }
-            ],
-        },
+        _order_payload(order_id=7, alert_group_name="Disk Full"),
     )
     monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
 
@@ -980,25 +1166,7 @@ def test_activity_get_scans_dishes_endpoint(
     fake_api.add_json(
         "GET",
         "/api/v1/dishes",
-        [
-            {
-                "id": 5,
-                "recipe_id": 2,
-                "recipe": {"name": "Filesystem"},
-                "order_id": 7,
-                "run_phase": "firing",
-                "processing_status": "processing",
-                "execution_status": "running",
-                "execution_ref": "st2-1",
-                "retry_attempt": 0,
-                "expected_duration_sec": 60,
-                "actual_duration_sec": None,
-                "started_at": "2026-01-01T00:00:00+00:00",
-                "completed_at": None,
-                "updated_at": "2026-01-01T00:05:00+00:00",
-                "error_message": None,
-            }
-        ],
+        [_dish_payload(dish_id=5, recipe_id=2, recipe_name="Filesystem", order_id=7)],
     )
     monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
 
@@ -1017,26 +1185,7 @@ def test_suppressions_get_renders_summary_when_present(
     fake_api.add_json(
         "GET",
         "/api/v1/suppressions/13",
-        {
-            "id": 13,
-            "name": "Maintenance",
-            "status": "active",
-            "scope": "matchers",
-            "enabled": True,
-            "starts_at": "2026-01-01T00:00:00+00:00",
-            "ends_at": "2026-01-01T01:00:00+00:00",
-            "reason": "Patch window",
-            "created_by": "cli-user",
-            "summary_ticket_enabled": True,
-            "matchers": [{"label_key": "alertname", "operator": "eq", "value": "DiskFull"}],
-            "counters": {
-                "suppression_id": 13,
-                "total_suppressed": 4,
-                "by_alertname": {"DiskFull": 4},
-                "by_severity": {"critical": 4},
-            },
-            "summary": {"state": "open", "total_suppressed": 4},
-        },
+        _suppression_payload(suppression_id=13, name="Maintenance", include_detail=True),
     )
     monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
 

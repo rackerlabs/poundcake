@@ -27,6 +27,7 @@ from api.schemas.schemas import (
     DishUpdate,
     DishDetailResponse,
     DishIngredientBulkUpsert,
+    DishIngredientBulkUpsertResponse,
     DishIngredientResponse,
 )
 from api.schemas.query_params import DishQueryParams, validate_query_params
@@ -208,13 +209,13 @@ async def claim_dish_for_finalize(
     return dish
 
 
-@router.post("/dishes/{dish_id}/ingredients/bulk")
+@router.post("/dishes/{dish_id}/ingredients/bulk", response_model=DishIngredientBulkUpsertResponse)
 async def upsert_dish_ingredients(
     request: Request,
     dish_id: int,
     payload: DishIngredientBulkUpsert,
     db: AsyncSession = Depends(get_db),
-):
+) -> DishIngredientBulkUpsertResponse:
     """Upsert dish ingredient executions for a dish."""
     req_id = request.state.req_id
 
@@ -339,7 +340,7 @@ async def upsert_dish_ingredients(
             "updated_count": updated,
         },
     )
-    return {"created": created, "updated": updated}
+    return DishIngredientBulkUpsertResponse(created=created, updated=updated)
 
 
 @router.get("/dishes/{dish_id}/ingredients", response_model=List[DishIngredientResponse])

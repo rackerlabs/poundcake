@@ -24,7 +24,7 @@ Make sure you have:
 
 - a Bakery URL reachable from the PoundCake environment, for example `https://bakery.example.com`
 - a shared HMAC secret value that both environments will use
-- the release version you want to deploy
+- the image tag or digest values you plan to deploy
 - image pull auth configured if you deploy private GHCR images
 - provider credentials ready for the Bakery side if you are enabling a real ticketing provider
 
@@ -33,12 +33,13 @@ Important notes:
 - Do not enable shared DB mode across environments. When Bakery is remote, PoundCake should keep its own database resources.
 - The Kubernetes secret names do not have to match across environments, but the HMAC key material must match.
 - `GET /api/v1/health` is open on Bakery, so you can test reachability before wiring PoundCake to it.
+- Helm chart version is resolved by the installers from `/etc/genestack/helm-chart-versions.yaml` by default.
+- Image repositories/tags/digests must be configured in values files or override files, not installer env vars.
 
-Set the shared values once so both installs use the same URL, version, and HMAC key:
+Set the shared values once so both installs use the same URL and HMAC key:
 
 ```bash
 export BAKERY_URL=https://bakery.example.com
-export POUNDCAKE_VERSION=<version>
 export SHARED_BAKERY_HMAC_KEY='<shared-hmac-key>'
 ```
 
@@ -50,10 +51,9 @@ export SHARED_BAKERY_HMAC_KEY="$(openssl rand -base64 32)"
 
 ## Step 1: Install Bakery In The Bakery Environment
 
-Choose the HMAC key that PoundCake will use later:
+Set the HMAC key that PoundCake will use later:
 
 ```bash
-export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY_ID=active
 export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY="${SHARED_BAKERY_HMAC_KEY}"
 ```
 
@@ -61,7 +61,6 @@ Install Bakery and store that key in a named Bakery auth secret:
 
 ```bash
 export POUNDCAKE_NAMESPACE=bakery
-export POUNDCAKE_BAKERY_IMAGE_TAG="${POUNDCAKE_VERSION}"
 
 ./install/install-bakery-helm.sh \
   --bakery-auth-secret-name bakery-hmac \
@@ -88,14 +87,11 @@ Use the same HMAC key on the PoundCake side and let the PoundCake installer crea
 
 ```bash
 export POUNDCAKE_NAMESPACE=poundcake
-export POUNDCAKE_IMAGE_TAG="${POUNDCAKE_VERSION}"
-export POUNDCAKE_UI_IMAGE_TAG="${POUNDCAKE_VERSION}"
 
 ./install/install-poundcake-helm.sh \
   --remote-bakery-url "${BAKERY_URL}" \
   --remote-bakery-auth-mode hmac \
   --remote-bakery-auth-secret bakery-hmac \
-  --remote-bakery-hmac-key-id active \
   --remote-bakery-hmac-key "${SHARED_BAKERY_HMAC_KEY}"
 ```
 
@@ -106,6 +102,9 @@ What this does:
 - creates the `bakery-hmac` secret in the PoundCake namespace if it does not already exist
 - wires `bakery.client.auth.existingSecret=bakery-hmac`
 - leaves PoundCake in normal embedded DB mode unless you explicitly override it
+
+Before running those commands, ensure the image refs for each environment are pinned in your values or override files.
+Typical override path: `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`.
 
 ## Repeat Installs And Upgrades
 

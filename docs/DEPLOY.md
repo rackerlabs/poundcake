@@ -67,15 +67,16 @@ Non-interactive Bakery secret create/update:
   --bakery-rackspace-password '<new-password>'
 ```
 
-Bakery install with explicit image pin and existing pull secret:
+Bakery install with image refs pinned in values/override files and an existing pull secret:
 
 ```bash
-POUNDCAKE_BAKERY_IMAGE_TAG=2.0.96 \
 POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
 POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true \
 POUNDCAKE_IMAGE_PULL_SECRET_NAME=ghcr-creds \
 ./helm/bin/install-bakery.sh
 ```
+
+Image repositories/tags/digests must be configured in Helm values or override files such as `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`, not installer env vars.
 
 Optional environment defaults for fork/private registry/local chart workflows:
 

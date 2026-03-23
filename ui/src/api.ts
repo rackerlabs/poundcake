@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export class ApiError extends Error {
   status: number;
   body: unknown;
@@ -21,6 +23,7 @@ function redirectToLogin(): void {
 
 export async function apiFetch<T>(
   path: string,
+  schema: z.ZodType<T>,
   init: RequestInit = {},
   options: { allowUnauthorized?: boolean } = {},
 ): Promise<T> {
@@ -51,34 +54,34 @@ export async function apiFetch<T>(
     throw new ApiError(detail || `Request failed (${response.status})`, response.status, body);
   }
 
-  return body as T;
+  return schema.parse(body);
 }
 
-export function apiGet<T>(path: string): Promise<T> {
-  return apiFetch<T>(path);
+export function apiGet<T>(path: string, schema: z.ZodType<T>): Promise<T> {
+  return apiFetch<T>(path, schema);
 }
 
-export function apiPost<T>(path: string, body?: unknown): Promise<T> {
-  return apiFetch<T>(path, {
+export function apiPost<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promise<T> {
+  return apiFetch<T>(path, schema, {
     method: "POST",
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
-export function apiPut<T>(path: string, body: unknown): Promise<T> {
-  return apiFetch<T>(path, {
+export function apiPut<T>(path: string, schema: z.ZodType<T>, body: unknown): Promise<T> {
+  return apiFetch<T>(path, schema, {
     method: "PUT",
     body: JSON.stringify(body),
   });
 }
 
-export function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  return apiFetch<T>(path, {
+export function apiPatch<T>(path: string, schema: z.ZodType<T>, body: unknown): Promise<T> {
+  return apiFetch<T>(path, schema, {
     method: "PATCH",
     body: JSON.stringify(body),
   });
 }
 
-export function apiDelete<T>(path: string): Promise<T> {
-  return apiFetch<T>(path, { method: "DELETE" });
+export function apiDelete<T>(path: string, schema: z.ZodType<T>): Promise<T> {
+  return apiFetch<T>(path, schema, { method: "DELETE" });
 }

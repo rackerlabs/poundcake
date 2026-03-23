@@ -365,8 +365,6 @@ export SHARED_BAKERY_HMAC_KEY="$(openssl rand -base64 32)"
 
 # Bakery environment
 export POUNDCAKE_NAMESPACE=bakery
-export POUNDCAKE_BAKERY_IMAGE_TAG=<version>
-export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY_ID=active
 export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY="${SHARED_BAKERY_HMAC_KEY}"
 
 ./install/install-bakery-helm.sh \
@@ -377,18 +375,15 @@ export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY="${SHARED_BAKERY_HMAC_KEY}"
 
 # PoundCake environment
 export POUNDCAKE_NAMESPACE=poundcake
-export POUNDCAKE_IMAGE_TAG=<version>
-export POUNDCAKE_UI_IMAGE_TAG=<version>
 
 ./install/install-poundcake-helm.sh \
   --remote-bakery-url https://bakery.example.com \
   --remote-bakery-auth-mode hmac \
   --remote-bakery-auth-secret bakery-hmac \
-  --remote-bakery-hmac-key-id active \
   --remote-bakery-hmac-key "${SHARED_BAKERY_HMAC_KEY}"
 ```
 
-That first PoundCake install lets the installer create the local client secret. For the full split-environment flow, including rerun behavior and validation, see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
+The installers resolve chart version from `/etc/genestack/helm-chart-versions.yaml` by default. Configure image repositories/tags/digests in Helm values or override files such as `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`, not installer env vars. That first PoundCake install lets the installer create the local client secret. For the full split-environment flow, including rerun behavior and validation, see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
 
 #### Installer Command Reference
 
@@ -434,7 +429,7 @@ Installer flags:
 - PoundCake installer auto-discovers the colocated Bakery HMAC secret; external remote Bakery can use either an existing `--remote-bakery-auth-secret` or `--remote-bakery-hmac-key` so the installer creates one
 - Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
 - Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
-- For repeatable Bakery deploys, prefer `POUNDCAKE_BAKERY_IMAGE_DIGEST` (or `POUNDCAKE_IMAGE_DIGEST` fallback) and ensure image pull auth is configured (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET` or existing pull secret via `POUNDCAKE_IMAGE_PULL_SECRET_NAME`)
+- Configure image repositories/tags/digests in values or override files; the installers no longer accept image env vars for these settings
 - Split-environment quick start: see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md)
 
 Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
@@ -464,10 +459,7 @@ Chart value controls:
 
 Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
 
-- Ensure image pin is explicit via either:
-  - `POUNDCAKE_IMAGE_REPO:POUNDCAKE_IMAGE_TAG`, or
-  - `POUNDCAKE_IMAGE_REPO@POUNDCAKE_IMAGE_DIGEST`
-- Bakery precedence is `POUNDCAKE_BAKERY_IMAGE_DIGEST` -> `POUNDCAKE_BAKERY_IMAGE_TAG` -> chart defaults, with `POUNDCAKE_IMAGE_DIGEST` used when Bakery digest is unset.
+- Ensure image pins are explicit in your values or override files (`poundcakeImage.*`, `uiImage.*`, `bakery.image.*`, `stackstormImage.*`).
 - Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
 - Ensure PAT has `read:packages` and package visibility grants access
 - Verify pull secret is on a PoundCake pod:

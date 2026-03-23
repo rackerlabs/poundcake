@@ -13,18 +13,7 @@ HELM_ATOMIC="${POUNDCAKE_HELM_ATOMIC:-false}"
 HELM_CLEANUP_ON_FAIL="${POUNDCAKE_HELM_CLEANUP_ON_FAIL:-false}"
 ALLOW_HOOK_WAIT="${POUNDCAKE_ALLOW_HOOK_WAIT:-false}"
 
-GHCR_OWNER="${POUNDCAKE_GHCR_OWNER:-rackerlabs}"
 CHART_REPO="${POUNDCAKE_CHART_REPO:-}"
-POUNDCAKE_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
-POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-}"
-POUNDCAKE_IMAGE_DIGEST="${POUNDCAKE_IMAGE_DIGEST:-}"
-STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
-STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
-UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
-UI_IMAGE_TAG="${POUNDCAKE_UI_IMAGE_TAG:-}"
-BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-}"
-BAKERY_IMAGE_TAG="${POUNDCAKE_BAKERY_IMAGE_TAG:-${POUNDCAKE_IMAGE_TAG:-}}"
-BAKERY_IMAGE_DIGEST="${POUNDCAKE_BAKERY_IMAGE_DIGEST:-}"
 REMOTE_BAKERY_ENABLED="${POUNDCAKE_REMOTE_BAKERY_ENABLED:-}"
 REMOTE_BAKERY_URL="${POUNDCAKE_REMOTE_BAKERY_URL:-}"
 REMOTE_BAKERY_AUTH_MODE="${POUNDCAKE_REMOTE_BAKERY_AUTH_MODE:-hmac}"
@@ -142,7 +131,6 @@ Installer options:
   --shared-db-server-name <name>     Shared MariaDB server/service name for PoundCake DB resources
 
 Environment overrides:
-  POUNDCAKE_GHCR_OWNER             (default: rackerlabs)
   POUNDCAKE_CHART_REPO             (default: local chart at ./helm)
   POUNDCAKE_CHART_VERSION          (optional; for OCI repo installs)
   POUNDCAKE_VERSION_FILE           (optional; explicit chart versions file)
@@ -154,14 +142,6 @@ Environment overrides:
   POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR (optional; overlay path guard)
   POUNDCAKE_INSTALL_DEBUG         (default: false; same as --debug)
   POUNDCAKE_HELM_VALIDATE          (default: false; same as --validate)
-  POUNDCAKE_IMAGE_REPO             (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake)
-  POUNDCAKE_IMAGE_TAG              (optional; required when digest unset)
-  POUNDCAKE_IMAGE_DIGEST           (optional; sha256:...; required when tag unset)
-  POUNDCAKE_BAKERY_IMAGE_REPO      (optional; sets bakery.image.repository)
-  POUNDCAKE_BAKERY_IMAGE_TAG       (optional; sets bakery.image.tag when digest unset)
-  POUNDCAKE_BAKERY_IMAGE_DIGEST    (optional; sha256:...; sets bakery.image.digest)
-  POUNDCAKE_UI_IMAGE_REPO          (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake-ui; sets uiImage.repository)
-  POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
   POUNDCAKE_REMOTE_BAKERY_ENABLED  (optional; defaults to auto based on discovered/explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_URL      (optional; explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
@@ -206,6 +186,11 @@ Environment overrides:
   POUNDCAKE_HELM_ATOMIC            (default: false)
   POUNDCAKE_HELM_CLEANUP_ON_FAIL   (default: false)
 
+Image repositories/tags/digests:
+  - Configure these in Helm values files or override files only.
+  - Default override path: /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+  - Image env vars and image --set overrides are intentionally not supported.
+
 Examples:
   ./install/install-poundcake-helm.sh
   ./install/install-poundcake-helm.sh --validate
@@ -214,6 +199,70 @@ Examples:
   ./install/install-poundcake-helm.sh --shared-db-mode on --shared-db-server-name bakery-pc-bakery-mariadb
   ./install/install-poundcake-helm.sh --skip-preflight -f /path/to/values.yaml
 USAGE_EOF
+}
+
+validate_image_env_inputs() {
+  local deprecated_image_envs=()
+  local env_name=""
+
+  for env_name in \
+    POUNDCAKE_GHCR_OWNER \
+    POUNDCAKE_IMAGE_REPO \
+    POUNDCAKE_IMAGE_TAG \
+    POUNDCAKE_IMAGE_DIGEST \
+    POUNDCAKE_BAKERY_IMAGE_REPO \
+    POUNDCAKE_BAKERY_IMAGE_TAG \
+    POUNDCAKE_BAKERY_IMAGE_DIGEST \
+    POUNDCAKE_UI_IMAGE_REPO \
+    POUNDCAKE_UI_IMAGE_TAG \
+    POUNDCAKE_STACKSTORM_IMAGE_REPO \
+    POUNDCAKE_STACKSTORM_IMAGE_TAG
+  do
+    if [[ -n "${!env_name:-}" ]]; then
+      deprecated_image_envs+=("${env_name}")
+    fi
+  done
+
+  if (( ${#deprecated_image_envs[@]} > 0 )); then
+    log_error "Image environment variables are no longer supported by the Helm installers: ${deprecated_image_envs[*]}"
+    log_error "Configure image repositories/tags/digests in values files or override files instead."
+    log_error "Default override path: /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml"
+    exit 1
+  fi
+}
+
+reject_image_override_args() {
+  local arg=""
+  local next_is_set_payload="false"
+
+  for arg in "$@"; do
+    if [[ "${next_is_set_payload}" == "true" ]]; then
+      next_is_set_payload="false"
+      case "${arg}" in
+        poundcakeImage.*=*|uiImage.*=*|stackstormImage.*=*|bakery.image.*=*)
+          log_error "Image --set overrides are not supported by the Helm installers."
+          log_error "Configure image repositories/tags/digests in values files or override files instead."
+          exit 1
+          ;;
+      esac
+      continue
+    fi
+
+    case "${arg}" in
+      --set|--set-string|--set-json|--set-literal|--set-file)
+        next_is_set_payload="true"
+        ;;
+      --set=*|--set-string=*|--set-json=*|--set-literal=*|--set-file=*)
+        case "${arg}" in
+          *poundcakeImage.*=*|*uiImage.*=*|*stackstormImage.*=*|*bakery.image.*=*)
+            log_error "Image --set overrides are not supported by the Helm installers."
+            log_error "Configure image repositories/tags/digests in values files or override files instead."
+            exit 1
+            ;;
+        esac
+        ;;
+    esac
+  done
 }
 
 check_dependencies() {
@@ -954,33 +1003,6 @@ rotate_chart_secrets() {
   done
 }
 
-validate_image_pin_input() {
-  if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-    log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
-    exit 1
-  fi
-  if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]] && [[ ! "${POUNDCAKE_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    log_error "POUNDCAKE_IMAGE_DIGEST must match sha256:<64-hex>."
-    exit 1
-  fi
-  if [[ -n "${BAKERY_IMAGE_TAG}" && -n "${BAKERY_IMAGE_DIGEST}" ]] \
-    && [[ "${BAKERY_IMAGE_TAG}" != "${POUNDCAKE_IMAGE_TAG}" || -z "${POUNDCAKE_IMAGE_TAG}" ]]; then
-    log_error "Set only one of POUNDCAKE_BAKERY_IMAGE_TAG or POUNDCAKE_BAKERY_IMAGE_DIGEST."
-    exit 1
-  fi
-  if [[ -n "${BAKERY_IMAGE_DIGEST}" ]] && [[ ! "${BAKERY_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    log_error "POUNDCAKE_BAKERY_IMAGE_DIGEST must match sha256:<64-hex>."
-    exit 1
-  fi
-  if [[ "${INSTALL_PROFILE}" == "bakery" && -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-    return
-  fi
-  if [[ -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-    log_error "Image pin required: set POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
-    exit 1
-  fi
-}
-
 verify_rendered_endpoint_contract() {
   local rendered_manifest="$1"
   local expected_pack_sync_endpoint="$2"
@@ -1169,6 +1191,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if (( ${#EXTRA_ARGS[@]} > 0 )); then
+  reject_image_override_args "${EXTRA_ARGS[@]}"
+fi
+
 if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" && "${OPERATOR_MODE}" != "skip" ]]; then
   log_error "Invalid operators mode '${OPERATOR_MODE}'. Valid values: install-missing, verify, skip."
   exit 1
@@ -1190,14 +1216,12 @@ log_info "Installer profile: ${INSTALL_PROFILE}"
 log_info "Installer options: operators_mode=${OPERATOR_MODE}, shared_db_mode=${SHARED_DB_MODE}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
+validate_image_env_inputs
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
   perform_preflight_checks
 else
   log_info "Skipping preflight checks (--skip-preflight)."
 fi
-
-log_phase "image pin validation"
-validate_image_pin_input
 
 if [[ "${CREATE_IMAGE_PULL_SECRET}" == "true" ]] && ! command -v kubectl >/dev/null 2>&1; then
   log_error "kubectl is required when POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true."
@@ -1292,9 +1316,6 @@ INSTALLER_SET_ARGS=(
   --set "poundcake.enabled=true"
   --set "bakery.enabled=false"
   --set "bakery.worker.enabled=false"
-  --set-string "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
-  --set-string "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
-  --set-string "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
   --set-string "stackstormPackSync.endpoint=${PACK_SYNC_ENDPOINT}"
   --set "bakery.client.enabled=${RESOLVED_BAKERY_CLIENT_ENABLED}"
   --set-string "bakery.client.auth.mode=${REMOTE_BAKERY_AUTH_MODE}"
@@ -1320,36 +1341,9 @@ else
   INSTALLER_SET_ARGS+=(--set "database.mode=embedded")
 fi
 
-if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.tag=")
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.digest=${POUNDCAKE_IMAGE_DIGEST}")
-else
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.tag=${POUNDCAKE_IMAGE_TAG}")
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.digest=")
-fi
-
-EFFECTIVE_BAKERY_IMAGE_DIGEST="${BAKERY_IMAGE_DIGEST:-${POUNDCAKE_IMAGE_DIGEST:-}}"
-
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.pullSecrets[0]=${IMAGE_PULL_SECRET_NAME}")
   INSTALLER_SET_ARGS+=(--set-string "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
-fi
-
-if [[ -n "${UI_IMAGE_REPO}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "uiImage.repository=${UI_IMAGE_REPO}")
-fi
-if [[ -n "${UI_IMAGE_TAG}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "uiImage.tag=${UI_IMAGE_TAG}")
-fi
-if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.repository=${BAKERY_IMAGE_REPO}")
-fi
-if [[ -n "${EFFECTIVE_BAKERY_IMAGE_DIGEST}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.digest=${EFFECTIVE_BAKERY_IMAGE_DIGEST}")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=")
-elif [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.digest=")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=${BAKERY_IMAGE_TAG}")
 fi
 COMMON_HELM_ARGS=(
   --namespace "${NAMESPACE}"
@@ -1482,30 +1476,8 @@ log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
   log_info "Chart version: ${CHART_VERSION:-"(not set)"}"
 fi
-if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-  log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}@${POUNDCAKE_IMAGE_DIGEST}"
-else
-  log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
-fi
+log_info "Image refs: values files / override files"
 log_info "Pack sync endpoint: ${PACK_SYNC_ENDPOINT}"
-if [[ -n "${UI_IMAGE_REPO}" ]]; then
-  log_info "UI image repo override: ${UI_IMAGE_REPO}"
-fi
-if [[ -n "${UI_IMAGE_TAG}" ]]; then
-  log_info "UI image tag override: ${UI_IMAGE_TAG}"
-fi
-if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
-  log_info "Bakery image repo override: ${BAKERY_IMAGE_REPO}"
-fi
-if [[ -n "${EFFECTIVE_BAKERY_IMAGE_DIGEST}" ]]; then
-  if [[ -n "${BAKERY_IMAGE_DIGEST}" ]]; then
-    log_info "Bakery image digest override: ${BAKERY_IMAGE_DIGEST}"
-  else
-    log_info "Bakery image digest override: ${POUNDCAKE_IMAGE_DIGEST} (from POUNDCAKE_IMAGE_DIGEST)"
-  fi
-elif [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
-  log_info "Bakery image tag override: ${BAKERY_IMAGE_TAG}"
-fi
 log_info "Bakery client enabled: ${RESOLVED_BAKERY_CLIENT_ENABLED}"
 if [[ -n "${RESOLVED_BAKERY_URL}" ]]; then
   log_info "Bakery client URL: ${RESOLVED_BAKERY_URL}"

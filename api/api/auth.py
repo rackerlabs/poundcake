@@ -21,6 +21,7 @@ from api.core.database import get_db
 from api.core.logging import get_logger
 from api.schemas.schemas import (
     AuthLoginRequest,
+    AuthLogoutResponse,
     AuthMeResponse,
     AuthPrincipalResponse,
     AuthProviderResponse,
@@ -379,16 +380,16 @@ async def auth_me(
     )
 
 
-@router.post("/auth/logout")
+@router.post("/auth/logout", response_model=AuthLogoutResponse)
 async def logout(
     request: Request,
     response: Response,
-) -> dict[str, str]:
+) -> AuthLogoutResponse:
     """Destroy the current session."""
     session_token = request.cookies.get("session_token")
     await get_session_store().delete_session(session_token)
     _clear_session_cookie(response)
-    return {"message": "Logged out successfully"}
+    return AuthLogoutResponse(message="Logged out successfully")
 
 
 @router.get("/auth/oidc/login")

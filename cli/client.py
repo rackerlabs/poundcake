@@ -3,12 +3,53 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, Optional, TypeVar, cast
 
 import httpx
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from api.schemas.schemas import (
+    AuthLoginRequest,
+    AuthMeResponse,
+    AuthPrincipalResponse,
+    AuthProviderResponse,
+    AuthRoleBindingCreate,
+    AuthRoleBindingResponse,
+    AuthRoleBindingUpdate,
+    CommunicationActivityRecord,
+    CommunicationPolicyResponse,
+    CommunicationPolicyUpdate,
+    DeleteResponse,
+    DeviceAuthorizationPollRequest,
+    DeviceAuthorizationPollResponse,
+    DeviceAuthorizationStartRequest,
+    DeviceAuthorizationStartResponse,
+    DishDetailResponse,
+    HealthResponse,
+    IncidentTimelineResponse,
+    IngredientCreate,
+    IngredientResponse,
+    IngredientUpdate,
+    ObservabilityActivityRecord,
+    ObservabilityOverviewResponse,
+    OrderResponse,
+    PrometheusRuleListResponse,
+    PrometheusRuleMutationResponse,
+    PrometheusRuleWriteRequest,
+    RecipeCreate,
+    RecipeDetailResponse,
+    RecipeUpdate,
+    SessionResponse,
+    SettingsResponse,
+    StatsResponse,
+    SuppressionCreate,
+    SuppressionDetailResponse,
+    SuppressionResponse,
+)
 from api.core.http_client import request_with_retry_sync
 from cli.session import SessionStore, StoredSession
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class PoundCakeClientError(RuntimeError):
@@ -124,6 +165,38 @@ class PoundCakeClient:
             return response.json()
         return response.text
 
+    def _validate_model(self, payload: Any, model: type[ModelT], context: str) -> ModelT:
+        try:
+            return model.model_validate(payload)
+        except ValidationError as exc:
+            raise PoundCakeClientError(f"{context}: {exc}") from exc
+
+    def _validate_model_dump(
+        self, payload: Any, model: type[ModelT], context: str
+    ) -> dict[str, Any]:
+        validated = self._validate_model(payload, model, context)
+        return cast(dict[str, Any], validated.model_dump(mode="json", by_alias=True))
+
+    def _validate_list_dump(
+        self, payload: Any, item_model: type[ModelT], context: str
+    ) -> list[dict[str, Any]]:
+        if not isinstance(payload, list):
+            raise PoundCakeClientError(context)
+        validated: list[dict[str, Any]] = []
+        for item in payload:
+            model = self._validate_model(item, item_model, context)
+            validated.append(cast(dict[str, Any], model.model_dump(mode="json", by_alias=True)))
+        return validated
+
+    def _validate_request_payload(
+        self, payload: dict[str, Any], model: type[ModelT], context: str
+    ) -> dict[str, Any]:
+        validated = self._validate_model(payload, model, context)
+        return cast(
+            dict[str, Any],
+            validated.model_dump(mode="json", by_alias=True, exclude_none=True, exclude_unset=True),
+        )
+
     def _request(
         self,
         method: str,
@@ -160,20 +233,19 @@ class PoundCakeClient:
         self.session = None
 
     def _store_login_payload(self, payload: Any) -> LoginResult:
-        if not isinstance(payload, dict):
-            raise PoundCakeClientError("Unexpected login response format")
+        validated = self._validate_model(
+            payload, SessionResponse, "Unexpected login response format"
+        )
         result = LoginResult(
-            session_id=str(payload["session_id"]),
-            username=str(payload["username"]),
-            expires_at=str(payload["expires_at"]),
-            provider=str(payload["provider"]),
-            role=str(payload["role"]),
-            display_name=(
-                None if payload.get("display_name") is None else str(payload.get("display_name"))
-            ),
-            is_superuser=bool(payload.get("is_superuser")),
-            permissions=[str(item) for item in payload.get("permissions") or []] or None,
-            token_type=str(payload.get("token_type") or "Bearer"),
+            session_id=str(validated.session_id),
+            username=str(validated.username),
+            expires_at=str(validated.expires_at),
+            provider=str(validated.provider),
+            role=str(validated.role),
+            display_name=(None if validated.display_name is None else str(validated.display_name)),
+            is_superuser=bool(validated.is_superuser),
+            permissions=[str(item) for item in validated.permissions] or None,
+            token_type=str(validated.token_type or "Bearer"),
         )
         session = StoredSession(
             session_id=result.session_id,
@@ -191,13 +263,21 @@ class PoundCakeClient:
 
     def login(self, provider: str, username: str, password: str) -> LoginResult:
         """Authenticate with username/password and persist the session locally."""
+        request_payload = self._validate_request_payload(
+            {"provider": provider, "username": username, "password": password},
+            AuthLoginRequest,
+            "Invalid login request payload",
+        )
         payload = self._request(
             "POST",
             "/api/v1/auth/login",
-            json={"provider": provider, "username": username, "password": password},
+            json=request_payload,
             use_session=False,
         )
-        return self._store_login_payload(payload)
+        validated = self._validate_model(
+            payload, SessionResponse, "Unexpected login response format"
+        )
+        return self._store_login_payload(validated.model_dump(mode="json", by_alias=True))
 
     def logout(self) -> bool:
         """Attempt remote logout when a session exists, then clear the local session."""
@@ -212,85 +292,98 @@ class PoundCakeClient:
 
     def get_settings(self) -> dict[str, Any]:
         payload = self._request("GET", "/api/v1/settings")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected settings response format")
+        return self._validate_model_dump(
+            payload, SettingsResponse, "Unexpected settings response format"
+        )
 
     def get_auth_providers(self) -> list[ProviderInfo]:
         payload = self._request("GET", "/api/v1/auth/providers", use_session=False)
-        if not isinstance(payload, list):
-            raise PoundCakeClientError("Unexpected auth providers response format")
+        try:
+            validated = TypeAdapter(list[AuthProviderResponse]).validate_python(payload)
+        except ValidationError as exc:
+            raise PoundCakeClientError(f"Unexpected auth providers response format: {exc}") from exc
         return [
             ProviderInfo(
-                name=str(item["name"]),
-                label=str(item["label"]),
-                login_mode=str(item["login_mode"]),
-                cli_login_mode=str(item["cli_login_mode"]),
-                browser_login=bool(item.get("browser_login")),
-                device_login=bool(item.get("device_login")),
-                password_login=bool(item.get("password_login")),
+                name=str(item.name),
+                label=str(item.label),
+                login_mode=str(item.login_mode),
+                cli_login_mode=str(item.cli_login_mode),
+                browser_login=bool(item.browser_login),
+                device_login=bool(item.device_login),
+                password_login=bool(item.password_login),
             )
-            for item in payload
-            if isinstance(item, dict)
+            for item in validated
         ]
 
     def auth_me(self) -> AuthMeResult:
         payload = self._request("GET", "/api/v1/auth/me")
-        if not isinstance(payload, dict):
-            raise PoundCakeClientError("Unexpected auth me response format")
+        validated = self._validate_model(
+            payload, AuthMeResponse, "Unexpected auth me response format"
+        )
         return AuthMeResult(
-            username=str(payload["username"]),
-            display_name=(
-                None if payload.get("display_name") is None else str(payload.get("display_name"))
-            ),
-            provider=str(payload["provider"]),
-            role=str(payload["role"]),
-            principal_type=str(payload["principal_type"]),
-            principal_id=(int(payload["principal_id"]) if payload.get("principal_id") else None),
-            is_superuser=bool(payload.get("is_superuser")),
-            permissions=[str(item) for item in payload.get("permissions") or []],
-            groups=[str(item) for item in payload.get("groups") or []],
-            expires_at=(
-                None if payload.get("expires_at") is None else str(payload.get("expires_at"))
-            ),
+            username=str(validated.username),
+            display_name=(None if validated.display_name is None else str(validated.display_name)),
+            provider=str(validated.provider),
+            role=str(validated.role),
+            principal_type=str(validated.principal_type),
+            principal_id=(int(validated.principal_id) if validated.principal_id else None),
+            is_superuser=bool(validated.is_superuser),
+            permissions=[str(item) for item in validated.permissions],
+            groups=[str(item) for item in validated.groups],
+            expires_at=(None if validated.expires_at is None else str(validated.expires_at)),
         )
 
     def start_device_login(self, provider: str) -> DeviceAuthorizationStart:
+        request_payload = self._validate_request_payload(
+            {"provider": provider},
+            DeviceAuthorizationStartRequest,
+            "Invalid device authorization request payload",
+        )
         payload = self._request(
             "POST",
             "/api/v1/auth/device/start",
-            json={"provider": provider},
+            json=request_payload,
             use_session=False,
         )
-        if not isinstance(payload, dict):
-            raise PoundCakeClientError("Unexpected device authorization response format")
+        validated = self._validate_model(
+            payload,
+            DeviceAuthorizationStartResponse,
+            "Unexpected device authorization response format",
+        )
         return DeviceAuthorizationStart(
-            provider=str(payload.get("provider") or provider),
-            device_code=str(payload["device_code"]),
-            user_code=str(payload["user_code"]),
-            verification_uri=str(payload["verification_uri"]),
+            provider=str(validated.provider or provider),
+            device_code=str(validated.device_code),
+            user_code=str(validated.user_code),
+            verification_uri=str(validated.verification_uri),
             verification_uri_complete=(
                 None
-                if payload.get("verification_uri_complete") is None
-                else str(payload.get("verification_uri_complete"))
+                if validated.verification_uri_complete is None
+                else str(validated.verification_uri_complete)
             ),
-            expires_in=int(payload.get("expires_in") or 0),
-            interval=int(payload.get("interval") or 5),
+            expires_in=int(validated.expires_in),
+            interval=int(validated.interval),
         )
 
     def poll_device_login(self, provider: str, device_code: str) -> dict[str, Any]:
+        request_payload = self._validate_request_payload(
+            {"provider": provider, "device_code": device_code},
+            DeviceAuthorizationPollRequest,
+            "Invalid device poll request payload",
+        )
         payload = self._request(
             "POST",
             "/api/v1/auth/device/poll",
-            json={"provider": provider, "device_code": device_code},
+            json=request_payload,
             use_session=False,
         )
-        if isinstance(payload, dict):
-            session = payload.get("session")
-            if isinstance(session, dict):
-                self._store_login_payload(session)
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected device poll response format")
+        validated = self._validate_model(
+            payload,
+            DeviceAuthorizationPollResponse,
+            "Unexpected device poll response format",
+        )
+        if validated.session is not None:
+            self._store_login_payload(validated.session.model_dump(mode="json", by_alias=True))
+        return cast(dict[str, Any], validated.model_dump(mode="json", by_alias=True))
 
     def list_auth_principals(
         self,
@@ -306,58 +399,78 @@ class PoundCakeClient:
         if search:
             params["search"] = search
         payload = self._request("GET", "/api/v1/auth/principals", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected auth principals response format")
+        return self._validate_list_dump(
+            payload,
+            AuthPrincipalResponse,
+            "Unexpected auth principals response format",
+        )
 
     def list_auth_bindings(self, *, provider: str | None = None) -> list[dict[str, Any]]:
         params: dict[str, Any] | None = None
         if provider:
             params = {"provider": provider}
         payload = self._request("GET", "/api/v1/auth/bindings", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected auth bindings response format")
+        return self._validate_list_dump(
+            payload,
+            AuthRoleBindingResponse,
+            "Unexpected auth bindings response format",
+        )
 
     def create_auth_binding(self, payload: dict[str, Any]) -> dict[str, Any]:
-        result = self._request("POST", "/api/v1/auth/bindings", json=payload)
-        if isinstance(result, dict):
-            return cast(dict[str, Any], result)
-        raise PoundCakeClientError("Unexpected auth binding response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            AuthRoleBindingCreate,
+            "Invalid auth binding request payload",
+        )
+        result = self._request("POST", "/api/v1/auth/bindings", json=request_payload)
+        return self._validate_model_dump(
+            result,
+            AuthRoleBindingResponse,
+            "Unexpected auth binding response format",
+        )
 
     def update_auth_binding(self, binding_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        result = self._request("PATCH", f"/api/v1/auth/bindings/{binding_id}", json=payload)
-        if isinstance(result, dict):
-            return cast(dict[str, Any], result)
-        raise PoundCakeClientError("Unexpected auth binding response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            AuthRoleBindingUpdate,
+            "Invalid auth binding update payload",
+        )
+        result = self._request("PATCH", f"/api/v1/auth/bindings/{binding_id}", json=request_payload)
+        return self._validate_model_dump(
+            result,
+            AuthRoleBindingResponse,
+            "Unexpected auth binding response format",
+        )
 
     def delete_auth_binding(self, binding_id: int) -> dict[str, Any]:
         result = self._request("DELETE", f"/api/v1/auth/bindings/{binding_id}")
-        if isinstance(result, dict):
-            return cast(dict[str, Any], result)
-        raise PoundCakeClientError("Unexpected auth binding delete response format")
+        return self._validate_model_dump(
+            result,
+            DeleteResponse,
+            "Unexpected auth binding delete response format",
+        )
 
     # Health and overview
     def health(self) -> dict[str, Any]:
         payload = self._request("GET", "/api/v1/health")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected health response format")
+        return self._validate_model_dump(
+            payload, HealthResponse, "Unexpected health response format"
+        )
 
     def ready(self) -> dict[str, Any]:
         return self.health()
 
     def stats(self) -> dict[str, Any]:
         payload = self._request("GET", "/api/v1/stats")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected stats response format")
+        return self._validate_model_dump(payload, StatsResponse, "Unexpected stats response format")
 
     def observability_overview(self) -> dict[str, Any]:
         payload = self._request("GET", "/api/v1/observability/overview")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected observability overview response format")
+        return self._validate_model_dump(
+            payload,
+            ObservabilityOverviewResponse,
+            "Unexpected observability overview response format",
+        )
 
     def list_observability_activity(
         self,
@@ -370,9 +483,11 @@ class PoundCakeClient:
         if activity_type:
             params["type"] = activity_type
         payload = self._request("GET", "/api/v1/observability/activity", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected observability activity response format")
+        return self._validate_list_dump(
+            payload,
+            ObservabilityActivityRecord,
+            "Unexpected observability activity response format",
+        )
 
     # Incidents / orders
     def list_orders(
@@ -395,21 +510,19 @@ class PoundCakeClient:
         if req_id:
             params["req_id"] = req_id
         payload = self._request("GET", "/api/v1/orders", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected orders response format")
+        return self._validate_list_dump(payload, OrderResponse, "Unexpected orders response format")
 
     def get_order(self, order_id: int) -> dict[str, Any]:
         payload = self._request("GET", f"/api/v1/orders/{order_id}")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected order response format")
+        return self._validate_model_dump(payload, OrderResponse, "Unexpected order response format")
 
     def get_order_timeline(self, order_id: int) -> dict[str, Any]:
         payload = self._request("GET", f"/api/v1/orders/{order_id}/timeline")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected order timeline response format")
+        return self._validate_model_dump(
+            payload,
+            IncidentTimelineResponse,
+            "Unexpected order timeline response format",
+        )
 
     # Communications activity
     def list_communications(
@@ -426,9 +539,11 @@ class PoundCakeClient:
         if channel:
             params["channel"] = channel
         payload = self._request("GET", "/api/v1/communications/activity", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected communications activity response format")
+        return self._validate_list_dump(
+            payload,
+            CommunicationActivityRecord,
+            "Unexpected communications activity response format",
+        )
 
     def get_communication(self, communication_id: str, *, limit: int = 1000) -> dict[str, Any]:
         for item in self.list_communications(limit=limit):
@@ -454,27 +569,40 @@ class PoundCakeClient:
         if scope:
             params["scope"] = scope
         payload = self._request("GET", "/api/v1/suppressions", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected suppressions response format")
+        return self._validate_list_dump(
+            payload,
+            SuppressionResponse,
+            "Unexpected suppressions response format",
+        )
 
     def get_suppression(self, suppression_id: int) -> dict[str, Any]:
         payload = self._request("GET", f"/api/v1/suppressions/{suppression_id}")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected suppression response format")
+        return self._validate_model_dump(
+            payload,
+            SuppressionDetailResponse,
+            "Unexpected suppression response format",
+        )
 
     def create_suppression(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._request("POST", "/api/v1/suppressions", json=payload)
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected create suppression response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            SuppressionCreate,
+            "Invalid create suppression payload",
+        )
+        response = self._request("POST", "/api/v1/suppressions", json=request_payload)
+        return self._validate_model_dump(
+            response,
+            SuppressionResponse,
+            "Unexpected create suppression response format",
+        )
 
     def cancel_suppression(self, suppression_id: int) -> dict[str, Any]:
         response = self._request("POST", f"/api/v1/suppressions/{suppression_id}/cancel")
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected cancel suppression response format")
+        return self._validate_model_dump(
+            response,
+            SuppressionResponse,
+            "Unexpected cancel suppression response format",
+        )
 
     # Workflow activity / dishes
     def list_dishes(
@@ -497,9 +625,9 @@ class PoundCakeClient:
         if execution_ref:
             params["execution_ref"] = execution_ref
         payload = self._request("GET", "/api/v1/dishes", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected dishes response format")
+        return self._validate_list_dump(
+            payload, DishDetailResponse, "Unexpected dishes response format"
+        )
 
     def get_dish(self, dish_id: int, *, limit: int = 1000) -> dict[str, Any]:
         for item in self.list_dishes(limit=limit):
@@ -522,33 +650,55 @@ class PoundCakeClient:
         if task_key_template:
             params["task_key_template"] = task_key_template
         payload = self._request("GET", "/api/v1/ingredients/", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected ingredients response format")
+        return self._validate_list_dump(
+            payload,
+            IngredientResponse,
+            "Unexpected ingredients response format",
+        )
 
     def get_ingredient(self, ingredient_id: int) -> dict[str, Any]:
         payload = self._request("GET", f"/api/v1/ingredients/{ingredient_id}")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected ingredient response format")
+        return self._validate_model_dump(
+            payload,
+            IngredientResponse,
+            "Unexpected ingredient response format",
+        )
 
     def create_ingredient(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._request("POST", "/api/v1/ingredients/", json=payload)
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected create ingredient response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            IngredientCreate,
+            "Invalid create ingredient payload",
+        )
+        response = self._request("POST", "/api/v1/ingredients/", json=request_payload)
+        return self._validate_model_dump(
+            response,
+            IngredientResponse,
+            "Unexpected create ingredient response format",
+        )
 
     def update_ingredient(self, ingredient_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._request("PUT", f"/api/v1/ingredients/{ingredient_id}", json=payload)
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected update ingredient response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            IngredientUpdate,
+            "Invalid update ingredient payload",
+        )
+        response = self._request(
+            "PUT", f"/api/v1/ingredients/{ingredient_id}", json=request_payload
+        )
+        return self._validate_model_dump(
+            response,
+            IngredientResponse,
+            "Unexpected update ingredient response format",
+        )
 
     def delete_ingredient(self, ingredient_id: int) -> dict[str, Any]:
         response = self._request("DELETE", f"/api/v1/ingredients/{ingredient_id}")
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected delete ingredient response format")
+        return self._validate_model_dump(
+            response,
+            DeleteResponse,
+            "Unexpected delete ingredient response format",
+        )
 
     # Workflows / recipes
     def list_recipes(
@@ -565,55 +715,80 @@ class PoundCakeClient:
         if enabled is not None:
             params["enabled"] = str(enabled).lower()
         payload = self._request("GET", "/api/v1/recipes/", params=params)
-        if isinstance(payload, list):
-            return cast(list[dict[str, Any]], payload)
-        raise PoundCakeClientError("Unexpected recipes response format")
+        return self._validate_list_dump(
+            payload, RecipeDetailResponse, "Unexpected recipes response format"
+        )
 
     def get_recipe(self, recipe_id: int) -> dict[str, Any]:
         payload = self._request("GET", f"/api/v1/recipes/{recipe_id}")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected recipe response format")
+        return self._validate_model_dump(
+            payload, RecipeDetailResponse, "Unexpected recipe response format"
+        )
 
     def create_recipe(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._request("POST", "/api/v1/recipes/", json=payload)
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected create recipe response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            RecipeCreate,
+            "Invalid create recipe payload",
+        )
+        response = self._request("POST", "/api/v1/recipes/", json=request_payload)
+        return self._validate_model_dump(
+            response,
+            RecipeDetailResponse,
+            "Unexpected create recipe response format",
+        )
 
     def update_recipe(self, recipe_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._request("PATCH", f"/api/v1/recipes/{recipe_id}", json=payload)
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected update recipe response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            RecipeUpdate,
+            "Invalid update recipe payload",
+        )
+        response = self._request("PATCH", f"/api/v1/recipes/{recipe_id}", json=request_payload)
+        return self._validate_model_dump(
+            response,
+            RecipeDetailResponse,
+            "Unexpected update recipe response format",
+        )
 
     def delete_recipe(self, recipe_id: int) -> dict[str, Any]:
         response = self._request("DELETE", f"/api/v1/recipes/{recipe_id}")
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected delete recipe response format")
+        return self._validate_model_dump(
+            response,
+            DeleteResponse,
+            "Unexpected delete recipe response format",
+        )
 
     # Global communications policy
     def get_global_communications_policy(self) -> dict[str, Any]:
         payload = self._request("GET", "/api/v1/communications/policy")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected communications policy response format")
+        return self._validate_model_dump(
+            payload,
+            CommunicationPolicyResponse,
+            "Unexpected communications policy response format",
+        )
 
     def set_global_communications_policy(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._request("PUT", "/api/v1/communications/policy", json=payload)
-        if isinstance(response, dict):
-            return cast(dict[str, Any], response)
-        raise PoundCakeClientError("Unexpected communications policy update response format")
+        request_payload = self._validate_request_payload(
+            payload,
+            CommunicationPolicyUpdate,
+            "Invalid communications policy payload",
+        )
+        response = self._request("PUT", "/api/v1/communications/policy", json=request_payload)
+        return self._validate_model_dump(
+            response,
+            CommunicationPolicyResponse,
+            "Unexpected communications policy update response format",
+        )
 
     # Prometheus rules
     def list_rules(self) -> dict[str, Any]:
         payload = self._request("GET", "/api/v1/prometheus/rules")
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        if isinstance(payload, list):
-            return {"rules": cast(list[dict[str, Any]], payload), "source": "unknown"}
-        raise PoundCakeClientError("Unexpected rule list response format")
+        return self._validate_model_dump(
+            payload,
+            PrometheusRuleListResponse,
+            "Unexpected rule list response format",
+        )
 
     def get_rule(self, source_name: str, group_name: str, rule_name: str) -> dict[str, Any]:
         payload = self.list_rules()
@@ -637,19 +812,26 @@ class PoundCakeClient:
         rule_name: str,
         rule_data: dict[str, Any],
     ) -> dict[str, Any]:
+        request_payload = self._validate_request_payload(
+            rule_data,
+            PrometheusRuleWriteRequest,
+            "Invalid create rule payload",
+        )
         payload = self._request(
             "POST",
             "/api/v1/prometheus/rules",
-            json=rule_data,
+            json=request_payload,
             params={
                 "rule_name": rule_name,
                 "group_name": group_name,
                 "file_name": source_name,
             },
         )
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected create rule response format")
+        return self._validate_model_dump(
+            payload,
+            PrometheusRuleMutationResponse,
+            "Unexpected create rule response format",
+        )
 
     def update_rule(
         self,
@@ -658,18 +840,25 @@ class PoundCakeClient:
         rule_name: str,
         rule_data: dict[str, Any],
     ) -> dict[str, Any]:
+        request_payload = self._validate_request_payload(
+            rule_data,
+            PrometheusRuleWriteRequest,
+            "Invalid update rule payload",
+        )
         payload = self._request(
             "PUT",
             f"/api/v1/prometheus/rules/{rule_name}",
-            json=rule_data,
+            json=request_payload,
             params={
                 "group_name": group_name,
                 "file_name": source_name,
             },
         )
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected update rule response format")
+        return self._validate_model_dump(
+            payload,
+            PrometheusRuleMutationResponse,
+            "Unexpected update rule response format",
+        )
 
     def delete_rule(
         self,
@@ -685,9 +874,11 @@ class PoundCakeClient:
                 "file_name": source_name,
             },
         )
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        raise PoundCakeClientError("Unexpected delete rule response format")
+        return self._validate_model_dump(
+            payload,
+            PrometheusRuleMutationResponse,
+            "Unexpected delete rule response format",
+        )
 
     # StackStorm action management
     def list_st2_actions(

@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import delete, func, or_, select
@@ -37,6 +37,7 @@ from api.schemas.schemas import (
     SuppressedActivityResponse,
     SuppressionCreate,
     SuppressionDetailResponse,
+    SuppressionLifecycleResponse,
     SuppressionMatcher,
     SuppressionResponse,
     SuppressionSummaryResponse,
@@ -289,14 +290,14 @@ async def get_suppressed_activity(
     return [SuppressedActivityResponse.model_validate(row) for row in rows]
 
 
-@router.post("/suppressions/run-lifecycle")
+@router.post("/suppressions/run-lifecycle", response_model=SuppressionLifecycleResponse)
 async def run_suppression_lifecycle(
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> SuppressionLifecycleResponse:
     req_id = request.state.req_id
     finalized = await finalize_expired_suppressions(db, req_id=req_id)
-    return {"status": "ok", "finalized": finalized}
+    return SuppressionLifecycleResponse(status="ok", finalized=finalized)
 
 
 @router.get("/observability/overview", response_model=ObservabilityOverviewResponse)

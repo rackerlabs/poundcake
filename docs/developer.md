@@ -181,14 +181,11 @@ Deploy in lab from fork registries:
 export HELM_REGISTRY_USERNAME="<github-user>"
 export HELM_REGISTRY_PASSWORD="<github-token-with-read:packages>"
 
-export POUNDCAKE_GHCR_OWNER="$FORK_OWNER"
 export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake"
 # Default helper behavior is local chart install (POUNDCAKE_CHART_REPO unset).
 # Set POUNDCAKE_CHART_REPO only when you explicitly want OCI chart source.
 # export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake"
-export POUNDCAKE_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake"
-export POUNDCAKE_UI_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-ui"
-export POUNDCAKE_BAKERY_IMAGE_REPO="ghcr.io/${FORK_OWNER}/poundcake-bakery"
+# Configure image repositories/tags in your Helm override files.
 
 ./install/install-bakery-helm.sh
 ./install/install-poundcake-helm.sh --validate
@@ -221,19 +218,9 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `FORK_OWNER` | _(none)_ | Yes for fork workflow | Owner/org for fork package references in helper snippets | Always in fork-based deploy workflows |
 | `HELM_REGISTRY_USERNAME` | `""` (helper: `$FORK_OWNER`) | Required for private GHCR | Used for Helm OCI login and docker-registry secret creation | Set when chart/images are private |
 | `HELM_REGISTRY_PASSWORD` | `""` | Required for private GHCR | Token/password for OCI login and pull-secret auth; must include `read:packages` for private pulls | Set when using private GHCR |
-| `POUNDCAKE_GHCR_OWNER` | `rackerlabs` (helper: `$FORK_OWNER`) | Optional | Owner used to derive default image repo | Set when pulling from a fork/private owner |
 | `POUNDCAKE_CHART_REPO` | local chart path (`./helm`) (helper leaves unset for local mode) | Optional | Chart source (`oci://...` or local) | Set for OCI-based deployments |
 | `POUNDCAKE_CHART_VERSION` | `""` | Optional | Explicit OCI chart version | Pin chart version for repeatable deploys |
 | `POUNDCAKE_VERSION_FILE` | `/etc/genestack/helm-chart-versions.yaml` | Optional | Source for auto-detected chart version key `poundcake` | Change only if your version file is elsewhere |
-| `POUNDCAKE_IMAGE_REPO` | `ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake` | Optional | PoundCake image repository | Set for fork/private image repo |
-| `POUNDCAKE_IMAGE_TAG` | `""` | Conditionally required | PoundCake image tag | Set when not using digest pin |
-| `POUNDCAKE_IMAGE_DIGEST` | `""` | Conditionally required | PoundCake image digest (`sha256:...`) | Set when not using tag pin; preferred for immutable deploys |
-| `POUNDCAKE_UI_IMAGE_REPO` | `""` (helper sets fork path) | Optional | UI image repository override (`uiImage.repository`) | Set for fork/private UI image repo |
-| `POUNDCAKE_BAKERY_IMAGE_REPO` | `""` (helper sets fork path) | Optional | Bakery image repository override (`bakery.image.repository`) | Set for fork/private Bakery image repo |
-| `POUNDCAKE_BAKERY_IMAGE_TAG` | `""` (helper defaults from `POUNDCAKE_IMAGE_TAG`) | Optional | Bakery image tag (`bakery.image.tag`) | Used when Bakery digest unset |
-| `POUNDCAKE_BAKERY_IMAGE_DIGEST` | `""` | Optional | Bakery image digest (`sha256:...`) | Overrides Bakery tag; if unset, `POUNDCAKE_IMAGE_DIGEST` is used |
-| `POUNDCAKE_STACKSTORM_IMAGE_REPO` | `stackstorm/st2` | Optional | StackStorm image repository | Set when using custom/private StackStorm image |
-| `POUNDCAKE_STACKSTORM_IMAGE_TAG` | `3.9.0` | Optional | StackStorm image tag | Pin custom StackStorm version |
 | `POUNDCAKE_RELEASE_NAME` | `poundcake` | Optional | Helm release name | Change for parallel installs |
 | `POUNDCAKE_NAMESPACE` | `rackspace` | Optional | Kubernetes namespace for install | Set per environment/tenant |
 | `POUNDCAKE_HELM_TIMEOUT` | `120m` | Optional | Helm operation timeout | Increase for slower clusters |
@@ -250,9 +237,9 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 Important clarifications:
 
 - `HELM_REGISTRY_PASSWORD` must have `read:packages` for private GHCR pulls.
+- Image repositories/tags/digests are configured in Helm values or override files, not installer env vars.
 - `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true` injects pull secret into PoundCake workloads.
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true` requires namespace and secret create/apply RBAC.
-- Bakery image precedence is `POUNDCAKE_BAKERY_IMAGE_DIGEST` -> `POUNDCAKE_BAKERY_IMAGE_TAG` -> chart defaults, with `POUNDCAKE_IMAGE_DIGEST` used when Bakery digest is unset.
 
 ### 5.2) Chart Pull-Secret Values (Canonical vs Legacy)
 
@@ -287,11 +274,7 @@ Secret ownership and readiness notes:
 source ./install/set-env-helper.sh
 export HELM_REGISTRY_PASSWORD="<github-token-with-read:packages>"
 
-# Optional overrides
-# export POUNDCAKE_IMAGE_REPO="ghcr.io/<owner>/poundcake"
-# export POUNDCAKE_IMAGE_TAG="release-20260221-1200"
-# export POUNDCAKE_IMAGE_DIGEST="sha256:<64-hex>"
-# export POUNDCAKE_BAKERY_IMAGE_DIGEST="sha256:<64-hex>"
+# Configure image repositories/tags in your values/override files.
 # export POUNDCAKE_NAMESPACE="rackspace"
 
 ./install/install-poundcake-helm.sh
