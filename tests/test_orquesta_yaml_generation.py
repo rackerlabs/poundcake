@@ -140,7 +140,7 @@ def test_non_blocking_group_to_blocking_to_non_blocking_group():
     ]
 
 
-def test_generate_orquesta_yaml_merges_base_parameters_and_timeout() -> None:
+def test_generate_orquesta_yaml_merges_base_runtime_parameters_and_timeout() -> None:
     recipe = _recipe_with_steps(
         [
             {
@@ -160,6 +160,35 @@ def test_generate_orquesta_yaml_merges_base_parameters_and_timeout() -> None:
         "cmd": "echo override",
         "cwd": "/tmp/work",
         "timeout": 180,
+    }
+
+
+def test_generate_orquesta_yaml_ignores_stackstorm_parameter_schema_definitions() -> None:
+    recipe = _recipe_with_steps(
+        [
+            {
+                "step_order": 1,
+                "task_name": "task1",
+                "is_blocking": True,
+                "action_parameters": {
+                    "cmd": {
+                        "description": "Arbitrary Linux command to be executed on the local host.",
+                        "required": True,
+                        "type": "string",
+                    },
+                    "sudo": {"immutable": True},
+                },
+                "input_parameters": {"cmd": "echo override"},
+                "timeout_duration_sec": 300,
+            }
+        ]
+    )
+
+    workflow = yaml.safe_load(generate_orquesta_yaml(recipe))
+
+    assert workflow["tasks"]["step_1_task1"]["input"] == {
+        "cmd": "echo override",
+        "timeout": 300,
     }
 
 

@@ -49,6 +49,45 @@ def _dict_or_empty(value: Any) -> dict[str, Any]:
     return {}
 
 
+_STACKSTORM_PARAMETER_SCHEMA_KEYS = {
+    "allOf",
+    "anyOf",
+    "default",
+    "description",
+    "enum",
+    "immutable",
+    "items",
+    "maxLength",
+    "maximum",
+    "minLength",
+    "minimum",
+    "oneOf",
+    "pattern",
+    "position",
+    "required",
+    "secret",
+    "type",
+}
+
+
+def _looks_like_stackstorm_parameter_schema(value: Any) -> bool:
+    if not isinstance(value, dict) or not value:
+        return False
+    keys = set(value)
+    return bool(keys & {"type", "required", "immutable", "description", "enum", "secret"}) and (
+        keys <= _STACKSTORM_PARAMETER_SCHEMA_KEYS
+    )
+
+
+def _runtime_input_parameters(value: Any) -> dict[str, Any]:
+    params = _dict_or_empty(value)
+    return {
+        key: item_value
+        for key, item_value in params.items()
+        if not _looks_like_stackstorm_parameter_schema(item_value)
+    }
+
+
 def _positive_int_or_none(value: Any) -> int | None:
     if isinstance(value, int):
         return value if value > 0 else None
@@ -728,7 +767,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             depth = ri.get("depth") or 0
             task_name_raw = ingredient.get("task_key_template", "task")
             task_id = ingredient.get("execution_target")
-            input_parameters = _dict_or_empty(ingredient.get("execution_parameters"))
+            input_parameters = _runtime_input_parameters(ingredient.get("execution_parameters"))
             input_parameters.update(_dict_or_empty(ri.get("execution_parameters_override")))
             timeout_duration_sec = _positive_int_or_none(ingredient.get("timeout_duration_sec"))
             retry_count = ingredient.get("retry_count") or 0
@@ -743,7 +782,7 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             depth = ri.depth
             task_name_raw = ingredient.task_key_template
             task_id = ingredient.execution_target
-            input_parameters = _dict_or_empty(ingredient.execution_parameters)
+            input_parameters = _runtime_input_parameters(ingredient.execution_parameters)
             input_parameters.update(_dict_or_empty(ri.execution_parameters_override))
             timeout_duration_sec = _positive_int_or_none(ingredient.timeout_duration_sec)
             retry_count = ingredient.retry_count
