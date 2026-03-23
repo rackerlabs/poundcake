@@ -7,7 +7,6 @@
 """Prometheus API endpoints for rule and metric management."""
 
 from api.core.logging import get_logger
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -16,6 +15,16 @@ from api.services.prometheus_service import get_prometheus_client
 from api.services.prometheus_rule_manager import get_prometheus_rule_manager
 from api.services.prometheus_crd_manager import PrometheusCRDManager
 from api.core.config import get_settings
+from api.schemas.schemas import (
+    PrometheusHealthResponse,
+    PrometheusLabelValuesResponse,
+    PrometheusLabelsResponse,
+    PrometheusMetricsResponse,
+    PrometheusRuleListResponse,
+    PrometheusRuleGroupsResponse,
+    PrometheusRuleMutationResponse,
+    PrometheusRuleWriteRequest,
+)
 
 logger = get_logger(__name__)
 
@@ -28,11 +37,11 @@ router = APIRouter(tags=["prometheus"])
 # =============================================================================
 
 
-@router.get("/prometheus/rules")
+@router.get("/prometheus/rules", response_model=PrometheusRuleListResponse)
 async def list_rules(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusRuleListResponse:
     """List all Prometheus alert rules.
 
     If prometheus.useCrds is enabled, reads from PrometheusRule CRDs.
@@ -84,12 +93,14 @@ async def list_rules(
                     "rule_count": len(rules),
                 },
             )
-            return {"rules": rules, "source": "crds"}
+            return PrometheusRuleListResponse.model_validate({"rules": rules, "source": "crds"})
         else:
             # Read from Prometheus API
             client = get_prometheus_client()
             rules = await client.get_rules()
-            return {"rules": rules, "source": "prometheus-api"}
+            return PrometheusRuleListResponse.model_validate(
+                {"rules": rules, "source": "prometheus-api"}
+            )
 
     except Exception as e:
         logger.error(
@@ -99,16 +110,16 @@ async def list_rules(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/prometheus/rule-groups")
+@router.get("/prometheus/rule-groups", response_model=PrometheusRuleGroupsResponse)
 async def list_rule_groups(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusRuleGroupsResponse:
     """List all Prometheus rule groups."""
     client = get_prometheus_client()
     try:
         groups = await client.get_rule_groups()
-        return {"groups": groups}
+        return PrometheusRuleGroupsResponse(groups=groups)
     except Exception as e:
         logger.error("Failed to list rule groups", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
@@ -119,49 +130,49 @@ async def list_rule_groups(
 # =============================================================================
 
 
-@router.get("/prometheus/metrics")
+@router.get("/prometheus/metrics", response_model=PrometheusMetricsResponse)
 async def list_metrics(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusMetricsResponse:
     """List all available Prometheus metrics."""
     client = get_prometheus_client()
     try:
         metrics = await client.get_metric_names()
-        return {"metrics": metrics}
+        return PrometheusMetricsResponse(metrics=metrics)
     except Exception as e:
         logger.error("Failed to list metrics", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/prometheus/labels")
+@router.get("/prometheus/labels", response_model=PrometheusLabelsResponse)
 async def list_labels(
     request: Request,
     metric: str | None = None,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusLabelsResponse:
     """List all available label names."""
     client = get_prometheus_client()
     try:
         labels = await client.get_label_names(metric=metric)
-        return {"labels": labels}
+        return PrometheusLabelsResponse(labels=labels)
     except Exception as e:
         logger.error("Failed to list labels", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/prometheus/label-values/{label_name}")
+@router.get("/prometheus/label-values/{label_name}", response_model=PrometheusLabelValuesResponse)
 async def list_label_values(
     label_name: str,
     request: Request,
     metric: str | None = None,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusLabelValuesResponse:
     """List all values for a specific label."""
     client = get_prometheus_client()
     try:
         values = await client.get_label_values(label_name, metric=metric)
-        return {"label": label_name, "values": values}
+        return PrometheusLabelValuesResponse(label=label_name, values=values)
     except Exception as e:
         logger.error("Failed to list label values", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
@@ -172,33 +183,33 @@ async def list_label_values(
 # =============================================================================
 
 
-@router.get("/prometheus/health")
+@router.get("/prometheus/health", response_model=PrometheusHealthResponse)
 async def prometheus_health(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusHealthResponse:
     """Check Prometheus health status."""
     client = get_prometheus_client()
     try:
         health = await client.health_check()
-        return health
+        return PrometheusHealthResponse.model_validate(health)
     except Exception as e:
         logger.error("Failed to check Prometheus health", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/prometheus/reload")
+@router.post("/prometheus/reload", response_model=PrometheusRuleMutationResponse)
 async def reload_prometheus(
     request: Request,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusRuleMutationResponse:
     """Reload Prometheus configuration."""
     client = get_prometheus_client()
     try:
         result = await client.reload_config()
         if result.get("status") == "error":
             raise HTTPException(status_code=500, detail=result.get("message"))
-        return result
+        return PrometheusRuleMutationResponse.model_validate(result)
     except HTTPException:
         raise
     except Exception as e:
@@ -211,66 +222,66 @@ async def reload_prometheus(
 # =============================================================================
 
 
-@router.post("/prometheus/rules")
+@router.post("/prometheus/rules", response_model=PrometheusRuleMutationResponse)
 async def create_rule(
     request: Request,
     rule_name: str,
     group_name: str,
     file_name: str,
+    payload: PrometheusRuleWriteRequest,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusRuleMutationResponse:
     """Create a new Prometheus alert rule."""
     rule_manager = get_prometheus_rule_manager()
     try:
-        rule_data: dict[str, Any] = await request.json()
         result = await rule_manager.create_rule(
             rule_name=rule_name,
             group_name=group_name,
             file_name=file_name,
-            rule_data=rule_data,
+            rule_data=payload.model_dump(mode="python", by_alias=True, exclude_none=True),
         )
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
-        return result
+        return PrometheusRuleMutationResponse.model_validate(result)
     except Exception as e:
         logger.error("Failed to create rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/prometheus/rules/{rule_name}")
+@router.put("/prometheus/rules/{rule_name}", response_model=PrometheusRuleMutationResponse)
 async def update_rule(
     rule_name: str,
     request: Request,
     group_name: str,
     file_name: str,
+    payload: PrometheusRuleWriteRequest,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusRuleMutationResponse:
     """Update a Prometheus alert rule."""
     rule_manager = get_prometheus_rule_manager()
     try:
-        rule_data: dict[str, Any] = await request.json()
         result = await rule_manager.update_rule(
             rule_name=rule_name,
             group_name=group_name,
             file_name=file_name,
-            rule_data=rule_data,
+            rule_data=payload.model_dump(mode="python", by_alias=True, exclude_none=True),
         )
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
-        return result
+        return PrometheusRuleMutationResponse.model_validate(result)
     except Exception as e:
         logger.error("Failed to update rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/prometheus/rules/{rule_name}")
+@router.delete("/prometheus/rules/{rule_name}", response_model=PrometheusRuleMutationResponse)
 async def delete_rule(
     rule_name: str,
     request: Request,
     group_name: str,
     file_name: str,
     _user: str | None = Depends(require_auth_if_enabled),
-):
+) -> PrometheusRuleMutationResponse:
     """Delete a Prometheus alert rule."""
     rule_manager = get_prometheus_rule_manager()
     try:
@@ -281,7 +292,7 @@ async def delete_rule(
         )
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
-        return result
+        return PrometheusRuleMutationResponse.model_validate(result)
     except Exception as e:
         logger.error("Failed to delete rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))

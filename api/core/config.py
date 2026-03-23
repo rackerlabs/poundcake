@@ -9,11 +9,21 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from api.version import __version__
+
+
+def _default_redis_url() -> str:
+    host = os.getenv("REDIS_HOST", "poundcake-redis").strip() or "poundcake-redis"
+    port = os.getenv("REDIS_PORT", "6379").strip() or "6379"
+    db = os.getenv("REDIS_DB", "0").strip() or "0"
+    password = os.getenv("REDIS_PASSWORD", "").strip()
+    auth = f":{quote(password)}@" if password else ""
+    return f"redis://{auth}{host}:{port}/{db}"
 
 
 class Settings(BaseSettings):
@@ -53,7 +63,7 @@ class Settings(BaseSettings):
     # Redis Settings
     # ==========================================================================
     # Default to in-cluster Redis service (overridden by Helm env var in production).
-    redis_url: str = "redis://poundcake-redis:6379/0"
+    redis_url: str = Field(default_factory=_default_redis_url)
     redis_password: str = ""
     alert_ttl_hours: int = 24
     lock_timeout_seconds: int = 300
@@ -160,6 +170,8 @@ class Settings(BaseSettings):
     git_repo_url: str = ""
     git_branch: str = "main"
     git_rules_path: str = "prometheus/rules"
+    git_workflows_path: str = "poundcake/workflows"
+    git_actions_path: str = "poundcake/actions"
     git_file_per_alert: bool = True
     git_file_pattern: str = "{alert_name}.yaml"
     git_token: str = ""
@@ -219,14 +231,115 @@ class Settings(BaseSettings):
     )
     auth_session_timeout: int = 86400
     auth_secret_key: str = Field(default_factory=lambda: os.urandom(32).hex())
-    auth_internal_api_key: str = ""
-    # Preferred in-cluster credential source (injected from Secret via env vars).
+    auth_oidc_state_ttl: int = 600
+    auth_redis_prefix: str = "poundcake:auth"
+    auth_rbac_enabled: bool = True
+    auth_service_token: str = ""
+
+    # Local bootstrap superuser.
+    auth_local_enabled: bool = True
     auth_username: str = ""
     auth_password: str = ""
-
-    # Development/local auth fallback
     auth_dev_username: str = ""
     auth_dev_password: str = ""
+
+    # Active Directory / LDAP.
+    auth_ad_enabled: bool = False
+    auth_ad_server_uri: str = ""
+    auth_ad_bind_dn: str = ""
+    auth_ad_bind_password: str = ""
+    auth_ad_user_base_dn: str = ""
+    auth_ad_user_filter: str = "(&(objectClass=user)(sAMAccountName={username}))"
+    auth_ad_group_attribute: str = "memberOf"
+    auth_ad_display_name_attribute: str = "displayName"
+    auth_ad_username_attribute: str = "sAMAccountName"
+    auth_ad_subject_attribute: str = "distinguishedName"
+    auth_ad_use_ssl: bool = True
+    auth_ad_validate_tls: bool = True
+    auth_ad_ca_certs_file: str = ""
+    auth_ad_group_name_regex: str = r"CN=([^,]+)"
+
+    # Auth0.
+    auth_auth0_enabled: bool = False
+    auth_auth0_domain: str = ""
+    auth_auth0_audience: str = ""
+    auth_auth0_scope: str = "openid profile email"
+    auth_auth0_organization: str = ""
+    auth_auth0_connection: str = ""
+    auth_auth0_username_claim: str = "email"
+    auth_auth0_display_name_claim: str = "name"
+    auth_auth0_groups_claim: str = "groups"
+    auth_auth0_subject_claim: str = "sub"
+    auth_auth0_ui_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID")
+        )
+    )
+    auth_auth0_ui_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID", "")
+    )
+    auth_auth0_ui_client_secret: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CLIENT_SECRET", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_SECRET", "")
+    )
+    auth_auth0_ui_callback_url: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_UI_CALLBACK_URL", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CALLBACK_URL", "")
+    )
+    auth_auth0_cli_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID")
+        )
+    )
+    auth_auth0_cli_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_ID", "")
+    )
+    auth_auth0_cli_client_secret: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AUTH0_CLI_CLIENT_SECRET", "")
+        or os.getenv("POUNDCAKE_AUTH_AUTH0_CLIENT_SECRET", "")
+    )
+
+    # Azure AD / Microsoft Entra ID.
+    auth_azure_ad_enabled: bool = False
+    auth_azure_ad_tenant: str = ""
+    auth_azure_ad_audience: str = ""
+    auth_azure_ad_scope: str = "openid profile email"
+    auth_azure_ad_username_claim: str = "preferred_username"
+    auth_azure_ad_display_name_claim: str = "name"
+    auth_azure_ad_groups_claim: str = "groups"
+    auth_azure_ad_subject_claim: str = "sub"
+    auth_azure_ad_ui_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID")
+        )
+    )
+    auth_azure_ad_ui_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID", "")
+    )
+    auth_azure_ad_ui_client_secret: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CLIENT_SECRET", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_SECRET", "")
+    )
+    auth_azure_ad_ui_callback_url: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_UI_CALLBACK_URL", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CALLBACK_URL", "")
+    )
+    auth_azure_ad_cli_enabled: bool = Field(
+        default_factory=lambda: bool(
+            os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLI_CLIENT_ID")
+            or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID")
+        )
+    )
+    auth_azure_ad_cli_client_id: str = Field(
+        default_factory=lambda: os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLI_CLIENT_ID", "")
+        or os.getenv("POUNDCAKE_AUTH_AZURE_AD_CLIENT_ID", "")
+    )
 
     # ==========================================================================
     # Bakery Integration Settings

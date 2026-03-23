@@ -31,6 +31,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import {
+  apiFetch,
   apiDelete,
   apiGet,
   apiPatch,
@@ -47,33 +48,71 @@ import {
 } from "./format";
 import type {
   AppSettings,
+  AuthMeRecord,
+  AuthPrincipalRecord,
+  AuthProviderRecord,
+  AuthRoleBindingRecord,
   CommunicationActivityRecord,
   CommunicationPolicyRecord,
   CommunicationRouteRecord,
+  DeleteResponse,
   DishRecord,
   HealthResponse,
-  IncidentTimelineResponse,
   IncidentTimelineEvent,
+  IncidentTimelineResponse,
+  IngredientRecord,
   ObservabilityActivityRecord,
   ObservabilityOverviewResponse,
   OrderResponse,
   PrometheusRule,
-  PrometheusRuleListResponse,
+  RepoSyncResponse,
   RecipeRecord,
   StatsResponse,
   SuppressionRecord,
-  IngredientRecord,
-} from "./types";
+} from "./contracts";
+import {
+  appSettingsSchema,
+  authMeRecordSchema,
+  authProviderRecordArraySchema,
+  authPrincipalRecordArraySchema,
+  authRoleBindingCreateRequestSchema,
+  authRoleBindingRecordArraySchema,
+  authRoleBindingRecordSchema,
+  authRoleBindingUpdateRequestSchema,
+  communicationActivityRecordArraySchema,
+  communicationPolicyRecordSchema,
+  communicationPolicyUpdateRequestSchema,
+  deleteResponseSchema,
+  dishRecordArraySchema,
+  healthResponseSchema,
+  incidentTimelineResponseSchema,
+  ingredientCreateRequestSchema,
+  ingredientRecordArraySchema,
+  ingredientRecordSchema,
+  ingredientUpdateRequestSchema,
+  observabilityActivityRecordArraySchema,
+  observabilityOverviewResponseSchema,
+  orderResponseArraySchema,
+  orderResponseSchema,
+  prometheusRuleListResponseSchema,
+  prometheusRuleMutationResponseSchema,
+  prometheusRuleWriteRequestSchema,
+  recipeCreateRequestSchema,
+  recipeRecordArraySchema,
+  recipeRecordSchema,
+  recipeUpdateRequestSchema,
+  repoSyncResponseSchema,
+  statsResponseSchema,
+  suppressionCreateRequestSchema,
+  suppressionRecordArraySchema,
+  suppressionRecordSchema,
+} from "./contracts";
 
 const SettingsContext = createContext<AppSettings | null>(null);
+const PrincipalContext = createContext<AuthMeRecord | null>(null);
 const ToastContext = createContext<(tone: "success" | "error", message: string) => void>(
   () => undefined,
 );
-
-interface DeleteResponse {
-  status: string;
-  message?: string | null;
-}
 
 interface ToastMessage {
   id: number;
@@ -214,51 +253,56 @@ function SessionGate() {
     );
   }
 
-  const settingsQuery = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => apiGet<AppSettings>("/api/v1/settings"),
+  const bootstrapQuery = useQuery({
+    queryKey: ["settings", "auth-me"],
+    queryFn: async () => {
+      const [settings, principal] = await Promise.all([
+        apiGet("/api/v1/settings", appSettingsSchema),
+        apiGet("/api/v1/auth/me", authMeRecordSchema),
+      ]);
+      return { settings, principal };
+    },
   });
 
-  if (settingsQuery.isLoading) {
+  if (bootstrapQuery.isLoading) {
     return <FullscreenState title="Loading monitoring console" message="Checking session and loading workspace state." />;
   }
 
-  if (settingsQuery.isError || !settingsQuery.data) {
-    if (settingsQuery.error instanceof ApiError && settingsQuery.error.status === 401) {
-      return (
-        <FullscreenState
-          title="Redirecting to sign in"
-          message="Your session is missing or expired. Taking you back to the login screen."
-        />
-      );
+  if (bootstrapQuery.isError || !bootstrapQuery.data) {
+    if (bootstrapQuery.error instanceof ApiError && bootstrapQuery.error.status === 401) {
+      const nextTarget = `${location.pathname}${location.search}${location.hash}`;
+      return <Navigate to={`/login?next=${encodeURIComponent(nextTarget)}`} replace />;
     }
     return (
       <FullscreenState
         title="Unable to load PoundCake"
-        message={getErrorMessage(settingsQuery.error)}
+        message={getErrorMessage(bootstrapQuery.error)}
         tone="error"
       />
     );
   }
 
   return (
-    <SettingsContext.Provider value={settingsQuery.data}>
-      <Routes>
-        <Route element={<ShellLayout />}>
-          <Route path="/" element={<Navigate to="/overview" replace />} />
-          <Route path="/overview" element={<OverviewPage />} />
-          <Route path="/incidents" element={<IncidentsPage />} />
-          <Route path="/incidents/:incidentId" element={<IncidentsPage />} />
-          <Route path="/communications" element={<CommunicationsPage />} />
-          <Route path="/suppressions" element={<SuppressionsPage />} />
-          <Route path="/activity" element={<ActivityPage />} />
-          <Route path="/config/alert-rules" element={<AlertRulesPage />} />
-          <Route path="/config/communications" element={<GlobalCommunicationsPage />} />
-          <Route path="/config/workflows" element={<WorkflowsPage />} />
-          <Route path="/config/actions" element={<ActionsPage />} />
-          <Route path="*" element={<Navigate to="/overview" replace />} />
-        </Route>
-      </Routes>
+    <SettingsContext.Provider value={bootstrapQuery.data.settings}>
+      <PrincipalContext.Provider value={bootstrapQuery.data.principal}>
+        <Routes>
+          <Route element={<ShellLayout />}>
+            <Route path="/" element={<Navigate to="/overview" replace />} />
+            <Route path="/overview" element={<OverviewPage />} />
+            <Route path="/incidents" element={<IncidentsPage />} />
+            <Route path="/incidents/:incidentId" element={<IncidentsPage />} />
+            <Route path="/communications" element={<CommunicationsPage />} />
+            <Route path="/suppressions" element={<SuppressionsPage />} />
+            <Route path="/activity" element={<ActivityPage />} />
+            <Route path="/config/alert-rules" element={<AlertRulesPage />} />
+            <Route path="/config/communications" element={<GlobalCommunicationsPage />} />
+            <Route path="/config/workflows" element={<WorkflowsPage />} />
+            <Route path="/config/actions" element={<ActionsPage />} />
+            <Route path="/config/access" element={<AccessPage />} />
+            <Route path="*" element={<Navigate to="/overview" replace />} />
+          </Route>
+        </Routes>
+      </PrincipalContext.Provider>
     </SettingsContext.Provider>
   );
 }
@@ -266,17 +310,31 @@ function SessionGate() {
 function LoginPage() {
   const [searchParams] = useSearchParams();
   const nextTarget = getLoginNextTarget(searchParams);
+  const providersQuery = useQuery({
+    queryKey: ["auth-providers"],
+    queryFn: () =>
+      apiFetch("/api/v1/auth/providers", authProviderRecordArraySchema, {}, { allowUnauthorized: true }),
+  });
+  const passwordProviders = (providersQuery.data || []).filter((provider) => provider.password_login);
+  const browserProviders = (providersQuery.data || []).filter((provider) => provider.browser_login);
+  const [provider, setProvider] = useState<string>("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [sessionMessage, setSessionMessage] = useState(
-    "Use your PoundCake admin credentials to open the monitoring console.",
+    "Sign in with a configured PoundCake auth provider to open the monitoring console.",
   );
+
+  useEffect(() => {
+    if (passwordProviders.length === 1) {
+      setProvider(passwordProviders[0].name);
+    }
+  }, [passwordProviders]);
 
   useEffect(() => {
     let active = true;
 
-    fetch("/api/v1/settings", {
+    fetch("/api/v1/auth/me", {
       credentials: "same-origin",
     })
       .then((response) => {
@@ -306,7 +364,7 @@ function LoginPage() {
   }, [nextTarget]);
 
   const loginMutation = useMutation({
-    mutationFn: async (credentials: { username: string; password: string }) => {
+    mutationFn: async (credentials: { provider: string; username: string; password: string }) => {
       const response = await fetch("/api/v1/auth/login", {
         method: "POST",
         credentials: "same-origin",
@@ -342,18 +400,29 @@ function LoginPage() {
     setSubmitAttempted(true);
     loginMutation.reset();
 
-    if (!username.trim() || !password) {
+    if (!username.trim() || !password || !provider) {
       return;
     }
 
     loginMutation.mutate({
+      provider,
       username: username.trim(),
       password,
     });
   }
 
   const credentialError =
-    !username.trim() || !password ? "Username and password are required." : undefined;
+    !provider
+      ? "Choose an auth provider to continue."
+      : !username.trim() || !password
+        ? "Username and password are required."
+        : undefined;
+
+  function handleBrowserLogin(providerName: string) {
+    window.location.assign(
+      `/api/v1/auth/oidc/login?provider=${encodeURIComponent(providerName)}&next=${encodeURIComponent(nextTarget)}`,
+    );
+  }
 
   return (
     <div className="login-screen">
@@ -390,51 +459,101 @@ function LoginPage() {
             <span className="version-chip">Next stop: {getRouteName(nextTarget)}</span>
           </div>
 
-          <form className="form-stack" onSubmit={handleSubmit}>
-            <FormField label="Username">
-              <input
-                autoComplete="username"
-                autoFocus
-                onChange={(event) => {
-                  if (loginMutation.isError) {
-                    loginMutation.reset();
-                  }
-                  setSubmitAttempted(false);
-                  setUsername(event.target.value);
-                }}
-                placeholder="Enter your username"
-                type="text"
-                value={username}
-              />
-            </FormField>
+          {providersQuery.isError ? (
+            <PageError compact message={getErrorMessage(providersQuery.error)} />
+          ) : null}
 
-            <FormField label="Password">
-              <input
-                autoComplete="current-password"
-                onChange={(event) => {
-                  if (loginMutation.isError) {
-                    loginMutation.reset();
-                  }
-                  setSubmitAttempted(false);
-                  setPassword(event.target.value);
-                }}
-                placeholder="Enter your password"
-                type="password"
-                value={password}
-              />
-            </FormField>
+          {passwordProviders.length ? (
+            <form className="form-stack" onSubmit={handleSubmit}>
+              {passwordProviders.length > 1 ? (
+                <FormField label="Provider">
+                  <select
+                    onChange={(event) => {
+                      if (loginMutation.isError) {
+                        loginMutation.reset();
+                      }
+                      setSubmitAttempted(false);
+                      setProvider(event.target.value);
+                    }}
+                    value={provider}
+                  >
+                    <option value="">Choose a provider</option>
+                    {passwordProviders.map((option) => (
+                      <option key={option.name} value={option.name}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : null}
 
-            {loginMutation.isError ? <PageError compact message={getErrorMessage(loginMutation.error)} /> : null}
-            {!loginMutation.isError && submitAttempted && credentialError ? (
-              <div className="login-note">Enter both fields to continue.</div>
-            ) : null}
+              <FormField label="Username">
+                <input
+                  autoComplete="username"
+                  autoFocus
+                  onChange={(event) => {
+                    if (loginMutation.isError) {
+                      loginMutation.reset();
+                    }
+                    setSubmitAttempted(false);
+                    setUsername(event.target.value);
+                  }}
+                  placeholder="Enter your username"
+                  type="text"
+                  value={username}
+                />
+              </FormField>
 
-            <div className="form-actions">
-              <button className="primary-button" disabled={loginMutation.isPending} type="submit">
-                {loginMutation.isPending ? "Signing in..." : "Sign in"}
-              </button>
+              <FormField label="Password">
+                <input
+                  autoComplete="current-password"
+                  onChange={(event) => {
+                    if (loginMutation.isError) {
+                      loginMutation.reset();
+                    }
+                    setSubmitAttempted(false);
+                    setPassword(event.target.value);
+                  }}
+                  placeholder="Enter your password"
+                  type="password"
+                  value={password}
+                />
+              </FormField>
+
+              {loginMutation.isError ? <PageError compact message={getErrorMessage(loginMutation.error)} /> : null}
+              {!loginMutation.isError && submitAttempted && credentialError ? (
+                <div className="login-note">{credentialError}</div>
+              ) : null}
+
+              <div className="form-actions">
+                <button className="primary-button" disabled={loginMutation.isPending} type="submit">
+                  {loginMutation.isPending ? "Signing in..." : "Sign in"}
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          {browserProviders.length ? (
+            <div className="form-stack">
+              {passwordProviders.length ? <div className="login-note">Or continue with single sign-on.</div> : null}
+              <div className="form-actions">
+                {browserProviders.map((browserProvider) => (
+                  <button
+                    className="ghost-button"
+                    key={browserProvider.name}
+                    type="button"
+                    onClick={() => handleBrowserLogin(browserProvider.name)}
+                  >
+                    Sign in with {browserProvider.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </form>
+          ) : null}
+
+          {!providersQuery.isError && !passwordProviders.length && !browserProviders.length ? (
+            <div className="login-note">No browser-capable login providers are configured right now.</div>
+          ) : null}
         </section>
       </div>
     </div>
@@ -443,6 +562,7 @@ function LoginPage() {
 
 function ShellLayout() {
   const settings = useSettings();
+  const principal = usePrincipal();
   const location = useLocation();
 
   async function handleLogout() {
@@ -463,6 +583,9 @@ function ShellLayout() {
           <h1>Monitoring Console</h1>
           <p>One place to triage incidents, track communications, and manage response logic.</p>
           <div className="version-chip">v{settings.version}</div>
+          <div className="login-note">
+            {principal.display_name || principal.username} • {principal.is_superuser ? "superuser" : principal.role}
+          </div>
         </div>
 
         <nav className="nav-stack" aria-label="Primary navigation">
@@ -483,6 +606,7 @@ function ShellLayout() {
               { to: "/config/communications", label: "Global Communications" },
               { to: "/config/workflows", label: "Workflows" },
               { to: "/config/actions", label: "Actions" },
+              ...(canManageAccess(principal) ? [{ to: "/config/access", label: "Access" }] : []),
             ]}
           />
         </nav>
@@ -524,13 +648,13 @@ function OverviewPage() {
     queryFn: async () => {
       const [health, stats, overview, activity, incidents, communications, suppressions] =
         await Promise.all([
-          apiGet<HealthResponse>("/api/v1/health"),
-          apiGet<StatsResponse>("/api/v1/stats"),
-          apiGet<ObservabilityOverviewResponse>("/api/v1/observability/overview"),
-          apiGet<ObservabilityActivityRecord[]>("/api/v1/observability/activity?limit=10"),
-          apiGet<OrderResponse[]>("/api/v1/orders?limit=8"),
-          apiGet<CommunicationActivityRecord[]>("/api/v1/communications/activity?limit=8"),
-          apiGet<SuppressionRecord[]>("/api/v1/suppressions?limit=8"),
+          apiGet("/api/v1/health", healthResponseSchema),
+          apiGet("/api/v1/stats", statsResponseSchema),
+          apiGet("/api/v1/observability/overview", observabilityOverviewResponseSchema),
+          apiGet("/api/v1/observability/activity?limit=10", observabilityActivityRecordArraySchema),
+          apiGet("/api/v1/orders?limit=8", orderResponseArraySchema),
+          apiGet("/api/v1/communications/activity?limit=8", communicationActivityRecordArraySchema),
+          apiGet("/api/v1/suppressions?limit=8", suppressionRecordArraySchema),
         ]);
       return { health, stats, overview, activity, incidents, communications, suppressions };
     },
@@ -684,7 +808,7 @@ function IncidentsPage() {
 
   const incidentsQuery = useQuery({
     queryKey: ["incidents"],
-    queryFn: () => apiGet<OrderResponse[]>("/api/v1/orders?limit=100"),
+    queryFn: () => apiGet("/api/v1/orders?limit=100", orderResponseArraySchema),
   });
 
   const selectedId = incidentId ? Number(incidentId) : null;
@@ -695,7 +819,7 @@ function IncidentsPage() {
   const selectedIncidentQuery = useQuery({
     queryKey: ["incident", selectedId],
     enabled: Boolean(selectedId) && Boolean(incidentsQuery.data) && !selectedFromRoute,
-    queryFn: () => apiGet<OrderResponse>(`/api/v1/orders/${selectedId}`),
+    queryFn: () => apiGet(`/api/v1/orders/${selectedId}`, orderResponseSchema),
   });
 
   const incidentRows = incidentsQuery.data || [];
@@ -723,7 +847,7 @@ function IncidentsPage() {
   const timelineQuery = useQuery({
     queryKey: ["incident-timeline", timelineTargetId],
     enabled: Boolean(timelineTargetId),
-    queryFn: () => apiGet<IncidentTimelineResponse>(`/api/v1/orders/${timelineTargetId}/timeline`),
+    queryFn: () => apiGet(`/api/v1/orders/${timelineTargetId}/timeline`, incidentTimelineResponseSchema),
   });
 
   useEffect(() => {
@@ -943,7 +1067,7 @@ function CommunicationsPage() {
 
   const query = useQuery({
     queryKey: ["communications-activity"],
-    queryFn: () => apiGet<CommunicationActivityRecord[]>("/api/v1/communications/activity?limit=200"),
+    queryFn: () => apiGet("/api/v1/communications/activity?limit=200", communicationActivityRecordArraySchema),
   });
 
   if (query.isLoading) {
@@ -1072,12 +1196,14 @@ function CommunicationsPage() {
 
 function SuppressionsPage() {
   const notify = useToast();
+  const principal = usePrincipal();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+  const canEdit = canManageSuppressions(principal);
 
   const suppressionsQuery = useQuery({
     queryKey: ["suppressions"],
-    queryFn: () => apiGet<SuppressionRecord[]>("/api/v1/suppressions?limit=100"),
+    queryFn: () => apiGet("/api/v1/suppressions?limit=100", suppressionRecordArraySchema),
   });
 
   const form = useForm<z.infer<typeof suppressionSchema>>({
@@ -1096,8 +1222,8 @@ function SuppressionsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (values: z.infer<typeof suppressionSchema>) =>
-      apiPost<SuppressionRecord>("/api/v1/suppressions", {
+    mutationFn: async (values: z.infer<typeof suppressionSchema>) => {
+      const request = suppressionCreateRequestSchema.parse({
         name: values.name,
         reason: values.reason || null,
         starts_at: values.starts_at,
@@ -1116,7 +1242,9 @@ function SuppressionsPage() {
                 },
               ]
             : [],
-      }),
+      });
+      return apiPost("/api/v1/suppressions", suppressionRecordSchema, request);
+    },
     onSuccess: async () => {
       notify("success", "Suppression created.");
       form.reset();
@@ -1126,7 +1254,7 @@ function SuppressionsPage() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: (id: number) => apiPost<SuppressionRecord>(`/api/v1/suppressions/${id}/cancel`),
+    mutationFn: (id: number) => apiPost(`/api/v1/suppressions/${id}/cancel`, suppressionRecordSchema),
     onSuccess: async () => {
       notify("success", "Suppression canceled.");
       await queryClient.invalidateQueries({ queryKey: ["suppressions"] });
@@ -1153,7 +1281,14 @@ function SuppressionsPage() {
 
       <div className="editor-grid">
         <Panel title="Create suppression" subtitle="Use clear dates and matcher scope so operators know exactly what is being muted.">
+          {!canEdit ? (
+            <div className="helper-card">
+              <strong>Read-only access</strong>
+              <p>Your role can review suppressions but cannot create or cancel them.</p>
+            </div>
+          ) : null}
           <form className="form-stack" onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}>
+            <fieldset disabled={!canEdit}>
             <FormField label="Suppression name" help="Use a human-readable maintenance or outage label.">
               <input {...form.register("name")} placeholder="Database maintenance" />
               <FieldError message={form.formState.errors.name?.message} />
@@ -1208,6 +1343,7 @@ function SuppressionsPage() {
                 {createMutation.isPending ? "Creating..." : "Create suppression"}
               </button>
             </div>
+            </fieldset>
           </form>
         </Panel>
 
@@ -1226,7 +1362,7 @@ function SuppressionsPage() {
                   <StatusBadge status={item.status}>{item.status}</StatusBadge>
                   <button
                     className="ghost-button"
-                    disabled={cancelMutation.isPending || item.status === "canceled"}
+                    disabled={!canEdit || cancelMutation.isPending || item.status === "canceled"}
                     type="button"
                     onClick={() => {
                       if (window.confirm(`Cancel suppression "${item.name}"?`)) {
@@ -1254,7 +1390,7 @@ function ActivityPage() {
   const deferredSearch = useDeferredValue(search);
   const query = useQuery({
     queryKey: ["activity-dishes"],
-    queryFn: () => apiGet<DishRecord[]>("/api/v1/dishes?limit=100"),
+    queryFn: () => apiGet("/api/v1/dishes?limit=100", dishRecordArraySchema),
   });
 
   const selectedDishId = searchParams.get("dish");
@@ -1447,12 +1583,16 @@ function ActivityPage() {
 
 function AlertRulesPage() {
   const notify = useToast();
+  const principal = usePrincipal();
+  const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingRule, setEditingRule] = useState<PrometheusRule | null>(null);
+  const canEdit = canManageAlertRules(principal);
+  const canClear = canManageRepoSyncClear(principal);
 
   const rulesQuery = useQuery({
     queryKey: ["prometheus-rules"],
-    queryFn: () => apiGet<PrometheusRuleListResponse>("/api/v1/prometheus/rules"),
+    queryFn: () => apiGet("/api/v1/prometheus/rules", prometheusRuleListResponseSchema),
   });
 
   const form = useForm<z.infer<typeof ruleSchema>>({
@@ -1485,21 +1625,23 @@ function AlertRulesPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof ruleSchema>) => {
-      const body = {
+      const body = prometheusRuleWriteRequestSchema.parse({
         alert: values.name,
         expr: values.expr,
         for: values.duration || undefined,
         labels: parseJsonObject(values.labels, "Labels"),
         annotations: parseJsonObject(values.annotations, "Annotations"),
-      };
+      });
       if (editingRule) {
         return apiPut(
           `/api/v1/prometheus/rules/${encodeURIComponent(values.name)}?group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+          prometheusRuleMutationResponseSchema,
           body,
         );
       }
       return apiPost(
         `/api/v1/prometheus/rules?rule_name=${encodeURIComponent(values.name)}&group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+        prometheusRuleMutationResponseSchema,
         body,
       );
     },
@@ -1516,9 +1658,38 @@ function AlertRulesPage() {
     mutationFn: (rule: PrometheusRule) =>
       apiDelete(
         `/api/v1/prometheus/rules/${encodeURIComponent(rule.name)}?group_name=${encodeURIComponent(rule.group)}&file_name=${encodeURIComponent(rule.crd || rule.file || "")}`,
+        prometheusRuleMutationResponseSchema,
       ),
     onSuccess: async () => {
       notify("success", "Alert rule deleted.");
+      setEditingRule(null);
+      form.reset();
+      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/alert-rules/export", repoSyncResponseSchema),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/alert-rules/import", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingRule(null);
+      form.reset();
+      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => apiDelete("/api/v1/repo-sync/alert-rules", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
       setEditingRule(null);
       form.reset();
       await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
@@ -1540,9 +1711,26 @@ function AlertRulesPage() {
         title="Alert Rules"
         description="Create, update, and retire alert definitions with monitoring-first labels and inline PromQL help."
       />
+      <AlertRuleRepoSyncPanel
+        canClear={canClear}
+        canEdit={canEdit}
+        canImport={settings.prometheus_use_crds}
+        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
+        onClear={() => clearMutation.mutate()}
+        onExport={() => exportMutation.mutate()}
+        onImport={() => importMutation.mutate()}
+        settings={settings}
+      />
       <div className="editor-grid">
         <Panel title={editingRule ? `Edit ${editingRule.name}` : "Create alert rule"} subtitle="Prometheus details stay available, but the workflow is written for operators.">
+          {!canEdit ? (
+            <div className="helper-card">
+              <strong>Read-only access</strong>
+              <p>Your role can inspect alert rules but cannot create, update, or delete them.</p>
+            </div>
+          ) : null}
           <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+            <fieldset disabled={!canEdit}>
             <div className="grid-two">
               <FormField label="Rule name" help="Human-readable alert identifier shown to operators.">
                 <input {...form.register("name")} placeholder="NodeFilesystemAlmostOutOfSpace" />
@@ -1585,6 +1773,7 @@ function AlertRulesPage() {
                 </button>
               ) : null}
             </div>
+            </fieldset>
           </form>
         </Panel>
 
@@ -1633,11 +1822,12 @@ function AlertRulesPage() {
                   </td>
                   <td className="query-cell">{rule.query}</td>
                   <td className="action-cell">
-                    <button className="ghost-button" type="button" onClick={() => setEditingRule(rule)}>
+                    <button className="ghost-button" disabled={!canEdit} type="button" onClick={() => setEditingRule(rule)}>
                       Edit
                     </button>
                     <button
                       className="danger-button"
+                      disabled={!canEdit}
                       type="button"
                       onClick={() => {
                         if (window.confirm(`Delete alert rule "${rule.name}"?`)) {
@@ -1660,11 +1850,13 @@ function AlertRulesPage() {
 
 function GlobalCommunicationsPage() {
   const notify = useToast();
+  const principal = usePrincipal();
   const queryClient = useQueryClient();
+  const canEdit = canManageGlobalCommunications(principal);
 
   const policyQuery = useQuery({
     queryKey: ["communications-policy"],
-    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+    queryFn: () => apiGet("/api/v1/communications/policy", communicationPolicyRecordSchema),
   });
 
   const form = useForm<z.infer<typeof communicationsPolicySchema>>({
@@ -1698,7 +1890,7 @@ function GlobalCommunicationsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof communicationsPolicySchema>) => {
-      return apiPut<CommunicationPolicyRecord>("/api/v1/communications/policy", {
+      const request = communicationPolicyUpdateRequestSchema.parse({
         routes: values.routes.map((route, index) => ({
           id: route.id || undefined,
           label: route.label,
@@ -1709,6 +1901,7 @@ function GlobalCommunicationsPage() {
           position: index + 1,
         })),
       });
+      return apiPut("/api/v1/communications/policy", communicationPolicyRecordSchema, request);
     },
     onSuccess: async () => {
       notify("success", "Global communications policy updated.");
@@ -1743,7 +1936,14 @@ function GlobalCommunicationsPage() {
           title="Default route set"
           subtitle="This policy is optional. If it is empty, enabled workflows must define workflow-specific communications."
         >
+          {!canEdit ? (
+            <div className="helper-card">
+              <strong>Read-only access</strong>
+              <p>Your role can review the global policy but only admins can change it.</p>
+            </div>
+          ) : null}
           <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+            <fieldset disabled={!canEdit}>
             <div className="builder-header">
               <div>
                 <h4>Communication routes</h4>
@@ -1751,6 +1951,7 @@ function GlobalCommunicationsPage() {
               </div>
               <button
                 className="ghost-button"
+                disabled={!canEdit}
                 type="button"
                 onClick={() => routes.append({ ...emptyCommunicationRoute(), position: routes.fields.length + 1 })}
               >
@@ -1832,6 +2033,7 @@ function GlobalCommunicationsPage() {
                 {saveMutation.isPending ? "Saving..." : "Save global policy"}
               </button>
             </div>
+            </fieldset>
           </form>
         </Panel>
 
@@ -1867,22 +2069,25 @@ function GlobalCommunicationsPage() {
 
 function WorkflowsPage() {
   const notify = useToast();
+  const principal = usePrincipal();
   const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingWorkflow, setEditingWorkflow] = useState<RecipeRecord | null>(null);
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
+  const canEdit = canManageWorkflows(principal);
+  const canClear = canManageRepoSyncClear(principal);
 
   const recipesQuery = useQuery({
     queryKey: ["workflows"],
-    queryFn: () => apiGet<RecipeRecord[]>("/api/v1/recipes/?limit=200"),
+    queryFn: () => apiGet("/api/v1/recipes/?limit=200", recipeRecordArraySchema),
   });
   const actionsQuery = useQuery({
     queryKey: ["actions"],
-    queryFn: () => apiGet<IngredientRecord[]>("/api/v1/ingredients/?limit=500"),
+    queryFn: () => apiGet("/api/v1/ingredients/?limit=500", ingredientRecordArraySchema),
   });
   const policyQuery = useQuery({
     queryKey: ["communications-policy"],
-    queryFn: () => apiGet<CommunicationPolicyRecord>("/api/v1/communications/policy"),
+    queryFn: () => apiGet("/api/v1/communications/policy", communicationPolicyRecordSchema),
   });
 
   const form = useForm<z.infer<typeof workflowSchema>>({
@@ -2007,9 +2212,13 @@ function WorkflowsPage() {
         })),
       };
       if (editingWorkflow) {
-        return apiPut<RecipeRecord>(`/api/v1/recipes/${editingWorkflow.id}`, payload);
+        return apiPut(
+          `/api/v1/recipes/${editingWorkflow.id}`,
+          recipeRecordSchema,
+          recipeUpdateRequestSchema.parse(payload),
+        );
       }
-      return apiPost<RecipeRecord>("/api/v1/recipes/", payload);
+      return apiPost("/api/v1/recipes/", recipeRecordSchema, recipeCreateRequestSchema.parse(payload));
     },
     onSuccess: async () => {
       notify("success", editingWorkflow ? "Workflow updated." : "Workflow created.");
@@ -2024,12 +2233,46 @@ function WorkflowsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (workflowId: number) => apiDelete<DeleteResponse>(`/api/v1/recipes/${workflowId}`),
+    mutationFn: (workflowId: number) => apiDelete(`/api/v1/recipes/${workflowId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Workflow deleted.");
       setEditingWorkflow(null);
       resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
       await queryClient.invalidateQueries({ queryKey: ["workflows"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/export", repoSyncResponseSchema),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/import", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingWorkflow(null);
+      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => apiDelete("/api/v1/repo-sync/workflow-actions", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingWorkflow(null);
+      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -2060,18 +2303,34 @@ function WorkflowsPage() {
         title="Workflows"
         description="Build remediation and utility workflows, then choose whether they inherit global communications or define a workflow-specific override."
       />
+      <WorkflowActionRepoSyncPanel
+        canClear={canClear}
+        canEdit={canEdit}
+        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
+        onClear={() => clearMutation.mutate()}
+        onExport={() => exportMutation.mutate()}
+        onImport={() => importMutation.mutate()}
+        settings={settings}
+      />
       <div className="editor-grid">
         <Panel title={editingWorkflow ? `Edit ${editingWorkflow.name}` : "Create workflow"} subtitle="Simple mode keeps the common path short. Advanced mode exposes execution plumbing when you need it.">
+          {!canEdit ? (
+            <div className="helper-card">
+              <strong>Read-only access</strong>
+              <p>Your role can inspect workflows, but only operators and admins can change them.</p>
+            </div>
+          ) : null}
           <div className="mode-toggle">
-            <button className={mode === "simple" ? "primary-button" : "ghost-button"} onClick={() => setMode("simple")} type="button">
+            <button className={mode === "simple" ? "primary-button" : "ghost-button"} disabled={!canEdit} onClick={() => setMode("simple")} type="button">
               Simple
             </button>
-            <button className={mode === "advanced" ? "primary-button" : "ghost-button"} onClick={() => setMode("advanced")} type="button">
+            <button className={mode === "advanced" ? "primary-button" : "ghost-button"} disabled={!canEdit} onClick={() => setMode("advanced")} type="button">
               Advanced
             </button>
           </div>
 
           <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+            <fieldset disabled={!canEdit}>
             <div className="grid-two">
               <FormField label="Workflow name" help="Use the alert or handling pattern name operators will recognize.">
                 <input {...form.register("name")} placeholder="Node filesystem response" />
@@ -2357,6 +2616,7 @@ function WorkflowsPage() {
                 </button>
               ) : null}
             </div>
+            </fieldset>
           </form>
         </Panel>
 
@@ -2413,11 +2673,12 @@ function WorkflowsPage() {
                   <td>{workflow.recipe_ingredients.length}</td>
                   <td>{formatDate(workflow.updated_at)}</td>
                   <td className="action-cell">
-                    <button className="ghost-button" type="button" onClick={() => setEditingWorkflow(workflow)}>
+                    <button className="ghost-button" disabled={!canEdit} type="button" onClick={() => setEditingWorkflow(workflow)}>
                       Edit
                     </button>
                     <button
                       className="danger-button"
+                      disabled={!canEdit}
                       type="button"
                       onClick={() => {
                         if (window.confirm(`Delete workflow "${workflow.name}"?`)) {
@@ -2440,12 +2701,16 @@ function WorkflowsPage() {
 
 function ActionsPage() {
   const notify = useToast();
+  const principal = usePrincipal();
+  const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingAction, setEditingAction] = useState<IngredientRecord | null>(null);
+  const canEdit = canManageActions(principal);
+  const canClear = canManageRepoSyncClear(principal);
 
   const actionsQuery = useQuery({
     queryKey: ["actions"],
-    queryFn: () => apiGet<IngredientRecord[]>("/api/v1/ingredients/?limit=500"),
+    queryFn: () => apiGet("/api/v1/ingredients/?limit=500", ingredientRecordArraySchema),
   });
 
   const form = useForm<z.infer<typeof actionSchema>>({
@@ -2538,9 +2803,17 @@ function ActionsPage() {
         on_failure: values.on_failure,
       };
       if (editingAction) {
-        return apiPut<IngredientRecord>(`/api/v1/ingredients/${editingAction.id}`, payload);
+        return apiPut(
+          `/api/v1/ingredients/${editingAction.id}`,
+          ingredientRecordSchema,
+          ingredientUpdateRequestSchema.parse(payload),
+        );
       }
-      return apiPost<IngredientRecord>("/api/v1/ingredients/", payload);
+      return apiPost(
+        "/api/v1/ingredients/",
+        ingredientRecordSchema,
+        ingredientCreateRequestSchema.parse(payload),
+      );
     },
     onSuccess: async () => {
       notify("success", editingAction ? "Action updated." : "Action created.");
@@ -2552,12 +2825,46 @@ function ActionsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (actionId: number) => apiDelete<DeleteResponse>(`/api/v1/ingredients/${actionId}`),
+    mutationFn: (actionId: number) => apiDelete(`/api/v1/ingredients/${actionId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Action deleted.");
       setEditingAction(null);
       form.reset();
       await queryClient.invalidateQueries({ queryKey: ["actions"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/export", repoSyncResponseSchema),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/import", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingAction(null);
+      form.reset();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => apiDelete("/api/v1/repo-sync/workflow-actions", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      setEditingAction(null);
+      form.reset();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["actions"] }),
+      ]);
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -2576,9 +2883,25 @@ function ActionsPage() {
         title="Actions"
         description="Reusable remediation and utility actions for workflows. Communication routes now live in Global Communications and the workflow communications section."
       />
+      <WorkflowActionRepoSyncPanel
+        canClear={canClear}
+        canEdit={canEdit}
+        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
+        onClear={() => clearMutation.mutate()}
+        onExport={() => exportMutation.mutate()}
+        onImport={() => importMutation.mutate()}
+        settings={settings}
+      />
       <div className="editor-grid">
         <Panel title={editingAction ? `Edit ${editingAction.task_key_template}` : "Create action"} subtitle="Start with remediation or custom automation templates. Ticket and chat actions remain available only for legacy compatibility.">
+          {!canEdit ? (
+            <div className="helper-card">
+              <strong>Read-only access</strong>
+              <p>Your role can inspect actions, but only operators and admins can change them.</p>
+            </div>
+          ) : null}
           <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+            <fieldset disabled={!canEdit}>
             <FormField label="Action type" help="Use remediation or custom for new workflow actions. Communications are configured in communications policy screens instead of ordinary workflow steps.">
               <select {...form.register("template")}>
                 <option value="remediation">Remediation</option>
@@ -2669,6 +2992,7 @@ function ActionsPage() {
                 </button>
               ) : null}
             </div>
+            </fieldset>
           </form>
         </Panel>
 
@@ -2715,11 +3039,12 @@ function ActionsPage() {
                   <td>{String(action.is_blocking)}</td>
                   <td>{formatDate(action.updated_at)}</td>
                   <td className="action-cell">
-                    <button className="ghost-button" type="button" onClick={() => setEditingAction(action)}>
+                    <button className="ghost-button" disabled={!canEdit} type="button" onClick={() => setEditingAction(action)}>
                       Edit
                     </button>
                     <button
                       className="danger-button"
+                      disabled={!canEdit}
                       type="button"
                       onClick={() => {
                         if (window.confirm(`Delete action "${action.task_key_template}"?`)) {
@@ -2730,6 +3055,351 @@ function ActionsPage() {
                       Delete
                     </button>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function AccessPage() {
+  const principal = usePrincipal();
+  const settings = useSettings();
+  const notify = useToast();
+  const queryClient = useQueryClient();
+  const [provider, setProvider] = useState<string>(
+    settings.auth_providers.find((item) => item.name !== "local" && item.name !== "service")?.name || "",
+  );
+  const [bindingType, setBindingType] = useState<"group" | "user">("group");
+  const [role, setRole] = useState<"reader" | "operator" | "admin">("reader");
+  const [externalGroup, setExternalGroup] = useState("");
+  const [selectedPrincipalId, setSelectedPrincipalId] = useState("");
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+
+  const providers = settings.auth_providers.filter((item) => item.name !== "service");
+  const externalProviders = providers.filter((item) => item.name !== "local");
+
+  useEffect(() => {
+    if (externalProviders.length === 0) {
+      if (provider) setProvider("");
+      return;
+    }
+    if (!provider || !externalProviders.some((item) => item.name === provider)) {
+      setProvider(externalProviders[0].name);
+    }
+  }, [externalProviders, provider]);
+
+  const principalsQuery = useQuery({
+    queryKey: ["auth-principals", provider, deferredSearch],
+    queryFn: () =>
+      apiGet(
+        `/api/v1/auth/principals?limit=200${provider ? `&provider=${encodeURIComponent(provider)}` : ""}${deferredSearch ? `&search=${encodeURIComponent(deferredSearch)}` : ""}`,
+        authPrincipalRecordArraySchema,
+      ),
+    placeholderData: (previousData) => previousData,
+    enabled: canManageAccess(principal),
+  });
+  const bindingsQuery = useQuery({
+    queryKey: ["auth-bindings"],
+    queryFn: () => apiGet("/api/v1/auth/bindings", authRoleBindingRecordArraySchema),
+    enabled: canManageAccess(principal),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const payload =
+        bindingType === "group"
+          ? {
+              provider,
+              binding_type: "group",
+              role,
+              external_group: externalGroup,
+            }
+          : {
+              provider,
+              binding_type: "user",
+              role,
+              principal_id: Number(selectedPrincipalId),
+            };
+      return apiPost(
+        "/api/v1/auth/bindings",
+        authRoleBindingRecordSchema,
+        authRoleBindingCreateRequestSchema.parse(payload),
+      );
+    },
+    onSuccess: async () => {
+      notify("success", "Role binding created.");
+      setExternalGroup("");
+      setSelectedPrincipalId("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["auth-bindings"] }),
+        queryClient.invalidateQueries({ queryKey: ["auth-principals"] }),
+      ]);
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, nextRole }: { id: number; nextRole: string }) =>
+      apiPatch(
+        `/api/v1/auth/bindings/${id}`,
+        authRoleBindingRecordSchema,
+        authRoleBindingUpdateRequestSchema.parse({ role: nextRole }),
+      ),
+    onSuccess: async () => {
+      notify("success", "Role binding updated.");
+      await queryClient.invalidateQueries({ queryKey: ["auth-bindings"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiDelete(`/api/v1/auth/bindings/${id}`, deleteResponseSchema),
+    onSuccess: async () => {
+      notify("success", "Role binding deleted.");
+      await queryClient.invalidateQueries({ queryKey: ["auth-bindings"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
+  if (!canManageAccess(principal)) {
+    return <PageError message="You do not have access to manage PoundCake role bindings." />;
+  }
+
+  if (bindingsQuery.isLoading || (principalsQuery.isLoading && !principalsQuery.data)) {
+    return <PageLoading message="Loading provider status, observed principals, and role bindings." />;
+  }
+
+  if (principalsQuery.isError || bindingsQuery.isError || !principalsQuery.data || !bindingsQuery.data) {
+    return <PageError message={getErrorMessage(principalsQuery.error || bindingsQuery.error)} />;
+  }
+
+  const principalFilter = search.trim().toLowerCase();
+  const visiblePrincipals = (principalsQuery.data || []).filter((item) => {
+    if (!principalFilter) {
+      return true;
+    }
+    const haystack = [item.username, item.display_name, item.subject_id]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(principalFilter);
+  });
+  const hasExternalProviders = externalProviders.length > 0;
+  const createDisabled =
+    createMutation.isPending
+    || !hasExternalProviders
+    || (bindingType === "group" ? !externalGroup.trim() : !selectedPrincipalId);
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Access"
+        description="Manage provider-backed RBAC bindings for readers, operators, and admins. External providers are enabled at deploy time; this page manages who gets access after they appear in PoundCake."
+      />
+
+      <div className="status-grid">
+        {providers.map((item) => (
+          <MetricCard key={item.name} title={item.label} value={titleize(item.login_mode)} tone="active">
+            {describeAuthProviderModes(item)}
+          </MetricCard>
+        ))}
+      </div>
+
+      <div className="editor-grid">
+        <Panel title="Create role binding" subtitle="Bind either an observed user or an external group to a PoundCake role.">
+          <div className="form-stack">
+            {!hasExternalProviders ? (
+              <EmptyState message="No external auth providers are enabled yet. Add Active Directory, Auth0, or Azure AD in Helm auth values, redeploy PoundCake, then create bindings here." />
+            ) : null}
+            <div className="grid-two">
+              <FormField
+                label="Provider"
+                help="Providers are enabled in Helm and appear here after redeploy. The local superuser is always available for recovery, but role bindings only apply to external providers."
+              >
+                <select
+                  disabled={!hasExternalProviders}
+                  value={provider}
+                  onChange={(event) => setProvider(event.target.value)}
+                >
+                  {externalProviders.map((item) => (
+                    <option key={item.name} value={item.name}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField
+                label="Binding type"
+                help="Use group bindings to pre-provision access before a user logs in. Use observed user bindings after someone has already authenticated successfully."
+              >
+                <select value={bindingType} onChange={(event) => setBindingType(event.target.value as "group" | "user")}>
+                  <option value="group">Group</option>
+                  <option value="user">Observed user</option>
+                </select>
+              </FormField>
+            </div>
+            <div className="grid-two">
+              <FormField
+                label="Role"
+                help="Readers are read-only. Operators can manage workflows, actions, suppressions, and alert rules. Admins can also manage access and all remaining configuration."
+              >
+                <select value={role} onChange={(event) => setRole(event.target.value as "reader" | "operator" | "admin")}>
+                  <option value="reader">Reader</option>
+                  <option value="operator">Operator</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </FormField>
+              <FormField
+                label="Principal search"
+                help="Observed users appear here after a successful login through Auth0, Azure AD, or Active Directory. Search narrows the stored principal list before you choose a user binding."
+              >
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter observed users" />
+              </FormField>
+            </div>
+
+            {bindingType === "group" ? (
+              <FormField
+                label="External group"
+                help="Enter the group name exactly as PoundCake sees it after provider normalization. For Active Directory this is usually the extracted CN; for Auth0 and Azure AD it is usually the exact group claim value."
+              >
+                <input
+                  value={externalGroup}
+                  onChange={(event) => setExternalGroup(event.target.value)}
+                  placeholder="monitoring-operators"
+                />
+              </FormField>
+            ) : (
+              <FormField
+                label="Observed user"
+                help="Choose a user who has already logged in and been recorded by PoundCake. If the person is missing here, have them authenticate once or create a group binding instead."
+              >
+                <select
+                  disabled={!hasExternalProviders}
+                  value={selectedPrincipalId}
+                  onChange={(event) => setSelectedPrincipalId(event.target.value)}
+                >
+                  <option value="">Choose a user</option>
+                  {visiblePrincipals.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.display_name || item.username}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            )}
+
+            <div className="form-actions">
+              <button
+                className="primary-button"
+                disabled={createDisabled}
+                type="button"
+                onClick={() => createMutation.mutate()}
+              >
+                {createMutation.isPending ? "Saving..." : "Create binding"}
+              </button>
+            </div>
+          </div>
+        </Panel>
+
+        <HelpRail
+          title="Access help"
+          items={[
+            {
+              label: "Operator scope",
+              description: "Operators can manage workflows, actions, suppressions, and alert rules, but they cannot change access or global communications.",
+            },
+            {
+              label: "Admin scope",
+              description: "Admins can do everything operators can, plus manage role bindings and global communications.",
+            },
+            {
+              label: "Superuser safety",
+              description: "The local superuser remains outside normal RBAC binding changes so there is always a recovery path.",
+            },
+            {
+              label: "Adding providers",
+              description: "Auth0, Azure AD, and Active Directory are enabled through Helm auth settings and secrets, then they appear here for binding management. This page does not create provider connections by itself.",
+            },
+          ]}
+        />
+      </div>
+
+      <Panel title="Role bindings" subtitle="Change roles inline or remove bindings that are no longer needed.">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Type</th>
+                <th>Target</th>
+                <th>Role</th>
+                <th>Created by</th>
+                <th>Updated</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {bindingsQuery.data.map((binding) => (
+                <tr key={binding.id}>
+                  <td>{binding.provider}</td>
+                  <td>{binding.binding_type}</td>
+                  <td>{binding.binding_type === "group" ? binding.external_group || "-" : binding.principal?.display_name || binding.principal?.username || "-"}</td>
+                  <td>
+                    <select
+                      value={binding.role}
+                      onChange={(event) => updateMutation.mutate({ id: binding.id, nextRole: event.target.value })}
+                    >
+                      <option value="reader">Reader</option>
+                      <option value="operator">Operator</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </td>
+                  <td>{binding.created_by || "-"}</td>
+                  <td>{formatDate(binding.updated_at)}</td>
+                  <td className="action-cell">
+                    <button
+                      className="danger-button"
+                      disabled={deleteMutation.isPending}
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("Delete this role binding?")) {
+                          deleteMutation.mutate(binding.id);
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel title="Observed principals" subtitle="Users appear here after a successful external-provider login.">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>User</th>
+                <th>Groups</th>
+                <th>Last seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {principalsQuery.data.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.provider}</td>
+                  <td>{item.display_name || item.username}</td>
+                  <td>{item.groups.length ? item.groups.join(", ") : "-"}</td>
+                  <td>{formatDate(item.last_seen_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2772,6 +3442,222 @@ function PageHeader({ title, description }: { title: string; description: string
       <h3>{title}</h3>
       <p>{description}</p>
     </section>
+  );
+}
+
+function AlertRuleRepoSyncPanel({
+  canClear,
+  settings,
+  canEdit,
+  canImport,
+  isPending,
+  onExport,
+  onImport,
+  onClear,
+}: {
+  settings: AppSettings;
+  canClear: boolean;
+  canEdit: boolean;
+  canImport: boolean;
+  isPending: boolean;
+  onExport: () => void;
+  onImport: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <Panel
+      title="Repo sync"
+      subtitle="Export the live rule set to Git, clear the current in-cluster rules when you want a fresh slate, then import from the repo."
+    >
+      {!settings.git_enabled ? (
+        <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, and the repo directories in Helm before using repo import/export." />
+      ) : (
+        <div className="form-stack">
+          <div className="helper-card">
+            <strong>Configured repository</strong>
+            <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
+            <p>Alert rules directory: {settings.git_rules_path || "-"}</p>
+          </div>
+          {!canImport ? (
+            <div className="helper-card">
+              <strong>CRD mode required for import and clear</strong>
+              <p>
+                Export can still write the current rules to Git, but clear and import require
+                `prometheus.useCrds=true` so PoundCake can apply changes back into the cluster.
+              </p>
+            </div>
+          ) : null}
+          {!canClear ? (
+            <div className="helper-card">
+              <strong>Admin access required for clear</strong>
+              <p>Only admins can clear live alert rules.</p>
+            </div>
+          ) : null}
+          <div className="form-actions">
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
+              {isPending ? "Working..." : "Export to repo"}
+            </button>
+            <button
+              className="ghost-button"
+              disabled={!canEdit || !canImport || isPending}
+              type="button"
+              onClick={onImport}
+            >
+              {isPending ? "Working..." : "Import from repo"}
+            </button>
+            <DangerConfirmButton
+              dangerMessage="This removes every live alert rule currently managed by PoundCake. Import from repo does not delete missing rules automatically."
+              disabled={!canClear || !canImport || isPending}
+              isPending={isPending}
+              label="Clear alert rules"
+              title="Clear alert rules?"
+              onConfirm={onClear}
+            />
+          </div>
+          <div className="login-note">
+            Import upserts what is in Git. Use clear first when you want the repo to become the full live rule set.
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function WorkflowActionRepoSyncPanel({
+  canClear,
+  settings,
+  canEdit,
+  isPending,
+  onExport,
+  onImport,
+  onClear,
+}: {
+  settings: AppSettings;
+  canClear: boolean;
+  canEdit: boolean;
+  isPending: boolean;
+  onExport: () => void;
+  onImport: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <Panel
+      title="Repo sync"
+      subtitle="Version workflows and actions together in Git so the same action catalog and workflow graph can be promoted into other environments."
+    >
+      {!settings.git_enabled ? (
+        <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, git.workflowsPath, and git.actionsPath in Helm before using repo import/export." />
+      ) : (
+        <div className="form-stack">
+          <div className="helper-card">
+            <strong>Configured repository</strong>
+            <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
+            <p>Workflows directory: {settings.git_workflows_path || "-"}</p>
+            <p>Actions directory: {settings.git_actions_path || "-"}</p>
+          </div>
+          {!canClear ? (
+            <div className="helper-card">
+              <strong>Admin access required for clear</strong>
+              <p>Only admins can clear workflows and actions.</p>
+            </div>
+          ) : null}
+          <div className="form-actions">
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
+              {isPending ? "Working..." : "Export to repo"}
+            </button>
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onImport}>
+              {isPending ? "Working..." : "Import from repo"}
+            </button>
+            <DangerConfirmButton
+              dangerMessage="This removes every user-visible workflow and action currently stored in PoundCake. Import from repo does not delete missing items automatically."
+              disabled={!canClear || isPending}
+              isPending={isPending}
+              label="Clear workflows and actions"
+              title="Clear workflows and actions?"
+              onConfirm={onClear}
+            />
+          </div>
+          <div className="login-note">
+            Import upserts repo-backed actions first, then resolves workflow steps against those actions. Use clear first for a full replace.
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function DangerConfirmButton({
+  title,
+  label,
+  dangerMessage,
+  disabled,
+  isPending,
+  onConfirm,
+}: {
+  title: string;
+  label: string;
+  dangerMessage: string;
+  disabled: boolean;
+  isPending: boolean;
+  onConfirm: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
+  const confirmed = confirmation.trim().toLowerCase() === "yes";
+
+  function closeDialog() {
+    setOpen(false);
+    setConfirmation("");
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!confirmed || isPending) {
+      return;
+    }
+    closeDialog();
+    onConfirm();
+  }
+
+  return (
+    <>
+      <button className="danger-button" disabled={disabled} type="button" onClick={() => setOpen(true)}>
+        {isPending ? "Working..." : label}
+      </button>
+      {open ? (
+        <div aria-modal="true" className="dialog-backdrop" role="dialog">
+          <div className="dialog-card">
+            <div className="panel-head">
+              <div>
+                <h4>{title}</h4>
+                <p className="danger-note">{dangerMessage}</p>
+              </div>
+            </div>
+            <form className="form-stack" onSubmit={handleSubmit}>
+              <div className="helper-card">
+                <strong>Danger zone</strong>
+                <p>Type "yes" to continue.</p>
+              </div>
+              <input
+                autoFocus
+                className="dialog-input"
+                onChange={(event) => setConfirmation(event.target.value)}
+                placeholder="yes"
+                value={confirmation}
+              />
+              <div className="form-actions">
+                <button className="ghost-button" type="button" onClick={closeDialog}>
+                  Cancel
+                </button>
+                <button className="danger-button" disabled={!confirmed || isPending} type="submit">
+                  {isPending ? "Working..." : label}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -2967,8 +3853,62 @@ function useSettings() {
   return settings;
 }
 
+function usePrincipal() {
+  const principal = useContext(PrincipalContext);
+  if (!principal) {
+    throw new Error("Principal context is missing");
+  }
+  return principal;
+}
+
 function useToast() {
   return useContext(ToastContext);
+}
+
+function hasRole(
+  principal: AuthMeRecord,
+  role: "reader" | "operator" | "admin",
+) {
+  if (principal.is_superuser) {
+    return true;
+  }
+  if (principal.role === "service") {
+    return false;
+  }
+  const order = {
+    reader: 0,
+    operator: 1,
+    admin: 2,
+  } as const;
+  return order[principal.role] >= order[role];
+}
+
+function canManageSuppressions(principal: AuthMeRecord) {
+  return hasRole(principal, "operator");
+}
+
+function canManageAlertRules(principal: AuthMeRecord) {
+  return hasRole(principal, "operator");
+}
+
+function canManageWorkflows(principal: AuthMeRecord) {
+  return hasRole(principal, "operator");
+}
+
+function canManageActions(principal: AuthMeRecord) {
+  return hasRole(principal, "operator");
+}
+
+function canManageRepoSyncClear(principal: AuthMeRecord) {
+  return hasRole(principal, "admin");
+}
+
+function canManageGlobalCommunications(principal: AuthMeRecord) {
+  return hasRole(principal, "admin");
+}
+
+function canManageAccess(principal: AuthMeRecord) {
+  return hasRole(principal, "admin");
 }
 
 function getRouteName(pathname: string): string {
@@ -2980,6 +3920,7 @@ function getRouteName(pathname: string): string {
   if (pathname.startsWith("/config/communications")) return "Global Communications";
   if (pathname.startsWith("/config/workflows")) return "Workflows";
   if (pathname.startsWith("/config/actions")) return "Actions";
+  if (pathname.startsWith("/config/access")) return "Access";
   return "Overview";
 }
 
@@ -3022,6 +3963,39 @@ function getErrorMessage(error: unknown): string {
     return String((error as { message: unknown }).message);
   }
   return "Something went wrong.";
+}
+
+function formatRepoLocation(repoUrl: string | null, branch: string | null): string {
+  if (!repoUrl) {
+    return "Repository URL is not configured.";
+  }
+  return branch ? `${repoUrl} • branch ${branch}` : repoUrl;
+}
+
+function formatRepoSyncMessage(result: RepoSyncResponse): string {
+  if (result.pull_request?.url) {
+    return `${result.message} Pull request created.`;
+  }
+  if (result.branch) {
+    return `${result.message} Branch ${result.branch} created.`;
+  }
+  return result.message;
+}
+
+function describeAuthProviderModes(provider: AuthProviderRecord): string {
+  if (provider.password_login) {
+    return "Password login enabled.";
+  }
+  if (provider.browser_login && provider.device_login) {
+    return "Browser login and CLI device login enabled.";
+  }
+  if (provider.browser_login) {
+    return "Browser login enabled.";
+  }
+  if (provider.device_login) {
+    return "CLI device login enabled.";
+  }
+  return "Provider available.";
 }
 
 function parseJsonObject(value?: string, label?: string): Record<string, unknown> | undefined {

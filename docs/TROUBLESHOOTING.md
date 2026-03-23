@@ -10,6 +10,7 @@ flowchart TD
   Scope -->|Compose| Local["Inspect local services and config"]
   Scope -->|Kubernetes| K8s["Run startup gate and hook checks"]
 ```
+For auth provider setup and access-binding workflows, see [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
 
 ## API not ready
 
@@ -102,7 +103,7 @@ Confirm `subsets[].addresses[]` is non-empty.
 
 ## Alertmanager webhook returns 401
 
-PoundCake requires `X-Internal-API-Key` for `/api/v1/webhook` when auth is enabled.
+PoundCake requires `X-Auth-Token` for `/api/v1/webhook` when auth is enabled.
 
 Get the key:
 
@@ -115,7 +116,7 @@ Confirm your Alertmanager receiver sends:
 ```yaml
 http_config:
   headers:
-    X-Internal-API-Key: "<internal-api-key>"
+    X-Auth-Token: "<internal-api-key>"
 ```
 
 ## Worker services return 401 when calling PoundCake API
@@ -127,7 +128,7 @@ Symptoms in logs:
 - `timer ... status=401 ... Failed to fetch dishes`
 - `dishwasher ... status=401 ... Dishwasher sync failed`
 
-When auth is enabled, workers must send `X-Internal-API-Key` for protected endpoints.
+When auth is enabled, workers must send `X-Auth-Token` for protected endpoints.
 
 Verify the internal key in the admin secret:
 
@@ -139,11 +140,11 @@ Verify environment wiring:
 
 ```bash
 kubectl get deploy <release>-poundcake-api -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_ENABLED")]}'
-kubectl get deploy <release>-poundcake-api -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_INTERNAL_API_KEY")]}'
-kubectl get deploy <release>-poundcake-chef -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
-kubectl get deploy <release>-poundcake-prep-chef -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
-kubectl get deploy <release>-poundcake-timer -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
-kubectl get deploy <release>-poundcake-dishwasher -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_INTERNAL_API_KEY")]}'
+kubectl get deploy <release>-poundcake-api -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_SERVICE_TOKEN")]}'
+kubectl get deploy <release>-poundcake-chef -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_SERVICE_TOKEN")]}'
+kubectl get deploy <release>-poundcake-prep-chef -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_SERVICE_TOKEN")]}'
+kubectl get deploy <release>-poundcake-timer -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_SERVICE_TOKEN")]}'
+kubectl get deploy <release>-poundcake-dishwasher -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POUNDCAKE_AUTH_SERVICE_TOKEN")]}'
 ```
 
 If Helm has `auth.enabled: false`, ensure API shows `POUNDCAKE_AUTH_ENABLED=false`.

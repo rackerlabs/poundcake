@@ -10,6 +10,25 @@ flowchart TD
   PoundCake --> Cluster["Kubernetes Cluster"]
   Bakery --> Cluster
 ```
+Auth provider and RBAC setup is documented in [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+Use that guide for enabling local superuser, Active Directory, and Auth0 together, plus post-deploy access binding.
+
+## Choose Your Install Path
+
+- Same namespace or cluster: install Bakery first, then install PoundCake. The PoundCake installer auto-discovers the co-located Bakery URL and shared DB host.
+- Different namespaces or clusters: install Bakery in its own environment, expose it at an HTTPS URL, then install PoundCake with `--remote-bakery-url` and a shared HMAC key. Start with [REMOTE_BAKERY_QUICKSTART.md](REMOTE_BAKERY_QUICKSTART.md).
+- Docker Compose: local development only. It is not the primary installer path for deploying Bakery and PoundCake into Kubernetes environments.
+
+## Split-Environment Summary
+
+If Bakery and PoundCake will run in different namespaces or clusters, the installer-driven flow is:
+
+1. Install Bakery first and set `POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY` explicitly.
+2. Expose Bakery at a URL the PoundCake environment can reach.
+3. Install PoundCake with `--remote-bakery-url` and the same HMAC key.
+4. Verify Bakery health, the HMAC secret in each environment, and PoundCake rollout.
+
+The full end-to-end walkthrough is in [REMOTE_BAKERY_QUICKSTART.md](REMOTE_BAKERY_QUICKSTART.md).
 
 ## Helm (Kubernetes)
 
@@ -58,15 +77,16 @@ Non-interactive Bakery secret create/update:
   --bakery-rackspace-password '<new-password>'
 ```
 
-Bakery install with explicit image pin and existing pull secret:
+Bakery install with image refs pinned in values/override files and an existing pull secret:
 
 ```bash
-POUNDCAKE_BAKERY_IMAGE_TAG=2.0.96 \
 POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
 POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true \
 POUNDCAKE_IMAGE_PULL_SECRET_NAME=ghcr-creds \
 ./helm/bin/install-bakery.sh
 ```
+
+Image repositories/tags/digests must be configured in Helm values or override files such as `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`, not installer env vars.
 
 Optional environment defaults for fork/private registry/local chart workflows:
 
@@ -101,8 +121,14 @@ External Bakery (not co-located) path:
 ./install/install-poundcake-helm.sh \
   --remote-bakery-url https://bakery.example.com \
   --remote-bakery-auth-mode hmac \
-  --remote-bakery-auth-secret external-bakery-hmac
+  --remote-bakery-hmac-key '<shared-hmac-key>'
 ```
+
+Recommended approach for different environments:
+
+- Set `POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY` explicitly when installing Bakery.
+- Use the same key with `--remote-bakery-hmac-key` when installing PoundCake.
+- See [REMOTE_BAKERY_QUICKSTART.md](REMOTE_BAKERY_QUICKSTART.md) for the full end-to-end flow.
 
 Notes:
 - `install-poundcake-helm.sh` does not support `--target`.
@@ -110,7 +136,9 @@ Notes:
 - Co-located install flow is now HMAC-secret aware:
   - `install-bakery-helm.sh` creates/reuses a Bakery HMAC secret and wires `bakery.auth.existingSecret` + `bakery.client.auth.existingSecret`.
   - `install-poundcake-helm.sh` auto-discovers that secret and sets `bakery.client.auth.existingSecret`.
-- External remote Bakery still requires `--remote-bakery-auth-secret` (or `POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET`) pointing to a pre-created matching secret.
+- External remote Bakery can either:
+  - provide `--remote-bakery-auth-secret` (or `POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET`) pointing to a pre-created matching secret, or
+  - provide `--remote-bakery-hmac-key` (and optional `--remote-bakery-hmac-key-id`) so the PoundCake installer creates the client secret in-cluster.
 - Chart versions are sourced from `/etc/genestack/helm-chart-version.yaml` and `/etc/genestack/helm-chart-versions.yaml`.
 
 Bakery Gateway API exposure (optional):
@@ -225,7 +253,7 @@ StackStorm default profile (via `/Users/chris.breu/code/poundcake/helm/stackstor
 - Disabled by default: `st2stream`, `st2web`, `st2chatops`, `st2garbagecollector`, `st2timersengine`, `st2sensorcontainer`.
 - To customize: add override files under `/etc/genestack/helm-configs/stackstorm/*.yaml` to re-enable optional services or increase replicas.
 
-## Docker Compose (Local)
+## Docker Compose (Local Development Only)
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
@@ -255,7 +283,7 @@ curl http://localhost:8000/api/v1/health
 
 ## Alertmanager Webhook Auth (Kubernetes)
 
-When auth is enabled, inbound `/api/v1/webhook` requests must send `X-Internal-API-Key`.
+When auth is enabled, inbound `/api/v1/webhook` requests must send `X-Auth-Token`.
 
 ```bash
 kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from api.services.bakery_client import BakeryTicketAccepted, BakeryTicketOperation
 from api.services.execution_adapters.bakery import BakeryExecutionAdapter
 from api.services.execution_adapters.stackstorm import StackStormExecutionAdapter
 from api.services.execution_types import ExecutionContext
@@ -36,7 +37,30 @@ async def test_stackstorm_adapter_maps_running_status():
 async def test_bakery_adapter_create_success_sets_context_update(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         "api.services.execution_adapters.bakery.create_ticket_with_key",
-        AsyncMock(return_value={"status": "succeeded", "ticket_id": "INC-1"}),
+        AsyncMock(
+            return_value=BakeryTicketAccepted(
+                ticket_id="INC-1",
+                operation_id="op-1",
+                action="create",
+                status="succeeded",
+                created_at="2026-03-19T00:00:00Z",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "api.services.execution_adapters.bakery.poll_operation",
+        AsyncMock(
+            return_value=BakeryTicketOperation(
+                operation_id="op-1",
+                ticket_id="INC-1",
+                action="create",
+                status="succeeded",
+                attempt_count=1,
+                max_attempts=5,
+                created_at="2026-03-19T00:00:00Z",
+                updated_at="2026-03-19T00:00:00Z",
+            )
+        ),
     )
     adapter = BakeryExecutionAdapter()
     result = await adapter.execute_once(
@@ -59,11 +83,31 @@ async def test_bakery_adapter_polls_operation_and_maps_failed_terminal_status(
 ):
     monkeypatch.setattr(
         "api.services.execution_adapters.bakery.add_ticket_comment_with_key",
-        AsyncMock(return_value={"operation_id": "op-1"}),
+        AsyncMock(
+            return_value=BakeryTicketAccepted(
+                ticket_id="INC-2",
+                operation_id="op-1",
+                action="comment",
+                status="queued",
+                created_at="2026-03-19T00:00:00Z",
+            )
+        ),
     )
     monkeypatch.setattr(
         "api.services.execution_adapters.bakery.poll_operation",
-        AsyncMock(return_value={"status": "dead_letter", "last_error": "unrecoverable"}),
+        AsyncMock(
+            return_value=BakeryTicketOperation(
+                operation_id="op-1",
+                ticket_id="INC-2",
+                action="comment",
+                status="dead_letter",
+                attempt_count=1,
+                max_attempts=5,
+                last_error="unrecoverable",
+                created_at="2026-03-19T00:00:00Z",
+                updated_at="2026-03-19T00:00:00Z",
+            )
+        ),
     )
     adapter = BakeryExecutionAdapter()
     result = await adapter.execute_once(

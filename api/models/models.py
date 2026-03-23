@@ -506,3 +506,73 @@ class SuppressionSummary(Base):
     suppression: Mapped["AlertSuppression"] = relationship(
         "AlertSuppression", back_populates="summary"
     )
+
+
+class AuthPrincipal(Base):
+    """Observed external principal metadata used for RBAC assignments."""
+
+    __tablename__ = "auth_principals"
+    __table_args__ = (
+        UniqueConstraint("provider", "subject_id", name="ux_auth_principals_provider_subject"),
+        Index("ix_auth_principals_provider_username", "provider", "username"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    subject_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    username: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    principal_type: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
+    groups_json: Mapped[list[str] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+    role_bindings: Mapped[list["AuthRoleBinding"]] = relationship(
+        "AuthRoleBinding",
+        back_populates="principal",
+        cascade="all, delete-orphan",
+    )
+
+
+class AuthRoleBinding(Base):
+    """Provider-scoped RBAC bindings for users and groups."""
+
+    __tablename__ = "auth_role_bindings"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "binding_type",
+            "principal_id",
+            name="ux_auth_role_bindings_provider_type_principal",
+        ),
+        UniqueConstraint(
+            "provider",
+            "binding_type",
+            "external_group",
+            name="ux_auth_role_bindings_provider_type_group",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    binding_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    principal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("auth_principals.id"),
+        nullable=True,
+        index=True,
+    )
+    external_group: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+    principal: Mapped["AuthPrincipal | None"] = relationship(
+        "AuthPrincipal",
+        back_populates="role_bindings",
+    )

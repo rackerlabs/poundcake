@@ -2,6 +2,8 @@
 
 A standalone Helm chart for running PoundCake with StackStorm in Kubernetes. This chart is generated from the Docker Compose configuration and provides a production-ready deployment.
 
+Auth provider setup for local superuser, Active Directory, Auth0, and Azure AD is documented in [docs/AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+
 ## Table of Contents
 
 - [Features](#features)
@@ -235,6 +237,7 @@ Co-located install order:
 External Bakery mode (not co-located):
 - Set `--remote-bakery-url` / `POUNDCAKE_REMOTE_BAKERY_URL`.
 - Optional: `--remote-bakery-enabled`, `--remote-bakery-auth-mode`, `--remote-bakery-auth-secret`.
+- For first-time split-environment installs, prefer `--remote-bakery-hmac-key` so the PoundCake installer can create the local client auth secret.
 - If no Bakery URL is explicit and no Bakery is discovered in-namespace, PoundCake installer sets `bakery.client.enabled=false`.
 
 Example:
@@ -242,8 +245,11 @@ Example:
 ./install/install-poundcake-helm.sh \
   --remote-bakery-url https://bakery.example.com \
   --remote-bakery-auth-mode hmac \
-  --remote-bakery-auth-secret external-bakery-hmac
+  --remote-bakery-auth-secret external-bakery-hmac \
+  --remote-bakery-hmac-key '<shared-hmac-key>'
 ```
+
+For the full step-by-step split-environment flow, see [docs/REMOTE_BAKERY_QUICKSTART.md](../docs/REMOTE_BAKERY_QUICKSTART.md).
 
 Readiness semantics:
 - `/api/v1/live` is process-only.
@@ -273,8 +279,7 @@ stackstormImage:
   pullPolicy: IfNotPresent
 ```
 
-Use immutable image pins for PoundCake releases. Set either a fixed tag or digest (`repository@sha256:...`) and avoid mutable `latest` in production installs.
-Bakery image refs follow digest-first precedence as well: `bakery.image.digest` (or installer `POUNDCAKE_BAKERY_IMAGE_DIGEST` / `POUNDCAKE_IMAGE_DIGEST` fallback) overrides `bakery.image.tag`.
+Use immutable image pins for PoundCake releases. Set either a fixed tag or digest (`repository@sha256:...`) in values or override files and avoid mutable `latest` in production installs.
 
 #### Persistence Configuration
 

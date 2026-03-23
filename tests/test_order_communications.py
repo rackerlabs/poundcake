@@ -8,6 +8,7 @@ import pytest
 
 from api.models.models import Order, OrderCommunication
 from api.services import order_communications
+from shared.bakery_contract import CommunicationResponse
 
 
 def _make_order(order_id: int = 1) -> Order:
@@ -84,7 +85,16 @@ async def test_apply_execution_result_refreshes_remote_state_after_successful_cl
         "load_order_with_communications",
         AsyncMock(return_value=order),
     )
-    get_communication = AsyncMock(return_value={"state": "confirmed_solved"})
+    get_communication = AsyncMock(
+        return_value=CommunicationResponse(
+            communication_id="comm-1",
+            provider_type="rackspace_core",
+            provider_reference_id="240101-00001",
+            state="confirmed_solved",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
     monkeypatch.setattr(order_communications, "get_communication", get_communication)
 
     await order_communications.apply_execution_result(
@@ -127,7 +137,15 @@ async def test_apply_execution_result_refreshes_remote_state_for_new_successful_
         "load_order_with_communications",
         AsyncMock(return_value=order),
     )
-    get_communication = AsyncMock(return_value={"state": "open"})
+    get_communication = AsyncMock(
+        return_value=CommunicationResponse(
+            communication_id="comm-2",
+            provider_type="discord",
+            state="open",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
     monkeypatch.setattr(order_communications, "get_communication", get_communication)
 
     await order_communications.apply_execution_result(

@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from api.models.models import Dish, DishIngredient, Order, Recipe
+from api.services.bakery_client import BakeryTicketOperation
 
 
 class ScalarResult:
@@ -747,7 +748,21 @@ def test_order_timeline_get__returns_events(client, mock_db_session):
         ]
     )
 
-    with patch("api.api.orders.get_operation", new=AsyncMock(return_value={"status": "running"})):
+    with patch(
+        "api.api.orders.get_operation",
+        new=AsyncMock(
+            return_value=BakeryTicketOperation(
+                operation_id="op-1",
+                ticket_id="ticket-1",
+                action="comment",
+                status="running",
+                attempt_count=1,
+                max_attempts=5,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        ),
+    ):
         response = client.get("/api/v1/orders/1/timeline")
 
     assert response.status_code == 200

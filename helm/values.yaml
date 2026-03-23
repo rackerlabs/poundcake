@@ -464,6 +464,12 @@ git:
   # Path to Prometheus rules directory in repo
   rulesPath: prometheus/rules
 
+  # Path to workflow export/import directory in repo
+  workflowsPath: poundcake/workflows
+
+  # Path to action export/import directory in repo
+  actionsPath: poundcake/actions
+
   # File organization strategy
   # When true, each alert gets its own file (recommended)
   # When false, orders are grouped in files by CRD name
@@ -500,12 +506,88 @@ auth:
   enabled: true
   # Session timeout in seconds (default: 24 hours)
   sessionTimeout: 86400
+  # OIDC state token lifetime in seconds for browser login providers.
+  oidcStateTtl: 600
   # Shared internal API key for service-to-service auth (API <-> workers).
   # If empty, Helm will generate one and persist it in the admin secret.
   internalApiKey: ""
   # Secret name will be: <release-name>-poundcake-admin
   # Get password with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.password}' | base64 -d
   # Get internal key with: kubectl get secret <release-name>-poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d
+  # Access page manages role bindings only. Provider enablement happens here at deploy time.
+
+  local:
+    # Keep the bootstrap superuser enabled as the recovery account.
+    enabled: true
+
+  activeDirectory:
+    enabled: false
+    serverUri: ""
+    userBaseDn: ""
+    bindDn: ""
+    userFilter: "(&(objectClass=user)(sAMAccountName={username}))"
+    groupAttribute: "memberOf"
+    displayNameAttribute: "displayName"
+    usernameAttribute: "sAMAccountName"
+    subjectAttribute: "distinguishedName"
+    useSsl: true
+    validateTls: true
+    groupNameRegex: "CN=([^,]+)"
+    existingSecret: ""
+    secretKeys:
+      bindPassword: "bind-password"
+    caBundle:
+      existingSecret: ""
+      key: "ca.crt"
+      mountPath: "/run/secrets/poundcake-ad"
+      fileName: "ca.crt"
+
+  auth0:
+    enabled: false
+    shared:
+      domain: ""
+      audience: ""
+      scope: "openid profile email"
+      organization: ""
+      connection: ""
+      usernameClaim: "email"
+      displayNameClaim: "name"
+      groupsClaim: "groups"
+      subjectClaim: "sub"
+    ui:
+      enabled: false
+      clientId: ""
+      callbackUrl: ""
+      existingSecret: ""
+      secretKeys:
+        clientSecret: "client-secret"
+    cli:
+      enabled: false
+      clientId: ""
+      existingSecret: ""
+      secretKeys:
+        clientSecret: "client-secret"
+
+  azureAd:
+    enabled: false
+    shared:
+      tenant: ""
+      audience: ""
+      scope: "openid profile email"
+      usernameClaim: "preferred_username"
+      displayNameClaim: "name"
+      groupsClaim: "groups"
+      subjectClaim: "sub"
+    ui:
+      enabled: false
+      clientId: ""
+      callbackUrl: ""
+      existingSecret: ""
+      secretKeys:
+        clientSecret: "client-secret"
+    cli:
+      enabled: false
+      clientId: ""
 
 # Database configuration (MySQL/MariaDB) for PoundCake API only.
 # Bakery uses a separate database contract under bakery.database.
@@ -764,7 +846,7 @@ bakery:
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: Always
-    tag: "2.0.114"
+    tag: "2.0.153"
     # Optional immutable image digest (sha256:...); overrides tag when set.
     digest: ""
 
@@ -953,7 +1035,7 @@ bakery:
 
 poundcakeImage:
   repository: ghcr.io/rackerlabs/poundcake
-  tag: "2.0.114"
+  tag: "2.0.153"
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
   pullPolicy: Always
@@ -969,7 +1051,7 @@ poundcakeImage:
 
 uiImage:
   repository: ghcr.io/rackerlabs/poundcake-ui
-  tag: "2.0.114"
+  tag: "2.0.153"
   pullPolicy: Always
   containerPort: 8080
   runtimeWritablePaths:

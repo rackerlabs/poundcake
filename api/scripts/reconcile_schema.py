@@ -21,6 +21,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from api.core.logging import get_logger, setup_logging  # noqa: E402
+from api.models.models import Base  # noqa: E402
 
 setup_logging()
 logger = get_logger(__name__)
@@ -97,12 +98,29 @@ def _apply_table_reconciliation(
         conn.execute(text(ddl))
 
 
+def _ensure_tables_exist(conn: Connection, table_names: list[str]) -> None:
+    missing_table_names = [
+        table_name for table_name in table_names if not _table_exists(conn, table_name)
+    ]
+    if not missing_table_names:
+        return
+
+    tables = [Base.metadata.tables[table_name] for table_name in missing_table_names]
+    logger.info(
+        "Creating missing tables during schema reconciliation",
+        extra={"table_names": missing_table_names, "req_id": "SYSTEM-DB-RECONCILE"},
+    )
+    Base.metadata.create_all(bind=conn, tables=tables, checkfirst=True)
+
+
 def reconcile_schema() -> None:
     db_url = _sync_database_url_from_env()
     engine = create_engine(db_url, future=True)
 
     try:
         with engine.begin() as conn:
+            _ensure_tables_exist(conn, ["auth_principals", "auth_role_bindings"])
+
             orders_ddl: list[str] = []
 
             if not _column_exists(conn, "orders", "bakery_ticket_state"):

@@ -12,6 +12,8 @@ from api.services.communications import (
     normalize_communication_operation,
 )
 from api.services.bakery_client import (
+    BakeryTicketAccepted,
+    BakeryTicketOperation,
     add_ticket_comment_with_key,
     close_ticket_with_key,
     create_ticket_with_key,
@@ -101,7 +103,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         ).strip()
 
         try:
-            accepted: dict[str, Any]
+            accepted: BakeryTicketAccepted
             context_updates: dict[str, Any] = {}
             if operation == "open":
                 reuse_mode = str(ctx.context.get("communication_reuse_mode") or "").strip().lower()
@@ -125,7 +127,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                         payload=payload,
                         idempotency_key=idem_key,
                     )
-                    created_ticket_id = str(accepted.get("ticket_id") or "").strip()
+                    created_ticket_id = accepted.ticket_id.strip()
                     if created_ticket_id:
                         context_updates["bakery_ticket_id"] = created_ticket_id
                         ticket_id = created_ticket_id
@@ -159,7 +161,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                     payload=payload,
                     idempotency_key=idem_key,
                 )
-                created_ticket_id = str(accepted.get("ticket_id") or "").strip()
+                created_ticket_id = accepted.ticket_id.strip()
                 if created_ticket_id:
                     context_updates["bakery_ticket_id"] = created_ticket_id
                     ticket_id = created_ticket_id
@@ -198,35 +200,26 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                     retryable=False,
                 )
 
-            execution_ref = (
-                str(
-                    accepted.get("operation_id")
-                    or accepted.get("request_id")
-                    or accepted.get("id")
-                    or ""
-                )
-                or None
-            )
+            execution_ref = accepted.operation_id or None
 
-            terminal_payload: dict[str, Any] = accepted
-            operation_id = accepted.get("operation_id")
+            terminal_payload: BakeryTicketAccepted | BakeryTicketOperation = accepted
+            operation_id = accepted.operation_id
             if operation_id:
-                terminal_payload = await poll_operation(str(operation_id))
+                terminal_payload = await poll_operation(operation_id)
 
-            terminal_status = str(terminal_payload.get("status") or "").lower()
+            terminal_status = terminal_payload.status.lower()
             if terminal_status in {"succeeded", "success", "completed"}:
                 return ExecutionResult(
                     engine=self.engine,
                     status="succeeded",
                     execution_ref=execution_ref,
-                    result=terminal_payload,
-                    raw=terminal_payload,
+                    result=terminal_payload.model_dump(mode="json"),
+                    raw=terminal_payload.model_dump(mode="json"),
                     context_updates=context_updates,
                 )
 
             error_message = str(
-                terminal_payload.get("last_error")
-                or terminal_payload.get("error")
+                getattr(terminal_payload, "last_error", None)
                 or f"Bakery operation terminal status={terminal_status or 'unknown'}"
             )
             return ExecutionResult(
@@ -234,8 +227,8 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                 status="failed",
                 execution_ref=execution_ref,
                 error_message=error_message,
-                result=terminal_payload,
-                raw=terminal_payload,
+                result=terminal_payload.model_dump(mode="json"),
+                raw=terminal_payload.model_dump(mode="json"),
                 retryable=False,
                 context_updates=context_updates,
             )

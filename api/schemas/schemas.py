@@ -6,11 +6,23 @@
 #
 """Pydantic schemas for PoundCake API."""
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel as PydanticBaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    field_validator,
+    model_validator,
+)
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from api.types import (
+    AuthBindingType,
+    AuthPrincipalType,
+    AuthProvider,
+    AuthRole,
     DishProcessingStatus,
     OrderProcessingStatus,
     AlertStatus,
@@ -33,6 +45,13 @@ from api.services.communications import (
     normalize_route_provider_config,
 )
 
+
+class BaseModel(PydanticBaseModel):
+    """Strict base model for PoundCake-owned DTOs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 # =============================================================================
 # Health & Stats
 # =============================================================================
@@ -50,6 +69,11 @@ class HealthResponse(BaseModel):
     instance_id: str
     timestamp: datetime
     components: Dict[str, ComponentHealth]  # database, stackstorm, mongodb, rabbitmq, redis
+
+
+class LivenessResponse(BaseModel):
+    status: str
+    version: str
 
 
 class StatsResponse(BaseModel):
@@ -324,7 +348,7 @@ class IngredientResponse(IngredientBase):
     deleted: bool
     deleted_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 # =============================================================================
@@ -352,7 +376,7 @@ class RecipeIngredientResponse(RecipeIngredientBase):
     recipe_id: int
     ingredient: Optional[IngredientResponse] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 # =============================================================================
@@ -372,7 +396,7 @@ class RecipeBase(BaseModel):
 class RecipeCreate(RecipeBase):
     """Schema for creating a recipe with recipe_ingredients."""
 
-    recipe_ingredients: List[RecipeIngredientCreate] = Field(..., min_length=1)
+    recipe_ingredients: List[RecipeIngredientCreate] = Field(...)
     communications: RecipeCommunicationsConfig = Field(default_factory=RecipeCommunicationsConfig)
 
 
@@ -383,7 +407,7 @@ class RecipeUpdate(BaseModel):
     description: Optional[str] = None
     enabled: Optional[bool] = None
     clear_timeout_sec: Optional[int] = Field(default=None, gt=0)
-    recipe_ingredients: Optional[List[RecipeIngredientCreate]] = Field(default=None, min_length=1)
+    recipe_ingredients: Optional[List[RecipeIngredientCreate]] = None
     communications: Optional[RecipeCommunicationsConfig] = None
 
 
@@ -396,7 +420,7 @@ class RecipeResponse(RecipeBase):
     deleted: bool
     deleted_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class RecipeDetailResponse(RecipeResponse):
@@ -455,7 +479,7 @@ class DishResponse(DishBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class DishDetailResponse(DishResponse):
@@ -540,7 +564,7 @@ class OrderResponse(OrderBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class DishIngredientUpsert(BaseModel):
@@ -562,7 +586,7 @@ class DishIngredientUpsert(BaseModel):
     result: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class DishIngredientBulkUpsert(BaseModel):
@@ -570,7 +594,7 @@ class DishIngredientBulkUpsert(BaseModel):
 
     items: List[DishIngredientUpsert]
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class DishIngredientResponse(BaseModel):
@@ -598,7 +622,7 @@ class DishIngredientResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class OrderDetailResponse(OrderResponse):
@@ -625,7 +649,7 @@ class OrderCommunicationResponse(OrderCommunicationBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class IncidentTimelineEvent(BaseModel):
@@ -689,7 +713,7 @@ class SuppressionResponse(BaseModel):
     updated_at: datetime
     matchers: List[SuppressionMatcher] = Field(default_factory=list)
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class SuppressionStatsResponse(BaseModel):
@@ -713,7 +737,7 @@ class SuppressedActivityResponse(BaseModel):
     labels_json: Dict[str, Any]
     annotations_json: Optional[Dict[str, Any]] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class SuppressionSummaryResponse(BaseModel):
@@ -733,7 +757,7 @@ class SuppressionSummaryResponse(BaseModel):
     summary_close_at: Optional[datetime] = None
     last_error: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class SuppressionDetailResponse(SuppressionResponse):
@@ -813,7 +837,7 @@ class WebhookResponse(BaseModel):
     message: Optional[str] = None
     results: Optional[List[Dict[str, Any]]] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class OrderDispatchResponse(BaseModel):
@@ -827,7 +851,7 @@ class OrderDispatchResponse(BaseModel):
     recipe_name: Optional[str] = None
     reason: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class ExecuteRequest(BaseModel):
@@ -867,7 +891,65 @@ class ExecutionEnvelopeResponse(BaseModel):
     raw: Optional[Dict[str, Any]] = None
     attempts: int = 1
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+
+class StackStormExecutionResponse(RootModel[Dict[str, Any]]):
+    """Opaque StackStorm execution document returned by proxy endpoints."""
+
+
+class StackStormExecutionListResponse(RootModel[List[Dict[str, Any]]]):
+    """Opaque StackStorm execution collection returned by proxy endpoints."""
+
+
+class StackStormExecutionTasksResponse(RootModel[List[Dict[str, Any]]]):
+    """Opaque StackStorm task collection returned by proxy endpoints."""
+
+
+class StackStormExecutionMutationResponse(BaseModel):
+    """Result of cancel/delete execution operations."""
+
+    status: str
+    execution_id: str
+
+
+class StackStormWorkflowRegistrationRequest(RootModel[Dict[str, Any]]):
+    """Opaque workflow registration payload forwarded to StackStorm."""
+
+
+class StackStormWorkflowRegistrationResponse(BaseModel):
+    """Workflow registration result."""
+
+    workflow_id: str
+
+
+class StackStormSyncStepResponse(BaseModel):
+    """Summary stats for a StackStorm sync phase."""
+
+    created: int = 0
+    updated: int = 0
+    pruned: Optional[int] = None
+    skipped: Optional[int] = None
+    processed: Optional[int] = None
+    errors: Optional[int] = None
+    error_messages: List[str] = Field(default_factory=list)
+    source: Optional[str] = None
+
+
+class StackStormBootstrapCatalogResponse(BaseModel):
+    """Bootstrap catalog sync summary."""
+
+    ingredients: StackStormSyncStepResponse
+    recipes: StackStormSyncStepResponse
+
+
+class StackStormSyncResponse(BaseModel):
+    """StackStorm sync endpoint result."""
+
+    ingredients: StackStormSyncStepResponse
+    recipes: StackStormSyncStepResponse
+    bootstrap_catalog: StackStormBootstrapCatalogResponse
+    bootstrap_marked: Optional[bool] = None
 
 
 class SessionResponse(BaseModel):
@@ -876,9 +958,149 @@ class SessionResponse(BaseModel):
     session_id: str
     username: str
     expires_at: str  # ISO format datetime
+    provider: AuthProvider
+    role: AuthRole
+    display_name: Optional[str] = None
+    is_superuser: bool = False
+    permissions: List[str] = Field(default_factory=list)
     token_type: str = "Bearer"
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+
+class AuthLoginRequest(BaseModel):
+    """Password login request."""
+
+    provider: Optional[AuthProvider] = None
+    username: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=1, max_length=255)
+
+
+class AuthProviderResponse(BaseModel):
+    """Enabled auth provider metadata for UI and CLI discovery."""
+
+    name: AuthProvider
+    label: str
+    login_mode: str
+    cli_login_mode: str
+    browser_login: bool = False
+    device_login: bool = False
+    password_login: bool = False
+
+
+class AuthMeResponse(BaseModel):
+    """Current authenticated principal metadata."""
+
+    username: str
+    display_name: Optional[str] = None
+    provider: AuthProvider
+    role: AuthRole
+    principal_type: AuthPrincipalType
+    principal_id: Optional[int] = None
+    is_superuser: bool = False
+    permissions: List[str] = Field(default_factory=list)
+    groups: List[str] = Field(default_factory=list)
+    expires_at: Optional[str] = None
+
+
+class AuthLogoutResponse(BaseModel):
+    """Logout acknowledgement."""
+
+    message: str
+
+
+class DeviceAuthorizationStartResponse(BaseModel):
+    """Device login start payload."""
+
+    provider: AuthProvider
+    device_code: str
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: Optional[str] = None
+    expires_in: int
+    interval: int
+
+
+class DeviceAuthorizationStartRequest(BaseModel):
+    """Device login start request."""
+
+    provider: Optional[AuthProvider] = None
+
+
+class DeviceAuthorizationPollRequest(BaseModel):
+    """Device authorization poll request."""
+
+    provider: Optional[AuthProvider] = None
+    device_code: str = Field(..., min_length=1)
+
+
+class DeviceAuthorizationPollResponse(BaseModel):
+    """Device authorization status response."""
+
+    status: str
+    interval: Optional[int] = None
+    detail: Optional[str] = None
+    session: Optional[SessionResponse] = None
+
+
+class AuthPrincipalResponse(BaseModel):
+    """Observed principal metadata for access management."""
+
+    id: int
+    provider: AuthProvider
+    subject_id: str
+    username: str
+    display_name: Optional[str] = None
+    principal_type: AuthPrincipalType
+    groups: List[str] = Field(default_factory=list)
+    last_seen_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+
+class AuthRoleBindingCreate(BaseModel):
+    """Create a new RBAC binding."""
+
+    provider: AuthProvider
+    binding_type: AuthBindingType
+    role: AuthRole
+    principal_id: Optional[int] = None
+    external_group: Optional[str] = Field(default=None, max_length=255)
+    created_by: Optional[str] = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def _validate_target(self) -> "AuthRoleBindingCreate":
+        if self.binding_type == "user" and self.principal_id is None:
+            raise ValueError("principal_id is required for user bindings")
+        if self.binding_type == "group" and not str(self.external_group or "").strip():
+            raise ValueError("external_group is required for group bindings")
+        return self
+
+
+class AuthRoleBindingUpdate(BaseModel):
+    """Update an existing RBAC binding."""
+
+    role: Optional[AuthRole] = None
+    external_group: Optional[str] = Field(default=None, max_length=255)
+
+
+class AuthRoleBindingResponse(BaseModel):
+    """RBAC binding details."""
+
+    id: int
+    provider: AuthProvider
+    binding_type: AuthBindingType
+    role: AuthRole
+    principal_id: Optional[int] = None
+    external_group: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    principal: Optional[AuthPrincipalResponse] = None
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class DeleteResponse(BaseModel):
@@ -888,4 +1110,145 @@ class DeleteResponse(BaseModel):
     id: int
     message: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+
+class SettingsResponse(BaseModel):
+    """Application settings returned to UI and CLI clients."""
+
+    auth_enabled: bool
+    rbac_enabled: bool
+    auth_providers: List[AuthProviderResponse] = Field(default_factory=list)
+    prometheus_use_crds: bool
+    prometheus_crd_namespace: str
+    prometheus_url: str
+    git_enabled: bool
+    git_provider: Optional[str] = None
+    git_repo_url: Optional[str] = None
+    git_branch: Optional[str] = None
+    git_rules_path: Optional[str] = None
+    git_workflows_path: Optional[str] = None
+    git_actions_path: Optional[str] = None
+    stackstorm_enabled: bool
+    version: str
+    global_communications_configured: bool
+
+
+class RepoSyncPullRequestResponse(BaseModel):
+    """Pull-request metadata returned by Git-backed sync operations."""
+
+    number: int | str | None = None
+    url: Optional[str] = None
+
+
+class RepoSyncResponse(BaseModel):
+    """Generic Git-backed import/export response."""
+
+    status: str
+    message: str
+    branch: Optional[str] = None
+    pull_request: Optional[RepoSyncPullRequestResponse] = None
+    exported: Optional[Dict[str, str | int | None]] = None
+    imported: Optional[Dict[str, int]] = None
+    cleared: Optional[Dict[str, int]] = None
+
+
+class PrometheusRuleResponse(BaseModel):
+    """Canonical Prometheus rule representation used by UI and CLI."""
+
+    group: str
+    crd: Optional[str] = None
+    file: Optional[str] = None
+    namespace: Optional[str] = None
+    interval: Optional[str] = None
+    name: str
+    query: str
+    duration: Optional[str] = None
+    labels: Dict[str, str] = Field(default_factory=dict)
+    annotations: Dict[str, str] = Field(default_factory=dict)
+    state: Optional[str] = None
+    health: Optional[str] = None
+
+
+class PrometheusRuleListResponse(BaseModel):
+    """Prometheus rule listing response."""
+
+    rules: List[PrometheusRuleResponse] = Field(default_factory=list)
+    source: str
+
+
+class PrometheusRuleGroupsResponse(BaseModel):
+    """Prometheus rule group listing response."""
+
+    groups: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PrometheusMetricsResponse(BaseModel):
+    """Prometheus metric-name discovery response."""
+
+    metrics: List[str] = Field(default_factory=list)
+
+
+class PrometheusLabelsResponse(BaseModel):
+    """Prometheus label-name discovery response."""
+
+    labels: List[str] = Field(default_factory=list)
+
+
+class PrometheusLabelValuesResponse(BaseModel):
+    """Prometheus label-values discovery response."""
+
+    label: str
+    values: List[str] = Field(default_factory=list)
+
+
+class PrometheusHealthResponse(BaseModel):
+    """Prometheus connectivity health response."""
+
+    status: str
+    url: str
+    status_code: Optional[int] = None
+    latency_ms: Optional[int] = None
+    error: Optional[str] = None
+
+
+class PrometheusRuleWriteRequest(BaseModel):
+    """Create/update payload for Prometheus alert rules."""
+
+    alert: Optional[str] = Field(default=None, min_length=1)
+    record: Optional[str] = Field(default=None, min_length=1)
+    expr: str = Field(..., min_length=1, validation_alias=AliasChoices("expr", "query"))
+    for_: Optional[str] = Field(default=None, alias="for", serialization_alias="for")
+    labels: Dict[str, str] = Field(default_factory=dict)
+    annotations: Dict[str, str] = Field(default_factory=dict)
+    keep_firing_for: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_identity(self) -> "PrometheusRuleWriteRequest":
+        if not str(self.alert or "").strip() and not str(self.record or "").strip():
+            raise ValueError("either alert or record is required")
+        return self
+
+
+class PrometheusRuleMutationResponse(BaseModel):
+    """Create/update/delete result for a Prometheus rule operation."""
+
+    status: str
+    message: str
+    crd: Optional[Dict[str, Any]] = None
+    git: Optional[Dict[str, Any]] = None
+    git_error: Optional[str] = None
+
+
+class DishIngredientBulkUpsertResponse(BaseModel):
+    """Bulk upsert summary for dish ingredient execution rows."""
+
+    created: int
+    updated: int
+
+
+class SuppressionLifecycleResponse(BaseModel):
+    """Result of a suppression lifecycle sweep."""
+
+    status: str
+    finalized: int

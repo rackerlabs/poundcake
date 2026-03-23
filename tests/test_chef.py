@@ -56,7 +56,7 @@ def test_run_chef_register_failure_marks_dish_failed(
     monkeypatch.setattr(chef, "wait_for_api", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(chef, "request_with_retry_sync", _request)
     monkeypatch.setattr(chef.time, "sleep", lambda _seconds: (_ for _ in ()).throw(SystemExit))
-    monkeypatch.setenv("POUNDCAKE_INTERNAL_API_KEY", "worker-key")
+    monkeypatch.setenv("POUNDCAKE_AUTH_SERVICE_TOKEN", "worker-token")
 
     with pytest.raises(SystemExit):
         chef.run_chef()
@@ -68,7 +68,7 @@ def test_run_chef_register_failure_marks_dish_failed(
         and body.get("processing_status") == "failed"
         and "register failed" in body.get("error_message", "")
         and headers
-        and headers.get("X-Internal-API-Key") == "worker-key"
+        and headers.get("X-Auth-Token") == "worker-token"
         for method, url, body, headers in calls
     )
 

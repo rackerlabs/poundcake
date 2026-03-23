@@ -38,6 +38,11 @@ class StoredSession:
     session_id: str
     username: str
     expires_at: str
+    provider: str = "local"
+    role: str = "reader"
+    display_name: str | None = None
+    is_superuser: bool = False
+    permissions: list[str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "StoredSession":
@@ -45,6 +50,13 @@ class StoredSession:
             session_id=str(data["session_id"]),
             username=str(data["username"]),
             expires_at=str(data["expires_at"]),
+            provider=str(data.get("provider") or "local"),
+            role=str(data.get("role") or "reader"),
+            display_name=(
+                None if data.get("display_name") is None else str(data.get("display_name"))
+            ),
+            is_superuser=bool(data.get("is_superuser")),
+            permissions=[str(item) for item in data.get("permissions") or []] or None,
         )
 
     def is_expired(self) -> bool:

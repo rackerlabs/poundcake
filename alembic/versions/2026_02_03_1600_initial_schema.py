@@ -464,8 +464,119 @@ def upgrade() -> None:
         unique=False,
     )
 
+    op.create_table(
+        "auth_principals",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("provider", sa.String(length=32), nullable=False),
+        sa.Column("subject_id", sa.String(length=255), nullable=False),
+        sa.Column("username", sa.String(length=255), nullable=False),
+        sa.Column("display_name", sa.String(length=255), nullable=True),
+        sa.Column("principal_type", sa.String(length=16), nullable=False),
+        sa.Column("groups_json", mysql.JSON(), nullable=True),
+        sa.Column("last_seen_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "provider",
+            "subject_id",
+            name="ux_auth_principals_provider_subject",
+        ),
+    )
+    op.create_index("ix_auth_principals_id", "auth_principals", ["id"], unique=False)
+    op.create_index(
+        "ix_auth_principals_provider",
+        "auth_principals",
+        ["provider"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_auth_principals_username",
+        "auth_principals",
+        ["username"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_auth_principals_provider_username",
+        "auth_principals",
+        ["provider", "username"],
+        unique=False,
+    )
+
+    op.create_table(
+        "auth_role_bindings",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("provider", sa.String(length=32), nullable=False),
+        sa.Column("binding_type", sa.String(length=16), nullable=False),
+        sa.Column("role", sa.String(length=16), nullable=False),
+        sa.Column("principal_id", sa.Integer(), nullable=True),
+        sa.Column("external_group", sa.String(length=255), nullable=True),
+        sa.Column("created_by", sa.String(length=255), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["principal_id"], ["auth_principals.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "provider",
+            "binding_type",
+            "principal_id",
+            name="ux_auth_role_bindings_provider_type_principal",
+        ),
+        sa.UniqueConstraint(
+            "provider",
+            "binding_type",
+            "external_group",
+            name="ux_auth_role_bindings_provider_type_group",
+        ),
+    )
+    op.create_index("ix_auth_role_bindings_id", "auth_role_bindings", ["id"], unique=False)
+    op.create_index(
+        "ix_auth_role_bindings_provider",
+        "auth_role_bindings",
+        ["provider"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_auth_role_bindings_binding_type",
+        "auth_role_bindings",
+        ["binding_type"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_auth_role_bindings_role",
+        "auth_role_bindings",
+        ["role"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_auth_role_bindings_principal_id",
+        "auth_role_bindings",
+        ["principal_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_auth_role_bindings_external_group",
+        "auth_role_bindings",
+        ["external_group"],
+        unique=False,
+    )
+
 
 def downgrade() -> None:
+    op.drop_index("ix_auth_role_bindings_external_group", table_name="auth_role_bindings")
+    op.drop_index("ix_auth_role_bindings_principal_id", table_name="auth_role_bindings")
+    op.drop_index("ix_auth_role_bindings_role", table_name="auth_role_bindings")
+    op.drop_index("ix_auth_role_bindings_binding_type", table_name="auth_role_bindings")
+    op.drop_index("ix_auth_role_bindings_provider", table_name="auth_role_bindings")
+    op.drop_index("ix_auth_role_bindings_id", table_name="auth_role_bindings")
+    op.drop_table("auth_role_bindings")
+
+    op.drop_index("ix_auth_principals_provider_username", table_name="auth_principals")
+    op.drop_index("ix_auth_principals_username", table_name="auth_principals")
+    op.drop_index("ix_auth_principals_provider", table_name="auth_principals")
+    op.drop_index("ix_auth_principals_id", table_name="auth_principals")
+    op.drop_table("auth_principals")
+
     op.drop_index("ix_suppression_summaries_state", table_name="suppression_summaries")
     op.drop_index(
         "ix_suppression_summaries_bakery_close_operation_id",

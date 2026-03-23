@@ -65,7 +65,7 @@ def test_missing_workflow_failure_without_retry_metadata_falls_back_to_failed_fi
     monkeypatch.setattr(timer, "check_for_timeouts", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(timer.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(timer, "API_UNAVAILABLE_SINCE", None)
-    monkeypatch.setenv("POUNDCAKE_INTERNAL_API_KEY", "worker-key")
+    monkeypatch.setenv("POUNDCAKE_AUTH_SERVICE_TOKEN", "worker-token")
 
     timer.monitor_dishes()
 

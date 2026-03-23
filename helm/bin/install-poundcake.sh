@@ -13,22 +13,13 @@ HELM_ATOMIC="${POUNDCAKE_HELM_ATOMIC:-false}"
 HELM_CLEANUP_ON_FAIL="${POUNDCAKE_HELM_CLEANUP_ON_FAIL:-false}"
 ALLOW_HOOK_WAIT="${POUNDCAKE_ALLOW_HOOK_WAIT:-false}"
 
-GHCR_OWNER="${POUNDCAKE_GHCR_OWNER:-rackerlabs}"
 CHART_REPO="${POUNDCAKE_CHART_REPO:-}"
-POUNDCAKE_IMAGE_REPO="${POUNDCAKE_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake}"
-POUNDCAKE_IMAGE_TAG="${POUNDCAKE_IMAGE_TAG:-}"
-POUNDCAKE_IMAGE_DIGEST="${POUNDCAKE_IMAGE_DIGEST:-}"
-STACKSTORM_IMAGE_REPO="${POUNDCAKE_STACKSTORM_IMAGE_REPO:-stackstorm/st2}"
-STACKSTORM_IMAGE_TAG="${POUNDCAKE_STACKSTORM_IMAGE_TAG:-3.9.0}"
-UI_IMAGE_REPO="${POUNDCAKE_UI_IMAGE_REPO:-ghcr.io/${GHCR_OWNER}/poundcake-ui}"
-UI_IMAGE_TAG="${POUNDCAKE_UI_IMAGE_TAG:-}"
-BAKERY_IMAGE_REPO="${POUNDCAKE_BAKERY_IMAGE_REPO:-}"
-BAKERY_IMAGE_TAG="${POUNDCAKE_BAKERY_IMAGE_TAG:-${POUNDCAKE_IMAGE_TAG:-}}"
-BAKERY_IMAGE_DIGEST="${POUNDCAKE_BAKERY_IMAGE_DIGEST:-}"
 REMOTE_BAKERY_ENABLED="${POUNDCAKE_REMOTE_BAKERY_ENABLED:-}"
 REMOTE_BAKERY_URL="${POUNDCAKE_REMOTE_BAKERY_URL:-}"
 REMOTE_BAKERY_AUTH_MODE="${POUNDCAKE_REMOTE_BAKERY_AUTH_MODE:-hmac}"
 REMOTE_BAKERY_AUTH_SECRET="${POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET:-}"
+REMOTE_BAKERY_HMAC_KEY_ID="${POUNDCAKE_REMOTE_BAKERY_HMAC_KEY_ID:-}"
+REMOTE_BAKERY_HMAC_KEY="${POUNDCAKE_REMOTE_BAKERY_HMAC_KEY:-}"
 SHARED_DB_MODE="${POUNDCAKE_SHARED_DB_MODE:-auto}"
 SHARED_DB_SERVER_NAME="${POUNDCAKE_SHARED_DB_SERVER_NAME:-}"
 CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
@@ -134,11 +125,12 @@ Installer options:
   --remote-bakery-url <url>          Remote Bakery base URL for PoundCake comms
   --remote-bakery-auth-mode <mode>   Remote Bakery client auth mode (default: hmac)
   --remote-bakery-auth-secret <name> Existing secret name for remote Bakery client auth keys (auto-discovered for colocated Bakery)
+  --remote-bakery-hmac-key <value>   HMAC key for creating the remote Bakery client auth secret when missing
+  --remote-bakery-hmac-key-id <id>   HMAC key id for created remote Bakery client auth secret (default: active)
   --shared-db-mode <auto|on|off>     Shared MariaDB mode selection (default: auto)
   --shared-db-server-name <name>     Shared MariaDB server/service name for PoundCake DB resources
 
 Environment overrides:
-  POUNDCAKE_GHCR_OWNER             (default: rackerlabs)
   POUNDCAKE_CHART_REPO             (default: local chart at ./helm)
   POUNDCAKE_CHART_VERSION          (optional; for OCI repo installs)
   POUNDCAKE_VERSION_FILE           (optional; explicit chart versions file)
@@ -150,18 +142,12 @@ Environment overrides:
   POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR (optional; overlay path guard)
   POUNDCAKE_INSTALL_DEBUG         (default: false; same as --debug)
   POUNDCAKE_HELM_VALIDATE          (default: false; same as --validate)
-  POUNDCAKE_IMAGE_REPO             (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake)
-  POUNDCAKE_IMAGE_TAG              (optional; required when digest unset)
-  POUNDCAKE_IMAGE_DIGEST           (optional; sha256:...; required when tag unset)
-  POUNDCAKE_BAKERY_IMAGE_REPO      (optional; sets bakery.image.repository)
-  POUNDCAKE_BAKERY_IMAGE_TAG       (optional; sets bakery.image.tag when digest unset)
-  POUNDCAKE_BAKERY_IMAGE_DIGEST    (optional; sha256:...; sets bakery.image.digest)
-  POUNDCAKE_UI_IMAGE_REPO          (default: ghcr.io/${POUNDCAKE_GHCR_OWNER}/poundcake-ui; sets uiImage.repository)
-  POUNDCAKE_UI_IMAGE_TAG           (optional; sets uiImage.tag)
   POUNDCAKE_REMOTE_BAKERY_ENABLED  (optional; defaults to auto based on discovered/explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_URL      (optional; explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
   POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (required for external remote Bakery HMAC unless auto-discovered)
+  POUNDCAKE_REMOTE_BAKERY_HMAC_KEY  (optional; creates remote Bakery HMAC client secret when secret is missing)
+  POUNDCAKE_REMOTE_BAKERY_HMAC_KEY_ID (default: active when POUNDCAKE_REMOTE_BAKERY_HMAC_KEY is set)
   POUNDCAKE_SHARED_DB_MODE         (default: auto; valid: auto, on, off)
   POUNDCAKE_SHARED_DB_SERVER_NAME  (optional; shared DB server/service name)
   POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
@@ -200,13 +186,83 @@ Environment overrides:
   POUNDCAKE_HELM_ATOMIC            (default: false)
   POUNDCAKE_HELM_CLEANUP_ON_FAIL   (default: false)
 
+Image repositories/tags/digests:
+  - Configure these in Helm values files or override files only.
+  - Default override path: /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+  - Image env vars and image --set overrides are intentionally not supported.
+
 Examples:
   ./install/install-poundcake-helm.sh
   ./install/install-poundcake-helm.sh --validate
   ./install/install-poundcake-helm.sh --remote-bakery-url http://bakery.rackspace.svc.cluster.local:8000
+  ./install/install-poundcake-helm.sh --remote-bakery-url https://bakery.example.com --remote-bakery-hmac-key '<shared-hmac-key>'
   ./install/install-poundcake-helm.sh --shared-db-mode on --shared-db-server-name bakery-pc-bakery-mariadb
   ./install/install-poundcake-helm.sh --skip-preflight -f /path/to/values.yaml
 USAGE_EOF
+}
+
+validate_image_env_inputs() {
+  local deprecated_image_envs=()
+  local env_name=""
+
+  for env_name in \
+    POUNDCAKE_GHCR_OWNER \
+    POUNDCAKE_IMAGE_REPO \
+    POUNDCAKE_IMAGE_TAG \
+    POUNDCAKE_IMAGE_DIGEST \
+    POUNDCAKE_BAKERY_IMAGE_REPO \
+    POUNDCAKE_BAKERY_IMAGE_TAG \
+    POUNDCAKE_BAKERY_IMAGE_DIGEST \
+    POUNDCAKE_UI_IMAGE_REPO \
+    POUNDCAKE_UI_IMAGE_TAG \
+    POUNDCAKE_STACKSTORM_IMAGE_REPO \
+    POUNDCAKE_STACKSTORM_IMAGE_TAG
+  do
+    if [[ -n "${!env_name:-}" ]]; then
+      deprecated_image_envs+=("${env_name}")
+    fi
+  done
+
+  if (( ${#deprecated_image_envs[@]} > 0 )); then
+    log_error "Image environment variables are no longer supported by the Helm installers: ${deprecated_image_envs[*]}"
+    log_error "Configure image repositories/tags/digests in values files or override files instead."
+    log_error "Default override path: /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml"
+    exit 1
+  fi
+}
+
+reject_image_override_args() {
+  local arg=""
+  local next_is_set_payload="false"
+
+  for arg in "$@"; do
+    if [[ "${next_is_set_payload}" == "true" ]]; then
+      next_is_set_payload="false"
+      case "${arg}" in
+        poundcakeImage.*=*|uiImage.*=*|stackstormImage.*=*|bakery.image.*=*)
+          log_error "Image --set overrides are not supported by the Helm installers."
+          log_error "Configure image repositories/tags/digests in values files or override files instead."
+          exit 1
+          ;;
+      esac
+      continue
+    fi
+
+    case "${arg}" in
+      --set|--set-string|--set-json|--set-literal|--set-file)
+        next_is_set_payload="true"
+        ;;
+      --set=*|--set-string=*|--set-json=*|--set-literal=*|--set-file=*)
+        case "${arg}" in
+          *poundcakeImage.*=*|*uiImage.*=*|*stackstormImage.*=*|*bakery.image.*=*)
+            log_error "Image --set overrides are not supported by the Helm installers."
+            log_error "Configure image repositories/tags/digests in values files or override files instead."
+            exit 1
+            ;;
+        esac
+        ;;
+    esac
+  done
 }
 
 check_dependencies() {
@@ -535,6 +591,35 @@ discover_override_args() {
   done < <(collect_yaml_files "${SERVICE_CONFIG_DIR}")
 }
 
+default_bakery_auth_secret_name() {
+  local release_name="$1"
+  local fullname=""
+  local bakery_name=""
+  local secret_name=""
+
+  if [[ "${release_name}" == *"poundcake"* ]]; then
+    fullname="${release_name}"
+  else
+    fullname="${release_name}-poundcake"
+  fi
+  bakery_name="${fullname}-bakery"
+  bakery_name="${bakery_name:0:63}"
+  bakery_name="${bakery_name%-}"
+
+  secret_name="${bakery_name}-secret"
+  secret_name="${secret_name:0:63}"
+  secret_name="${secret_name%-}"
+  echo "${secret_name}"
+}
+
+ensure_namespace_exists() {
+  local reason="$1"
+  if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+    log_info "Namespace '${NAMESPACE}' does not exist; creating it for ${reason}..."
+    kubectl create namespace "${NAMESPACE}" >/dev/null
+  fi
+}
+
 normalize_bool_or_empty() {
   local raw="$1"
   local trimmed="${raw#"${raw%%[![:space:]]*}"}"
@@ -724,6 +809,7 @@ resolve_runtime_modes() {
 
 ensure_remote_bakery_auth_secret() {
   local auth_mode=""
+  local resolved_hmac_key_id=""
   auth_mode="$(echo "${REMOTE_BAKERY_AUTH_MODE}" | tr '[:upper:]' '[:lower:]')"
 
   if [[ "${RESOLVED_BAKERY_CLIENT_ENABLED}" != "true" ]]; then
@@ -734,24 +820,51 @@ ensure_remote_bakery_auth_secret() {
     return 0
   fi
 
+  if [[ -n "${REMOTE_BAKERY_HMAC_KEY_ID}" && -z "${REMOTE_BAKERY_HMAC_KEY}" ]]; then
+    log_error "Remote Bakery HMAC key id was provided without a matching HMAC key."
+    log_error "Set --remote-bakery-hmac-key (or POUNDCAKE_REMOTE_BAKERY_HMAC_KEY) when using --remote-bakery-hmac-key-id."
+    exit 1
+  fi
+
   if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" && -n "${DISCOVERED_BAKERY_AUTH_SECRET}" ]]; then
     REMOTE_BAKERY_AUTH_SECRET="${DISCOVERED_BAKERY_AUTH_SECRET}"
     log_info "Resolved remote Bakery HMAC auth secret from discovered Bakery deployment: ${REMOTE_BAKERY_AUTH_SECRET}"
   fi
 
+  if [[ -n "${REMOTE_BAKERY_HMAC_KEY}" ]]; then
+    if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
+      REMOTE_BAKERY_AUTH_SECRET="$(default_bakery_auth_secret_name "${RELEASE_NAME}")"
+      log_info "Resolved remote Bakery HMAC auth secret name from release defaults: ${REMOTE_BAKERY_AUTH_SECRET}"
+    fi
+
+    if kubectl -n "${NAMESPACE}" get secret "${REMOTE_BAKERY_AUTH_SECRET}" >/dev/null 2>&1; then
+      log_error "Remote Bakery HMAC key was provided, but secret '${REMOTE_BAKERY_AUTH_SECRET}' already exists in namespace '${NAMESPACE}'."
+      log_error "Use the existing secret or choose a different secret name with --remote-bakery-auth-secret."
+      exit 1
+    fi
+
+    resolved_hmac_key_id="${REMOTE_BAKERY_HMAC_KEY_ID:-active}"
+    ensure_namespace_exists "remote Bakery HMAC auth secret setup"
+    log_info "Creating remote Bakery HMAC client secret '${REMOTE_BAKERY_AUTH_SECRET}' in namespace '${NAMESPACE}'."
+    kubectl -n "${NAMESPACE}" create secret generic "${REMOTE_BAKERY_AUTH_SECRET}" \
+      --from-literal=active-key-id="${resolved_hmac_key_id}" \
+      --from-literal=active-key="${REMOTE_BAKERY_HMAC_KEY}" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  fi
+
   if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
     log_error "Bakery client auth mode is 'hmac' but no auth secret was resolved."
     if [[ -n "${REMOTE_BAKERY_URL}" && -z "${DISCOVERED_BAKERY_URL}" ]]; then
-      log_error "Provide --remote-bakery-auth-secret (or POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET) for external Bakery endpoints."
+      log_error "Provide --remote-bakery-auth-secret or --remote-bakery-hmac-key (or matching POUNDCAKE_REMOTE_BAKERY_* env vars) for external Bakery endpoints."
     else
-      log_error "Run install/install-bakery-helm.sh first so auth secret discovery succeeds, or provide --remote-bakery-auth-secret explicitly."
+      log_error "Run install/install-bakery-helm.sh first so auth secret discovery succeeds, or provide --remote-bakery-auth-secret / --remote-bakery-hmac-key explicitly."
     fi
     exit 1
   fi
 
   if ! kubectl -n "${NAMESPACE}" get secret "${REMOTE_BAKERY_AUTH_SECRET}" >/dev/null 2>&1; then
     log_error "Resolved Bakery auth secret '${REMOTE_BAKERY_AUTH_SECRET}' was not found in namespace '${NAMESPACE}'."
-    log_error "Run install/install-bakery-helm.sh to provision Bakery auth secrets, or provide --remote-bakery-auth-secret pointing to an existing secret."
+    log_error "Run install/install-bakery-helm.sh to provision Bakery auth secrets, provide --remote-bakery-auth-secret pointing to an existing secret, or pass --remote-bakery-hmac-key so this installer can create one."
     exit 1
   fi
 }
@@ -888,33 +1001,6 @@ rotate_chart_secrets() {
   for s in "${secrets[@]}"; do
     kubectl -n "${namespace}" delete secret "${s}" --ignore-not-found >/dev/null || true
   done
-}
-
-validate_image_pin_input() {
-  if [[ -n "${POUNDCAKE_IMAGE_TAG}" && -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-    log_error "Set only one of POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
-    exit 1
-  fi
-  if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]] && [[ ! "${POUNDCAKE_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    log_error "POUNDCAKE_IMAGE_DIGEST must match sha256:<64-hex>."
-    exit 1
-  fi
-  if [[ -n "${BAKERY_IMAGE_TAG}" && -n "${BAKERY_IMAGE_DIGEST}" ]] \
-    && [[ "${BAKERY_IMAGE_TAG}" != "${POUNDCAKE_IMAGE_TAG}" || -z "${POUNDCAKE_IMAGE_TAG}" ]]; then
-    log_error "Set only one of POUNDCAKE_BAKERY_IMAGE_TAG or POUNDCAKE_BAKERY_IMAGE_DIGEST."
-    exit 1
-  fi
-  if [[ -n "${BAKERY_IMAGE_DIGEST}" ]] && [[ ! "${BAKERY_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    log_error "POUNDCAKE_BAKERY_IMAGE_DIGEST must match sha256:<64-hex>."
-    exit 1
-  fi
-  if [[ "${INSTALL_PROFILE}" == "bakery" && -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-    return
-  fi
-  if [[ -z "${POUNDCAKE_IMAGE_TAG}" && -z "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-    log_error "Image pin required: set POUNDCAKE_IMAGE_TAG or POUNDCAKE_IMAGE_DIGEST."
-    exit 1
-  fi
 }
 
 verify_rendered_endpoint_contract() {
@@ -1059,6 +1145,14 @@ while [[ $# -gt 0 ]]; do
       REMOTE_BAKERY_AUTH_SECRET="$2"
       shift 2
       ;;
+    --remote-bakery-hmac-key)
+      REMOTE_BAKERY_HMAC_KEY="$2"
+      shift 2
+      ;;
+    --remote-bakery-hmac-key-id)
+      REMOTE_BAKERY_HMAC_KEY_ID="$2"
+      shift 2
+      ;;
     --shared-db-mode)
       SHARED_DB_MODE="$2"
       shift 2
@@ -1097,6 +1191,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if (( ${#EXTRA_ARGS[@]} > 0 )); then
+  reject_image_override_args "${EXTRA_ARGS[@]}"
+fi
+
 if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" && "${OPERATOR_MODE}" != "skip" ]]; then
   log_error "Invalid operators mode '${OPERATOR_MODE}'. Valid values: install-missing, verify, skip."
   exit 1
@@ -1118,14 +1216,12 @@ log_info "Installer profile: ${INSTALL_PROFILE}"
 log_info "Installer options: operators_mode=${OPERATOR_MODE}, shared_db_mode=${SHARED_DB_MODE}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
+validate_image_env_inputs
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
   perform_preflight_checks
 else
   log_info "Skipping preflight checks (--skip-preflight)."
 fi
-
-log_phase "image pin validation"
-validate_image_pin_input
 
 if [[ "${CREATE_IMAGE_PULL_SECRET}" == "true" ]] && ! command -v kubectl >/dev/null 2>&1; then
   log_error "kubectl is required when POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true."
@@ -1220,9 +1316,6 @@ INSTALLER_SET_ARGS=(
   --set "poundcake.enabled=true"
   --set "bakery.enabled=false"
   --set "bakery.worker.enabled=false"
-  --set-string "poundcakeImage.repository=${POUNDCAKE_IMAGE_REPO}"
-  --set-string "stackstormImage.repository=${STACKSTORM_IMAGE_REPO}"
-  --set-string "stackstormImage.tag=${STACKSTORM_IMAGE_TAG}"
   --set-string "stackstormPackSync.endpoint=${PACK_SYNC_ENDPOINT}"
   --set "bakery.client.enabled=${RESOLVED_BAKERY_CLIENT_ENABLED}"
   --set-string "bakery.client.auth.mode=${REMOTE_BAKERY_AUTH_MODE}"
@@ -1248,36 +1341,9 @@ else
   INSTALLER_SET_ARGS+=(--set "database.mode=embedded")
 fi
 
-if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.tag=")
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.digest=${POUNDCAKE_IMAGE_DIGEST}")
-else
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.tag=${POUNDCAKE_IMAGE_TAG}")
-  INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.digest=")
-fi
-
-EFFECTIVE_BAKERY_IMAGE_DIGEST="${BAKERY_IMAGE_DIGEST:-${POUNDCAKE_IMAGE_DIGEST:-}}"
-
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.pullSecrets[0]=${IMAGE_PULL_SECRET_NAME}")
   INSTALLER_SET_ARGS+=(--set-string "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
-fi
-
-if [[ -n "${UI_IMAGE_REPO}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "uiImage.repository=${UI_IMAGE_REPO}")
-fi
-if [[ -n "${UI_IMAGE_TAG}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "uiImage.tag=${UI_IMAGE_TAG}")
-fi
-if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.repository=${BAKERY_IMAGE_REPO}")
-fi
-if [[ -n "${EFFECTIVE_BAKERY_IMAGE_DIGEST}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.digest=${EFFECTIVE_BAKERY_IMAGE_DIGEST}")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=")
-elif [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.digest=")
-  INSTALLER_SET_ARGS+=(--set-string "bakery.image.tag=${BAKERY_IMAGE_TAG}")
 fi
 COMMON_HELM_ARGS=(
   --namespace "${NAMESPACE}"
@@ -1410,30 +1476,8 @@ log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
   log_info "Chart version: ${CHART_VERSION:-"(not set)"}"
 fi
-if [[ -n "${POUNDCAKE_IMAGE_DIGEST}" ]]; then
-  log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}@${POUNDCAKE_IMAGE_DIGEST}"
-else
-  log_info "PoundCake image: ${POUNDCAKE_IMAGE_REPO}:${POUNDCAKE_IMAGE_TAG}"
-fi
+log_info "Image refs: values files / override files"
 log_info "Pack sync endpoint: ${PACK_SYNC_ENDPOINT}"
-if [[ -n "${UI_IMAGE_REPO}" ]]; then
-  log_info "UI image repo override: ${UI_IMAGE_REPO}"
-fi
-if [[ -n "${UI_IMAGE_TAG}" ]]; then
-  log_info "UI image tag override: ${UI_IMAGE_TAG}"
-fi
-if [[ -n "${BAKERY_IMAGE_REPO}" ]]; then
-  log_info "Bakery image repo override: ${BAKERY_IMAGE_REPO}"
-fi
-if [[ -n "${EFFECTIVE_BAKERY_IMAGE_DIGEST}" ]]; then
-  if [[ -n "${BAKERY_IMAGE_DIGEST}" ]]; then
-    log_info "Bakery image digest override: ${BAKERY_IMAGE_DIGEST}"
-  else
-    log_info "Bakery image digest override: ${POUNDCAKE_IMAGE_DIGEST} (from POUNDCAKE_IMAGE_DIGEST)"
-  fi
-elif [[ -n "${BAKERY_IMAGE_TAG}" ]]; then
-  log_info "Bakery image tag override: ${BAKERY_IMAGE_TAG}"
-fi
 log_info "Bakery client enabled: ${RESOLVED_BAKERY_CLIENT_ENABLED}"
 if [[ -n "${RESOLVED_BAKERY_URL}" ]]; then
   log_info "Bakery client URL: ${RESOLVED_BAKERY_URL}"
