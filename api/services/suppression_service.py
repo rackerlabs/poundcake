@@ -37,13 +37,25 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def normalize_utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def suppression_status(suppression: AlertSuppression, now: datetime | None = None) -> str:
-    if suppression.canceled_at:
+    if normalize_utc_datetime(suppression.canceled_at):
         return "canceled"
-    current = now or _utc_now()
-    if current < suppression.starts_at:
+    current = normalize_utc_datetime(now or _utc_now())
+    starts_at = normalize_utc_datetime(suppression.starts_at)
+    ends_at = normalize_utc_datetime(suppression.ends_at)
+    if current is None or starts_at is None or ends_at is None:
+        return "active"
+    if current < starts_at:
         return "scheduled"
-    if current > suppression.ends_at:
+    if current > ends_at:
         return "expired"
     return "active"
 
@@ -173,8 +185,10 @@ def build_summary_ticket_payload(
 ) -> dict[str, Any]:
     by_alertname = summary.by_alertname_json or {}
     by_severity = summary.by_severity_json or {}
-    starts = suppression.starts_at.isoformat()
-    ends = suppression.ends_at.isoformat()
+    starts_at = normalize_utc_datetime(suppression.starts_at)
+    ends_at = normalize_utc_datetime(suppression.ends_at)
+    starts = starts_at.isoformat() if starts_at else "N/A"
+    ends = ends_at.isoformat() if ends_at else "N/A"
     matcher_snapshot = [
         {
             "label_key": m.label_key,

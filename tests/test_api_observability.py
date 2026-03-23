@@ -1,6 +1,6 @@
 """Tests for observability and communication activity endpoints."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -229,3 +229,33 @@ def test_observability_activity_returns_clickable_typed_feed(client, mock_db):
     )
     assert incident_item["link_hint"] == "/incidents/1"
     assert communication_item["link_hint"] == "/incidents/1?communication=17"
+
+
+def test_observability_activity_accepts_naive_suppression_timestamps(client, mock_db):
+    order = _make_order()
+    _suppression, summary = _make_suppression()
+    dish = _make_dish(order)
+    summary.suppression.starts_at = (datetime.now(timezone.utc) - timedelta(minutes=1)).replace(
+        tzinfo=None
+    )
+    summary.suppression.ends_at = (datetime.now(timezone.utc) + timedelta(minutes=1)).replace(
+        tzinfo=None
+    )
+    summary.suppression.updated_at = summary.suppression.updated_at.replace(tzinfo=None)
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(all_=[order]),
+            ScalarResult(all_=[dish]),
+            ScalarResult(all_=[order]),
+            ScalarResult(all_=[summary]),
+            ScalarResult(all_=[summary.suppression]),
+        ]
+    )
+
+    response = client.get("/api/v1/observability/activity")
+
+    assert response.status_code == 200
+    suppression_item = next(item for item in response.json() if item["type"] == "suppression")
+    assert suppression_item["status"] == "active"
+    assert suppression_item["timestamp"].endswith("Z")

@@ -93,6 +93,23 @@ def test_suppression_status_variants():
     assert suppression_status(active, now=now) == "canceled"
 
 
+def test_suppression_status_handles_naive_database_timestamps():
+    now = datetime.now(timezone.utc)
+    active = AlertSuppression(
+        id=2,
+        name="naive-active",
+        scope="all",
+        enabled=True,
+        starts_at=(now - timedelta(minutes=1)).replace(tzinfo=None),
+        ends_at=(now + timedelta(minutes=1)).replace(tzinfo=None),
+        created_at=now.replace(tzinfo=None),
+        updated_at=now.replace(tzinfo=None),
+        summary_ticket_enabled=True,
+    )
+
+    assert suppression_status(active, now=now) == "active"
+
+
 @pytest.mark.asyncio
 async def test_first_created_suppression_wins():
     db = AsyncMock()

@@ -57,6 +57,7 @@ from api.services.suppression_service import (
     get_suppression,
     list_suppression_activity,
     list_suppressions,
+    normalize_utc_datetime,
     suppression_status,
 )
 from api.types import SuppressionMatcherOperator, SuppressionScope, SuppressionStatus
@@ -78,6 +79,12 @@ def _to_matcher_response(matchers: list[AlertSuppressionMatcher]) -> list[Suppre
 
 def _to_suppression_response(item: AlertSuppression) -> SuppressionResponse:
     status = cast(SuppressionStatus, suppression_status(item))
+    starts_at = normalize_utc_datetime(item.starts_at)
+    ends_at = normalize_utc_datetime(item.ends_at)
+    created_at = normalize_utc_datetime(item.created_at)
+    updated_at = normalize_utc_datetime(item.updated_at)
+    if starts_at is None or ends_at is None or created_at is None or updated_at is None:
+        raise ValueError("Suppression timestamps must be present")
     return SuppressionResponse(
         id=item.id,
         name=item.name,
@@ -85,13 +92,13 @@ def _to_suppression_response(item: AlertSuppression) -> SuppressionResponse:
         scope=cast(SuppressionScope, item.scope),
         status=status,
         enabled=item.enabled,
-        starts_at=item.starts_at,
-        ends_at=item.ends_at,
-        canceled_at=item.canceled_at,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        canceled_at=normalize_utc_datetime(item.canceled_at),
         created_by=item.created_by,
         summary_ticket_enabled=item.summary_ticket_enabled,
-        created_at=item.created_at,
-        updated_at=item.updated_at,
+        created_at=created_at,
+        updated_at=updated_at,
         matchers=_to_matcher_response(item.matchers),
     )
 
@@ -207,8 +214,11 @@ async def patch_suppression(
         raise HTTPException(status_code=404, detail="Suppression not found")
 
     changes = payload.model_dump(exclude_unset=True)
-    if "ends_at" in changes and changes["ends_at"] <= suppression.starts_at:
-        raise HTTPException(status_code=400, detail="ends_at must be greater than starts_at")
+    if "ends_at" in changes:
+        updated_ends_at = normalize_utc_datetime(changes["ends_at"])
+        starts_at = normalize_utc_datetime(suppression.starts_at)
+        if updated_ends_at is not None and starts_at is not None and updated_ends_at <= starts_at:
+            raise HTTPException(status_code=400, detail="ends_at must be greater than starts_at")
 
     for field in ("name", "ends_at", "reason", "enabled"):
         if field in changes:

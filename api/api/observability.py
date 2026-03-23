@@ -28,7 +28,7 @@ from api.services.communications import (
     normalize_destination_target,
     normalize_destination_type,
 )
-from api.services.suppression_service import suppression_status
+from api.services.suppression_service import normalize_utc_datetime, suppression_status
 
 router = APIRouter()
 
@@ -215,7 +215,7 @@ async def get_observability_activity(
                 status=order.processing_status,
                 title=order.alert_group_name,
                 summary=f"{order.alert_status} | {severity}{instance}",
-                timestamp=order.updated_at,
+                timestamp=normalize_utc_datetime(order.updated_at),
                 target_kind="incident",
                 target_id=str(order.id),
                 link_hint=f"/incidents/{order.id}",
@@ -244,7 +244,7 @@ async def get_observability_activity(
                 status=dish.processing_status,
                 title=f"{recipe_name} run",
                 summary=f"{dish.run_phase} phase | execution {dish.execution_ref or 'pending'}",
-                timestamp=dish.updated_at,
+                timestamp=normalize_utc_datetime(dish.updated_at),
                 target_kind="activity",
                 target_id=str(dish.id),
                 link_hint=target_link,
@@ -270,7 +270,7 @@ async def get_observability_activity(
                 status=item.remote_state or item.lifecycle_state or "unknown",
                 title=f"{item.channel} route for {reference_name}",
                 summary=item.destination or item.ticket_id or item.provider_reference_id,
-                timestamp=item.updated_at,
+                timestamp=normalize_utc_datetime(item.updated_at),
                 target_kind="communication",
                 target_id=item.communication_id,
                 link_hint=link_hint,
@@ -289,14 +289,15 @@ async def get_observability_activity(
     )
     for suppression in suppression_result.scalars().all():
         status = suppression_status(suppression)
+        ends_at = normalize_utc_datetime(suppression.ends_at)
         records.append(
             ObservabilityActivityRecord(
                 type="suppression",
                 status=status,
                 title=suppression.name,
                 summary=suppression.reason
-                or f"{suppression.scope} suppression window until {suppression.ends_at.isoformat()}",
-                timestamp=suppression.updated_at,
+                or f"{suppression.scope} suppression window until {ends_at.isoformat() if ends_at else 'unknown'}",
+                timestamp=normalize_utc_datetime(suppression.updated_at),
                 target_kind="suppression",
                 target_id=str(suppression.id),
                 link_hint=f"/suppressions?suppression={suppression.id}",
