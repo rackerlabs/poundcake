@@ -31,4 +31,7 @@ def test_ui_contract_objects_are_strict() -> None:
     assert "export const orderResponseSchema = strictObject({" in content
     assert "fingerprint_when_active: z.string().nullable().optional()," in content
     assert "result: z.unknown().nullable().optional()," in content
+    assert "file: z.string().nullable().optional()," in content
+    assert "crd: z.string().nullable().optional()," in content
+    assert "namespace: z.string().nullable().optional()," in content
     assert "export const recipeCreateRequestSchema = strictObject({" in content

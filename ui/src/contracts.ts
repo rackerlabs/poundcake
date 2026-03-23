@@ -342,17 +342,17 @@ export const dishRecordArraySchema = z.array(dishRecordSchema);
 
 export const prometheusRuleSchema = strictObject({
   group: z.string(),
-  crd: z.string().optional(),
-  file: z.string().optional(),
-  namespace: z.string().optional(),
-  interval: z.string().optional(),
+  crd: z.string().nullable().optional(),
+  file: z.string().nullable().optional(),
+  namespace: z.string().nullable().optional(),
+  interval: z.string().nullable().optional(),
   name: z.string(),
   query: z.string(),
-  duration: z.string().optional(),
+  duration: z.string().nullable().optional(),
   labels: stringRecordSchema.optional(),
   annotations: stringRecordSchema.optional(),
-  state: z.string().optional(),
-  health: z.string().optional(),
+  state: z.string().nullable().optional(),
+  health: z.string().nullable().optional(),
 });
 export type PrometheusRule = z.infer<typeof prometheusRuleSchema>;
 
