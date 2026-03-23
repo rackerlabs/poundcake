@@ -162,7 +162,11 @@ async def create_suppression(
         raise HTTPException(status_code=500, detail="Failed to create suppression")
     logger.info(
         "Created suppression",
-        extra={"req_id": req_id, "suppression_id": refreshed.id, "name": refreshed.name},
+        extra={
+            "req_id": req_id,
+            "suppression_id": refreshed.id,
+            "suppression_name": refreshed.name,
+        },
     )
     return _to_suppression_response(refreshed)
 

@@ -437,7 +437,9 @@ async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession 
     if recipe is None:
         raise HTTPException(status_code=500, detail="Recipe update failed")
 
-    result = await db.execute(_recipe_query().where(Recipe.id == recipe_id))
+    result = await db.execute(
+        _recipe_query().where(Recipe.id == recipe_id).execution_options(populate_existing=True)
+    )
     updated_recipe = result.unique().scalars().first()
     if updated_recipe is None:
         raise HTTPException(status_code=500, detail="Recipe update failed")

@@ -94,7 +94,10 @@ class PrometheusCRDManager:
             )
             return rule
         except Exception as e:
-            logger.error("Failed to get PrometheusRule CRD", extra={"name": name, "error": str(e)})
+            logger.error(
+                "Failed to get PrometheusRule CRD",
+                extra={"crd_name": name, "error": str(e)},
+            )
             return None
 
     async def find_crd_containing_rule(

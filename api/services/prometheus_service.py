@@ -22,6 +22,12 @@ logger = get_logger(__name__)
 SYSTEM_REQ_ID = "SYSTEM-PROM"
 
 
+def _optional_string(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    return str(value)
+
+
 class PrometheusClient:
     """Client for interacting with Prometheus API."""
 
@@ -98,8 +104,8 @@ class PrometheusClient:
         rules = []
         for group in groups:
             group_name = group.get("name", "")
-            group_file = group.get("file", "")
-            group_interval = group.get("interval", 0)
+            group_file = _optional_string(group.get("file"))
+            group_interval = _optional_string(group.get("interval"))
 
             for rule in group.get("rules", []):
                 if rule.get("type") == "alerting":
@@ -110,13 +116,11 @@ class PrometheusClient:
                             "interval": group_interval,
                             "name": rule.get("name", ""),
                             "query": rule.get("query", ""),
-                            "duration": rule.get("duration", ""),
+                            "duration": _optional_string(rule.get("duration")),
                             "labels": rule.get("labels", {}),
                             "annotations": rule.get("annotations", {}),
-                            "state": rule.get("state", ""),
-                            "health": rule.get("health", ""),
-                            "type": rule.get("type", ""),
-                            "alerts": rule.get("alerts", []),
+                            "state": _optional_string(rule.get("state")),
+                            "health": _optional_string(rule.get("health")),
                         }
                     )
         return rules

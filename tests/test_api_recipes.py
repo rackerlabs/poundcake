@@ -264,6 +264,63 @@ def test_recipe_update_applies_default_step_fields_when_optionals_are_omitted(cl
     assert response.json()["communications"]["effective_source"] == "global"
 
 
+def test_recipe_update_refreshes_recipe_with_populate_existing(client, mock_db):
+    recipe = _make_recipe()
+    ingredient = _make_ingredient(12, "core.local")
+    global_route = SimpleNamespace(
+        id="global-primary",
+        label="Primary route",
+        execution_target="rackspace_core",
+        destination_target="",
+        provider_config={"account_number": "1781738"},
+        enabled=True,
+        position=1,
+    )
+
+    def _add(obj):
+        if isinstance(obj, RecipeIngredient):
+            recipe.recipe_ingredients.append(obj)
+
+    async def _flush():
+        for index, item in enumerate(recipe.recipe_ingredients, start=1):
+            if not item.id:
+                item.id = index + 100
+
+    mock_db.add = Mock(side_effect=_add)
+    mock_db.flush = AsyncMock(side_effect=_flush)
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=recipe),
+            ScalarResult(all_=[ingredient]),
+            ScalarResult(first=recipe),
+        ]
+    )
+
+    with (
+        patch("api.api.recipes.global_policy_configured", new=AsyncMock(return_value=True)),
+        patch(
+            "api.api.recipes.get_global_policy_routes", new=AsyncMock(return_value=[global_route])
+        ),
+        patch("api.api.recipes.delete_recipe_ingredients_safely", new=AsyncMock(return_value=None)),
+    ):
+        response = client.patch(
+            "/api/v1/recipes/9",
+            json={
+                "recipe_ingredients": [
+                    {
+                        "ingredient_id": 12,
+                        "step_order": 1,
+                        "run_phase": "firing",
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    refresh_statement = mock_db.execute.await_args_list[-1].args[0]
+    assert refresh_statement._execution_options.get("populate_existing") is True
+
+
 def test_recipe_update_returns_404_when_workflow_references_missing_action(client, mock_db):
     recipe = _make_recipe()
     mock_db.execute = AsyncMock(

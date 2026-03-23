@@ -243,6 +243,8 @@ async def create_rule(
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
         return PrometheusRuleMutationResponse.model_validate(result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to create rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
@@ -269,6 +271,8 @@ async def update_rule(
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
         return PrometheusRuleMutationResponse.model_validate(result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to update rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
@@ -293,6 +297,8 @@ async def delete_rule(
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
         return PrometheusRuleMutationResponse.model_validate(result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to delete rule", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))
