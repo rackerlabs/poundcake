@@ -329,6 +329,7 @@ export const dishRecordSchema = strictObject({
   run_phase: z.string(),
   expected_duration_sec: z.number().nullable().optional(),
   actual_duration_sec: z.number().nullable().optional(),
+  result: z.unknown().nullable().optional(),
   error_message: z.string().nullable().optional(),
   retry_attempt: z.number().int(),
   started_at: z.string().nullable().optional(),
