@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import PurePosixPath
+import re
 from typing import Any, Optional, TypeVar, cast
 
 import httpx
@@ -116,6 +118,38 @@ class DeviceAuthorizationStart:
     verification_uri_complete: str | None
     expires_in: int
     interval: int
+
+
+def _canonical_rule_source(value: str | None) -> set[str]:
+    """Return comparable identifiers for a Prometheus rule source."""
+
+    text = str(value or "").strip()
+    if not text:
+        return set()
+
+    basename = PurePosixPath(text).name
+    without_extension = re.sub(r"\.(yaml|yml)$", "", basename, flags=re.IGNORECASE)
+    sanitized = re.sub(r"[^a-z0-9.-]", "-", without_extension.lower())
+    sanitized = re.sub(r"^[^a-z0-9]+", "", sanitized)
+    sanitized = re.sub(r"[^a-z0-9]+$", "", sanitized)
+    if not sanitized:
+        sanitized = "prometheus-rule"
+    if len(sanitized) > 253:
+        sanitized = sanitized[:253].rstrip("-.")
+
+    return {
+        candidate
+        for candidate in {
+            text,
+            text.lower(),
+            basename,
+            basename.lower(),
+            without_extension,
+            without_extension.lower(),
+            sanitized,
+        }
+        if candidate
+    }
 
 
 class PoundCakeClient:
@@ -797,9 +831,10 @@ class PoundCakeClient:
 
     def get_rule(self, source_name: str, group_name: str, rule_name: str) -> PrometheusRuleResponse:
         payload = self.list_rules()
+        requested_sources = _canonical_rule_source(source_name)
         for rule in payload.rules:
-            source = str(rule.crd or rule.file or "")
-            if source != source_name:
+            available_sources = _canonical_rule_source(rule.crd or rule.file)
+            if requested_sources.isdisjoint(available_sources):
                 continue
             if str(rule.group or "") != group_name:
                 continue

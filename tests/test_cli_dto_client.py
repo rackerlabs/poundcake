@@ -112,6 +112,37 @@ def test_cli_list_rules_rejects_unexpected_rule_fields(monkeypatch: pytest.Monke
         client.list_rules()
 
 
+def test_cli_get_rule_matches_canonicalized_crd_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client()
+    monkeypatch.setattr(
+        client,
+        "_request",
+        lambda *args, **kwargs: {
+            "rules": [
+                {
+                    "group": "MixedCaseGroup",
+                    "crd": "mixed-case-source",
+                    "name": "DiskFull",
+                    "query": "node_filesystem_avail_bytes == 0",
+                    "duration": "5m",
+                    "labels": {"severity": "warning"},
+                    "annotations": {"summary": "Disk filling up"},
+                    "state": "unknown",
+                    "health": "unknown",
+                }
+            ],
+            "source": "crds",
+        },
+    )
+
+    payload = client.get_rule("Mixed Case Source.yaml", "MixedCaseGroup", "DiskFull")
+
+    assert payload.crd == "mixed-case-source"
+    assert payload.name == "DiskFull"
+
+
 def test_cli_list_orders_rejects_unexpected_order_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
