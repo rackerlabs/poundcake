@@ -218,6 +218,7 @@ export const orderResponseSchema = strictObject({
   id: z.number().int(),
   req_id: z.string(),
   fingerprint: z.string(),
+  fingerprint_when_active: z.string().nullable().optional(),
   alert_status: z.string(),
   alert_group_name: z.string(),
   processing_status: z.string(),
