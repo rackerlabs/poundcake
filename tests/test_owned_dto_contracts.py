@@ -156,6 +156,8 @@ def test_public_json_routes_define_response_models() -> None:
                         keyword.arg == "response_model" for keyword in decorator.keywords
                     )
                     if not has_response_model:
-                        missing.append(f"{decorator.func.attr.upper()} {relative_dir}/{path.name}:{route_path}")
+                        missing.append(
+                            f"{decorator.func.attr.upper()} {relative_dir}/{path.name}:{route_path}"
+                        )
 
     assert missing == []

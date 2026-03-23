@@ -23,7 +23,10 @@ def test_ui_app_uses_runtime_contract_schemas_for_key_flows() -> None:
 
 def test_ui_contract_objects_are_strict() -> None:
     content = CONTRACTS_TS.read_text(encoding="utf-8")
-    assert "const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();" in content
+    assert (
+        "const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();"
+        in content
+    )
     assert "export const appSettingsSchema = strictObject({" in content
     assert "export const orderResponseSchema = strictObject({" in content
     assert "export const recipeCreateRequestSchema = strictObject({" in content

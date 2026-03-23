@@ -9,7 +9,9 @@ def _client() -> PoundCakeClient:
     return PoundCakeClient("https://poundcake.example", api_key="token")
 
 
-def test_cli_get_settings_rejects_unexpected_response_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_get_settings_rejects_unexpected_response_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _client()
     monkeypatch.setattr(
         client,
