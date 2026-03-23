@@ -758,11 +758,10 @@ def monitor_dishes() -> None:
                                 [
                                     {
                                         "id": child.get("id"),
-                                        "task_key": (
-                                            child.get("context", {})
-                                            .get("orquesta", {})
-                                            .get("task_id")
-                                        ),
+                                        "task_key": child.get("task_key")
+                                        or child.get("context", {})
+                                        .get("orquesta", {})
+                                        .get("task_id"),
                                         "status": child.get("status"),
                                         "result": child.get("result"),
                                         "start_timestamp": child.get("start_timestamp"),
@@ -792,11 +791,10 @@ def monitor_dishes() -> None:
                                 [
                                     {
                                         "id": child.get("id"),
-                                        "task_key": (
-                                            child.get("context", {})
-                                            .get("orquesta", {})
-                                            .get("task_id")
-                                        ),
+                                        "task_key": child.get("task_key")
+                                        or child.get("context", {})
+                                        .get("orquesta", {})
+                                        .get("task_id"),
                                         "status": child.get("status"),
                                         "result": child.get("result"),
                                         "start_timestamp": child.get("start_timestamp"),

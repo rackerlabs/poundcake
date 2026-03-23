@@ -14,6 +14,7 @@ from cli.utils import (
     print_error,
     print_output,
     render_sections,
+    to_plain_data,
 )
 
 ACTION_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
@@ -170,7 +171,7 @@ def list_actions(
             rows, search, ["task_key_template", "execution_target", "destination_target"]
         )
         if output_format == "table":
-            print_output(_action_rows(rows), output_format)
+            print_output(_action_rows(to_plain_data(rows)), output_format)
             return
         print_output(rows, output_format)
     except PoundCakeClientError as exc:
@@ -353,16 +354,16 @@ def delete_action(ctx: click.Context, action_id: int, yes: bool) -> None:
         action = client.get_ingredient(action_id)
         if not yes:
             click.confirm(
-                f"Delete action '{action.get('task_key_template') or action_id}'?",
+                f"Delete action '{action.task_key_template or action_id}'?",
                 abort=True,
             )
         payload = client.delete_ingredient(action_id)
         if output_format == "table":
             print_output(
                 {
-                    "status": payload.get("status"),
-                    "id": payload.get("id"),
-                    "message": payload.get("message"),
+                    "status": payload.status,
+                    "id": payload.id,
+                    "message": payload.message,
                 },
                 output_format,
             )

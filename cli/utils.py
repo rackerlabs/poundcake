@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 import json
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 import click
 import yaml
+from pydantic import BaseModel as PydanticModel
 
 TableRenderer = Callable[[Any], str]
 
@@ -16,14 +18,36 @@ def compact_json(data: Any) -> str:
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
 
+def to_plain_data(data: Any) -> Any:
+    if isinstance(data, PydanticModel):
+        return {
+            key: to_plain_data(value)
+            for key, value in data.model_dump(mode="json", by_alias=True).items()
+        }
+    if is_dataclass(data) and not isinstance(data, type):
+        return {key: to_plain_data(value) for key, value in asdict(data).items()}
+    if isinstance(data, dict):
+        return {key: to_plain_data(value) for key, value in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [to_plain_data(item) for item in data]
+    return data
+
+
+def get_field_value(item: Any, field: str, default: Any = None) -> Any:
+    if isinstance(item, dict):
+        return item.get(field, default)
+    return getattr(item, field, default)
+
+
 def format_output(data: Any, format: str = "table") -> str:
+    plain = to_plain_data(data)
     if format == "json":
-        return json.dumps(data, indent=2, sort_keys=False)
+        return json.dumps(plain, indent=2, sort_keys=False)
     if format == "yaml":
-        return yaml.safe_dump(data, default_flow_style=False, sort_keys=False)
+        return yaml.safe_dump(plain, default_flow_style=False, sort_keys=False)
     if format == "table":
-        return format_table(data)
-    return str(data)
+        return format_table(plain)
+    return str(plain)
 
 
 def format_table(data: Any) -> str:
@@ -79,7 +103,7 @@ def print_output(
     data: Any, format: str = "table", *, table_renderer: TableRenderer | None = None
 ) -> None:
     if format == "table" and table_renderer is not None:
-        click.echo(table_renderer(data))
+        click.echo(table_renderer(to_plain_data(data)))
         return
     click.echo(format_output(data, format))
 
@@ -139,16 +163,16 @@ def titleize(value: str | None) -> str:
 
 
 def filter_by_search(
-    rows: Sequence[dict[str, Any]],
+    rows: Sequence[Any],
     search: str | None,
     fields: Iterable[str],
-) -> list[dict[str, Any]]:
+) -> list[Any]:
     if not search:
         return list(rows)
     needle = search.lower()
-    filtered: list[dict[str, Any]] = []
+    filtered: list[Any] = []
     for row in rows:
-        haystack = " ".join(str(row.get(field) or "") for field in fields).lower()
+        haystack = " ".join(str(get_field_value(row, field) or "") for field in fields).lower()
         if needle in haystack:
             filtered.append(row)
     return filtered

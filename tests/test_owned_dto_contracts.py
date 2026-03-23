@@ -11,6 +11,9 @@ from api.schemas.schemas import (
     IngredientCreate,
     PrometheusRuleWriteRequest,
     SettingsResponse,
+    StackStormExecutionResponse,
+    StackStormExecutionTaskResponse,
+    StackStormWorkflowRegistrationRequest,
 )
 from api.services.repo_sync_service import RepoWorkflowDocument
 from bakery.schemas import TicketCreateRequest
@@ -120,6 +123,39 @@ def test_repo_sync_document_rejects_unknown_fields() -> None:
                 "communications": {"mode": "inherit", "routes": []},
                 "recipe_ingredients": [],
                 "unexpected": "boom",
+            }
+        )
+
+
+def test_stackstorm_execution_response_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        StackStormExecutionResponse.model_validate(
+            {
+                "id": "exec-1",
+                "status": "succeeded",
+                "unexpected": "boom",
+            }
+        )
+
+
+def test_stackstorm_execution_task_response_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        StackStormExecutionTaskResponse.model_validate(
+            {
+                "id": "task-1",
+                "status": "succeeded",
+                "unexpected": "boom",
+            }
+        )
+
+
+def test_stackstorm_workflow_registration_request_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        StackStormWorkflowRegistrationRequest.model_validate(
+            {
+                "name": "wf-1",
+                "execution_parameters": {},
+                "recipe_ingredients": [],
             }
         )
 

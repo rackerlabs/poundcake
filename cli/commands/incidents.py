@@ -9,7 +9,14 @@ import click
 
 from cli.client import PoundCakeClientError
 from cli.commands.common import get_client, get_output_format
-from cli.utils import filter_by_search, print_error, print_output, print_success, render_sections
+from cli.utils import (
+    filter_by_search,
+    print_error,
+    print_output,
+    print_success,
+    render_sections,
+    to_plain_data,
+)
 
 
 def _incident_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -150,7 +157,7 @@ def list_incidents(
             ["alert_group_name", "instance", "severity", "req_id"],
         )
         if output_format == "table":
-            print_output(_incident_rows(incidents_data), output_format)
+            print_output(_incident_rows(to_plain_data(incidents_data)), output_format)
             return
         print_output(incidents_data, output_format)
     except PoundCakeClientError as exc:
@@ -248,7 +255,7 @@ def watch_incidents(
             click.echo(f"Incidents (refreshed at {time.strftime('%H:%M:%S')})")
             click.echo("=" * 80)
             if output_format == "table":
-                print_output(_incident_rows(rows), output_format)
+                print_output(_incident_rows(to_plain_data(rows)), output_format)
             else:
                 print_output(rows, output_format)
             if once:

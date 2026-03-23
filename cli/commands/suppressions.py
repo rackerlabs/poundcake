@@ -9,7 +9,7 @@ import click
 
 from cli.client import PoundCakeClientError
 from cli.commands.common import get_client, get_output_format
-from cli.utils import parse_json_object, print_error, print_output, render_sections
+from cli.utils import parse_json_object, print_error, print_output, render_sections, to_plain_data
 
 
 def _suppression_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -115,7 +115,7 @@ def list_suppressions_cmd(
             status=status, enabled=enabled, scope=scope, limit=limit, offset=offset
         )
         if output_format == "table":
-            print_output(_suppression_rows(payload), output_format)
+            print_output(_suppression_rows(to_plain_data(payload)), output_format)
             return
         print_output(payload, output_format)
     except PoundCakeClientError as exc:

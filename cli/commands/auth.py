@@ -8,7 +8,7 @@ import click
 
 from cli.client import PoundCakeClientError, ProviderInfo
 from cli.commands.common import get_client, get_output_format
-from cli.utils import print_error, print_info, print_output, print_success
+from cli.utils import print_error, print_info, print_output, print_success, to_plain_data
 
 
 @click.group()
@@ -60,14 +60,14 @@ def _run_device_flow(ctx: click.Context, provider: ProviderInfo) -> None:
         while time.time() < deadline:
             time.sleep(max(start.interval, 1))
             poll = client.poll_device_login(provider.name, start.device_code)
-            status = str(poll.get("status") or "").strip().lower()
+            status = str(poll.status or "").strip().lower()
             if status == "pending":
                 continue
             if status == "expired":
-                raise PoundCakeClientError(str(poll.get("detail") or "Device login expired"))
-            session = poll.get("session")
-            if status == "authorized" and isinstance(session, dict):
-                print_output(session, output_format)
+                raise PoundCakeClientError(str(poll.detail or "Device login expired"))
+            session = poll.session
+            if status == "authorized" and session is not None:
+                print_output(to_plain_data(session), output_format)
                 return
         raise PoundCakeClientError("Device login timed out before authorization completed")
     except PoundCakeClientError as exc:

@@ -219,8 +219,7 @@ async def get_st2_execution(
     """Get a StackStorm execution by ID."""
     req_id = request.state.req_id
     try:
-        result = await manager._client.get_execution(execution_id)
-        return StackStormExecutionResponse(root=result)
+        return await manager._client.get_execution(execution_id)
     except StackStormError as e:
         logger.error(
             "Failed to get StackStorm execution",
@@ -263,8 +262,9 @@ async def get_st2_execution_tasks(
     """Get StackStorm execution task results by ID (Orquesta)."""
     req_id = request.state.req_id
     try:
-        result = await manager._client.get_execution_tasks(execution_id)
-        return StackStormExecutionTasksResponse(root=result)
+        return StackStormExecutionTasksResponse(
+            root=await manager._client.get_execution_tasks(execution_id)
+        )
     except StackStormError as e:
         logger.error(
             "Failed to get StackStorm execution tasks",
@@ -338,7 +338,7 @@ async def register_st2_workflow(
         workflow_id = await register_workflow_to_st2(
             settings.stackstorm_url,
             api_key,
-            payload.root,
+            payload.model_dump(mode="python", exclude_none=True),
         )
         return StackStormWorkflowRegistrationResponse(workflow_id=workflow_id)
     except ValueError as e:

@@ -33,7 +33,13 @@ from api.schemas.query_params import (
 )
 from api.schemas.schemas import (
     BakeryOperationRecord,
+    ObservabilityBakerySummary,
+    ObservabilityFailuresSummary,
+    ObservabilityHealthSummary,
     ObservabilityOverviewResponse,
+    ObservabilityQueueSummary,
+    ObservabilitySuppressionsSummary,
+    ObservabilityTopError,
     SuppressedActivityResponse,
     SuppressionCreate,
     SuppressionDetailResponse,
@@ -370,26 +376,26 @@ async def get_observability_overview(
         )
 
     return ObservabilityOverviewResponse(
-        health={"status": "ok"},
-        queue={
-            "orders_new": int(order_new or 0),
-            "orders_processing": int(order_processing or 0),
-        },
-        failures={
-            "orders_failed": int(failed_orders or 0),
-            "dishes_failed": int(failed_dishes or 0),
-            "top_errors": top_errors,
-            "runbook_hints": runbook_hints,
-        },
-        bakery={
-            "summary_failures": int(bakery_failures or 0),
-            "order_dead_letters": int(order_ticket_dead_letters or 0),
-        },
-        suppressions={
-            "active": int(active_suppressions),
-            "retrying_operations": int(retrying_operations or 0),
-            "dead_letter": int(dead_letter_count or 0),
-        },
+        health=ObservabilityHealthSummary(status="ok"),
+        queue=ObservabilityQueueSummary(
+            orders_new=int(order_new or 0),
+            orders_processing=int(order_processing or 0),
+        ),
+        failures=ObservabilityFailuresSummary(
+            orders_failed=int(failed_orders or 0),
+            dishes_failed=int(failed_dishes or 0),
+            top_errors=[ObservabilityTopError.model_validate(item) for item in top_errors],
+            runbook_hints=runbook_hints,
+        ),
+        bakery=ObservabilityBakerySummary(
+            summary_failures=int(bakery_failures or 0),
+            order_dead_letters=int(order_ticket_dead_letters or 0),
+        ),
+        suppressions=ObservabilitySuppressionsSummary(
+            active=int(active_suppressions),
+            retrying_operations=int(retrying_operations or 0),
+            dead_letter=int(dead_letter_count or 0),
+        ),
     )
 
 

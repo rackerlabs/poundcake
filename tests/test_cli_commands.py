@@ -704,8 +704,8 @@ def test_overview_aggregates_existing_endpoints_in_table_mode(
         "GET",
         "/api/v1/observability/overview",
         {
-            "health": {},
-            "queue": {},
+            "health": {"status": "ok"},
+            "queue": {"orders_new": 1, "orders_processing": 1},
             "failures": {
                 "orders_failed": 1,
                 "dishes_failed": 2,
@@ -1194,3 +1194,371 @@ def test_suppressions_get_renders_summary_when_present(
     assert "Suppression" in result.output
     assert "Counters" in result.output
     assert "Summary" in result.output
+
+
+def test_auth_read_commands_cover_provider_me_principals_and_bindings(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "GET",
+        "/api/v1/auth/providers",
+        [
+            {
+                "name": "auth0",
+                "label": "Auth0",
+                "login_mode": "oidc",
+                "cli_login_mode": "device",
+                "browser_login": True,
+                "device_login": True,
+                "password_login": False,
+            }
+        ],
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/auth/me",
+        {
+            "username": "alice@example.com",
+            "display_name": "Alice Example",
+            "provider": "auth0",
+            "role": "admin",
+            "principal_type": "user",
+            "principal_id": 7,
+            "is_superuser": False,
+            "permissions": ["read", "manage_access"],
+            "groups": ["monitoring-admins"],
+            "expires_at": "2099-01-01T00:00:00+00:00",
+        },
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/auth/principals",
+        [
+            {
+                "id": 7,
+                "provider": "auth0",
+                "subject_id": "auth0|abc",
+                "username": "alice@example.com",
+                "display_name": "Alice Example",
+                "principal_type": "user",
+                "groups": ["monitoring-admins"],
+                "last_seen_at": "2026-01-01T00:00:00+00:00",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+            }
+        ],
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/auth/bindings",
+        [
+            {
+                "id": 17,
+                "provider": "auth0",
+                "binding_type": "group",
+                "role": "operator",
+                "principal_id": None,
+                "external_group": "monitoring-operators",
+                "created_by": "alice",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+                "principal": None,
+            }
+        ],
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    _write_session(
+        tmp_path,
+        "http://example.test",
+        {
+            "session_id": "session-123",
+            "username": "alice@example.com",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+            "provider": "auth0",
+            "role": "admin",
+        },
+    )
+
+    for argv in (
+        ["--url", "http://example.test", "--format", "json", "auth", "providers"],
+        ["--url", "http://example.test", "--format", "json", "auth", "me"],
+        ["--url", "http://example.test", "--format", "json", "auth", "principals", "list"],
+        ["--url", "http://example.test", "--format", "json", "auth", "bindings", "list"],
+    ):
+        result = runner.invoke(cli, argv)
+        assert result.exit_code == 0, result.output
+
+
+def test_actions_and_workflows_commands_cover_remaining_crud_paths(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "GET",
+        "/api/v1/ingredients/",
+        [
+            _ingredient_payload(
+                ingredient_id=1,
+                execution_target="stackstorm",
+                task_key_template="demo.action",
+            )
+        ],
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/ingredients/1",
+        _ingredient_payload(
+            ingredient_id=1,
+            execution_target="stackstorm",
+            task_key_template="demo.action",
+        ),
+    )
+    fake_api.add_json(
+        "PUT",
+        "/api/v1/ingredients/1",
+        _ingredient_payload(
+            ingredient_id=1,
+            execution_target="stackstorm",
+            task_key_template="demo.action.updated",
+        ),
+    )
+    fake_api.add_json(
+        "DELETE",
+        "/api/v1/ingredients/1",
+        {"status": "deleted", "id": 1, "message": "deleted"},
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/recipes/",
+        [_recipe_payload(recipe_id=12, name="Filesystem")],
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/recipes/12",
+        _recipe_payload(recipe_id=12, name="Filesystem"),
+    )
+    fake_api.add_json(
+        "PATCH",
+        "/api/v1/recipes/12",
+        _recipe_payload(recipe_id=12, name="Filesystem Updated"),
+    )
+    fake_api.add_json(
+        "DELETE",
+        "/api/v1/recipes/12",
+        {"status": "deleted", "id": 12, "message": "deleted"},
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+
+    for argv in (
+        ["--url", "http://example.test", "--format", "json", "actions", "list"],
+        ["--url", "http://example.test", "--format", "json", "actions", "get", "1"],
+        [
+            "--url",
+            "http://example.test",
+            "--format",
+            "json",
+            "actions",
+            "update",
+            "1",
+            "--task-key-template",
+            "demo.action.updated",
+        ],
+        ["--url", "http://example.test", "--format", "json", "actions", "delete", "1", "--yes"],
+        ["--url", "http://example.test", "--format", "json", "workflows", "list"],
+        ["--url", "http://example.test", "--format", "json", "workflows", "get", "12"],
+        [
+            "--url",
+            "http://example.test",
+            "--format",
+            "json",
+            "workflows",
+            "update",
+            "12",
+            "--name",
+            "Filesystem Updated",
+        ],
+        ["--url", "http://example.test", "--format", "json", "workflows", "delete", "12", "--yes"],
+    ):
+        result = runner.invoke(cli, argv)
+        assert result.exit_code == 0, result.output
+
+
+def test_alert_rule_policy_and_read_commands_cover_remaining_supported_groups(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "GET",
+        "/api/v1/prometheus/rules",
+        {
+            "rules": [
+                {
+                    "group": "node",
+                    "crd": "rules-file",
+                    "file": None,
+                    "namespace": None,
+                    "interval": None,
+                    "name": "DiskFull",
+                    "query": "up == 0",
+                    "duration": "5m",
+                    "labels": {"severity": "critical"},
+                    "annotations": {"summary": "Disk full"},
+                    "state": "inactive",
+                    "health": "ok",
+                }
+            ],
+            "source": "crds",
+        },
+    )
+    fake_api.add_json(
+        "PUT",
+        "/api/v1/prometheus/rules/DiskFull",
+        {"status": "ok", "message": "updated"},
+    )
+    fake_api.add_json(
+        "DELETE",
+        "/api/v1/prometheus/rules/DiskFull",
+        {"status": "ok", "message": "deleted"},
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/communications/policy",
+        {
+            "configured": True,
+            "routes": [
+                {
+                    "id": "route-1",
+                    "label": "Core",
+                    "execution_target": "rackspace_core",
+                    "destination_target": "",
+                    "provider_config": {"account_number": "1781738"},
+                    "enabled": True,
+                    "position": 1,
+                }
+            ],
+            "lifecycle_summary": {"open": "open on escalation"},
+        },
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/communications/activity",
+        [
+            {
+                "communication_id": "comm-1",
+                "reference_type": "incident",
+                "reference_id": "7",
+                "reference_name": "Disk Full",
+                "channel": "rackspace_core",
+                "destination": "rackspace_core",
+                "ticket_id": "T-1",
+                "operation_id": "op-1",
+                "lifecycle_state": "open",
+                "remote_state": "open",
+                "writable": True,
+                "reopenable": False,
+                "updated_at": "2026-01-01T00:05:00+00:00",
+            }
+        ],
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/dishes",
+        [_dish_payload(dish_id=5, recipe_id=2, recipe_name="Filesystem", order_id=7)],
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+
+    for argv in (
+        ["--url", "http://example.test", "--format", "json", "alert-rules", "list"],
+        [
+            "--url",
+            "http://example.test",
+            "--format",
+            "json",
+            "alert-rules",
+            "get",
+            "rules-file",
+            "node",
+            "DiskFull",
+        ],
+        [
+            "--url",
+            "http://example.test",
+            "alert-rules",
+            "update",
+            "rules-file",
+            "node",
+            "DiskFull",
+            "--expr",
+            "up == 1",
+        ],
+        [
+            "--url",
+            "http://example.test",
+            "alert-rules",
+            "delete",
+            "rules-file",
+            "node",
+            "DiskFull",
+            "--yes",
+        ],
+        ["--url", "http://example.test", "--format", "json", "global-communications", "get"],
+        ["--url", "http://example.test", "--format", "json", "communications", "list"],
+        ["--url", "http://example.test", "--format", "json", "activity", "list"],
+    ):
+        result = runner.invoke(cli, argv)
+        assert result.exit_code == 0, result.output
+
+
+def test_incident_timeline_and_suppression_cancel_commands_succeed(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_api = FakeAPI()
+    fake_api.add_json(
+        "GET",
+        "/api/v1/orders",
+        [_order_payload(order_id=7, alert_group_name="Disk Full")],
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/orders/7/timeline",
+        {
+            "order": _order_payload(order_id=7, alert_group_name="Disk Full"),
+            "events": [
+                {
+                    "timestamp": "2026-01-01T00:05:00+00:00",
+                    "event_type": "workflow",
+                    "status": "processing",
+                    "title": "Workflow started",
+                    "details": {},
+                    "correlation_ids": {},
+                }
+            ],
+        },
+    )
+    fake_api.add_json(
+        "GET",
+        "/api/v1/suppressions",
+        [_suppression_payload(suppression_id=13, name="Maintenance")],
+    )
+    fake_api.add_json(
+        "POST",
+        "/api/v1/suppressions/13/cancel",
+        _suppression_payload(suppression_id=13, name="Maintenance"),
+    )
+    monkeypatch.setattr("cli.client.request_with_retry_sync", fake_api)
+
+    for argv in (
+        ["--url", "http://example.test", "--format", "json", "incidents", "list"],
+        ["--url", "http://example.test", "--format", "json", "incidents", "timeline", "7"],
+        ["--url", "http://example.test", "--format", "json", "suppressions", "list"],
+        ["--url", "http://example.test", "--format", "json", "suppressions", "cancel", "13"],
+    ):
+        result = runner.invoke(cli, argv)
+        assert result.exit_code == 0, result.output

@@ -765,12 +765,44 @@ class SuppressionDetailResponse(SuppressionResponse):
     counters: SuppressionStatsResponse
 
 
+class ObservabilityHealthSummary(BaseModel):
+    status: str
+
+
+class ObservabilityQueueSummary(BaseModel):
+    orders_new: int
+    orders_processing: int
+
+
+class ObservabilityTopError(BaseModel):
+    error: str
+    count: int
+
+
+class ObservabilityFailuresSummary(BaseModel):
+    orders_failed: int
+    dishes_failed: int
+    top_errors: List[ObservabilityTopError] = Field(default_factory=list)
+    runbook_hints: List[str] = Field(default_factory=list)
+
+
+class ObservabilityBakerySummary(BaseModel):
+    summary_failures: int
+    order_dead_letters: int
+
+
+class ObservabilitySuppressionsSummary(BaseModel):
+    active: int
+    retrying_operations: int
+    dead_letter: int
+
+
 class ObservabilityOverviewResponse(BaseModel):
-    health: Dict[str, Any]
-    queue: Dict[str, int]
-    failures: Dict[str, Any]
-    bakery: Dict[str, Any]
-    suppressions: Dict[str, Any]
+    health: ObservabilityHealthSummary
+    queue: ObservabilityQueueSummary
+    failures: ObservabilityFailuresSummary
+    bakery: ObservabilityBakerySummary
+    suppressions: ObservabilitySuppressionsSummary
 
 
 class ObservabilityActivityRecord(BaseModel):
@@ -894,16 +926,36 @@ class ExecutionEnvelopeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
-class StackStormExecutionResponse(RootModel[Dict[str, Any]]):
-    """Opaque StackStorm execution document returned by proxy endpoints."""
+class StackStormExecutionResponse(BaseModel):
+    """Normalized StackStorm execution document returned by PoundCake."""
+
+    id: str = Field(..., min_length=1)
+    action: Optional[str] = None
+    status: str
+    parent: Optional[str] = None
+    task_key: Optional[str] = None
+    start_timestamp: Optional[datetime] = None
+    end_timestamp: Optional[datetime] = None
+    result: Optional[Any] = None
 
 
-class StackStormExecutionListResponse(RootModel[List[Dict[str, Any]]]):
-    """Opaque StackStorm execution collection returned by proxy endpoints."""
+class StackStormExecutionListResponse(RootModel[List[StackStormExecutionResponse]]):
+    """Normalized StackStorm execution collection returned by PoundCake."""
 
 
-class StackStormExecutionTasksResponse(RootModel[List[Dict[str, Any]]]):
-    """Opaque StackStorm task collection returned by proxy endpoints."""
+class StackStormExecutionTaskResponse(BaseModel):
+    """Normalized StackStorm task record returned by PoundCake."""
+
+    id: Optional[str] = None
+    task_key: Optional[str] = None
+    status: Optional[str] = None
+    start_timestamp: Optional[datetime] = None
+    end_timestamp: Optional[datetime] = None
+    result: Optional[Any] = None
+
+
+class StackStormExecutionTasksResponse(RootModel[List[StackStormExecutionTaskResponse]]):
+    """Normalized StackStorm task collection returned by PoundCake."""
 
 
 class StackStormExecutionMutationResponse(BaseModel):
@@ -913,8 +965,12 @@ class StackStormExecutionMutationResponse(BaseModel):
     execution_id: str
 
 
-class StackStormWorkflowRegistrationRequest(RootModel[Dict[str, Any]]):
-    """Opaque workflow registration payload forwarded to StackStorm."""
+class StackStormWorkflowRegistrationRequest(BaseModel):
+    """Owned request payload for workflow registration in StackStorm."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    execution_parameters: Optional[Dict[str, Any]] = None
 
 
 class StackStormWorkflowRegistrationResponse(BaseModel):

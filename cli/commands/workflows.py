@@ -14,7 +14,7 @@ from cli.commands.common import (
     get_output_format,
     read_mapping_file,
 )
-from cli.utils import parse_json_object, print_error, print_output, render_sections
+from cli.utils import parse_json_object, print_error, print_output, render_sections, to_plain_data
 
 
 def _workflow_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -127,10 +127,7 @@ def _validate_non_communication_steps(client: PoundCakeClient, steps: list[dict[
     ingredient_ids = sorted({int(step["ingredient_id"]) for step in steps})
     for ingredient_id in ingredient_ids:
         ingredient = client.get_ingredient(ingredient_id)
-        if (
-            ingredient.get("execution_engine") == "bakery"
-            and ingredient.get("execution_purpose") == "comms"
-        ):
+        if ingredient.execution_engine == "bakery" and ingredient.execution_purpose == "comms":
             raise click.BadParameter(
                 f"Ingredient {ingredient_id} is a managed communication action and cannot be used as a workflow step"
             )
@@ -249,7 +246,7 @@ def list_workflows(
     try:
         payload = client.list_recipes(name=name, enabled=enabled_filter, limit=limit, offset=offset)
         if output_format == "table":
-            print_output(_workflow_rows(payload), output_format)
+            print_output(_workflow_rows(to_plain_data(payload)), output_format)
             return
         print_output(payload, output_format)
     except PoundCakeClientError as exc:
@@ -387,7 +384,7 @@ def delete_workflow(ctx: click.Context, workflow_id: int, yes: bool) -> None:
     try:
         workflow = client.get_recipe(workflow_id)
         if not yes:
-            click.confirm(f"Delete workflow '{workflow.get('name') or workflow_id}'?", abort=True)
+            click.confirm(f"Delete workflow '{workflow.name or workflow_id}'?", abort=True)
         response = client.delete_recipe(workflow_id)
         print_output(response, output_format)
     except PoundCakeClientError as exc:

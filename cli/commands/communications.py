@@ -8,7 +8,7 @@ import click
 
 from cli.client import PoundCakeClientError
 from cli.commands.common import get_client, get_output_format
-from cli.utils import filter_by_search, print_error, print_output, render_sections
+from cli.utils import filter_by_search, print_error, print_output, render_sections, to_plain_data
 
 
 def _communication_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -95,7 +95,7 @@ def list_communications_cmd(
             ],
         )
         if output_format == "table":
-            print_output(_communication_rows(rows), output_format)
+            print_output(_communication_rows(to_plain_data(rows)), output_format)
             return
         print_output(rows, output_format)
     except PoundCakeClientError as exc:

@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 import httpx
+from pydantic import ValidationError
 
 from api.core.config import get_settings
 from api.core.logging import get_logger
@@ -25,9 +26,87 @@ from api.core.httpx_utils import silence_httpx
 from api.core.http_client import request_with_retry
 from api.core.statuses import ST2_TERMINAL_STATUSES
 from api.models.models import Recipe
+from api.schemas.schemas import (
+    StackStormExecutionResponse,
+    StackStormExecutionTaskResponse,
+)
 from api.version import __version__
 
 logger = get_logger(__name__)
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value or None
+    return str(value)
+
+
+def _normalize_task_key(payload: dict[str, Any]) -> str | None:
+    for key in ("task_key", "task_id", "name"):
+        value = _string_or_none(payload.get(key))
+        if value:
+            return value
+
+    context = payload.get("context")
+    if isinstance(context, dict):
+        orquesta = context.get("orquesta")
+        if isinstance(orquesta, dict):
+            value = _string_or_none(orquesta.get("task_id"))
+            if value:
+                return value
+    return None
+
+
+def _normalize_task_execution_id(payload: dict[str, Any]) -> str | None:
+    direct_id = _string_or_none(payload.get("id") or payload.get("execution_id"))
+    if direct_id:
+        return direct_id
+
+    action_executions = payload.get("action_executions")
+    if isinstance(action_executions, list):
+        for action_execution in action_executions:
+            if not isinstance(action_execution, dict):
+                continue
+            execution_id = _string_or_none(
+                action_execution.get("id") or action_execution.get("execution_id")
+            )
+            if execution_id:
+                return execution_id
+    return None
+
+
+def _normalize_execution_record(payload: dict[str, Any]) -> StackStormExecutionResponse:
+    normalized = {
+        "id": _string_or_none(payload.get("id") or payload.get("execution_id")) or "",
+        "action": _string_or_none(payload.get("action") or payload.get("action_ref")),
+        "status": _string_or_none(payload.get("status")) or "unknown",
+        "parent": _string_or_none(payload.get("parent")),
+        "task_key": _normalize_task_key(payload),
+        "start_timestamp": payload.get("start_timestamp"),
+        "end_timestamp": payload.get("end_timestamp"),
+        "result": payload.get("result"),
+    }
+    try:
+        return StackStormExecutionResponse.model_validate(normalized)
+    except ValidationError as exc:
+        raise StackStormError(f"Invalid StackStorm execution payload: {exc}") from exc
+
+
+def _normalize_task_record(payload: dict[str, Any]) -> StackStormExecutionTaskResponse:
+    normalized = {
+        "id": _normalize_task_execution_id(payload),
+        "task_key": _normalize_task_key(payload),
+        "status": _string_or_none(payload.get("status") or payload.get("state")),
+        "start_timestamp": payload.get("start_timestamp"),
+        "end_timestamp": payload.get("end_timestamp"),
+        "result": payload.get("result"),
+    }
+    try:
+        return StackStormExecutionTaskResponse.model_validate(normalized)
+    except ValidationError as exc:
+        raise StackStormError(f"Invalid StackStorm task payload: {exc}") from exc
 
 
 class StackStormError(Exception):
@@ -184,7 +263,7 @@ class StackStormClient:
             )
             raise StackStormError(f"StackStorm request failed: {e}") from e
 
-    async def get_execution(self, execution_id: str) -> dict[str, Any]:
+    async def get_execution(self, execution_id: str) -> StackStormExecutionResponse:
         """Get the status of a StackStorm execution.
 
         Args:
@@ -204,10 +283,10 @@ class StackStormClient:
 
         if response.status_code == 200:
             result: dict[str, Any] = response.json()
-            return result
+            return _normalize_execution_record(result)
         raise StackStormError(f"Failed to get execution {execution_id}: {response.status_code}")
 
-    async def get_execution_tasks(self, execution_id: str) -> list[dict[str, Any]]:
+    async def get_execution_tasks(self, execution_id: str) -> list[StackStormExecutionTaskResponse]:
         """Get task results for a StackStorm execution (Orquesta)."""
         headers = self._get_headers()
 
@@ -220,7 +299,7 @@ class StackStormClient:
 
         if response.status_code == 200:
             result: list[dict[str, Any]] = response.json()
-            return result
+            return [_normalize_task_record(item) for item in result if isinstance(item, dict)]
         raise StackStormError(
             f"Failed to get execution tasks {execution_id}: {response.status_code}"
         )
@@ -261,7 +340,7 @@ class StackStormClient:
         execution_id: str,
         timeout: int = 300,
         poll_interval: int = 2,
-    ) -> dict[str, Any]:
+    ) -> StackStormExecutionResponse:
         """Wait for a StackStorm execution to complete.
 
         Args:
@@ -275,7 +354,7 @@ class StackStormClient:
         elapsed = 0
         while elapsed < timeout:
             result = await self.get_execution(execution_id)
-            status = result.get("status", "")
+            status = result.status
 
             if status in ST2_TERMINAL_STATUSES:
                 return result
@@ -455,7 +534,7 @@ class StackStormActionManager:
         limit: int = 50,
         action: str | None = None,
         parent: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[StackStormExecutionResponse]:
         """Get StackStorm execution history.
 
         Args:
@@ -483,7 +562,7 @@ class StackStormActionManager:
 
         if response.status_code == 200:
             result: list[dict[str, Any]] = response.json()
-            return result
+            return [_normalize_execution_record(item) for item in result if isinstance(item, dict)]
         return []
 
     async def update_action(

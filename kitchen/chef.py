@@ -255,7 +255,11 @@ def _start_stackstorm_workflow(
     reg_resp = request_with_retry_sync(
         "POST",
         f"{API_BASE_URL}/cook/workflows/register",
-        json=filtered_recipe,
+        json={
+            "name": filtered_recipe.get("name"),
+            "description": filtered_recipe.get("description"),
+            "execution_parameters": filtered_recipe.get("execution_parameters"),
+        },
         headers=get_service_headers(req_id),
         timeout=30,
         retries=POLLER_RETRIES,

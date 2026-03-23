@@ -17,11 +17,13 @@ from cli.utils import (
     print_output,
     print_success,
     render_sections,
+    to_plain_data,
 )
 
 
-def _print_git_result(result: dict[str, Any]) -> None:
-    git_result = result.get("git")
+def _print_git_result(result: Any) -> None:
+    plain = to_plain_data(result)
+    git_result = plain.get("git")
     if not isinstance(git_result, dict):
         return
     pr = git_result.get("pull_request", {})
@@ -83,8 +85,9 @@ def _build_rule_data(
     description: str | None,
     labels_json: str | None,
     annotations_json: str | None,
-    base_rule: dict[str, Any] | None = None,
+    base_rule: Any | None = None,
 ) -> dict[str, Any]:
+    base_rule_plain = to_plain_data(base_rule) if base_rule is not None else None
     if file:
         loaded = yaml.safe_load(file.read_text(encoding="utf-8"))
         if not isinstance(loaded, dict):
@@ -95,10 +98,10 @@ def _build_rule_data(
         raise click.BadParameter("Either --file or --expr must be provided")
 
     labels = _merge_objects(
-        (base_rule or {}).get("labels"), parse_json_object(labels_json, "labels-json")
+        (base_rule_plain or {}).get("labels"), parse_json_object(labels_json, "labels-json")
     )
     annotations = _merge_objects(
-        (base_rule or {}).get("annotations"),
+        (base_rule_plain or {}).get("annotations"),
         parse_json_object(annotations_json, "annotations-json"),
     )
     if severity:
@@ -110,10 +113,10 @@ def _build_rule_data(
 
     payload: dict[str, Any] = {
         "alert": rule_name,
-        "expr": expr or (base_rule or {}).get("query"),
+        "expr": expr or (base_rule_plain or {}).get("query"),
     }
     effective_duration = (
-        duration or (base_rule or {}).get("duration") or (base_rule or {}).get("for")
+        duration or (base_rule_plain or {}).get("duration") or (base_rule_plain or {}).get("for")
     )
     if effective_duration:
         payload["for"] = effective_duration
@@ -138,7 +141,7 @@ def list_rules_cmd(ctx: click.Context) -> None:
     try:
         payload = client.list_rules()
         if output_format == "table":
-            print_output(_rule_rows(payload), output_format)
+            print_output(_rule_rows(to_plain_data(payload)), output_format)
             return
         print_output(payload, output_format)
     except PoundCakeClientError as exc:

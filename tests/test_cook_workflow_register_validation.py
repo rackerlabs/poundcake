@@ -73,8 +73,7 @@ def test_register_workflow_rejects_non_object_execution_parameters(
     app = _build_app()
     client = TestClient(app)
 
-    error_message = "execution_parameters must be an object when provided"
-    register_mock = AsyncMock(side_effect=ValueError(error_message))
+    register_mock = AsyncMock(return_value="poundcake.wf")
     with (
         patch("api.api.cook.get_settings", return_value=_settings()),
         patch("api.api.cook.register_workflow_to_st2", register_mock),
@@ -84,8 +83,29 @@ def test_register_workflow_rejects_non_object_execution_parameters(
             json={"name": "wf-bad", "execution_parameters": []},
         )
 
-    assert response.status_code == 400
-    assert response.json() == {"detail": error_message}
+    assert response.status_code == 422
+    register_mock.assert_not_awaited()
+
+
+def test_register_workflow_rejects_unexpected_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TESTING", "1")
+    app = _build_app()
+    client = TestClient(app)
+
+    register_mock = AsyncMock(return_value="poundcake.wf")
+    with (
+        patch("api.api.cook.get_settings", return_value=_settings()),
+        patch("api.api.cook.register_workflow_to_st2", register_mock),
+    ):
+        response = client.post(
+            "/api/v1/cook/workflows/register",
+            json={"name": "wf-bad", "recipe_ingredients": []},
+        )
+
+    assert response.status_code == 422
+    register_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
