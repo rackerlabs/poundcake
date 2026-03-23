@@ -42,6 +42,12 @@ export POUNDCAKE_VERSION=<version>
 export SHARED_BAKERY_HMAC_KEY='<shared-hmac-key>'
 ```
 
+If you need to generate a fresh HMAC key, one simple option is:
+
+```bash
+export SHARED_BAKERY_HMAC_KEY="$(openssl rand -base64 32)"
+```
+
 ## Step 1: Install Bakery In The Bakery Environment
 
 Choose the HMAC key that PoundCake will use later:

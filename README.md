@@ -360,11 +360,14 @@ output:
 Use this when Bakery will live in one environment and PoundCake in another:
 
 ```bash
+# Generate a shared HMAC key once and reuse it in both environments
+export SHARED_BAKERY_HMAC_KEY="$(openssl rand -base64 32)"
+
 # Bakery environment
 export POUNDCAKE_NAMESPACE=bakery
 export POUNDCAKE_BAKERY_IMAGE_TAG=<version>
 export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY_ID=active
-export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY='<shared-hmac-key>'
+export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY="${SHARED_BAKERY_HMAC_KEY}"
 
 ./install/install-bakery-helm.sh \
   --bakery-auth-secret-name bakery-hmac \
@@ -382,7 +385,7 @@ export POUNDCAKE_UI_IMAGE_TAG=<version>
   --remote-bakery-auth-mode hmac \
   --remote-bakery-auth-secret bakery-hmac \
   --remote-bakery-hmac-key-id active \
-  --remote-bakery-hmac-key '<shared-hmac-key>'
+  --remote-bakery-hmac-key "${SHARED_BAKERY_HMAC_KEY}"
 ```
 
 That first PoundCake install lets the installer create the local client secret. For the full split-environment flow, including rerun behavior and validation, see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
