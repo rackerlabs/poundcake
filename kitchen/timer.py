@@ -115,6 +115,31 @@ def _normalize_tasks(tasks_payload: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _task_error_message(task: dict[str, Any]) -> str | None:
+    status = str(task.get("status") or "").strip().lower()
+    if status not in ST2_FAILURE_STATUSES and status != "failed":
+        return None
+
+    result = task.get("result")
+    if isinstance(result, dict):
+        for key in ("error", "stderr", "message"):
+            value = result.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        return_code = result.get("return_code")
+        if return_code is not None:
+            return f"Task failed with return_code={return_code}"
+
+        if result.get("failed") is True:
+            return "Task execution failed"
+
+    if isinstance(result, str) and result.strip():
+        return result.strip()
+
+    return "Task execution failed"
+
+
 def update_dish(
     dish: dict[str, Any],
     req_id: str,
@@ -872,6 +897,7 @@ def monitor_dishes() -> None:
                                     or dish.get("created_at"),
                                     "completed_at": task.get("end_timestamp"),
                                     "result": task.get("result"),
+                                    "error_message": _task_error_message(task),
                                 }
                             )
 

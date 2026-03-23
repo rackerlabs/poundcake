@@ -89,3 +89,86 @@ def test_monitor_dishes__task_payload_with_name_and_action_executions__normalize
     assert kwargs["execution_status"] == "succeeded"
     assert kwargs["final_status"] is True
     assert kwargs["started_at"] == "2026-03-03T01:57:23.634000Z"
+
+
+def test_monitor_dishes__failed_task_persists_normalized_error_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dish = {
+        "id": 32,
+        "req_id": "REQ-32",
+        "execution_ref": "exec-32",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": None,
+    }
+
+    tasks = [
+        {
+            "id": "task-exec-32-1",
+            "task_id": "step_1_local",
+            "status": "failed",
+            "result": {
+                "failed": True,
+                "succeeded": False,
+                "return_code": 2,
+                "stdout": "",
+                "stderr": "",
+            },
+            "start_timestamp": "2026-03-03T01:57:23.634000Z",
+            "end_timestamp": "2026-03-03T01:57:23.686000Z",
+        },
+        {
+            "id": "task-exec-32-2",
+            "task_id": "step_2_local",
+            "status": "succeeded",
+            "result": {"stdout": "still ran"},
+            "start_timestamp": "2026-03-03T01:57:23.700000Z",
+            "end_timestamp": "2026-03-03T01:57:23.800000Z",
+        },
+    ]
+
+    update_calls: list[tuple[dict, str, dict]] = []
+    ingredient_bulk_posts: list[dict] = []
+
+    def _update(d: dict, req_id: str, **kwargs) -> bool:
+        update_calls.append((d, req_id, kwargs))
+        return True
+
+    steps = iter(
+        [
+            _Resp(200, [dish]),  # processing dishes
+            _Resp(200, []),  # finalizing dishes
+            _Resp(200, dish),  # finalize-claim
+            _Resp(200, {"status": "succeeded", "result": {}}),  # execution
+            _Resp(200, tasks),  # execution tasks
+            _Resp(200, []),  # existing dish ingredients
+            _Resp(200, {"updated": 2}),  # bulk ingredient write
+            _Resp(200, []),  # bakery-stage ingredient fetch (no bakery rows)
+        ]
+    )
+
+    def _request(method: str, url: str, **kwargs):
+        if method == "POST" and str(url).endswith("/ingredients/bulk"):
+            ingredient_bulk_posts.append(kwargs.get("json"))
+        return next(steps)
+
+    monkeypatch.setattr(timer, "update_dish", _update)
+    monkeypatch.setattr(timer, "request_with_retry_sync", _request)
+    monkeypatch.setattr(timer, "check_for_timeouts", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(timer, "API_UNAVAILABLE_SINCE", None)
+
+    timer.monitor_dishes()
+
+    assert len(ingredient_bulk_posts) == 1
+    items = ingredient_bulk_posts[0]["items"]
+    assert len(items) == 2
+    assert items[0]["execution_status"] == "failed"
+    assert items[0]["error_message"] == "Task failed with return_code=2"
+    assert items[1]["execution_status"] == "succeeded"
+    assert items[1]["error_message"] is None
+
+    assert len(update_calls) == 1
+    _updated_dish, req_id, kwargs = update_calls[0]
+    assert req_id == "REQ-32"
+    assert kwargs["processing_status"] == "complete"
+    assert kwargs["execution_status"] == "succeeded"

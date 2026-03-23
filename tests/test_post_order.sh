@@ -41,7 +41,7 @@ fi
 payload=$(cat <<JSON
 {
   "req_id": "${REQ_ID}",
-  "fingerprint": "AutomatedTestAlert_localhost:9090",
+  "fingerprint": "AutomatedTestAlert_${REQ_ID}_$$_${RANDOM}",
   "alert_status": "firing",
   "processing_status": "new",
   "alert_group_name": "${TEST_RECIPE}",

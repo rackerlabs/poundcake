@@ -28,8 +28,16 @@ while true; do
 
   now=$(date +%s)
   if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
+    order_json=$(api_request_json GET "${API_URL}/orders?req_id=${REQ_ID}")
+    waiting_clear_ok=$(echo "${order_json}" | jq -r '[.[] | select(.processing_status=="waiting_clear" and .remediation_outcome=="succeeded" and .auto_close_eligible==true)] | length')
+    if [ "${waiting_clear_ok}" != "0" ]; then
+      log_info "No resolving dish yet for req_id=${REQ_ID}; order is waiting_clear after successful remediation, which is expected before alert resolution"
+      exit 0
+    fi
+
     log_error "Timed out waiting for resolving dish for req_id=${REQ_ID}"
     echo "${dishes}" | jq >&2
+    echo "${order_json}" | jq >&2
     exit 1
   fi
   sleep "${INTERVAL}"

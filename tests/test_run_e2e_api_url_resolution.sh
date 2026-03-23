@@ -42,16 +42,19 @@ run_expect_failure() {
 }
 
 output="$(run_expect_success "compose default URL" env DEBUG=1 "${RUN_E2E}" --list)"
-assert_contains "${output}" "Resolved API_URL=http://localhost:8000/api/v1" "compose default URL"
+assert_contains "${output}" "Resolved poundcake_api URL: http://localhost:8000/api/v1" "compose default URL"
 
-output="$(run_expect_success "k8s default URL without explicit service" env DEBUG=1 TEST_TARGET=k8s "${RUN_E2E}" --list)"
-assert_contains "${output}" "Resolved API_URL=http://localhost:8000/api/v1" "k8s default URL without explicit service"
+output="$(run_expect_failure "k8s requires explicit service" env DEBUG=1 TEST_TARGET=k8s "${RUN_E2E}" --list)"
+assert_contains "${output}" "--target k8s requires --service unless --api-url is provided" "k8s requires explicit service"
 
 output="$(run_expect_success "k8s explicit service FQDN URL" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --namespace rackspace --remote-port 8000 --list)"
-assert_contains "${output}" "Resolved API_URL=http://poundcake-api.rackspace.svc.cluster.local:8000/api/v1" "k8s explicit service FQDN URL"
+assert_contains "${output}" "Resolved poundcake_api URL: http://poundcake-api.rackspace.svc.cluster.local:8000/api/v1" "k8s explicit service FQDN URL"
+
+output="$(run_expect_success "k8s port-forward uses localhost URL" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --namespace rackspace --enable-port-forward --local-port 18000 --list)"
+assert_contains "${output}" "Resolved poundcake_api URL: http://localhost:18000/api/v1" "k8s port-forward uses localhost URL"
 
 output="$(run_expect_success "api-url override wins" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --api-url http://example:9999/api/v1 --list)"
-assert_contains "${output}" "Resolved API_URL=http://example:9999/api/v1" "api-url override wins"
+assert_contains "${output}" "Resolved poundcake_api URL: http://example:9999/api/v1" "api-url override wins"
 
 output="$(run_expect_failure "api-rul typo guidance" env DEBUG=1 "${RUN_E2E}" --api-rul http://x --list)"
 assert_contains "${output}" "Unknown argument --api-rul; did you mean --api-url?" "api-rul typo guidance"

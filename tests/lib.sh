@@ -6,6 +6,8 @@
 : "${POUNDCAKE_API_SERVICE:=poundcake-api}"
 : "${POUNDCAKE_LOCAL_PORT:=8000}"
 : "${POUNDCAKE_REMOTE_PORT:=8000}"
+: "${POUNDCAKE_AUTH_SERVICE_TOKEN:=}"
+: "${POUNDCAKE_SESSION_TOKEN:=}"
 : "${ENABLE_PORT_FORWARD:=0}"
 : "${TEST_TIMEOUT_SEC:=30}"
 : "${POLL_INTERVAL_SEC:=2}"
@@ -43,6 +45,32 @@ debug_log() {
   fi
 }
 
+request_uses_service_auth() {
+  local method="$1"
+  local url="$2"
+  local path="${url#*//*/}"
+
+  case "${method}:${path}" in
+    POST:api/v1/webhook)
+      return 0
+      ;;
+    *:api/v1/suppressions/run-lifecycle)
+      return 0
+      ;;
+    POST:api/v1/orders|POST:api/v1/orders/*|PUT:api/v1/orders/*|PATCH:api/v1/orders/*|DELETE:api/v1/orders/*)
+      return 0
+      ;;
+    POST:api/v1/dishes/*|PUT:api/v1/dishes/*|PATCH:api/v1/dishes/*|DELETE:api/v1/dishes/*)
+      return 0
+      ;;
+    POST:api/v1/cook/*|PUT:api/v1/cook/*|PATCH:api/v1/cook/*|DELETE:api/v1/cook/*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 require_cmd() {
   local cmd="$1"
   if ! command -v "${cmd}" >/dev/null 2>&1; then
@@ -65,6 +93,20 @@ api_request_json() {
   local data="${3:-}"
   local resp body code
   local curl_args=("-sS" "-X" "${method}" "${url}")
+
+  if request_uses_service_auth "${method}" "${url}"; then
+    if [ -n "${POUNDCAKE_AUTH_SERVICE_TOKEN}" ]; then
+      curl_args+=("-H" "X-Auth-Token: ${POUNDCAKE_AUTH_SERVICE_TOKEN}")
+    elif [ -n "${POUNDCAKE_SESSION_TOKEN}" ]; then
+      curl_args+=("--cookie" "session_token=${POUNDCAKE_SESSION_TOKEN}")
+    fi
+  else
+    if [ -n "${POUNDCAKE_SESSION_TOKEN}" ]; then
+      curl_args+=("--cookie" "session_token=${POUNDCAKE_SESSION_TOKEN}")
+    elif [ -n "${POUNDCAKE_AUTH_SERVICE_TOKEN}" ]; then
+      curl_args+=("-H" "X-Auth-Token: ${POUNDCAKE_AUTH_SERVICE_TOKEN}")
+    fi
+  fi
 
   if [ -n "${REQUEST_ID:-}" ]; then
     curl_args+=("-H" "X-Request-ID: ${REQUEST_ID}")

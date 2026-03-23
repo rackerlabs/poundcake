@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Negative test: host-down ping fails, but workflow continues when on_failure=continue.
+# Negative test: host lookup fails, but workflow continues when on_failure=continue.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,10 +13,10 @@ REQ_ID=${REQ_ID:-HOSTDOWN-${TEST_TS}}
 
 export API_URL TEST_RECIPE REQ_ID
 
-# Step 1 intentionally fails ping; step 2 should still execute.
+# Step 1 intentionally fails host lookup; step 2 should still execute.
 run_step "create two-step recipe (failure-continue)" \
   env IS_BLOCKING=true ING_ON_FAILURE=continue \
-  STEP1_CMD='ping -c 1 no-such-host.invalid' \
+  STEP1_CMD='getent hosts no-such-host.invalid >/dev/null' \
   STEP2_CMD='echo "step 2 still runs"' \
   "${SCRIPT_DIR}/test_create_recipe_two_step.sh"
 run_step "post webhook" "${SCRIPT_DIR}/test_post_webhook.sh"

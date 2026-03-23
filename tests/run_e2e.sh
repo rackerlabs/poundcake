@@ -89,6 +89,10 @@ resolve_api_url() {
   fi
 
   if [ "${TEST_TARGET}" = "k8s" ]; then
+    if [ "${enable_port_forward}" = "true" ]; then
+      echo "http://localhost:${POUNDCAKE_LOCAL_PORT}/api/v1"
+      return
+    fi
     echo "http://${POUNDCAKE_API_SERVICE}.${POUNDCAKE_NAMESPACE}.svc.cluster.local:${POUNDCAKE_REMOTE_PORT}/api/v1"
     return
   fi

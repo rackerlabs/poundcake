@@ -23,18 +23,25 @@ require_cmd jq
 
 log_info "Creating single-step recipe: ${TEST_RECIPE} (is_blocking=${IS_BLOCKING})"
 
-# Check if core.local ingredient already exists
-ING_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=core.local" | jq -r '.[0].id // empty')
+ING_TASK_KEY_TEMPLATE="single_echo"
+
+# Check if the expected core.local ingredient already exists.
+ING_ID=$(
+  api_request_json GET \
+    "${API_URL}/ingredients/?execution_target=core.local&task_key_template=${ING_TASK_KEY_TEMPLATE}" \
+    | jq -r '.[0].id // empty'
+)
 
 if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
   log_info "Ingredient core.local not found, creating it..."
   ING_PAYLOAD=$(jq -n \
     --arg execution_engine "stackstorm" \
+    --arg task_key_template "${ING_TASK_KEY_TEMPLATE}" \
     --argjson is_blocking "$IS_BLOCKING" \
     '{
       execution_engine: $execution_engine,
       execution_target: "core.local",
-      task_key_template: "single_echo",
+      task_key_template: $task_key_template,
       execution_parameters: {
         cmd: {
           type: "string",
@@ -57,7 +64,7 @@ if [ -z "$ING_ID" ] || [ "$ING_ID" = "null" ]; then
     exit 1
   fi
 else
-  log_info "Using existing ingredient core.local (ID: $ING_ID)"
+  log_info "Using existing ingredient core.local/${ING_TASK_KEY_TEMPLATE} (ID: $ING_ID)"
 fi
 
 RECIPE_PAYLOAD=$(jq -n \

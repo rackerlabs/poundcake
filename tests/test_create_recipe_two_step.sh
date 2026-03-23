@@ -35,7 +35,11 @@ INGREDIENT_SUFFIX=$(printf "%s" "${TEST_RECIPE}-$$-${RANDOM}" \
 ING_EXECUTION_TARGET="core.local"
 ING_TASK_KEY_TEMPLATE="echo_${INGREDIENT_SUFFIX}"
 
-ING1_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=${ING_EXECUTION_TARGET}" | jq -r '.[0].id // empty')
+ING1_ID=$(
+  api_request_json GET \
+    "${API_URL}/ingredients/?execution_target=${ING_EXECUTION_TARGET}&task_key_template=${ING_TASK_KEY_TEMPLATE}" \
+    | jq -r '.[0].id // empty'
+)
 
 if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
   log_info "Ingredient ${ING_EXECUTION_TARGET} not found, creating it..."
@@ -71,7 +75,7 @@ if [ -z "$ING1_ID" ] || [ "$ING1_ID" = "null" ]; then
     exit 1
   fi
 else
-  log_info "Using existing ingredient ${ING_EXECUTION_TARGET} (ID: $ING1_ID)"
+  log_info "Using existing ingredient ${ING_EXECUTION_TARGET}/${ING_TASK_KEY_TEMPLATE} (ID: $ING1_ID)"
 fi
 
 # Reuse the same unique ingredient for both recipe steps.

@@ -26,13 +26,19 @@ require_cmd jq
 
 log_info "Using recipe: ${TEST_RECIPE}"
 
-# Find or create core.local ingredient.
-ING_ID=$(api_request_json GET "${API_URL}/ingredients/?execution_target=core.local" | jq -r '.[0].id // empty')
+# Find or create the expected core.local ingredient.
+ING_TASK_KEY_TEMPLATE="local"
+ING_ID=$(
+  api_request_json GET \
+    "${API_URL}/ingredients/?execution_target=core.local&task_key_template=${ING_TASK_KEY_TEMPLATE}" \
+    | jq -r '.[0].id // empty'
+)
 if [ -z "${ING_ID}" ] || [ "${ING_ID}" = "null" ]; then
   ING_PAYLOAD=$(jq -n \
+    --arg task_key_template "${ING_TASK_KEY_TEMPLATE}" \
     '{
       execution_target: "core.local",
-      task_key_template: "local",
+      task_key_template: $task_key_template,
       is_blocking: true,
       expected_duration_sec: 30,
       timeout_duration_sec: 300,
@@ -144,7 +150,7 @@ wait_for_dish() {
   done
 }
 
-wait_for_order_inactive() {
+wait_for_order_settled() {
   local req_id="$1"
   local start now orders count is_active processing_status
   start=$(date +%s)
@@ -154,13 +160,16 @@ wait_for_order_inactive() {
     if [ "${count}" != "0" ]; then
       is_active=$(echo "${orders}" | jq -r '.[0].is_active')
       processing_status=$(echo "${orders}" | jq -r '.[0].processing_status')
+      if [ "${is_active}" = "true" ] && [ "${processing_status}" = "waiting_clear" ]; then
+        return 0
+      fi
       if [ "${is_active}" = "false" ] && echo "${processing_status}" | grep -Eq "^(complete|failed|canceled)$"; then
         return 0
       fi
     fi
     now=$(date +%s)
     if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
-      log_error "Timed out waiting for order to become inactive for req_id=${req_id}"
+      log_error "Timed out waiting for order to settle for req_id=${req_id}"
       return 1
     fi
     sleep "${INTERVAL}"
@@ -203,7 +212,7 @@ RECIPE_ID_1=$(echo "${DISH1_JSON}" | jq -r '.recipe_id')
 DISH_ID_1=$(echo "${DISH1_JSON}" | jq -r '.id')
 INGREDIENTS_1=$(wait_for_dish_ingredients "${DISH_ID_1}")
 TASK_SIG_1=$(build_task_signature "${INGREDIENTS_1}")
-wait_for_order_inactive "${REQ_ID_1}"
+wait_for_order_settled "${REQ_ID_1}"
 
 log_info "Posting second webhook (${REQ_ID_2})..."
 post_webhook "${REQ_ID_2}" "${FINGERPRINT_2}"
