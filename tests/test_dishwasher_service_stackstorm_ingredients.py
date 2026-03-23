@@ -24,7 +24,9 @@ class _ExecResult:
         return _ScalarResult(self._rows)
 
 
-def _stackstorm_action(*, ref: str = "core.local", name: str = "local", action_id: str = "action-1"):
+def _stackstorm_action(
+    *, ref: str = "core.local", name: str = "local", action_id: str = "action-1"
+):
     return {
         "ref": ref,
         "name": name,
@@ -34,7 +36,9 @@ def _stackstorm_action(*, ref: str = "core.local", name: str = "local", action_i
     }
 
 
-def _ingredient(*, ingredient_id: int, execution_target: str, task_key_template: str, execution_id: str | None):
+def _ingredient(
+    *, ingredient_id: int, execution_target: str, task_key_template: str, execution_id: str | None
+):
     return Ingredient(
         id=ingredient_id,
         execution_target=execution_target,
@@ -75,7 +79,9 @@ async def test_upsert_ingredients_prefers_exact_identity_match_over_target_only_
     added: list[Ingredient] = []
     db.add = Mock(side_effect=added.append)
 
-    stats = await dishwasher_service.upsert_ingredients(db, [_stackstorm_action(action_id="new-action-id")])
+    stats = await dishwasher_service.upsert_ingredients(
+        db, [_stackstorm_action(action_id="new-action-id")]
+    )
 
     assert stats == {"created": 0, "updated": 1, "pruned": 0}
     assert added == []
