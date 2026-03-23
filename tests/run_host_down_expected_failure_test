@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib.sh"
 start_test_target
 register_cleanup_trap
 
-TEST_TS=${TEST_TS:-$(date +%s)}
+TEST_TS=${TEST_TS:-$(generate_test_suffix)}
 TEST_RECIPE=${TEST_RECIPE:-HostDownExpectedFailure-${TEST_TS}}
 REQ_ID=${REQ_ID:-HOSTDOWN-${TEST_TS}}
 

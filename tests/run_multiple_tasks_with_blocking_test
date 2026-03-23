@@ -12,7 +12,7 @@ source "${SCRIPT_DIR}/lib.sh"
 start_test_target
 register_cleanup_trap
 
-TEST_TS=${TEST_TS:-$(date +%s)}
+TEST_TS=${TEST_TS:-$(generate_test_suffix)}
 TEST_RECIPE=${TEST_RECIPE:-AutomatedTestRecipe-${TEST_TS}}
 REQ_ID=${REQ_ID:-AUTOMATED-${TEST_TS}}
 FINGERPRINT=${FINGERPRINT:-AutomatedTestAlert-multi-blocking-${TEST_TS}-$$-${RANDOM}}

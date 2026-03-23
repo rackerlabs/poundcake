@@ -200,6 +200,70 @@ def test_recipe_update_replaces_workflow_steps(client, mock_db):
     assert response.json()["communications"]["effective_source"] == "global"
 
 
+def test_recipe_update_applies_default_step_fields_when_optionals_are_omitted(client, mock_db):
+    recipe = _make_recipe()
+    ingredient = _make_ingredient(12, "core.noop")
+    global_route = SimpleNamespace(
+        id="global-primary",
+        label="Primary teams route",
+        execution_target="teams",
+        destination_target="ops-alerts",
+        provider_config={},
+        enabled=True,
+        position=1,
+    )
+
+    def _add(obj):
+        if isinstance(obj, RecipeIngredient):
+            recipe.recipe_ingredients.append(obj)
+
+    async def _flush():
+        for index, item in enumerate(recipe.recipe_ingredients, start=1):
+            if not item.id:
+                item.id = index + 100
+
+    mock_db.add = Mock(side_effect=_add)
+    mock_db.flush = AsyncMock(side_effect=_flush)
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=recipe),
+            ScalarResult(all_=[ingredient]),
+            ScalarResult(first=recipe),
+        ]
+    )
+
+    with (
+        patch("api.api.recipes.global_policy_configured", new=AsyncMock(return_value=True)),
+        patch(
+            "api.api.recipes.get_global_policy_routes", new=AsyncMock(return_value=[global_route])
+        ),
+        patch("api.api.recipes.delete_recipe_ingredients_safely", new=AsyncMock(return_value=None)),
+    ):
+        response = client.patch(
+            "/api/v1/recipes/9",
+            json={
+                "recipe_ingredients": [
+                    {
+                        "ingredient_id": 12,
+                        "step_order": 1,
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(recipe.recipe_ingredients) == 1
+    step = recipe.recipe_ingredients[0]
+    assert step.ingredient_id == 12
+    assert step.on_success == "continue"
+    assert step.parallel_group == 0
+    assert step.depth == 0
+    assert step.execution_parameters_override is None
+    assert step.run_phase == "both"
+    assert step.run_condition == "always"
+    assert response.json()["communications"]["effective_source"] == "global"
+
+
 def test_recipe_update_returns_404_when_workflow_references_missing_action(client, mock_db):
     recipe = _make_recipe()
     mock_db.execute = AsyncMock(

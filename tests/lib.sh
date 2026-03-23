@@ -45,6 +45,17 @@ debug_log() {
   fi
 }
 
+generate_test_suffix() {
+  local suffix
+  suffix="$(date +%s%N 2>/dev/null || true)"
+  case "${suffix}" in
+    ""|*N*)
+      suffix="$(date +%s)-$$-${RANDOM}"
+      ;;
+  esac
+  echo "${suffix}"
+}
+
 request_uses_service_auth() {
   local method="$1"
   local url="$2"

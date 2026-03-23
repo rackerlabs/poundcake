@@ -29,9 +29,10 @@ while true; do
   now=$(date +%s)
   if [ $((now - start)) -ge "${TIMEOUT_SECONDS}" ]; then
     order_json=$(api_request_json GET "${API_URL}/orders?req_id=${REQ_ID}")
-    waiting_clear_ok=$(echo "${order_json}" | jq -r '[.[] | select(.processing_status=="waiting_clear" and .remediation_outcome=="succeeded" and .auto_close_eligible==true)] | length')
-    if [ "${waiting_clear_ok}" != "0" ]; then
-      log_info "No resolving dish yet for req_id=${REQ_ID}; order is waiting_clear after successful remediation, which is expected before alert resolution"
+    waiting_clear_ok=$(echo "${order_json}" | jq -r '[.[] | select(.processing_status=="waiting_clear" and .is_active == true)] | length')
+    firing_terminal_ok=$(echo "${dishes}" | jq -r '[.[] | select(.run_phase=="firing" and ((.processing_status // "") | test("^(complete|failed|canceled)$")))] | length')
+    if [ "${waiting_clear_ok}" != "0" ] && [ "${firing_terminal_ok}" != "0" ]; then
+      log_info "No resolving dish yet for req_id=${REQ_ID}; order is waiting_clear after the firing-phase dish reached a terminal status, which is expected before alert resolution"
       exit 0
     fi
 

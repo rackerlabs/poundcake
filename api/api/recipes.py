@@ -185,12 +185,12 @@ def _step_specs_from_payload(step_items: list[dict[str, Any]]) -> list[dict[str,
         {
             "ingredient_id": item["ingredient_id"],
             "step_order": item["step_order"],
-            "on_success": item["on_success"],
-            "parallel_group": item["parallel_group"],
-            "depth": item["depth"],
-            "execution_parameters_override": item["execution_parameters_override"],
-            "run_phase": item["run_phase"],
-            "run_condition": item["run_condition"],
+            "on_success": item.get("on_success", "continue"),
+            "parallel_group": item.get("parallel_group", 0),
+            "depth": item.get("depth", 0),
+            "execution_parameters_override": item.get("execution_parameters_override"),
+            "run_phase": item.get("run_phase", "both"),
+            "run_condition": item.get("run_condition", "always"),
         }
         for item in step_items
     ]
