@@ -31,7 +31,7 @@ async def test_stackstorm_client_get_execution_normalizes_owned_fields(
         ),
     )
     client = StackStormClient()
-    
+
     async def _request(*args, **kwargs):
         return _Resp(
             200,
