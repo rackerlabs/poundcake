@@ -103,7 +103,16 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
 
     # Only sync ingredients with execution_engine="stackstorm"
     result = await db.execute(select(Ingredient).where(Ingredient.execution_engine == "stackstorm"))
-    existing = {ing.execution_target: ing for ing in result.scalars().all()}
+    existing_rows = result.scalars().all()
+    existing_by_identity = {
+        (ing.execution_target, ing.task_key_template or ""): ing for ing in existing_rows
+    }
+    existing_by_execution_id = {
+        str(ing.execution_id): ing for ing in existing_rows if getattr(ing, "execution_id", None)
+    }
+    existing_by_target: dict[str, list[Ingredient]] = {}
+    for ing in existing_rows:
+        existing_by_target.setdefault(ing.execution_target, []).append(ing)
     action_refs = set()
 
     for action in actions:
@@ -112,14 +121,27 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
             continue
         action_refs.add(action_ref)
 
-        ing = existing.get(action_ref)
+        task_name = action.get("name") or action_ref
+        ing = existing_by_identity.get((action_ref, task_name))
+        if ing is None:
+            action_id = action.get("id")
+            if action_id:
+                ing = existing_by_execution_id.get(str(action_id))
+        if ing is None:
+            target_matches = existing_by_target.get(action_ref, [])
+            if len(target_matches) == 1:
+                candidate = target_matches[0]
+                candidate_task_name = candidate.task_key_template or ""
+                if candidate_task_name in {"", task_name}:
+                    ing = candidate
+
         payload = action
         parameters = action.get("parameters") or {}
 
         if ing is None:
             ing = Ingredient(
                 execution_target=action_ref,
-                task_key_template=action.get("name") or action_ref,
+                task_key_template=task_name,
                 execution_id=action.get("id"),
                 execution_payload=payload,
                 execution_parameters=parameters,
@@ -136,11 +158,15 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
                 updated_at=now,
             )
             db.add(ing)
+            existing_by_identity[(action_ref, task_name)] = ing
+            if getattr(ing, "execution_id", None):
+                existing_by_execution_id[str(ing.execution_id)] = ing
+            existing_by_target.setdefault(action_ref, []).append(ing)
             created += 1
         else:
             # Only update if something actually changed
             changed = False
-            new_task_name = action.get("name") or ing.task_key_template
+            new_task_name = task_name or ing.task_key_template
             new_action_id = action.get("id")
 
             if (
@@ -164,11 +190,15 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
                 changed = True
 
             if changed:
+                existing_by_identity[(action_ref, new_task_name)] = ing
+                if new_action_id:
+                    existing_by_execution_id[str(new_action_id)] = ing
                 updated += 1
 
     # Only prune StackStorm ingredients (existing dict already filtered by execution_engine)
     if PRUNE_MISSING:
-        for ref, ing in existing.items():
+        for ing in existing_rows:
+            ref = ing.execution_target
             if ref not in action_refs:
                 ing.deleted = True
                 ing.deleted_at = now
