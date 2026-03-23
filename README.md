@@ -334,6 +334,12 @@ output:
 
 ## Installation
 
+### Choose The Right Install Path
+
+- Kubernetes installers, same environment: install Bakery first, then install PoundCake in the same namespace with the installer wrappers.
+- Kubernetes installers, split environments: install Bakery in its own namespace or cluster, expose it at an HTTPS URL, then install PoundCake in a different namespace or cluster with `--remote-bakery-url` and a shared HMAC key. Start with [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
+- Docker Compose: local development only. Use this when working on PoundCake locally, not as the primary documented operator install path.
+
 ### Unified Launchers
 
 ```bash
@@ -347,7 +353,41 @@ output:
 ./install/install-bakery-helm.sh
 ```
 
-### Helm Install
+### Helm Installers
+
+#### Split-Environment Quick Start
+
+Use this when Bakery will live in one environment and PoundCake in another:
+
+```bash
+# Bakery environment
+export POUNDCAKE_NAMESPACE=bakery
+export POUNDCAKE_BAKERY_IMAGE_TAG=<version>
+export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY_ID=active
+export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY='<shared-hmac-key>'
+
+./install/install-bakery-helm.sh \
+  --bakery-auth-secret-name bakery-hmac \
+  --bakery-rackspace-url https://ws.core.rackspace.com \
+  --bakery-rackspace-username poundcake \
+  --bakery-rackspace-password '<password>'
+
+# PoundCake environment
+export POUNDCAKE_NAMESPACE=poundcake
+export POUNDCAKE_IMAGE_TAG=<version>
+export POUNDCAKE_UI_IMAGE_TAG=<version>
+
+./install/install-poundcake-helm.sh \
+  --remote-bakery-url https://bakery.example.com \
+  --remote-bakery-auth-mode hmac \
+  --remote-bakery-auth-secret bakery-hmac \
+  --remote-bakery-hmac-key-id active \
+  --remote-bakery-hmac-key '<shared-hmac-key>'
+```
+
+That first PoundCake install lets the installer create the local client secret. For the full split-environment flow, including rerun behavior and validation, see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
+
+#### Installer Command Reference
 
 ```bash
 # PoundCake installer (PoundCake-only)
@@ -382,14 +422,17 @@ Installer flags:
 - `--rotate-secrets` deletes known chart-managed secrets before install
 - `--remote-bakery-url` configures PoundCake to use an external/co-located Bakery endpoint
 - `--remote-bakery-auth-secret` sets the PoundCake Bakery HMAC client secret for external Bakery endpoints
+- `--remote-bakery-hmac-key` lets the PoundCake installer create that client secret when it is missing
+- `--remote-bakery-hmac-key-id` sets the created secret key id (default: `active`)
 - `--shared-db-mode <auto|on|off>` and `--shared-db-server-name` control shared MariaDB mode for PoundCake
 - Bakery installer verifies or creates provider secrets for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord, then wires `bakery.<provider>.existingSecret` automatically when those secrets exist
 - Use `--update-bakery-secret` to rotate/update an existing Bakery provider secret
 - Bakery installer also creates/reuses a Bakery HMAC auth secret and wires it into Bakery API/client auth values
-- PoundCake installer auto-discovers the colocated Bakery HMAC secret; external remote Bakery requires an explicit `--remote-bakery-auth-secret`
+- PoundCake installer auto-discovers the colocated Bakery HMAC secret; external remote Bakery can use either an existing `--remote-bakery-auth-secret` or `--remote-bakery-hmac-key` so the installer creates one
 - Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
 - Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
 - For repeatable Bakery deploys, prefer `POUNDCAKE_BAKERY_IMAGE_DIGEST` (or `POUNDCAKE_IMAGE_DIGEST` fallback) and ensure image pull auth is configured (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET` or existing pull secret via `POUNDCAKE_IMAGE_PULL_SECRET_NAME`)
+- Split-environment quick start: see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md)
 
 Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
 
@@ -458,14 +501,14 @@ kubectl -n rackspace get jobs \
 kubectl -n rackspace get jobs,pods
 ```
 
-### Docker Compose Install
+### Docker Compose Install (Local Development Only)
 
 ```bash
 # Docker-based install script
 ./docker/bin/install-poundcake.sh
 ```
 
-### Docker Compose Quick Start
+### Docker Compose Quick Start (Local Development Only)
 
 ```bash
 # Start all services
@@ -477,7 +520,6 @@ curl http://localhost:8000/api/v1/health
 
 # Logs
 
-docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
 docker compose -f docker/docker-compose.yml logs -f api prep-chef chef timer dishwasher
 ```
 
@@ -552,8 +594,12 @@ In co-located deployments, both services may share the same MariaDB server endpo
 If Bakery is not co-located, configure PoundCake with an explicit external Bakery URL:
 
 ```bash
-./install/install-poundcake-helm.sh --remote-bakery-url https://bakery.example.com
+./install/install-poundcake-helm.sh \
+  --remote-bakery-url https://bakery.example.com \
+  --remote-bakery-hmac-key '<shared-hmac-key>'
 ```
+
+For a full step-by-step guide where Bakery and PoundCake run in different namespaces or clusters, see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
 
 ## Container Build Targets
 

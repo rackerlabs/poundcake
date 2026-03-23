@@ -100,6 +100,7 @@ cat > "${MOCK_BIN}/kubectl" <<'KUBE_EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 : "${TEST_KUBECTL_LOG:?missing TEST_KUBECTL_LOG}"
+: "${TEST_KUBECTL_CREATED_SECRETS:?missing TEST_KUBECTL_CREATED_SECRETS}"
 printf '%s\n' "$*" >> "${TEST_KUBECTL_LOG}"
 
 if [[ "${1:-}" == "cluster-info" ]]; then
@@ -113,6 +114,9 @@ if [[ "${1:-}" == "create" && "${2:-}" == "namespace" ]]; then
 fi
 if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "secret" ]]; then
   secret_name="${5:-}"
+  if [[ -f "${TEST_KUBECTL_CREATED_SECRETS}" ]] && rg -Fxq -- "${secret_name}" "${TEST_KUBECTL_CREATED_SECRETS}"; then
+    exit 0
+  fi
   case "${secret_name}" in
     bakery-rackspace-core)
       secret_exists="${MOCK_BAKERY_RACKSPACE_SECRET_EXISTS:-${MOCK_BAKERY_SECRET_EXISTS:-1}}"
@@ -149,20 +153,24 @@ if [[ "${1:-}" == "get" && "${2:-}" == "crd" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "-n" && "${3:-}" == "create" && "${4:-}" == "secret" ]]; then
-  cat <<'YAML_EOF'
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mock
-YAML_EOF
+  secret_name="${6:-mock}"
+  printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n' "${secret_name}"
   exit 0
 fi
 if [[ "${1:-}" == "-n" && "${3:-}" == "apply" && "${4:-}" == "-f" && "${5:-}" == "-" ]]; then
-  cat >/dev/null
+  manifest="$(cat)"
+  secret_name="$(printf '%s\n' "${manifest}" | awk '/^  name:/ { print $2; exit }')"
+  if [[ -n "${secret_name}" ]]; then
+    printf '%s\n' "${secret_name}" >> "${TEST_KUBECTL_CREATED_SECRETS}"
+  fi
   exit 0
 fi
 if [[ "${1:-}" == "apply" && "${2:-}" == "-f" && "${3:-}" == "-" ]]; then
-  cat >/dev/null
+  manifest="$(cat)"
+  secret_name="$(printf '%s\n' "${manifest}" | awk '/^  name:/ { print $2; exit }')"
+  if [[ -n "${secret_name}" ]]; then
+    printf '%s\n' "${secret_name}" >> "${TEST_KUBECTL_CREATED_SECRETS}"
+  fi
   exit 0
 fi
 
@@ -225,12 +233,15 @@ run_with_mocks() {
   shift
   TEST_HELM_LOG="${TMP_DIR}/helm.log"
   TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log"
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log"
   : > "${TEST_HELM_LOG}"
   : > "${TEST_KUBECTL_LOG}"
+  : > "${TEST_KUBECTL_CREATED_SECRETS}"
 
   PATH="${MOCK_BIN}:${PATH}" \
   TEST_HELM_LOG="${TEST_HELM_LOG}" \
   TEST_KUBECTL_LOG="${TEST_KUBECTL_LOG}" \
+  TEST_KUBECTL_CREATED_SECRETS="${TEST_KUBECTL_CREATED_SECRETS}" \
   "$@" > "${out_file}" 2>&1
 }
 
@@ -303,11 +314,103 @@ assert_contains "--set-string bakery.client.baseUrl=https://bakery.external.exam
 assert_contains "--set-string bakery.client.auth.existingSecret=external-bakery-hmac" "${TMP_DIR}/helm.log"
 assert_contains "--set bakery.client.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set database.mode=embedded" "${TMP_DIR}/helm.log"
+assert_not_contains "create secret generic external-bakery-hmac" "${TMP_DIR}/kubectl.log"
+
+echo "Validating PoundCake installer can create a default remote Bakery HMAC secret..."
+POUNDCAKE_REMOTE_HMAC_CREATE_OUT="${TMP_DIR}/poundcake-remote-hmac-create.out"
+run_with_mocks "${POUNDCAKE_REMOTE_HMAC_CREATE_OUT}" \
+  env \
+  MOCK_BAKERY_SECRET_EXISTS=0 \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_TAG="env-tag" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_REMOTE_BAKERY_HMAC_KEY="shared-hmac-secret" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight \
+  --remote-bakery-url https://bakery.external.example
+
+assert_contains "create secret generic env-rel-poundcake-bakery-secret --from-literal=active-key-id=active --from-literal=active-key=shared-hmac-secret" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.client.auth.existingSecret=env-rel-poundcake-bakery-secret" "${TMP_DIR}/helm.log"
+
+echo "Validating PoundCake installer can create a named remote Bakery HMAC secret with an explicit key id..."
+POUNDCAKE_REMOTE_HMAC_NAMED_OUT="${TMP_DIR}/poundcake-remote-hmac-named.out"
+run_with_mocks "${POUNDCAKE_REMOTE_HMAC_NAMED_OUT}" \
+  env \
+  MOCK_BAKERY_SECRET_EXISTS=0 \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_TAG="env-tag" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight \
+  --remote-bakery-url https://bakery.external.example \
+  --remote-bakery-auth-secret external-bakery-hmac \
+  --remote-bakery-hmac-key-id imported-key \
+  --remote-bakery-hmac-key shared-hmac-secret
+
+assert_contains "create secret generic external-bakery-hmac --from-literal=active-key-id=imported-key --from-literal=active-key=shared-hmac-secret" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.client.auth.existingSecret=external-bakery-hmac" "${TMP_DIR}/helm.log"
+
+echo "Validating PoundCake installer fails when an external remote Bakery secret is missing and no HMAC key is provided..."
+POUNDCAKE_REMOTE_NO_SECRET_OUT="${TMP_DIR}/poundcake-remote-no-secret.out"
+: > "${TMP_DIR}/helm.log"
+: > "${TMP_DIR}/kubectl.log"
+: > "${TMP_DIR}/kubectl-created-secrets.log"
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
+  env \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_TAG="env-tag" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET="external-bakery-hmac" \
+  MOCK_BAKERY_SECRET_EXISTS=0 \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight \
+  --remote-bakery-url https://bakery.external.example >"${POUNDCAKE_REMOTE_NO_SECRET_OUT}" 2>&1; then
+  fail "expected missing remote Bakery auth secret without HMAC key to fail"
+fi
+assert_contains "or pass --remote-bakery-hmac-key so this installer can create one." "${POUNDCAKE_REMOTE_NO_SECRET_OUT}"
+
+echo "Validating PoundCake installer fails when a remote Bakery HMAC key is supplied for an existing secret..."
+POUNDCAKE_REMOTE_HMAC_CONFLICT_OUT="${TMP_DIR}/poundcake-remote-hmac-conflict.out"
+: > "${TMP_DIR}/helm.log"
+: > "${TMP_DIR}/kubectl.log"
+: > "${TMP_DIR}/kubectl-created-secrets.log"
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
+  env \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_TAG="env-tag" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight \
+  --remote-bakery-url https://bakery.external.example \
+  --remote-bakery-auth-secret external-bakery-hmac \
+  --remote-bakery-hmac-key shared-hmac-secret >"${POUNDCAKE_REMOTE_HMAC_CONFLICT_OUT}" 2>&1; then
+  fail "expected remote Bakery HMAC key conflict to fail"
+fi
+assert_contains "Use the existing secret or choose a different secret name with --remote-bakery-auth-secret." "${POUNDCAKE_REMOTE_HMAC_CONFLICT_OUT}"
 
 echo "Validating Bakery installer fixed toggles and profile..."
 BAKERY_OUT="${TMP_DIR}/bakery.out"
 run_with_mocks "${BAKERY_OUT}" \
   env \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=1 \
   POUNDCAKE_NAMESPACE="bakery-env-ns" \
   POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
   POUNDCAKE_BAKERY_IMAGE_REPO="example.registry.local/poundcake-bakery" \
@@ -332,8 +435,13 @@ assert_contains "--set-string bakery.image.digest=" "${TMP_DIR}/helm.log"
 
 echo "Validating Bakery digest precedence over tag..."
 BAKERY_DIGEST_OUT="${TMP_DIR}/bakery-digest.out"
+: > "${TMP_DIR}/helm.log"
+: > "${TMP_DIR}/kubectl.log"
+: > "${TMP_DIR}/kubectl-created-secrets.log"
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
   env \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=1 \
   POUNDCAKE_NAMESPACE="bakery-env-ns" \
   POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
   POUNDCAKE_BAKERY_IMAGE_REPO="example.registry.local/poundcake-bakery" \
@@ -353,6 +461,7 @@ echo "Validating global digest fallback for Bakery image..."
 BAKERY_GLOBAL_DIGEST_OUT="${TMP_DIR}/bakery-global-digest.out"
 run_with_mocks "${BAKERY_GLOBAL_DIGEST_OUT}" \
   env \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=1 \
   POUNDCAKE_NAMESPACE="bakery-env-ns" \
   POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
   POUNDCAKE_IMAGE_DIGEST="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
@@ -370,6 +479,7 @@ echo "Validating Bakery digest overrides global digest..."
 BAKERY_BOTH_DIGESTS_OUT="${TMP_DIR}/bakery-both-digests.out"
 run_with_mocks "${BAKERY_BOTH_DIGESTS_OUT}" \
   env \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=1 \
   POUNDCAKE_NAMESPACE="bakery-env-ns" \
   POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
   POUNDCAKE_IMAGE_DIGEST="sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" \
@@ -388,6 +498,7 @@ echo "Validating Bakery installer with no forwarded args..."
 BAKERY_NOARGS_OUT="${TMP_DIR}/bakery-noargs.out"
 run_with_mocks "${BAKERY_NOARGS_OUT}" \
   env \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=1 \
   POUNDCAKE_NAMESPACE="bakery-env-ns" \
   POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
   POUNDCAKE_OPERATORS_MODE="skip" \
@@ -469,6 +580,7 @@ assert_not_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rac
 
 echo "Validating Bakery installer requires --update-bakery-secret for credential changes..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
   env MOCK_BAKERY_SECRET_EXISTS=1 POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${BAKERY_INSTALLER}" --skip-preflight --bakery-rackspace-password rotate-me >/dev/null 2>&1; then
   fail "expected bakery secret update without --update-bakery-secret to fail"
@@ -476,6 +588,7 @@ fi
 
 echo "Validating ambiguous discovery guardrail..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
   env MOCK_BAKERY_DISCOVERY=ambiguous POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
   fail "expected ambiguous Bakery discovery to fail"
@@ -483,16 +596,19 @@ fi
 
 echo "Validating removed mixed-mode guardrails..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
   env POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" --skip-preflight --enable-bakery >/dev/null 2>&1; then
   fail "expected --enable-bakery to fail for poundcake installer"
 fi
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
   env POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" --skip-preflight --mode full >/dev/null 2>&1; then
   fail "expected --mode to fail for poundcake installer"
 fi
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
   env POUNDCAKE_INSTALL_MODE=full POUNDCAKE_IMAGE_TAG=env-tag POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
   fail "expected POUNDCAKE_INSTALL_MODE to fail for poundcake installer"

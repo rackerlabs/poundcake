@@ -237,6 +237,7 @@ Co-located install order:
 External Bakery mode (not co-located):
 - Set `--remote-bakery-url` / `POUNDCAKE_REMOTE_BAKERY_URL`.
 - Optional: `--remote-bakery-enabled`, `--remote-bakery-auth-mode`, `--remote-bakery-auth-secret`.
+- For first-time split-environment installs, prefer `--remote-bakery-hmac-key` so the PoundCake installer can create the local client auth secret.
 - If no Bakery URL is explicit and no Bakery is discovered in-namespace, PoundCake installer sets `bakery.client.enabled=false`.
 
 Example:
@@ -244,8 +245,11 @@ Example:
 ./install/install-poundcake-helm.sh \
   --remote-bakery-url https://bakery.example.com \
   --remote-bakery-auth-mode hmac \
-  --remote-bakery-auth-secret external-bakery-hmac
+  --remote-bakery-auth-secret external-bakery-hmac \
+  --remote-bakery-hmac-key '<shared-hmac-key>'
 ```
+
+For the full step-by-step split-environment flow, see [docs/REMOTE_BAKERY_QUICKSTART.md](../docs/REMOTE_BAKERY_QUICKSTART.md).
 
 Readiness semantics:
 - `/api/v1/live` is process-only.

@@ -29,6 +29,8 @@ REMOTE_BAKERY_ENABLED="${POUNDCAKE_REMOTE_BAKERY_ENABLED:-}"
 REMOTE_BAKERY_URL="${POUNDCAKE_REMOTE_BAKERY_URL:-}"
 REMOTE_BAKERY_AUTH_MODE="${POUNDCAKE_REMOTE_BAKERY_AUTH_MODE:-hmac}"
 REMOTE_BAKERY_AUTH_SECRET="${POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET:-}"
+REMOTE_BAKERY_HMAC_KEY_ID="${POUNDCAKE_REMOTE_BAKERY_HMAC_KEY_ID:-}"
+REMOTE_BAKERY_HMAC_KEY="${POUNDCAKE_REMOTE_BAKERY_HMAC_KEY:-}"
 SHARED_DB_MODE="${POUNDCAKE_SHARED_DB_MODE:-auto}"
 SHARED_DB_SERVER_NAME="${POUNDCAKE_SHARED_DB_SERVER_NAME:-}"
 CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
@@ -134,6 +136,8 @@ Installer options:
   --remote-bakery-url <url>          Remote Bakery base URL for PoundCake comms
   --remote-bakery-auth-mode <mode>   Remote Bakery client auth mode (default: hmac)
   --remote-bakery-auth-secret <name> Existing secret name for remote Bakery client auth keys (auto-discovered for colocated Bakery)
+  --remote-bakery-hmac-key <value>   HMAC key for creating the remote Bakery client auth secret when missing
+  --remote-bakery-hmac-key-id <id>   HMAC key id for created remote Bakery client auth secret (default: active)
   --shared-db-mode <auto|on|off>     Shared MariaDB mode selection (default: auto)
   --shared-db-server-name <name>     Shared MariaDB server/service name for PoundCake DB resources
 
@@ -162,6 +166,8 @@ Environment overrides:
   POUNDCAKE_REMOTE_BAKERY_URL      (optional; explicit Bakery URL)
   POUNDCAKE_REMOTE_BAKERY_AUTH_MODE (default: hmac)
   POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET (required for external remote Bakery HMAC unless auto-discovered)
+  POUNDCAKE_REMOTE_BAKERY_HMAC_KEY  (optional; creates remote Bakery HMAC client secret when secret is missing)
+  POUNDCAKE_REMOTE_BAKERY_HMAC_KEY_ID (default: active when POUNDCAKE_REMOTE_BAKERY_HMAC_KEY is set)
   POUNDCAKE_SHARED_DB_MODE         (default: auto; valid: auto, on, off)
   POUNDCAKE_SHARED_DB_SERVER_NAME  (optional; shared DB server/service name)
   POUNDCAKE_OPERATORS_MODE         (default: install-missing; valid: install-missing, verify, skip)
@@ -204,6 +210,7 @@ Examples:
   ./install/install-poundcake-helm.sh
   ./install/install-poundcake-helm.sh --validate
   ./install/install-poundcake-helm.sh --remote-bakery-url http://bakery.rackspace.svc.cluster.local:8000
+  ./install/install-poundcake-helm.sh --remote-bakery-url https://bakery.example.com --remote-bakery-hmac-key '<shared-hmac-key>'
   ./install/install-poundcake-helm.sh --shared-db-mode on --shared-db-server-name bakery-pc-bakery-mariadb
   ./install/install-poundcake-helm.sh --skip-preflight -f /path/to/values.yaml
 USAGE_EOF
@@ -535,6 +542,35 @@ discover_override_args() {
   done < <(collect_yaml_files "${SERVICE_CONFIG_DIR}")
 }
 
+default_bakery_auth_secret_name() {
+  local release_name="$1"
+  local fullname=""
+  local bakery_name=""
+  local secret_name=""
+
+  if [[ "${release_name}" == *"poundcake"* ]]; then
+    fullname="${release_name}"
+  else
+    fullname="${release_name}-poundcake"
+  fi
+  bakery_name="${fullname}-bakery"
+  bakery_name="${bakery_name:0:63}"
+  bakery_name="${bakery_name%-}"
+
+  secret_name="${bakery_name}-secret"
+  secret_name="${secret_name:0:63}"
+  secret_name="${secret_name%-}"
+  echo "${secret_name}"
+}
+
+ensure_namespace_exists() {
+  local reason="$1"
+  if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+    log_info "Namespace '${NAMESPACE}' does not exist; creating it for ${reason}..."
+    kubectl create namespace "${NAMESPACE}" >/dev/null
+  fi
+}
+
 normalize_bool_or_empty() {
   local raw="$1"
   local trimmed="${raw#"${raw%%[![:space:]]*}"}"
@@ -724,6 +760,7 @@ resolve_runtime_modes() {
 
 ensure_remote_bakery_auth_secret() {
   local auth_mode=""
+  local resolved_hmac_key_id=""
   auth_mode="$(echo "${REMOTE_BAKERY_AUTH_MODE}" | tr '[:upper:]' '[:lower:]')"
 
   if [[ "${RESOLVED_BAKERY_CLIENT_ENABLED}" != "true" ]]; then
@@ -734,24 +771,51 @@ ensure_remote_bakery_auth_secret() {
     return 0
   fi
 
+  if [[ -n "${REMOTE_BAKERY_HMAC_KEY_ID}" && -z "${REMOTE_BAKERY_HMAC_KEY}" ]]; then
+    log_error "Remote Bakery HMAC key id was provided without a matching HMAC key."
+    log_error "Set --remote-bakery-hmac-key (or POUNDCAKE_REMOTE_BAKERY_HMAC_KEY) when using --remote-bakery-hmac-key-id."
+    exit 1
+  fi
+
   if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" && -n "${DISCOVERED_BAKERY_AUTH_SECRET}" ]]; then
     REMOTE_BAKERY_AUTH_SECRET="${DISCOVERED_BAKERY_AUTH_SECRET}"
     log_info "Resolved remote Bakery HMAC auth secret from discovered Bakery deployment: ${REMOTE_BAKERY_AUTH_SECRET}"
   fi
 
+  if [[ -n "${REMOTE_BAKERY_HMAC_KEY}" ]]; then
+    if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
+      REMOTE_BAKERY_AUTH_SECRET="$(default_bakery_auth_secret_name "${RELEASE_NAME}")"
+      log_info "Resolved remote Bakery HMAC auth secret name from release defaults: ${REMOTE_BAKERY_AUTH_SECRET}"
+    fi
+
+    if kubectl -n "${NAMESPACE}" get secret "${REMOTE_BAKERY_AUTH_SECRET}" >/dev/null 2>&1; then
+      log_error "Remote Bakery HMAC key was provided, but secret '${REMOTE_BAKERY_AUTH_SECRET}' already exists in namespace '${NAMESPACE}'."
+      log_error "Use the existing secret or choose a different secret name with --remote-bakery-auth-secret."
+      exit 1
+    fi
+
+    resolved_hmac_key_id="${REMOTE_BAKERY_HMAC_KEY_ID:-active}"
+    ensure_namespace_exists "remote Bakery HMAC auth secret setup"
+    log_info "Creating remote Bakery HMAC client secret '${REMOTE_BAKERY_AUTH_SECRET}' in namespace '${NAMESPACE}'."
+    kubectl -n "${NAMESPACE}" create secret generic "${REMOTE_BAKERY_AUTH_SECRET}" \
+      --from-literal=active-key-id="${resolved_hmac_key_id}" \
+      --from-literal=active-key="${REMOTE_BAKERY_HMAC_KEY}" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  fi
+
   if [[ -z "${REMOTE_BAKERY_AUTH_SECRET}" ]]; then
     log_error "Bakery client auth mode is 'hmac' but no auth secret was resolved."
     if [[ -n "${REMOTE_BAKERY_URL}" && -z "${DISCOVERED_BAKERY_URL}" ]]; then
-      log_error "Provide --remote-bakery-auth-secret (or POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET) for external Bakery endpoints."
+      log_error "Provide --remote-bakery-auth-secret or --remote-bakery-hmac-key (or matching POUNDCAKE_REMOTE_BAKERY_* env vars) for external Bakery endpoints."
     else
-      log_error "Run install/install-bakery-helm.sh first so auth secret discovery succeeds, or provide --remote-bakery-auth-secret explicitly."
+      log_error "Run install/install-bakery-helm.sh first so auth secret discovery succeeds, or provide --remote-bakery-auth-secret / --remote-bakery-hmac-key explicitly."
     fi
     exit 1
   fi
 
   if ! kubectl -n "${NAMESPACE}" get secret "${REMOTE_BAKERY_AUTH_SECRET}" >/dev/null 2>&1; then
     log_error "Resolved Bakery auth secret '${REMOTE_BAKERY_AUTH_SECRET}' was not found in namespace '${NAMESPACE}'."
-    log_error "Run install/install-bakery-helm.sh to provision Bakery auth secrets, or provide --remote-bakery-auth-secret pointing to an existing secret."
+    log_error "Run install/install-bakery-helm.sh to provision Bakery auth secrets, provide --remote-bakery-auth-secret pointing to an existing secret, or pass --remote-bakery-hmac-key so this installer can create one."
     exit 1
   fi
 }
@@ -1057,6 +1121,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --remote-bakery-auth-secret)
       REMOTE_BAKERY_AUTH_SECRET="$2"
+      shift 2
+      ;;
+    --remote-bakery-hmac-key)
+      REMOTE_BAKERY_HMAC_KEY="$2"
+      shift 2
+      ;;
+    --remote-bakery-hmac-key-id)
+      REMOTE_BAKERY_HMAC_KEY_ID="$2"
       shift 2
       ;;
     --shared-db-mode)
