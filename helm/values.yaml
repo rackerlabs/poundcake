@@ -846,7 +846,7 @@ bakery:
   image:
     repository: ghcr.io/rackerlabs/poundcake-bakery
     pullPolicy: Always
-    tag: "2.0.150"
+    tag: "2.0.151"
     # Optional immutable image digest (sha256:...); overrides tag when set.
     digest: ""
 
@@ -1035,7 +1035,7 @@ bakery:
 
 poundcakeImage:
   repository: ghcr.io/rackerlabs/poundcake
-  tag: "2.0.150"
+  tag: "2.0.151"
   # Optional immutable image digest (sha256:...); overrides tag when set.
   digest: ""
   pullPolicy: Always
@@ -1051,7 +1051,7 @@ poundcakeImage:
 
 uiImage:
   repository: ghcr.io/rackerlabs/poundcake-ui
-  tag: "2.0.150"
+  tag: "2.0.151"
   pullPolicy: Always
   containerPort: 8080
   runtimeWritablePaths:
