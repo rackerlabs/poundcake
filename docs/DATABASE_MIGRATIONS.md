@@ -2,6 +2,15 @@
 
 PoundCake uses Alembic. The initial migration defines all tables including `dish_ingredients`.
 
+## Migration Flow
+
+```mermaid
+flowchart LR
+  Models["SQLAlchemy Models"] --> Revision["Create Alembic Revision"]
+  Revision --> Upgrade["Upgrade Database"]
+  Upgrade --> Verify["Verify Current Version"]
+```
+
 Key column naming conventions:
 - `expected_duration_sec`
 - `timeout_duration_sec`

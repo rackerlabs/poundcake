@@ -1,0 +1,37 @@
+site_name: PoundCake Docs
+site_description: Local documentation preview for PoundCake
+repo_name: poundcake
+strict: true
+docs_dir: docs
+theme:
+  name: mkdocs
+plugins:
+  - search
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - tables
+  - toc:
+      permalink: true
+extra_javascript:
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - API Endpoints: api_endpoints.md
+  - Deploy: deploy.md
+  - Developer: developer.md
+  - CLI: cli.md
+  - Troubleshooting: troubleshooting.md
+  - Database Migrations: database_migrations.md
+  - Alembic Quick Reference: alembic_quickref.md
+  - Alertmanager Payload Template: alertmanager_payload_template.md

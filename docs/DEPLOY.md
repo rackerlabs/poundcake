@@ -1,5 +1,16 @@
 # Deployment
 
+## Deployment Paths
+
+```mermaid
+flowchart TD
+  Source["Repo + Images"] --> Helm["Helm Install Scripts"]
+  Helm --> PoundCake["PoundCake Release"]
+  Helm --> Bakery["Bakery Release"]
+  PoundCake --> Cluster["Kubernetes Cluster"]
+  Bakery --> Cluster
+```
+
 ## Helm (Kubernetes)
 
 Two install commands are supported:

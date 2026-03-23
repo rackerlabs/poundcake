@@ -2,6 +2,19 @@
 
 This document reflects the current PoundCake API surface.
 
+## Endpoint Groups
+
+```mermaid
+flowchart TD
+  Root["/api/v1"] --> Auth["auth"]
+  Root --> System["system + observability"]
+  Root --> Prom["prometheus"]
+  Root --> Cook["cook"]
+  Root --> Recipes["recipes"]
+  Root --> Ingredients["ingredients"]
+  Root --> Orders["orders / dishes / communications"]
+```
+
 ## Base
 - `GET /`
 - `GET /metrics`

@@ -1,5 +1,16 @@
 # Troubleshooting
 
+## Triage Flow
+
+```mermaid
+flowchart TD
+  Issue["Observed Failure"] --> Ready{"API ready?"}
+  Ready -->|No| Logs["Check container or pod logs"]
+  Ready -->|Yes| Scope{"Compose or Kubernetes?"}
+  Scope -->|Compose| Local["Inspect local services and config"]
+  Scope -->|Kubernetes| K8s["Run startup gate and hook checks"]
+```
+
 ## API not ready
 
 Check logs:

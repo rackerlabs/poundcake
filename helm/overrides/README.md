@@ -2,6 +2,16 @@
 
 This directory stores example override files for Helm installs.
 
+## Override Precedence
+
+```mermaid
+flowchart TD
+  Base["Base override files"] --> Auto["Installer autodiscovery"]
+  Auto --> SetFlags["Installer --set flags"]
+  SetFlags --> UserFlags["User CLI flags"]
+  UserFlags --> Values["Final Helm values"]
+```
+
 Canonical image keys for overrides:
 - `poundcakeImage.repository` / `poundcakeImage.tag`
 - `uiImage.repository` / `uiImage.tag`

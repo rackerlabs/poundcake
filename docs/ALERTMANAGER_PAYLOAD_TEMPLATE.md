@@ -2,6 +2,17 @@
 
 PoundCake expects a provider-neutral Alertmanager payload. Alert rules should supply descriptive alert data only. Provider-specific routing belongs in the communications route configuration, not in alert labels or annotations.
 
+## Payload Shape
+
+```mermaid
+flowchart TD
+  Payload["Alertmanager Payload"] --> Status["status"]
+  Payload --> Alerts["alerts[]"]
+  Alerts --> Labels["labels.alertname / group_name / severity"]
+  Alerts --> Annotations["annotations.summary / description"]
+  Payload --> Common["commonLabels / commonAnnotations / metadata"]
+```
+
 ## Required fields
 
 Top level:

@@ -2,6 +2,23 @@
 
 This directory contains the background workers that drive execution.
 
+## Worker Flow
+
+```mermaid
+sequenceDiagram
+  participant AM as Alertmanager
+  participant Prep as prep-chef
+  participant Chef as chef
+  participant Timer as timer
+  participant DW as dishwasher
+
+  AM->>Prep: New webhook creates dispatchable order
+  Prep->>Chef: Dish ready for execution
+  Chef->>Timer: Workflow or Bakery work in progress
+  Timer->>Chef: Finalization data or recovery path
+  DW->>Prep: Synced recipes and ingredients
+```
+
 ## Services
 
 - **prep-chef**: Claims new orders and creates dishes.

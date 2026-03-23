@@ -2,6 +2,17 @@
 
 Shell-based e2e tests in this directory exercise the PoundCake API workflow generation paths.
 
+## Test Path
+
+```mermaid
+flowchart TD
+  Start["Choose test target"] --> Compose["Compose runner"]
+  Start --> K8s["Kubernetes runner"]
+  Compose --> Single["Single workflow script"]
+  Compose --> Full["Full suite"]
+  K8s --> Full
+```
+
 ## Prerequisites
 
 - Running PoundCake API endpoint

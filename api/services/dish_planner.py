@@ -8,7 +8,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.models import DishIngredient, Ingredient, Order, Recipe, RecipeIngredient
-from api.services.communications import normalize_run_condition, normalize_run_phase
+from api.services.bakery_payloads import resolve_bakery_payload
+from api.services.communication_canonical import build_canonical_communication_context
+from api.services.communications import (
+    normalize_communication_operation,
+    normalize_run_condition,
+    normalize_run_phase,
+)
 from api.services.communications_policy import should_seed_route_step
 
 
@@ -74,6 +80,47 @@ def build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
     if ri.execution_parameters_override:
         base.update(ri.execution_parameters_override)
     return base or None
+
+
+def build_step_execution_payload(
+    *,
+    ri: RecipeIngredient,
+    order: Order | None = None,
+) -> dict[str, Any] | None:
+    ingredient = ri.ingredient
+    if ingredient is None:
+        return None
+
+    payload = ingredient.execution_payload if isinstance(ingredient.execution_payload, dict) else None
+    if (ingredient.execution_engine or "").strip().lower() != "bakery":
+        return payload
+    if (ingredient.execution_purpose or "").strip().lower() != "comms":
+        return payload
+
+    destination_target = getattr(ingredient, "destination_target", "") or ""
+    parameters = build_step_parameters(ri)
+    operation = normalize_communication_operation((parameters or {}).get("operation"))
+    runtime_overlay: dict[str, Any] = {
+        "context": {
+            "provider_type": ingredient.execution_target,
+            "destination_target": destination_target,
+        }
+    }
+
+    resolved = resolve_bakery_payload(payload, runtime_overlay=runtime_overlay)
+    resolved_context = (
+        dict(resolved.get("context")) if isinstance(resolved.get("context"), dict) else {}
+    )
+    if order is not None:
+        resolved_context["_canonical"] = build_canonical_communication_context(
+            order=order,
+            execution_target=ingredient.execution_target,
+            destination_target=destination_target,
+            operation=operation,
+            execution_payload={**resolved, "context": resolved_context},
+        )
+    resolved["context"] = resolved_context
+    return resolved
 
 
 async def expected_duration_for_phase(
@@ -155,7 +202,7 @@ def seed_dish_ingredients_for_phase(
                 execution_engine=ri.ingredient.execution_engine,
                 execution_target=ri.ingredient.execution_target,
                 destination_target=getattr(ri.ingredient, "destination_target", "") or "",
-                execution_payload=ri.ingredient.execution_payload,
+                execution_payload=build_step_execution_payload(ri=ri, order=order),
                 execution_parameters=build_step_parameters(ri),
                 execution_status="pending",
             )

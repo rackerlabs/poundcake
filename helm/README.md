@@ -709,22 +709,30 @@ PoundCake bootstrap catalog behavior:
 
 ```mermaid
 flowchart LR
-  A["stackstorm-startup-markers-reset<br/>sets all markers=false"] --> B["stackstorm-mongodb-user-sync"]
-  B -->|set stackstorm_mongodb_user_ready=true| C["stackstorm-infra-ready"]
-  C -->|set stackstorm_infra_ready=true| D["Stage 2 deploys<br/>stackstorm-register/auth/api wait-stage2"]
-  D --> E["stackstorm-controlplane-ready"]
-  E -->|set stackstorm_controlplane_ready=true| F["Stage 4 deploys<br/>worker services wait-stage4"]
-  F --> G["stackstorm-workers-ready"]
-  G -->|set stackstorm_workers_ready=true| H["Stage 5 deploys<br/>edge services wait-stage5"]
-  H --> I["stackstorm-edge-ready"]
-  I -->|set stackstorm_edge_ready=true| J["stackstorm-bootstrap"]
-  J -->|set stackstorm_bootstrap_ready=true| K["poundcake-mariadb-ready"]
-  K -->|set poundcake_mariadb_ready=true| L["poundcake-bootstrap"]
-  L -->|set poundcake_bootstrap_ready=true| M["PoundCake runtime<br/>chef/prep-chef/timer/dishwasher/ui"]
+  classDef stage fill:#eef6ff,stroke:#5b7ea3;
+  classDef ready fill:#eef7ea,stroke:#6b8f5e;
+  classDef note fill:#fdf6e3,stroke:#657b83;
 
-  N["Optional waits are conditional on<br/>stackstormServices.*.enabled<br/>(notifier/timersengine/sensorcontainer/stream/web)"]
+  A["reset markers"] --> B["mongodb user sync"]
+  B -->|mongodb ready| C["infra ready"]
+  C -->|infra ready| D["stage 2 deploys"]
+  D --> E["control plane ready"]
+  E -->|control plane ready| F["stage 4 deploys"]
+  F --> G["workers ready"]
+  G -->|workers ready| H["stage 5 deploys"]
+  H --> I["edge ready"]
+  I -->|edge ready| J["stackstorm bootstrap"]
+  J -->|bootstrap ready| K["poundcake mariadb ready"]
+  K -->|mariadb ready| L["poundcake bootstrap"]
+  L -->|bootstrap ready| M["poundcake runtime"]
+
+  N["optional waits depend on enabled services"]
   N -.-> G
   N -.-> I
+
+  class A,D,F,H stage;
+  class B,C,E,G,I,J,K,L,M ready;
+  class N note;
 ```
 
 Hook cleanup behavior:

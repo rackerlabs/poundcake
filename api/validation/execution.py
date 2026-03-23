@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from api.services.bakery_payloads import resolve_bakery_payload
 from api.services.communications import (
     DESTINATION_TYPES,
     TICKET_CAPABLE_DESTINATION_TYPES,
@@ -131,7 +132,7 @@ def validate_execution_request(
             execution_parameters=execution_parameters,
         )
     if engine == "bakery":
-        payload = execution_payload if isinstance(execution_payload, dict) else {}
+        payload = resolve_bakery_payload(execution_payload)
         context_data = context if isinstance(context, dict) else {}
         ticket_id = str(context_data.get("ticket_id") or context_data.get("bakery_ticket_id") or "")
         return validate_bakery_target_payload(
@@ -176,4 +177,9 @@ def validate_runtime_execution_payload(
 
     if execution_payload is None:
         return "bakery comms ingredient requires execution_payload"
-    return None
+    resolved_payload = resolve_bakery_payload(execution_payload)
+    return validate_bakery_target_payload(
+        execution_target=str(execution_target),
+        payload=resolved_payload,
+        execution_parameters=execution_parameters,
+    )

@@ -2,6 +2,16 @@
 
 This runbook covers local development, CI/CD behavior, fork-based package publishing, and lab deployment.
 
+## Workflow Diagram
+
+```mermaid
+flowchart LR
+  Clone["Clone + Fork Setup"] --> Venv["Create .venv"]
+  Venv --> Deps["Install Dev Dependencies"]
+  Deps --> Validate["Run Tests, Lint, MkDocs"]
+  Validate --> Deploy["Build / Deploy to Lab"]
+```
+
 ## 1) Prerequisites
 
 Required tools:
@@ -53,7 +63,7 @@ python -m pip install --upgrade pip
 Install development dependencies:
 
 ```bash
-pip install -e ".[dev]"
+pip install -r dev-requirements.txt
 ```
 
 Install and run pre-commit hooks:
@@ -68,6 +78,13 @@ Typical local quality checks:
 ```bash
 make test
 make lint
+make docs-build
+```
+
+Local docs preview:
+
+```bash
+make docs-serve
 ```
 
 Start local stack with compose:

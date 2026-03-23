@@ -1,5 +1,13 @@
 # Helm Scripts
 
+## Script Flow
+
+```mermaid
+flowchart LR
+  Helpers["common-functions.sh"] --> Installers["Helm Installers"]
+  Runbook["startup-gate-runbook.sh"] --> Evidence["Startup Evidence Collection"]
+```
+
 Place Helm-specific helper scripts in this directory.
 
 Example use cases:

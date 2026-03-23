@@ -6,108 +6,107 @@ An auto-remediation framework that bridges Prometheus Alertmanager with executio
 
 PoundCake receives orders from Prometheus Alertmanager and executes remediation workflows through a unified execution orchestrator (StackStorm and Bakery). The API is stateless; background workers handle scheduling, execution, and monitoring.
 
+## Documentation
+
+- Source docs live in [`docs/`](./docs).
+- Local preview:
+  - `source .venv/bin/activate`
+  - `pip install -r dev-requirements.txt`
+  - `mkdocs serve`
+- Strict local build:
+  - `mkdocs build --strict`
+- GitHub Pages is built from the MkDocs site via the docs Pages workflow.
+
 ## Architecture (Current)
 
 ```mermaid
-sequenceDiagram
-    participant AM as Alertmanager
-    participant API as PoundCake API
-    participant DB as MariaDB
-    participant PC as Prep Chef
-    participant C as Chef
-    participant ST2 as StackStorm
-    participant T as Timer
-    participant DW as Dishwasher
+flowchart LR
+  classDef system fill:#eef6ff,stroke:#5b7ea3;
+  classDef store fill:#fdf6e3,stroke:#657b83;
+  classDef worker fill:#eef7ea,stroke:#6b8f5e;
 
-    Note over AM, API: Phase 1: Intake (pre_heat)
-    AM->>API: POST /api/v1/webhook (with X-Internal-API-Key header)
-    API->>DB: Store Order (processing_status: new)
-    API-->>AM: 202 Accepted
+  subgraph Intake
+    AM["Alertmanager"] --> API["PoundCake API"]
+    API --> DB["MariaDB"]
+  end
 
-    Note over DB, PC: Phase 2: Dispatching (prep-chef)
-    PC->>API: GET /api/v1/orders?processing_status=new
-    PC->>API: POST /api/v1/orders/{order_id}/dispatch
-    API->>DB: Create Dish for the Recipe
-    API->>DB: Update Order (processing_status: processing)
+  subgraph Dispatch
+    PC["prep chef"] --> API
+    API --> Dish["dish row"]
+    API --> Order["order processing"]
+  end
 
-    Note over DB, C: Phase 3: Execution (chef)
-    C->>API: POST /api/v1/dishes/{dish_id}/claim
-    C->>API: POST /api/v1/cook/workflows/register
-    C->>API: POST /api/v1/cook/execute
-    API->>ST2: POST /v1/executions (workflow)
-    ST2-->>API: execution_id
-    API-->>C: workflow_execution_id
-    C->>API: PATCH /api/v1/dishes/{id} (processing_status: processing)
+  subgraph Execute
+    Chef["chef"] --> API
+    API --> ST2["StackStorm"]
+    Timer["timer"] --> API
+  end
 
-    Note over ST2, T: Phase 4: Monitoring (timer)
-    T->>API: GET /api/v1/dishes?processing_status=processing
-    T->>API: POST /api/v1/dishes/{dish_id}/finalize-claim
-    T->>API: GET /api/v1/cook/executions/{workflow_execution_id}/tasks
-    T->>API: POST /api/v1/dishes/{dish_id}/ingredients/bulk
-    T->>API: PATCH /api/v1/dishes/{id} (processing_status: complete/failed)
+  subgraph Sync
+    DW["dishwasher"] --> API
+    API --> Catalog["recipes and ingredients"]
+  end
 
-    Note over API, DW: Phase 5: Sync (dishwasher)
-    DW->>API: POST /api/v1/cook/sync
-    API->>DB: Upsert Ingredients/Recipes
+  class API,AM,ST2 system;
+  class DB,Dish,Order,Catalog store;
+  class PC,Chef,Timer,DW worker;
 ```
 
 ## Unified Dispatch Order Diagram
 
 ```mermaid
-flowchart TD
-  A["Alertmanager webhook (firing)"] --> B["API pre_heat upserts Order<br/>processing_status=new"]
-  B --> C["prep-chef polls Orders(new,resolving)"]
-  C --> D["POST /api/v1/orders/{order_id}/dispatch"]
+flowchart LR
+  classDef api fill:#eef6ff,stroke:#5b7ea3;
+  classDef worker fill:#eef7ea,stroke:#6b8f5e;
+  classDef state fill:#fdf6e3,stroke:#657b83;
 
-  D --> E{"order.processing_status"}
-  E -->|new| F["Dispatch run_phase=firing"]
-  E -->|resolving| G["Dispatch run_phase=resolving"]
-  E -->|other| H["409 not dispatchable"]
+  Firing["firing webhook"] --> Preheat["pre heat"]
+  Resolved["resolved webhook"] --> Preheat
 
-  F --> I["Create/reuse firing Dish<br/>seed phase-eligible remediation/utility dish_ingredients"]
-  G --> J["Create/reuse resolving Dish<br/>seed policy-backed Bakery comms only"]
+  subgraph Dispatch
+    Preheat --> Queue["dispatchable order"]
+    Prep["prep chef"] --> Queue
+    Queue --> Phase{"run phase"}
+    Phase --> FireDish["firing dish"]
+    Phase --> ResolveDish["resolving dish"]
+  end
 
-  I --> K["Dish status=new"]
-  J --> K
+  subgraph Execution
+    FireDish --> Claim["chef claims dish"]
+    ResolveDish --> Claim
+    Claim --> Stackstorm{"stackstorm rows"}
+    Stackstorm -->|yes| ST2["run stackstorm"]
+    Stackstorm -->|no| Bakery{"bakery rows"}
+    ST2 --> Timer["timer writes results"]
+    Timer --> Bakery
+    Bakery -->|yes| Bake["run bakery rows"]
+    Bakery -->|no| Final["finalize dish"]
+    Bake --> Final
+  end
 
-  K --> L["chef claims dish -> processing"]
-  L --> M["chef loads dish_ingredients"]
-  M --> N{"stackstorm pending rows? (firing only)"}
+  Final --> Outcome{"dish phase"}
+  Outcome -->|firing| OrderUpdate["update active order"]
+  Outcome -->|resolving| OrderClose["complete or fail order"]
 
-  N -->|yes| O["Filter recipe to stackstorm rows<br/>POST /cook/workflows/register<br/>POST /cook/execute (stackstorm)<br/>PATCH dish.execution_ref"]
-  N -->|no| P{"bakery pending rows?"}
-
-  O --> Q["timer polls /cook/executions*"]
-  Q --> R["POST /dishes/{id}/ingredients/bulk<br/>upsert stackstorm task status/result"]
-  R --> P
-
-  P -->|yes| S["Execute bakery rows via /cook/execute (per row)<br/>upsert each dish_ingredient in place"]
-  P -->|no| T["Finalize dish"]
-
-  S --> T
-
-  T --> U{"dish.run_phase"}
-  U -->|firing| V["Dish terminal -> order moves to resolving"]
-  U -->|resolving| W["Dish terminal -> order complete/failed"]
-
-  X["Alertmanager webhook (resolved)"] --> Y["pre_heat sets order.processing_status=resolving"]
-  Y --> C
+  class Preheat,Claim,ST2,Timer,Bake api;
+  class Prep worker;
+  class Queue,FireDish,ResolveDish,Final,OrderUpdate,OrderClose state;
 ```
 
 ## Concurrency Guarantees (Locks and Claims)
 
 ```mermaid
 flowchart TD
-    A["Alertmanager webhook"] --> B["pre_heat: select (fingerprint, is_active) FOR UPDATE"]
-    B --> C["orders (new)"]
-    C --> D["prep-chef: cook_dishes"]
-    D --> E["orders new -> processing (atomic update)"]
-    D --> F["dishes created (new)"]
-    F --> G["chef: claim_dish"]
-    G --> H["dishes new -> processing (atomic update)"]
-    H --> I["timer: finalize-claim"]
-    I --> J["dishes processing -> finalizing (atomic update)"]
-    J --> K["timer: finalize + status update"]
+    Hook["webhook"] --> Lock["pre heat lock"]
+    Lock --> Order["order new"]
+    Order --> Dispatch["prep chef dispatch"]
+    Dispatch --> OrderRun["order processing"]
+    Dispatch --> Dish["dish new"]
+    Dish --> Claim["chef claim"]
+    Claim --> DishRun["dish processing"]
+    DishRun --> Finalize["timer finalize claim"]
+    Finalize --> DishFinal["dish finalizing"]
+    DishFinal --> Result["timer stores result"]
 ```
 
 ## Order Processing Status Lifecycle
@@ -148,45 +147,25 @@ flowchart TD
 ## Order Workflow Graph (States + Bakery Calls)
 
 ```mermaid
-stateDiagram-v2
-    [*] --> new: firing webhook\nPOST /api/v1/webhook -> pre_heat creates order
+flowchart LR
+  classDef active fill:#eef7ea,stroke:#6b8f5e;
+  classDef terminal fill:#fce8e6,stroke:#a35b5b;
 
-    new --> processing: prep-chef cook\nPOST /api/v1/orders/{order_id}/dispatch
-    processing --> resolving: dish terminal (non-catch-all)\nPATCH /api/v1/dishes/{dish_id}
+  New["new"] --> Processing["processing"]
+  New --> Resolving["resolving"]
+  Processing --> Resolving
+  Resolving --> Processing
+  Resolving --> Complete["complete"]
+  Resolving --> Failed["failed"]
+  New --> Canceled["canceled"]
+  Processing --> Canceled
+  Resolving --> Canceled
 
-    new --> resolving: resolved webhook\npre_heat transition check
-    processing --> resolving: resolved webhook\npre_heat transition check
-    resolving --> resolving: resolved webhook (idempotent)\npre_heat keeps resolving
-    resolving --> processing: re-fire while resolving\npre_heat sets processing
-
-    resolving --> complete: resolve success\nPOST /api/v1/orders/{order_id}/dispatch
-    resolving --> failed: resolve blocking failure\nPOST /api/v1/orders/{order_id}/dispatch
-    new --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
-    processing --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
-    resolving --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
-
-    note right of processing
-      Communications policy during active remediation:
-      - workflow start does not create communications
-      - if remediation fails or times out, escalation opens each effective route
-      - routes can be ticket-backed or chat-only
-    end note
-
-    note right of resolving
-      Resolve-phase policy behavior:
-      - successful auto-remediation clear -> open then close each effective route
-      - clear after escalation -> update existing routes only
-      - unmatched alerts use fallback communications sourced from the global policy
-      - workflow-local communications replace the global default for that workflow
-    end note
-
-    note right of complete
-      Terminal order statuses:
-      complete | failed | canceled
-      - immutable in order update logic
-      - cannot transition to another terminal status
-    end note
+  class New,Processing,Resolving active;
+  class Complete,Failed,Canceled terminal;
 ```
+
+For the current function-by-function webhook flow, Bakery handoff chain, and terminal state map, see [Architecture](./docs/architecture.md).
 
 ## Components
 
@@ -618,11 +597,11 @@ If the header/key is missing, PoundCake returns `401` for `/api/v1/webhook`.
 
 ## API Reference
 
-See `docs/API_ENDPOINTS.md`.
+See `docs/api_endpoints.md`.
 
 ## Troubleshooting
 
-See `docs/TROUBLESHOOTING.md`.
+See `docs/troubleshooting.md`.
 
 ## Developer Workflow
 

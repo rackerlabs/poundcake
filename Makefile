@@ -4,7 +4,7 @@
 # |  __/ (_) | |_| | | | | (_| | |__| (_| |   <  __/
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
-.PHONY: help install dev-install test lint format clean docker-up docker-down docker-logs db-init
+.PHONY: help install dev-install docs-install docs-serve docs-build test lint format clean docker-up docker-down docker-logs db-init
 
 help:
 	@echo "Available commands:"
@@ -13,6 +13,9 @@ help:
 	@echo "  make test         - Run tests"
 	@echo "  make lint         - Run linters (ruff, mypy)"
 	@echo "  make format       - Format code with black"
+	@echo "  make docs-install - Install docs/dev dependencies"
+	@echo "  make docs-serve   - Serve MkDocs locally"
+	@echo "  make docs-build   - Build MkDocs site locally"
 	@echo "  make clean        - Clean up generated files"
 	@echo "  make docker-up    - Start Docker services"
 	@echo "  make docker-down  - Stop Docker services"
@@ -23,7 +26,16 @@ install:
 	pip install -e .
 
 dev-install:
-	pip install -e ".[dev]"
+	pip install -r dev-requirements.txt
+
+docs-install:
+	pip install -r dev-requirements.txt
+
+docs-serve:
+	mkdocs serve
+
+docs-build:
+	mkdocs build --strict
 
 test:
 	pytest tests/ -v --cov=api --cov-report=html

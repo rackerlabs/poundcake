@@ -1,5 +1,15 @@
 # CLI Notes
 
+## CLI Interaction Flow
+
+```mermaid
+flowchart LR
+  User["Operator"] --> CLI["poundcake CLI"]
+  CLI --> Auth["API key or Session Auth"]
+  Auth --> API["PoundCake API"]
+  API --> Views["Overview / Incidents / Communications / Actions"]
+```
+
 ## PoundCake CLI
 
 Install the CLI from the repo root:

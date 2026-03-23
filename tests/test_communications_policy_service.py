@@ -156,6 +156,12 @@ def test_build_recipe_local_policy_step_specs_accepts_pre_normalized_routes() ->
     assert routes[0].execution_target == "rackspace_core"
     assert step_specs[0]["execution_target"] == "rackspace_core"
     assert step_specs[0]["execution_parameters"]["operation"] == "open"
+    assert "template" in step_specs[0]["execution_payload"]
+    assert step_specs[0]["execution_payload"]["template"]["context"]["provider_config"] == {
+        "account_number": "1781738",
+        "queue": "CloudBuilders Support",
+        "subcategory": "Monitoring",
+    }
 
 
 def test_get_recipe_local_routes_hydrates_legacy_provider_config(

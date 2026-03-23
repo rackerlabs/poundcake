@@ -87,6 +87,7 @@ docker-compose.override.yml
 *.tmp
 *.bak
 *.backup
+site/
 
 # Local configuration (keep .env.example!)
 .env.local

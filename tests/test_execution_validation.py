@@ -31,7 +31,18 @@ def test_validate_runtime_execution_payload_accepts_non_template_bakery_payloads
         execution_engine="bakery",
         execution_purpose="comms",
         execution_target="core",
-        execution_payload={"context": {"x": 1}},
+        execution_payload={"comment": "ok", "context": {"x": 1}},
+        execution_parameters={"operation": "ticket_comment"},
+    )
+    assert error is None
+
+
+def test_validate_runtime_execution_payload_accepts_template_bakery_payloads():
+    error = validate_runtime_execution_payload(
+        execution_engine="bakery",
+        execution_purpose="comms",
+        execution_target="core",
+        execution_payload={"template": {"comment": "resolved"}},
         execution_parameters={"operation": "ticket_comment"},
     )
     assert error is None

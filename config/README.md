@@ -1,5 +1,15 @@
 # Runtime Config
 
+## Config Flow
+
+```mermaid
+flowchart TD
+  Repo["Repo Config Files"] --> Runtime["Runtime Mounts or Env Overrides"]
+  Runtime --> API["PoundCake API"]
+  Runtime --> Jobs["Bootstrap and Sync Jobs"]
+  Jobs --> DB["Recipes / Ingredients in DB"]
+```
+
 ## st2_api_key
 
 This file contains the StackStorm API key used by PoundCake.

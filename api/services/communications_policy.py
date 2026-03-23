@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload
 
 from api.core.config import get_settings
 from api.models.models import DishIngredient, Ingredient, Recipe, RecipeIngredient
+from api.services.bakery_payloads import resolve_bakery_payload
 from api.services.communications import (
     normalize_destination_target,
     normalize_destination_type,
@@ -79,9 +80,8 @@ def _coerce_route_id(
 
 
 def _metadata_from_payload(execution_payload: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(execution_payload, dict):
-        return {}
-    context = execution_payload.get("context")
+    payload = resolve_bakery_payload(execution_payload)
+    context = payload.get("context")
     if not isinstance(context, dict):
         return {}
     metadata = context.get(POLICY_METADATA_KEY)
@@ -286,18 +286,20 @@ def _managed_payload(
         "event": event_name,
     }
     return {
-        "title": semantic_text["headline"],
-        "description": semantic_text["summary"],
-        "message": semantic_text["detail"],
-        "source": "poundcake",
-        "context": {
+        "template": {
+            "title": semantic_text["headline"],
+            "description": semantic_text["summary"],
+            "message": semantic_text["detail"],
             "source": "poundcake",
-            "route_label": route.label,
-            "destination_target": route.destination_target,
-            "provider_config": route.provider_config,
-            "semantic_text": semantic_text,
-            POLICY_METADATA_KEY: metadata,
-        },
+            "context": {
+                "source": "poundcake",
+                "route_label": route.label,
+                "destination_target": route.destination_target,
+                "provider_config": route.provider_config,
+                "semantic_text": semantic_text,
+                POLICY_METADATA_KEY: metadata,
+            },
+        }
     }
 
 
@@ -655,7 +657,7 @@ def _legacy_provider_config_from_payload(
     execution_target: str,
     execution_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    payload = execution_payload if isinstance(execution_payload, dict) else {}
+    payload = resolve_bakery_payload(execution_payload)
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
 
     if isinstance(context.get("provider_config"), dict):

@@ -281,6 +281,11 @@ def test_order_dispatch__resolving_phase__seeds_phase_ingredients(client, mock_d
     dish_ingredients = [row for row in added_rows if isinstance(row, DishIngredient)]
     assert len(dish_ingredients) == 1
     assert dish_ingredients[0].execution_status == "pending"
+    assert dish_ingredients[0].execution_payload["comment"] == "resolved"
+    assert "template" not in dish_ingredients[0].execution_payload
+    assert dish_ingredients[0].execution_payload["context"]["provider_type"] == "core"
+    assert dish_ingredients[0].execution_payload["context"]["destination_target"] == ""
+    assert "_canonical" in dish_ingredients[0].execution_payload["context"]
     assert dish_ingredients[0].execution_parameters == {
         "operation": "ticket_comment",
         "visibility": "internal",

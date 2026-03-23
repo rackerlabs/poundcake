@@ -16,25 +16,13 @@ Bakery is PoundCake's communication integration microservice. It is an async bro
 
 ## Architecture
 
-```
-PoundCake API
-     |
-     | POST /api/v1/communications
-     v
-  ┌──────────┐    ┌──────────────────┐    ┌──────────────────┐
-  │  Bakery   │───>│  Mixer Factory   │───>│  ServiceNow      │
-  │  FastAPI  │    │                  │    │  Jira             │
-  │           │    │  get_mixer()     │    │  GitHub           │
-  │           │    │  list_mixers()   │    │  PagerDuty        │
-  │           │    │                  │    │  Teams            │
-  │           │    │                  │    │  Discord          │
-  └──────────┘    └──────────────────┘    │  Rackspace Core   │
-       |                                   └──────────────────┘
-       v                                            |
-  ┌──────────┐                                      v
-  │ MariaDB  │                              External Ticketing
-  │          │                              System APIs
-  └──────────┘
+```mermaid
+flowchart LR
+  PC["PoundCake API"] -->|POST /api/v1/communications| BA["Bakery FastAPI"]
+  BA --> MF["Mixer Factory"]
+  MF --> MX["Provider Mixers"]
+  MX --> EXT["External Ticketing or Messaging APIs"]
+  BA --> DB["MariaDB"]
 ```
 
 ### Request Flow
@@ -304,7 +292,7 @@ PoundCake remains provider-agnostic. Alertmanager payloads should stay descripti
 | `teams` | none beyond generic payload (`message`) | none |
 | `discord` | none beyond generic payload (`message`) | none |
 
-See [docs/ALERTMANAGER_PAYLOAD_TEMPLATE.md](../docs/ALERTMANAGER_PAYLOAD_TEMPLATE.md) for the standardized webhook payload shape and alert-rule annotation template.
+See [docs/alertmanager_payload_template.md](../docs/alertmanager_payload_template.md) for the standardized webhook payload shape and alert-rule annotation template.
 
 Rackspace Core defaults:
 - If `queue` is not provided, Bakery uses `RACKSPACE_CORE_DEFAULT_QUEUE` (default `CloudBuilders Support`).

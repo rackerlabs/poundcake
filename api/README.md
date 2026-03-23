@@ -2,6 +2,17 @@
 
 FastAPI service exposing PoundCake endpoints.
 
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  Client["Operator or Worker"] --> Auth["Auth + Routing"]
+  Auth --> API["FastAPI Endpoints"]
+  API --> Orders["Orders / Dishes APIs"]
+  API --> Cook["/api/v1/cook/*"]
+  Cook --> Engines["StackStorm or Bakery"]
+```
+
 ## Key Endpoints
 
 - `/api/v1/webhook` - Alertmanager intake

@@ -15,6 +15,7 @@ from api.core.database import get_db
 from api.schemas.schemas import ExecuteRequest, ExecutionEnvelopeResponse
 from api.services.execution_orchestrator import ExecutionOrchestrator, get_execution_orchestrator
 from api.services.execution_types import ExecutionContext
+from api.services.bakery_payloads import resolve_bakery_payload
 from api.services.communications import (
     normalize_communication_operation,
     normalize_destination_target,
@@ -48,26 +49,6 @@ async def execute_ingredient(
     Generic execution endpoint for all supported execution engines.
     """
     req_id = request.state.req_id
-    validation_error = validate_execution_request(
-        execution_engine=payload.execution_engine,
-        execution_target=payload.execution_target,
-        execution_payload=payload.execution_payload,
-        execution_parameters=payload.execution_parameters,
-        context=payload.context,
-    )
-    if validation_error:
-        raise HTTPException(status_code=400, detail=validation_error)
-
-    logger.info(
-        "Received execution request",
-        extra={
-            "req_id": req_id,
-            "execution_engine": payload.execution_engine,
-            "execution_target": payload.execution_target,
-            "method": request.method,
-        },
-    )
-
     try:
         execution_payload = (
             dict(payload.execution_payload) if isinstance(payload.execution_payload, dict) else {}
@@ -91,34 +72,46 @@ async def execute_ingredient(
         )
         destination_target = normalize_destination_target(
             context.get("destination_target")
-            or ((execution_payload.get("context") or {}).get("destination_target"))
+            or ((resolve_bakery_payload(execution_payload).get("context") or {}).get("destination_target"))
         )
         operation = normalize_communication_operation(execution_parameters.get("operation"))
         order = None
 
-        if payload.execution_engine == "bakery" and order_id is not None:
-            async with db.begin():
-                order, communication = await prepare_communication_context(
-                    db,
-                    order_id=order_id,
-                    execution_target=payload.execution_target,
-                    destination_target=destination_target,
-                    operation=operation,
-                )
-                if communication.bakery_ticket_id:
-                    context["bakery_ticket_id"] = communication.bakery_ticket_id
-                    context["ticket_id"] = communication.bakery_ticket_id
-                context["destination_target"] = destination_target
-                context["communication_reuse_mode"] = (
-                    "reopen" if communication.reopenable else "reuse"
-                )
+        if payload.execution_engine == "bakery":
+            payload_context_overlay: dict[str, Any] = {
+                "provider_type": payload.execution_target,
+                "destination_target": destination_target,
+            }
 
-            raw_payload_context = execution_payload.get("context")
-            payload_context = (
-                dict(raw_payload_context) if isinstance(raw_payload_context, dict) else {}
+            if order_id is not None:
+                async with db.begin():
+                    order, communication = await prepare_communication_context(
+                        db,
+                        order_id=order_id,
+                        execution_target=payload.execution_target,
+                        destination_target=destination_target,
+                        operation=operation,
+                    )
+                    if communication.bakery_ticket_id:
+                        context["bakery_ticket_id"] = communication.bakery_ticket_id
+                        context["ticket_id"] = communication.bakery_ticket_id
+                    context["destination_target"] = destination_target
+                    context["communication_reuse_mode"] = (
+                        "reopen" if communication.reopenable else "reuse"
+                    )
+                    payload_context_overlay["communication_reuse_mode"] = context[
+                        "communication_reuse_mode"
+                    ]
+
+            execution_payload = resolve_bakery_payload(
+                execution_payload,
+                runtime_overlay={"context": payload_context_overlay},
             )
-            payload_context["provider_type"] = payload.execution_target
-            payload_context["destination_target"] = destination_target
+            payload_context = (
+                dict(execution_payload.get("context"))
+                if isinstance(execution_payload.get("context"), dict)
+                else {}
+            )
             if order is not None:
                 payload_context["_canonical"] = build_canonical_communication_context(
                     order=order,
@@ -131,6 +124,26 @@ async def execute_ingredient(
                     },
                 )
             execution_payload["context"] = payload_context
+
+        validation_error = validate_execution_request(
+            execution_engine=payload.execution_engine,
+            execution_target=payload.execution_target,
+            execution_payload=execution_payload,
+            execution_parameters=execution_parameters,
+            context=context,
+        )
+        if validation_error:
+            raise HTTPException(status_code=400, detail=validation_error)
+
+        logger.info(
+            "Received execution request",
+            extra={
+                "req_id": req_id,
+                "execution_engine": payload.execution_engine,
+                "execution_target": payload.execution_target,
+                "method": request.method,
+            },
+        )
 
         execution_result = await orchestrator.execute(
             ExecutionContext(
@@ -184,6 +197,8 @@ async def execute_ingredient(
             attempts=execution_result.attempts,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             "Execution request failed",
