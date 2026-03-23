@@ -15,6 +15,7 @@ def _recipe_with_steps(steps):
                     "execution_target": step.get("task_id", "core.local"),
                     "task_key_template": step["task_name"],
                     "execution_parameters": step.get("action_parameters", {}),
+                    "timeout_duration_sec": step.get("timeout_duration_sec"),
                     "is_blocking": step["is_blocking"],
                     "retry_count": 0,
                     "retry_delay": 0,
@@ -137,3 +138,44 @@ def test_non_blocking_group_to_blocking_to_non_blocking_group():
     assert tasks["step_3_task3"]["next"] == [
         {"when": "<% succeeded() %>", "do": ["step_4_task4", "step_5_task5"]}
     ]
+
+
+def test_generate_orquesta_yaml_merges_base_parameters_and_timeout() -> None:
+    recipe = _recipe_with_steps(
+        [
+            {
+                "step_order": 1,
+                "task_name": "task1",
+                "is_blocking": True,
+                "action_parameters": {"cmd": "echo base", "cwd": "/tmp/work"},
+                "input_parameters": {"cmd": "echo override"},
+                "timeout_duration_sec": 180,
+            }
+        ]
+    )
+
+    workflow = yaml.safe_load(generate_orquesta_yaml(recipe))
+
+    assert workflow["tasks"]["step_1_task1"]["input"] == {
+        "cmd": "echo override",
+        "cwd": "/tmp/work",
+        "timeout": 180,
+    }
+
+
+def test_generate_orquesta_yaml_preserves_explicit_timeout_parameter() -> None:
+    recipe = _recipe_with_steps(
+        [
+            {
+                "step_order": 1,
+                "task_name": "task1",
+                "is_blocking": True,
+                "action_parameters": {"cmd": "echo base", "timeout": 45},
+                "timeout_duration_sec": 180,
+            }
+        ]
+    )
+
+    workflow = yaml.safe_load(generate_orquesta_yaml(recipe))
+
+    assert workflow["tasks"]["step_1_task1"]["input"]["timeout"] == 45
