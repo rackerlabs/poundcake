@@ -1,0 +1,38 @@
+suite: bakery-gateway-rbac
+templates:
+  - templates/bakery-gateway-rbac.yaml
+tests:
+  - it: renders namespace-unique gateway manager RBAC names for bakery installs
+    release:
+      name: bakery
+      namespace: acct4788235
+    set:
+      bakery.enabled: true
+      bakery.gateway.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: kind
+          value: ClusterRole
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: acct4788235-bakery-poundcake-bakery-gateway-manager
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: ClusterRoleBinding
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: acct4788235-bakery-poundcake-bakery-gateway-manager
+        documentIndex: 1
+      - equal:
+          path: roleRef.name
+          value: acct4788235-bakery-poundcake-bakery-gateway-manager
+        documentIndex: 1
+      - equal:
+          path: subjects[0].namespace
+          value: acct4788235
+        documentIndex: 1

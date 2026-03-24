@@ -169,6 +169,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-bakery" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "poundcake.bakeryGatewayManagerName" -}}
+{{- printf "%s-%s-gateway-manager" .Release.Namespace (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "poundcake.bakeryBaseUrl" -}}
 {{- if .Values.bakery.client.baseUrl -}}
 {{- .Values.bakery.client.baseUrl -}}
