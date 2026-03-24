@@ -174,7 +174,7 @@ For pull-secret creation (`POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true`), `HELM_REGI
 `HELM_REGISTRY_PASSWORD` must be set explicitly.
 
 Installer controls:
-- `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-pull`)
+- `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-creds`)
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` (default: `true`)
 - `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` (default: `noreply@local`)
 - `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)
@@ -185,8 +185,8 @@ Chart pull-secret values:
 
 Examples:
 ```bash
-helm upgrade --install poundcake ./helm --set poundcakeImage.pullSecrets[0]=ghcr-pull
-helm upgrade --install poundcake ./helm --set imagePullSecrets[0]=ghcr-pull
+helm upgrade --install poundcake ./helm --set poundcakeImage.pullSecrets[0]=ghcr-creds
+helm upgrade --install poundcake ./helm --set imagePullSecrets[0]=ghcr-creds
 ```
 
 Troubleshooting GHCR 401:

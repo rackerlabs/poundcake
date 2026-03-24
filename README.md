@@ -447,7 +447,7 @@ export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
 
 Installer env controls for private pulls:
 
-- `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-pull`)
+- `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-creds`)
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` (default: `true`)
 - `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` (default: `noreply@local`)
 - `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)

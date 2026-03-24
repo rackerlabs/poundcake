@@ -228,7 +228,7 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `POUNDCAKE_ALLOW_HOOK_WAIT` | `false` | Optional | Bypass wait deadlock guard | Set only when intentionally forcing wait/atomic |
 | `POUNDCAKE_HELM_ATOMIC` | `false` | Optional | Enable Helm `--atomic` | Use only if you accept hook/wait behavior implications |
 | `POUNDCAKE_HELM_CLEANUP_ON_FAIL` | `false` | Optional | Enable Helm cleanup on failure | Enable in strict CI environments |
-| `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `ghcr-pull` | Optional | Pull secret name created/reused by installer | Set when org requires naming convention |
+| `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `ghcr-creds` | Optional | Pull secret name created/reused by installer | Override when the target namespace uses a different secret name |
 | `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `true` | Optional | Auto-create/apply docker-registry secret | Disable if secret is pre-provisioned |
 | `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` | `noreply@local` | Optional | Email field used when creating docker-registry secret | Set if your policy requires real address |
 | `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` | `true` | Optional | Inject pull secret into PoundCake workloads | Set `false` only when all images are public or pull handled elsewhere |
@@ -250,10 +250,10 @@ Examples:
 
 ```bash
 # Canonical
-helm upgrade --install poundcake ./helm --set poundcakeImage.pullSecrets[0]=ghcr-pull
+helm upgrade --install poundcake ./helm --set poundcakeImage.pullSecrets[0]=ghcr-creds
 
 # Legacy fallback (backward compatibility)
-helm upgrade --install poundcake ./helm --set imagePullSecrets[0]=ghcr-pull
+helm upgrade --install poundcake ./helm --set imagePullSecrets[0]=ghcr-creds
 ```
 
 Scope:
