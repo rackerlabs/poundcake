@@ -1,48 +1,70 @@
 # CLI Notes
 
-## PoundCake CLI
+For the full command and flag inventory, see [REFERENCE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REFERENCE.md).
 
-Full auth and RBAC setup, including how providers are enabled in Helm before they appear in the CLI, is documented in [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+This page keeps the short, practical CLI quickstart.
 
-Install the CLI from the repo root:
+## Install
+
+From the repo root:
 
 ```bash
 python3 -m pip install -e .
 ```
 
-Run the installed application:
+The installed command is `poundcake`.
+
+## Global Options
 
 ```bash
 poundcake --help
+```
+
+The most commonly used global flags are:
+
+- `--url` / `POUNDCAKE_URL`
+- `--api-key` / `POUNDCAKE_API_KEY`
+- `--format json|yaml|table`
+- `--verbose`
+
+The CLI defaults to `http://localhost:8080` if `--url` is omitted. For local Docker Compose examples in this repo, use `http://localhost:8000`.
+
+## Common Commands
+
+```bash
 poundcake --url http://localhost:8000 overview
 poundcake --url http://localhost:8000 incidents list
 poundcake --url http://localhost:8000 communications list
+poundcake --url http://localhost:8000 alert-rules list
+poundcake --url http://localhost:8000 workflows list
+poundcake --url http://localhost:8000 actions list
 ```
 
-### Authentication
+## Authentication
 
-List the enabled auth providers first:
+Full auth provider enablement and RBAC setup are documented in [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+
+List enabled providers:
 
 ```bash
 poundcake --url http://localhost:8000 auth providers
 ```
 
-If API auth is enabled and you have the service token, pass it explicitly:
+If you have the internal service token or another API key, pass it explicitly:
 
 ```bash
 poundcake --url http://localhost:8000 --api-key "$POUNDCAKE_AUTH_SERVICE_TOKEN" incidents list
 ```
 
-For local or Active Directory logins, store a session locally:
+Local login:
 
 ```bash
 poundcake --url http://localhost:8000 auth login --provider local --username admin
 poundcake --url http://localhost:8000 auth me
-poundcake --url http://localhost:8000 overview
 poundcake --url http://localhost:8000 auth logout
 ```
 
-For Auth0 and Azure AD, the CLI uses the API-brokered device flow:
+Browser/device-code providers:
 
 ```bash
 poundcake --url http://localhost:8000 auth login --provider auth0
@@ -50,57 +72,20 @@ poundcake --url http://localhost:8000 auth login --provider azure_ad
 ```
 
 Stored sessions live under `${XDG_CONFIG_HOME:-~/.config}/poundcake/session.json`.
-If `--api-key` is provided, it takes precedence over any stored session.
+If `--api-key` is supplied, it takes precedence over any stored session.
 
-The installer also provides `poundcake-cli` as an equivalent command name.
+## File-Driven Commands
 
-Admins can inspect observed principals and manage role bindings:
-
-```bash
-poundcake --url http://localhost:8000 auth principals list --provider auth0
-poundcake --url http://localhost:8000 auth principals list --provider azure_ad
-poundcake --url http://localhost:8000 auth bindings list
-poundcake --url http://localhost:8000 auth bindings create \
-  --provider auth0 \
-  --type group \
-  --role operator \
-  --group monitoring-operators
-```
-
-### Canonical Commands
-
-The CLI now uses UI-aligned nouns as the primary interface:
-
-```bash
-poundcake overview
-poundcake incidents list
-poundcake incidents get 204
-poundcake incidents timeline 204
-poundcake communications get comm-123
-poundcake activity list --phase firing
-poundcake suppressions create \
-  --name "Database maintenance" \
-  --starts-at 2026-03-16T22:00:00+00:00 \
-  --ends-at 2026-03-16T23:00:00+00:00 \
-  --matcher-key alertname \
-  --matcher-value NodeFilesystemAlmostOutOfSpace
-poundcake actions list
-poundcake workflows list
-poundcake global-communications get
-poundcake alert-rules list
-```
-
-### Workflow And Policy File Input
-
-`workflows` and `global-communications` accept exact API request bodies from JSON or YAML files:
+`workflows`, `global-communications`, and `alert-rules apply` all work well with checked-in JSON or YAML:
 
 ```bash
 poundcake workflows create --file ./examples/workflow.yaml
 poundcake workflows update 17 --file ./examples/workflow-update.yaml
 poundcake global-communications set --file ./examples/global-comms.yaml
+poundcake alert-rules apply ./examples/rule-group.yaml --source-name kube-prometheus-stack
 ```
 
-Inline JSON input is also supported when you only want to supply a few steps or routes:
+Inline JSON is also supported for quick edits:
 
 ```bash
 poundcake workflows create \
@@ -113,18 +98,9 @@ poundcake global-communications set \
   --route-json '{"label":"Discord","execution_target":"discord","destination_target":"ops-alerts"}'
 ```
 
-### Legacy Aliases
+## Legacy Aliases
 
-The older command names still work as aliases:
-
-```bash
-poundcake orders list
-poundcake ingredients list
-poundcake recipes list
-poundcake rules list
-```
-
-Alias mapping:
+The old nouns still work as aliases:
 
 - `orders` -> `incidents`
 - `ingredients` -> `actions`
@@ -133,7 +109,7 @@ Alias mapping:
 
 ## StackStorm CLI
 
-The `st2client` container provides StackStorm CLI access:
+The local dev stack still includes a StackStorm client container:
 
 ```bash
 docker compose -f docker/docker-compose.yml exec st2client st2 action list

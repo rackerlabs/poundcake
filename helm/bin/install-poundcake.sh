@@ -153,7 +153,7 @@ Environment overrides:
 
 Image repositories/tags/digests:
   - Configure these in Helm values files or override files only.
-  - Default override path: /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+  - Default active override dir: /etc/genestack/helm-configs/poundcake/
   - Image env vars and image --set overrides are intentionally not supported.
 
 Runtime deployment settings:
@@ -193,7 +193,7 @@ validate_image_env_inputs() {
   if (( ${#deprecated_image_envs[@]} > 0 )); then
     log_error "Image environment variables are no longer supported by the Helm installers: ${deprecated_image_envs[*]}"
     log_error "Configure image repositories/tags/digests in values files or override files instead."
-    log_error "Default override path: /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml"
+    log_error "Default active override dir: /etc/genestack/helm-configs/poundcake/"
     exit 1
   fi
 }

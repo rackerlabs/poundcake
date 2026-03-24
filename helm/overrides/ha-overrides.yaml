@@ -1,5 +1,5 @@
 # High Availability overrides for PoundCake
-# Copy to /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+# Merge into /etc/genestack/helm-configs/poundcake/10-main-overrides.yaml
 # before running install/install-poundcake-helm.sh.
 
 # Main API deployment (service load balances across pods)

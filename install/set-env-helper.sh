@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source this file:
-#   source /Users/chris.breu/code/poundcake/install/set-env-helper.sh
+#   source ./install/set-env-helper.sh
 #
 # This config targets fork-based development by default with local chart install.
 # Configure image repositories/tags in Helm values or override files, not env vars.

@@ -5,20 +5,19 @@
 # |_|   \___/ \__,_|_| |_|\__,_|\____\__,_|_|\_\___|
 #
 
-# Default values for poundcake
+# Default values for PoundCake
 #
-# NAMESPACE CONFIGURATION:
-# The namespace is set at install time with: helm install --namespace <namespace>
-# Example: helm install poundcake . -n poundcake
-# The default namespace is "poundcake" if not specified during installation.
-# All resources (API, UI, workers, Redis, etc.) will be created in the same namespace.
+# Namespace behavior:
+# - direct Helm installs use the namespace you pass with `--namespace`
+# - the supported Genestack installer defaults `POUNDCAKE_NAMESPACE` to `rackspace`
+# - each release renders into a single namespace; split installs use separate releases
 #
-# ARCHITECTURE:
-# - API: Main FastAPI application container
-# - UI: Separate container (built/stored separately via GitHub workflows)
-# - Workers: prep-chef, chef, timer, dishwasher
-# - Redis: StackStorm coordination cache
-# - Database: External MySQL/MariaDB (required)
+# High-level chart shape:
+# - PoundCake API + UI + workers
+# - optional Bakery API + worker + DB init job
+# - StackStorm and supporting infra rendered by the PoundCake profile
+# - PoundCake DB can be embedded or shared-operator backed
+# - Bakery owns its own database contract when installed
 
 replicaCount: 1
 

@@ -1,88 +1,61 @@
-# Helm Overrides
+# Helm Override Examples
 
-This directory stores example override files for Helm installs.
+This directory contains sanitized example fragments and example layouts.
 
-Recommended starter fragments:
-- `poundcake-only-overrides.yaml`
-- `bakery-only-overrides.yaml`
-- `colocated-shared-db-overrides.yaml`
-- `remote-bakery-overrides.yaml`
-- `ghcr-pull-secret-overrides.yaml`
-- `split-install/`
+These files are not the supported live deployment path by themselves. In Genestack, the active values come from:
 
-Canonical image keys for overrides:
-- `poundcakeImage.repository` / `poundcakeImage.tag`
-- `uiImage.repository` / `uiImage.tag`
-- `bakery.image.repository` / `bakery.image.tag`
-
-Base example source in-repo:
-- `helm/base-overrides/poundcake-helm-overrides-examples.yaml`
-  (copy/merge into `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`)
-
-Service selection in overrides now uses explicit booleans:
-- `poundcake.enabled` (PoundCake + StackStorm resources)
-- `bakery.enabled` (Bakery resources)
-
-Installer mapping:
-- `./install/install-poundcake-helm.sh` => `poundcake.enabled=true`, `bakery.enabled=false`
-- `./install/install-bakery-helm.sh` => `poundcake.enabled=false`, `bakery.enabled=true`
-- For co-located deployments in one namespace: install Bakery first, then PoundCake.
-
-Values-first note:
-- Put runtime config such as remote Bakery, shared DB mode, and `poundcakeImage.pullSecrets` in override files.
-- Use installer flags for operational behavior and optional secret creation only.
-- The Bakery installer forwards `existingSecret` names only when you intentionally choose a non-default secret name.
-
-## Enable HA
-
-1. Copy the HA example to the Genestack PoundCake overrides path:
-
-```bash
-sudo mkdir -p /etc/genestack/helm-configs/poundcake
-sudo cp helm/overrides/ha-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
-```
-
-2. Run the Helm installer:
-
-```bash
-./install/install-poundcake-helm.sh
-```
-
-The installer will automatically include:
-
-- `/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml`
+- `/etc/genestack/helm-chart-versions.yaml`
 - `/etc/genestack/helm-configs/global_overrides/*.yaml`
 - `/etc/genestack/helm-configs/poundcake/*.yaml`
-- kustomize post-renderer from `/etc/genestack/kustomize` (when present)
 
-## Verify
+Recommended live file layout:
 
-```bash
-kubectl -n rackspace get deploy poundcake poundcake-chef poundcake-timer poundcake-dishwasher
-kubectl -n rackspace get svc poundcake
-```
+- `00-pull-secret-overrides.yaml`
+- `10-main-overrides.yaml`
+- `20-auth-overrides.yaml`
+- `30-git-sync-overrides.yaml`
 
-## Enable Envoy Gateway Route/Listener
+Use the files in this directory as merge sources or sanitized examples, not as a direct substitute for the live Genestack files.
 
-Use the provided shared-host Gateway override to create/update:
-- Gateway listener on `HTTPS`/`443`
-- HTTPRoute for your published PoundCake hostname
+## What Each Example Is For
 
-1. Review and adjust gateway object names/namespace and TLS secret:
+- `poundcake-only-overrides.yaml`
+  - Minimal service-selection example for PoundCake-only installs.
+- `bakery-only-overrides.yaml`
+  - Minimal service-selection and provider-reference example for Bakery-only installs.
+- `colocated-shared-db-overrides.yaml`
+  - Merge into the active PoundCake main override when PoundCake should use the Bakery MariaDB operator server in the same environment.
+- `remote-bakery-overrides.yaml`
+  - Merge into the PoundCake-side main override when PoundCake should use a remote Bakery deployment.
+- `ghcr-pull-secret-overrides.yaml`
+  - Merge into `00-pull-secret-overrides.yaml` to reference an existing registry pull secret.
+- `gateway-shared-hostname-overrides.yaml`
+  - Merge into `10-main-overrides.yaml` when PoundCake should publish through Gateway API on a shared hostname.
+- `ha-overrides.yaml`
+  - Merge into `10-main-overrides.yaml` to scale PoundCake workers and enable a basic HA footprint.
+- `split-install/`
+  - Sanitized example of the supported Genestack split-install layout.
 
-```bash
-cat helm/overrides/gateway-shared-hostname-overrides.yaml
-```
+## Values-First Rules
 
-2. Copy into the active Genestack PoundCake override path:
+- Put runtime config such as remote Bakery, shared DB mode, gateway publication, auth provider enablement, Git sync, and `poundcakeImage.pullSecrets` in values files.
+- Use installer flags for operational behavior and optional secret creation only.
+- Bakery provider credentials should live in Kubernetes Secrets referenced by `existingSecret` values.
+- The installers own service selection:
+  - `install-poundcake-helm.sh` renders PoundCake only
+  - `install-bakery-helm.sh` renders Bakery only
 
-```bash
-sudo mkdir -p /etc/genestack/helm-configs/poundcake
-sudo cp helm/overrides/gateway-shared-hostname-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
-```
+## Common Merge Targets
 
-3. Install/upgrade:
+Use these example-to-live mappings:
 
-```bash
-./install/install-poundcake-helm.sh
-```
+- pull-secret reference fragments -> `/etc/genestack/helm-configs/poundcake/00-pull-secret-overrides.yaml`
+- Gateway, database, remote Bakery, Bakery runtime, scaling, scheduling, and resource fragments -> `/etc/genestack/helm-configs/poundcake/10-main-overrides.yaml`
+- auth provider fragments -> `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`
+- Git sync fragments -> `/etc/genestack/helm-configs/poundcake/30-git-sync-overrides.yaml`
+
+## Related Docs
+
+- [DEPLOY.md](/Users/aedan/Documents/GitHub/poundcake/docs/DEPLOY.md)
+- [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
+- [REFERENCE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REFERENCE.md)

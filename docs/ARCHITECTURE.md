@@ -93,23 +93,19 @@ stateDiagram-v2
     resolving --> canceled: manual order update\nPUT/PATCH /api/v1/orders/{order_id}
 
     note right of processing
-      Dish-terminal Bakery sync (_sync_bakery_for_terminal_dish):
-      - POST /api/v1/tickets (create if missing)
-      - PATCH /api/v1/tickets/{ticket_id} (reopen if confirmed_solved)
-      - POST /api/v1/tickets/{ticket_id}/comments (execution summary)
-      - GET /api/v1/operations/{operation_id} (poll loop)
+      Dish-terminal communication sync:
+      - PoundCake executes Bakery communication actions through /api/v1/cook/execute
+      - canonical operations are open, notify, update, and close
+      - Bakery maps those provider-neutral actions to provider-native create/comment/update/close calls
+      - asynchronous Bakery operations are polled until terminal state
     end note
 
     note right of resolving
-      Resolved-webhook Bakery sync (pre_heat):
-      - POST /api/v1/tickets/{ticket_id}/comments (clear note)
-      - POST /api/v1/tickets/{ticket_id}/close (if auto-remediation succeeded)
-      - GET /api/v1/operations/{operation_id} (poll loop)
-
-      Resolve-phase dispatch (/orders/{id}/dispatch):
-      - comms-only Bakery ingredients execute in resolving
-      - if recipe has no resolving comms ingredient, fallback comms is injected
-      - mapped Bakery endpoints + operation polling when operation_id is returned
+      Resolved-webhook communication sync:
+      - resolve-phase dispatch seeds communication-only Bakery work in resolving
+      - if a recipe has no resolving communication route, fallback comms is injected
+      - successful auto-remediation communicates on the resolved path instead of opening a firing-phase ticket
+      - final remote communication state is refreshed back onto the PoundCake order
     end note
 
     note right of complete

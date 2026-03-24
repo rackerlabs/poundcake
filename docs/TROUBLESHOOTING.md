@@ -93,7 +93,7 @@ Confirm `subsets[].addresses[]` is non-empty.
 
 ## Alertmanager webhook returns 401
 
-PoundCake requires `X-Auth-Token` for `/api/v1/webhook` when auth is enabled.
+When auth is enabled, PoundCake requires internal service authentication for `/api/v1/webhook`.
 
 Get the key:
 
@@ -101,12 +101,20 @@ Get the key:
 kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d
 ```
 
-Confirm your Alertmanager receiver sends:
+Confirm your Alertmanager receiver sends either:
+
+- `Authorization: Bearer <internal-api-key>`
+- `X-Auth-Token: <internal-api-key>`
+
+Prometheus Operator `AlertmanagerConfig` usually looks like:
 
 ```yaml
-http_config:
-  headers:
-    X-Auth-Token: "<internal-api-key>"
+httpConfig:
+  authorization:
+    type: Bearer
+    credentials:
+      name: poundcake-admin
+      key: internal-api-key
 ```
 
 ## Worker services return 401 when calling PoundCake API

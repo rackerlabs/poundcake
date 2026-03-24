@@ -1,7 +1,7 @@
 # Envoy Gateway overrides for a shared-host PoundCake deployment.
 # Creates or updates an HTTPS listener and the PoundCake HTTPRoutes.
-# Copy to /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
-# or merge into your active overrides.
+# Merge into /etc/genestack/helm-configs/poundcake/10-main-overrides.yaml
+# or the equivalent active main override file.
 
 gateway:
   enabled: true

@@ -2,6 +2,8 @@
 
 This runbook covers local development, CI/CD behavior, fork-based package publishing, and lab deployment.
 
+For the current installer, CLI, and Helm value inventory, see [REFERENCE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REFERENCE.md).
+
 ## 1) Prerequisites
 
 Required tools:
@@ -97,7 +99,7 @@ Run tests:
 make test
 ```
 
-Manual shell e2e test execution examples (compose and k8s): see `/Users/chris.breu/code/poundcake/tests/README.md` under **Run Tests By Hand**.
+Manual shell e2e test execution examples (compose and k8s): see [tests/README.md](/Users/aedan/Documents/GitHub/poundcake/tests/README.md) under **Run Tests By Hand**.
 
 Run lint/type checks:
 
@@ -119,7 +121,7 @@ Coverage output:
 
 Versioning inputs:
 
-- App version tags: Git tags like `v0.0.2` trigger release workflow.
+- App version tags: Git tags like `v2.0.169` trigger release workflow.
 - Helm chart publish version: `helm/Chart.yaml` `version:` field.
 
 Rules:
@@ -132,7 +134,7 @@ Rules:
 Tag and push:
 
 ```bash
-export RELEASE_TAG="v0.0.2"
+export RELEASE_TAG="<release-tag>"
 git tag "$RELEASE_TAG"
 git push origin "$RELEASE_TAG"
 ```
@@ -170,7 +172,7 @@ git push origin main
 Trigger chart publish (release tag in fork):
 
 ```bash
-export RELEASE_TAG="v0.0.2"
+export RELEASE_TAG="<release-tag>"
 git tag "$RELEASE_TAG"
 git push origin "$RELEASE_TAG"
 ```
@@ -327,7 +329,7 @@ Artifact verification:
 
 ```bash
 helm registry login ghcr.io -u "$HELM_REGISTRY_USERNAME" --password-stdin <<<"$HELM_REGISTRY_PASSWORD"
-helm pull oci://ghcr.io/${FORK_OWNER}/charts/poundcake --version 0.0.2
+helm pull oci://ghcr.io/${FORK_OWNER}/charts/poundcake --version <chart-version>
 ```
 
 Cluster verification after install:
