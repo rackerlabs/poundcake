@@ -249,7 +249,7 @@ Example:
   --remote-bakery-hmac-key '<shared-hmac-key>'
 ```
 
-For the full step-by-step split-environment flow, see [docs/REMOTE_BAKERY_QUICKSTART.md](../docs/REMOTE_BAKERY_QUICKSTART.md).
+For the opinionated step-by-step split-environment flow, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](../docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 
 Readiness semantics:
 - `/api/v1/live` is process-only.

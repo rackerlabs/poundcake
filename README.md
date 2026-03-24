@@ -337,7 +337,7 @@ output:
 ### Choose The Right Install Path
 
 - Kubernetes installers, same environment: install Bakery first, then install PoundCake in the same namespace with the installer wrappers.
-- Kubernetes installers, split environments: install Bakery in its own namespace or cluster, expose it at an HTTPS URL, then install PoundCake in a different namespace or cluster with `--remote-bakery-url` and a shared HMAC key. Start with [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
+- Kubernetes installers, split environments: install Bakery in its own namespace or cluster, expose it at an HTTPS URL, then install PoundCake in a different namespace or cluster with the same HMAC key. Start with [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 - Docker Compose: local development only. Use this when working on PoundCake locally, not as the primary documented operator install path.
 
 ### Unified Launchers
@@ -355,7 +355,7 @@ output:
 
 ### Helm Installers
 
-#### Split-Environment Quick Start
+#### Split-Environment Deployment
 
 Use this when Bakery will live in one environment and PoundCake in another:
 
@@ -383,7 +383,7 @@ export POUNDCAKE_NAMESPACE=poundcake
   --remote-bakery-hmac-key "${SHARED_BAKERY_HMAC_KEY}"
 ```
 
-The installers resolve chart version from `/etc/genestack/helm-chart-versions.yaml` by default. Configure image repositories/tags/digests in Helm values or override files such as `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`, not installer env vars. That first PoundCake install lets the installer create the local client secret. For the full split-environment flow, including rerun behavior and validation, see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
+The installers resolve chart version from `/etc/genestack/helm-chart-versions.yaml` by default. Configure image repositories/tags/digests in Helm values or override files such as `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`, not installer env vars. For the opinionated step-by-step deployment process, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 
 #### Installer Command Reference
 
@@ -430,7 +430,7 @@ Installer flags:
 - Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
 - Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
 - Configure image repositories/tags/digests in values or override files; the installers no longer accept image env vars for these settings
-- Split-environment quick start: see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md)
+- Split-environment deployment guide: see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
 
 Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
 
@@ -594,7 +594,7 @@ If Bakery is not co-located, configure PoundCake with an explicit external Baker
   --remote-bakery-hmac-key '<shared-hmac-key>'
 ```
 
-For a full step-by-step guide where Bakery and PoundCake run in different namespaces or clusters, see [docs/REMOTE_BAKERY_QUICKSTART.md](docs/REMOTE_BAKERY_QUICKSTART.md).
+For the opinionated step-by-step guide where Bakery and PoundCake run in different namespaces or clusters, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 
 ## Container Build Targets
 

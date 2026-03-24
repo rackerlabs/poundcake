@@ -199,7 +199,7 @@ Note:
   - `install/install-poundcake-helm.sh` installs PoundCake only.
   - Co-located flow in one namespace is Bakery first, then PoundCake.
   - For non-co-located Bakery, use `./install/install-poundcake-helm.sh --remote-bakery-url <url>`.
-  - For the full split-environment operator flow, see [REMOTE_BAKERY_QUICKSTART.md](REMOTE_BAKERY_QUICKSTART.md).
+  - For the opinionated split-environment operator flow, see [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 - `install/install-poundcake-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
   - `poundcake`
   - `stackstorm`

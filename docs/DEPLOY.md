@@ -6,7 +6,7 @@ Use that guide for enabling local superuser, Active Directory, and Auth0 togethe
 ## Choose Your Install Path
 
 - Same namespace or cluster: install Bakery first, then install PoundCake. The PoundCake installer auto-discovers the co-located Bakery URL and shared DB host.
-- Different namespaces or clusters: install Bakery in its own environment, expose it at an HTTPS URL, then install PoundCake with `--remote-bakery-url` and a shared HMAC key. Start with [REMOTE_BAKERY_QUICKSTART.md](REMOTE_BAKERY_QUICKSTART.md).
+- Different namespaces or clusters: install Bakery in its own environment, expose it at an HTTPS URL, then install PoundCake with the same HMAC key. Start with [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 - Docker Compose: local development only. It is not the primary installer path for deploying Bakery and PoundCake into Kubernetes environments.
 
 ## Split-Environment Summary
@@ -18,7 +18,7 @@ If Bakery and PoundCake will run in different namespaces or clusters, the instal
 3. Install PoundCake with `--remote-bakery-url` and the same HMAC key.
 4. Verify Bakery health, the HMAC secret in each environment, and PoundCake rollout.
 
-The full end-to-end walkthrough is in [REMOTE_BAKERY_QUICKSTART.md](REMOTE_BAKERY_QUICKSTART.md).
+The opinionated step-by-step walkthrough is in [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 
 ## Helm (Kubernetes)
 
@@ -118,7 +118,7 @@ Recommended approach for different environments:
 
 - Set `POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY` explicitly when installing Bakery.
 - Use the same key with `--remote-bakery-hmac-key` when installing PoundCake.
-- See [REMOTE_BAKERY_QUICKSTART.md](REMOTE_BAKERY_QUICKSTART.md) for the full end-to-end flow.
+- See [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md) for the opinionated split-environment flow.
 
 Notes:
 - `install-poundcake-helm.sh` does not support `--target`.
