@@ -225,6 +225,9 @@ Install model:
 - `./install/install-poundcake-helm.sh` installs PoundCake only.
 - `install-poundcake-helm.sh` no longer supports `--target`.
 - `install-bakery-helm.sh` is the supported path for Bakery provider credentials and can verify/create secret-backed config for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord.
+- The documented examples assume a Genestack host layout under `/etc/genestack/` and a pre-existing Gateway named `flex-gateway` in namespace `envoy-gateway`.
+- The live values used by the installers come from `/etc/genestack/helm-configs/poundcake/`, not from repo example files.
+- If the active provider secret is missing, `install-bakery-helm.sh` prompts interactively for the needed credentials. For `rackspace_core`, that means URL, username, and password; in non-interactive runs, pass the `--bakery-rackspace-*` flags.
 
 Co-located install order:
 1. Install Bakery first in the namespace.
@@ -233,16 +236,19 @@ Co-located install order:
 4. Enable `bakery.client.enabled=true` in values when PoundCake should talk to Bakery.
 
 External Bakery mode (not co-located):
+- Configure the Bakery release to publish an external HTTPS endpoint via `bakery.gateway.*`.
 - Set `bakery.client.enabled=true`.
 - Set `bakery.client.enforceRemoteBaseUrl=true`.
 - Set `bakery.client.baseUrl=<remote bakery url>`.
 - Set `bakery.client.auth.existingSecret=<shared bakery hmac secret>`.
+- Verify the Bakery `HTTPRoute` is accepted and `/api/v1/health` works at that published URL before installing PoundCake remote mode.
 
-Example:
+Genestack-oriented example:
 ```bash
-helm upgrade --install poundcake ./helm \
-  -f helm/overrides/poundcake-only-overrides.yaml \
-  -f helm/overrides/remote-bakery-overrides.yaml
+# Put the live values in:
+#   /etc/genestack/helm-configs/poundcake/00-pull-secret-overrides.yaml
+#   /etc/genestack/helm-configs/poundcake/10-main-overrides.yaml
+./install/install-poundcake-helm.sh
 ```
 
 For the opinionated step-by-step split-environment flow, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](../docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).

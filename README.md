@@ -362,19 +362,16 @@ Values-first install rules:
 - Use installer flags only for operational behavior and optional secret provisioning.
 - Use Kubernetes secrets plus `existingSecret` references for Git, Bakery provider credentials, and Bakery HMAC auth.
 - The PoundCake installer no longer auto-discovers or injects remote Bakery, shared DB, pack-sync, or pull-secret references.
-
-Example override files live under `helm/overrides/`:
-- `poundcake-only-overrides.yaml`
-- `bakery-only-overrides.yaml`
-- `colocated-shared-db-overrides.yaml`
-- `remote-bakery-overrides.yaml`
-- `ghcr-pull-secret-overrides.yaml`
+- These examples assume a Genestack layout under `/etc/genestack/` and an existing Gateway named `flex-gateway` in namespace `envoy-gateway`.
+- The active deployment files are the Genestack override files under `/etc/genestack/helm-configs/`.
 
 Typical same-environment flow:
 
 ```bash
-# 1) Bake the Bakery runtime config into your override file.
-cp helm/overrides/bakery-only-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+# 1) Write Bakery runtime config into the active Genestack override files.
+#    Typical live files are:
+#    /etc/genestack/helm-configs/poundcake/00-pull-secret-overrides.yaml
+#    /etc/genestack/helm-configs/poundcake/10-main-overrides.yaml
 
 # 2) Install Bakery.
 ./install/install-bakery-helm.sh \
@@ -382,11 +379,10 @@ cp helm/overrides/bakery-only-overrides.yaml /etc/genestack/helm-configs/poundca
   --bakery-rackspace-username <rackspace-core-username> \
   --bakery-rackspace-password '<password>'
 
-# 3) Update the PoundCake override file for the app release.
-cp helm/overrides/poundcake-only-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+# 3) Update the active Genestack override files for the PoundCake release.
 
-# 4) If PoundCake should use the Bakery-managed MariaDB server, merge in:
-#    helm/overrides/colocated-shared-db-overrides.yaml
+# 4) If PoundCake should use the Bakery-managed MariaDB server, set
+#    database.mode/sharedOperator in the active override file.
 
 # 5) Install PoundCake.
 ./install/install-poundcake-helm.sh
@@ -403,20 +399,23 @@ kubectl -n bakery create secret generic bakery-hmac \
   --from-literal=active-key="${SHARED_BAKERY_HMAC_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# Your Bakery override file must also publish Bakery externally through Gateway API
+# before PoundCake is pointed at the remote base URL.
 ./install/install-bakery-helm.sh \
-  --bakery-auth-secret-name bakery-hmac \
   --bakery-rackspace-url <rackspace-core-url> \
   --bakery-rackspace-username <rackspace-core-username> \
   --bakery-rackspace-password '<password>'
 
 # PoundCake environment
-kubectl -n poundcake create secret generic bakery-hmac \
+kubectl -n rackspace create secret generic bakery-hmac \
   --from-literal=active-key-id=active \
   --from-literal=active-key="${SHARED_BAKERY_HMAC_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# Merge helm/overrides/remote-bakery-overrides.yaml into your PoundCake override file
-# and set bakery.client.baseUrl to the published Bakery URL.
+# Write the remote Bakery client settings into the active Genestack override file
+# at /etc/genestack/helm-configs/poundcake/10-main-overrides.yaml and set
+# bakery.client.baseUrl to the published Bakery URL.
+# Verify https://bakery.example.com/api/v1/health before installing PoundCake.
 ./install/install-poundcake-helm.sh
 ```
 
@@ -458,6 +457,7 @@ Installer flags:
 - Bakery installer verifies or creates provider secrets for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord
 - Use `--update-bakery-secret` to rotate/update an existing Bakery provider secret
 - Bakery installer also creates/reuses a Bakery HMAC auth secret
+- If the active provider secret is missing, the Bakery installer prompts interactively for the needed credentials; for Rackspace Core that means URL, username, and password. In non-interactive runs, pass the `--bakery-rackspace-*` flags.
 - Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
 - Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
 - Configure image repositories/tags/digests in values or override files; the installers no longer accept image env vars for these settings
@@ -489,7 +489,7 @@ Installer env controls for pull-secret creation:
 Chart value controls:
 
 - Canonical: `poundcakeImage.pullSecrets`
-- Example: `helm/overrides/ghcr-pull-secret-overrides.yaml`
+- Put the live value in `/etc/genestack/helm-configs/poundcake/00-pull-secret-overrides.yaml`
 
 Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
 
@@ -625,6 +625,8 @@ If Bakery is not co-located, configure PoundCake in values:
 
 ```yaml
 bakery:
+  auth:
+    existingSecret: bakery-hmac
   client:
     enabled: true
     enforceRemoteBaseUrl: true

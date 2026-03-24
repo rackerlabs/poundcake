@@ -9,6 +9,11 @@ PoundCake supports these auth sources at the same time in one install:
 
 The local superuser is the immutable recovery account. It is always managed from the PoundCake admin secret and is not controlled through normal RBAC bindings.
 
+Dedicated provider guides:
+
+- [AUTH0.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH0.md)
+- [AZURE_AD.md](/Users/aedan/Documents/GitHub/poundcake/docs/AZURE_AD.md)
+
 ## Roles
 
 - `reader`: read-only access across the UI, CLI, and API.
@@ -27,7 +32,11 @@ The local superuser is the immutable recovery account. It is always managed from
 ## Helm Configuration
 
 Provider setup lives under `auth` in [helm/values.yaml](/Users/aedan/Documents/GitHub/poundcake/helm/values.yaml).
-In the lab, the deploy-time override file is `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`.
+In the current Genestack layout, auth settings normally live in:
+
+- `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`
+
+Secrets still live in the PoundCake namespace, usually `rackspace`.
 
 ### Local Superuser
 
@@ -99,6 +108,8 @@ Useful AD knobs:
 By default, PoundCake extracts group names from the AD `CN=...` component.
 
 ### Auth0
+
+For the step-by-step Genestack operator flow, see [AUTH0.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH0.md).
 
 PoundCake uses one Auth0 tenant with two applications:
 
@@ -178,6 +189,8 @@ For initial validation, start with an Auth0 database connection and create three
 Those are Auth0 users only. PoundCake roles are granted later through Access bindings.
 
 ### Azure AD
+
+For the step-by-step Genestack operator flow, see [AZURE_AD.md](/Users/aedan/Documents/GitHub/poundcake/docs/AZURE_AD.md).
 
 PoundCake uses one single-tenant Azure AD / Microsoft Entra app registration set:
 
@@ -274,11 +287,10 @@ auth:
       clientId: "<native-client-id>"
 ```
 
-Apply provider overrides using the normal install flow:
+Apply provider overrides using the normal install flow after updating the active auth override file:
 
 ```bash
-./install/install-poundcake-helm.sh \
-  -f /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+./install/install-poundcake-helm.sh
 ```
 
 ## Granting Access
