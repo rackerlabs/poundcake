@@ -228,17 +228,25 @@ spec:
             - sh
             - -c
             - |
+              mkdir -p /var/lib/rabbitmq
+              chown 1000:1000 /var/lib/rabbitmq
+              chmod 700 /var/lib/rabbitmq
               if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then
+                chown 1000:1000 /var/lib/rabbitmq/.erlang.cookie
                 chmod 600 /var/lib/rabbitmq/.erlang.cookie
               fi
           securityContext:
-            runAsUser: 1000
-            runAsNonRoot: true
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             capabilities:
               drop:
                 - ALL
+              add:
+                - CHOWN
+                - FOWNER
           volumeMounts:
             - name: rabbitmq-data
               mountPath: /var/lib/rabbitmq

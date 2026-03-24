@@ -87,7 +87,7 @@ tests:
           value: Recreate
         documentIndex: 3
 
-  - it: fixes rabbitmq cookie permissions before startup
+  - it: fixes rabbitmq data directory ownership before startup
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].name
@@ -96,9 +96,29 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].command[2]
           value: |
+            mkdir -p /var/lib/rabbitmq
+            chown 1000:1000 /var/lib/rabbitmq
+            chmod 700 /var/lib/rabbitmq
             if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then
+              chown 1000:1000 /var/lib/rabbitmq/.erlang.cookie
               chmod 600 /var/lib/rabbitmq/.erlang.cookie
             fi
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 0
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: false
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.add[0]
+          value: CHOWN
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.add[1]
+          value: FOWNER
         documentIndex: 2
       - isNull:
           path: spec.template.spec.securityContext.fsGroup
