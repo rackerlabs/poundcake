@@ -246,6 +246,15 @@ tests:
           pattern: '^ghcr\.io/rackerlabs/poundcake:[0-9]+\.[0-9]+\.[0-9]+$'
         documentIndex: 5
 
+  - it: defaults UI workload image tag to chart appVersion when unset
+    set:
+      uiImage.tag: ""
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^ghcr\.io/rackerlabs/poundcake-ui:[0-9]+\.[0-9]+\.[0-9]+$'
+        documentIndex: 2
+
   - it: reports API version from the deployed PoundCake image tag
     set:
       poundcakeImage.tag: "2.0.999"
