@@ -68,6 +68,42 @@ tests:
           value: 1000
         documentIndex: 1
 
+  - it: uses Recreate strategy for pvc-backed infra deployments
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+        documentIndex: 0
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+        documentIndex: 1
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+        documentIndex: 3
+
+  - it: fixes rabbitmq cookie permissions before startup
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: rabbitmq-cookie-fix
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].command[2]
+          value: |
+            if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then
+              chmod 600 /var/lib/rabbitmq/.erlang.cookie
+            fi
+        documentIndex: 2
+      - isNull:
+          path: spec.template.spec.securityContext.fsGroup
+        documentIndex: 2
+
   - it: applies configurable podSecurityContext to infra deployments
     set:
       podSecurityContext.runAsUser: 2001
@@ -80,7 +116,18 @@ tests:
       - equal:
           path: spec.template.spec.securityContext.fsGroup
           value: 2001
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 2001
         documentIndex: 2
+      - isNull:
+          path: spec.template.spec.securityContext.fsGroup
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2001
+        documentIndex: 3
 
   - it: allows overriding mongodb container security context
     set:

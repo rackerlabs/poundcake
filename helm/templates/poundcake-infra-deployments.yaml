@@ -9,6 +9,8 @@ metadata:
     {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: mariadb
@@ -106,6 +108,8 @@ metadata:
     {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: stackstorm-mongodb
@@ -199,6 +203,8 @@ metadata:
     {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: stackstorm-rabbitmq
@@ -210,11 +216,32 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-rabbitmq") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- with .Values.podSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml (omit . "fsGroup") | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
+      initContainers:
+        - name: rabbitmq-cookie-fix
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then
+                chmod 600 /var/lib/rabbitmq/.erlang.cookie
+              fi
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
       containers:
         - name: rabbitmq
           image: {{ .Values.images.rabbitmq }}
@@ -280,6 +307,8 @@ metadata:
     {{- include "poundcake.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: stackstorm-redis
