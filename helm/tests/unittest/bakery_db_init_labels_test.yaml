@@ -16,3 +16,6 @@ tests:
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: worker
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""

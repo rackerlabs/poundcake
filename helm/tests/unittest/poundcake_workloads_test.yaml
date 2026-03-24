@@ -38,6 +38,17 @@ tests:
           value: worker
         documentIndex: 4
 
+  - it: defaults poundcake workloads to worker nodes
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 5
+
   - it: applies image and interval values to key containers
     set:
       poundcakeImage.repository: custom/poundcake

@@ -134,6 +134,17 @@ tests:
           value: poundcake-bootstrap
         documentIndex: 8
 
+  - it: defaults startup hook jobs to worker nodes
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 8
+
   - it: creates API key only in stackstorm-bootstrap
     asserts:
       - notMatchRegex:

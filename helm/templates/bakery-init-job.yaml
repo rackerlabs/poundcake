@@ -31,6 +31,7 @@ spec:
       restartPolicy: OnFailure
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-for-db
           image: {{ .Values.images.busybox | quote }}

@@ -548,7 +548,10 @@
     },
     "nodeSelector": {
       "type": "object",
-      "description": "Node selector for pod placement"
+      "description": "Node selector for pod placement",
+      "default": {
+        "node-role.kubernetes.io/worker": ""
+      }
     },
     "tolerations": {
       "type": "array",

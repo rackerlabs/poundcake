@@ -177,7 +177,9 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
-nodeSelector: {}
+nodeSelector:
+  # Set to {} to disable worker-only scheduling or override with your cluster's worker label.
+  node-role.kubernetes.io/worker: ""
 
 tolerations: []
 

@@ -30,6 +30,7 @@ spec:
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage-ready
           image: {{ .Values.images.busybox }}
@@ -459,6 +460,7 @@ spec:
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}
@@ -541,6 +543,7 @@ spec:
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage10
           image: {{ .Values.images.busybox }}
@@ -637,6 +640,7 @@ spec:
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}
@@ -719,6 +723,7 @@ spec:
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}
@@ -808,6 +813,7 @@ spec:
       {{- end }}
       {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-api
           image: {{ .Values.images.busybox }}

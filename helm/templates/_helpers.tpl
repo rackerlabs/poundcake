@@ -316,8 +316,23 @@ imagePullSecrets:
   - name: {{ $secret | quote }}
   {{- else if and (kindIs "map" $secret) (hasKey $secret "name") }}
   - name: {{ index $secret "name" | quote }}
-  {{- end }}
 {{- end }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{- define "poundcake.podPlacement" -}}
+{{- with .Values.nodeSelector }}
+nodeSelector:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.affinity }}
+affinity:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.tolerations }}
+tolerations:
+  {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end -}}
 

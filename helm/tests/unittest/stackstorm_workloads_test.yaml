@@ -61,6 +61,17 @@ tests:
           value: client
         documentIndex: 7
 
+  - it: defaults stackstorm workloads to worker nodes
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 7
+
   - it: attaches the dedicated service account to stackstorm-actionrunner
     documentSelector:
       path: metadata.name

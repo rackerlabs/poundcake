@@ -53,3 +53,13 @@ tests:
           path: spec.template.spec.volumes[0].name
           value: tmp
         template: templates/bakery-deployment.yaml
+
+  - it: defaults bakery api pods to worker nodes
+    set:
+      poundcake.enabled: false
+      bakery.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        template: templates/bakery-deployment.yaml

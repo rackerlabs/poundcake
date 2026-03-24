@@ -27,6 +27,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage2
           image: {{ .Values.images.busybox }}
@@ -146,6 +147,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage2
           image: {{ .Values.images.busybox }}
@@ -237,6 +239,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage2
           image: {{ .Values.images.busybox }}
@@ -357,6 +360,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}
@@ -467,6 +471,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}
@@ -545,6 +550,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}
@@ -655,6 +661,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}
@@ -734,6 +741,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}
@@ -813,6 +821,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}
@@ -892,6 +901,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}
@@ -972,6 +982,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage5
           image: {{ .Values.images.busybox }}
@@ -1052,6 +1063,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage5
           image: {{ .Values.images.busybox }}
@@ -1135,6 +1147,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage5
           image: {{ .Values.images.busybox }}
@@ -1218,6 +1231,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
         - name: wait-stage4
           image: {{ .Values.images.busybox }}

@@ -51,3 +51,14 @@ tests:
       - isNull:
           path: spec.template.spec.volumes
         template: templates/bakery-worker-deployment.yaml
+
+  - it: defaults bakery worker pods to worker nodes
+    set:
+      poundcake.enabled: false
+      bakery.enabled: true
+      bakery.worker.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        template: templates/bakery-worker-deployment.yaml

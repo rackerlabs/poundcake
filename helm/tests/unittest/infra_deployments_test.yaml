@@ -42,6 +42,17 @@ tests:
           value: mongodb
         documentIndex: 1
 
+  - it: defaults infra deployments to worker nodes
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
+          value: ""
+        documentIndex: 3
+
   - it: renders mongodb with writable root filesystem by default
     asserts:
       - equal:

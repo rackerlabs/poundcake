@@ -23,6 +23,7 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "poundcake.bakeryServiceAccountName" . }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       containers:
       - name: bakery-gateway-listener
         image: bitnami/kubectl:latest

@@ -24,6 +24,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       containers:
         - name: mariadb
           image: {{ .Values.images.mariadb }}
@@ -120,6 +121,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       containers:
         - name: mongodb
           image: {{ .Values.images.mongodb }}
@@ -212,6 +214,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       containers:
         - name: rabbitmq
           image: {{ .Values.images.rabbitmq }}
@@ -292,6 +295,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
+      {{- include "poundcake.podPlacement" . | nindent 6 }}
       containers:
         - name: redis
           image: {{ .Values.images.redis }}
