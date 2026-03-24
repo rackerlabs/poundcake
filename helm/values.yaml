@@ -28,7 +28,6 @@ replicaCount: 1
 poundcake:
   enabled: true
 
-imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 

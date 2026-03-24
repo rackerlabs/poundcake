@@ -279,6 +279,20 @@ tests:
           value: ghcr-pull
         documentIndex: 8
 
+  - it: renders canonical pull secret on bakery db-init startup job when bakery is enabled
+    set:
+      bakery.enabled: true
+      poundcakeImage.pullSecrets[0]: ghcr-creds
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-creds
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: ghcr-creds
+        documentIndex: 9
+
   - it: supports hardened override for utility security context
     set:
       utilitySecurityContext.readOnlyRootFilesystem: true

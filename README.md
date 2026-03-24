@@ -454,16 +454,15 @@ Installer env controls for private pulls:
 
 Chart value controls:
 
-- Canonical (PoundCake-only): `poundcakeImage.pullSecrets`
-- Legacy fallback (temporary): `imagePullSecrets`
+- Canonical: `poundcakeImage.pullSecrets`
 
 Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
 
 - Ensure image pins are explicit in your values or override files (`poundcakeImage.*`, `uiImage.*`, `bakery.image.*`, `stackstormImage.*`).
 - Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
 - Ensure PAT has `read:packages` and package visibility grants access
-- Verify pull secret is on a PoundCake pod:
-  `kubectl -n <namespace> get pod <poundcake-pod> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
+- Verify pull secret is on a PoundCake or Bakery pod:
+  `kubectl -n <namespace> get pod <pod-name> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
 
 OCI chart auth fallback chain used by the installer:
 

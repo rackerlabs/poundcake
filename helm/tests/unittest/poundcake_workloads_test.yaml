@@ -467,33 +467,24 @@ tests:
 
   - it: renders poundcakeImage pull secrets on PoundCake workloads
     set:
-      poundcakeImage.pullSecrets[0]: ghcr-pull
+      poundcakeImage.pullSecrets[0]: ghcr-creds
     asserts:
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-pull
+          value: ghcr-creds
         documentIndex: 0
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-pull
+          value: ghcr-creds
         documentIndex: 2
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-pull
+          value: ghcr-creds
         documentIndex: 4
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-pull
+          value: ghcr-creds
         documentIndex: 5
-
-  - it: falls back to legacy imagePullSecrets when poundcakeImage.pullSecrets is unset
-    set:
-      imagePullSecrets[0]: ghcr-pull
-    asserts:
-      - equal:
-          path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-pull
-        documentIndex: 0
 
   - it: mounts alembic config and migration files into poundcake-api
     asserts:

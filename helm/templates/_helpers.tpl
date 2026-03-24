@@ -306,9 +306,6 @@ storageClassName: {{ .Values.persistence.storageClassName | quote }}
 
 {{- define "poundcake.poundcakePullSecrets" -}}
 {{- $pullSecrets := .Values.poundcakeImage.pullSecrets | default list -}}
-{{- if eq (len $pullSecrets) 0 -}}
-{{- $pullSecrets = .Values.imagePullSecrets | default list -}}
-{{- end -}}
 {{- if gt (len $pullSecrets) 0 }}
 imagePullSecrets:
 {{- range $secret := $pullSecrets }}

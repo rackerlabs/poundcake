@@ -21,22 +21,6 @@
       "type": "string",
       "description": "Override the full resource name"
     },
-    "imagePullSecrets": {
-      "type": "array",
-      "items": {
-        "oneOf": [
-          { "type": "string" },
-          {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-              "name": { "type": "string" }
-            }
-          }
-        ]
-      },
-      "description": "Image pull secrets for private registries"
-    },
     "poundcakeImage": {
       "type": "object",
       "required": ["repository", "tag", "pullPolicy"],
@@ -60,7 +44,7 @@
         },
         "pullSecrets": {
           "type": "array",
-          "description": "Image pull secrets for PoundCake workloads",
+          "description": "Image pull secrets for PoundCake and Bakery workloads",
           "items": {
             "oneOf": [
               { "type": "string" },

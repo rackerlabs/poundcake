@@ -253,10 +253,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       restartPolicy: OnFailure
       serviceAccountName: stackstorm-startup
       initContainers:

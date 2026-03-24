@@ -241,24 +241,19 @@ Important clarifications:
 - `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true` injects pull secret into PoundCake workloads.
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true` requires namespace and secret create/apply RBAC.
 
-### 5.2) Chart Pull-Secret Values (Canonical vs Legacy)
+### 5.2) Chart Pull-Secret Value
 
 - Canonical key: `poundcakeImage.pullSecrets`
-- Legacy fallback (temporary): `imagePullSecrets`
 
 Examples:
 
 ```bash
-# Canonical
 helm upgrade --install poundcake ./helm --set poundcakeImage.pullSecrets[0]=ghcr-creds
-
-# Legacy fallback (backward compatibility)
-helm upgrade --install poundcake ./helm --set imagePullSecrets[0]=ghcr-creds
 ```
 
 Scope:
 
-- Pull secret is applied to PoundCake deployments and `poundcake-bootstrap`.
+- Pull secret is applied to PoundCake and Bakery workloads, plus startup jobs that pull private PoundCake/Bakery images.
 - Pull secret is not applied to StackStorm/infra workloads by default.
 
 Secret ownership and readiness notes:

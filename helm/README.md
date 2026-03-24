@@ -180,21 +180,19 @@ Installer controls:
 - `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)
 
 Chart pull-secret values:
-- Canonical (PoundCake-only): `poundcakeImage.pullSecrets` (for PoundCake deployments and `poundcake-bootstrap` job)
-- Legacy fallback (temporary): `imagePullSecrets`
+- Canonical: `poundcakeImage.pullSecrets` (for PoundCake and Bakery workloads, plus startup jobs that pull private images)
 
 Examples:
 ```bash
 helm upgrade --install poundcake ./helm --set poundcakeImage.pullSecrets[0]=ghcr-creds
-helm upgrade --install poundcake ./helm --set imagePullSecrets[0]=ghcr-creds
 ```
 
 Troubleshooting GHCR 401:
 - Verify PAT includes `read:packages`
 - Verify package visibility/permissions allow the specified username
 - Verify `poundcakeImage.repository` and `poundcakeImage.tag` point to an existing image
-- Verify a PoundCake pod renders pull secret:
-  `kubectl -n <namespace> get pod <poundcake-pod> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
+- Verify a PoundCake or Bakery pod renders pull secret:
+  `kubectl -n <namespace> get pod <pod-name> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
 
 ## Configuration
 

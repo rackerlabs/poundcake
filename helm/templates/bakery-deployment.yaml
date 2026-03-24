@@ -29,10 +29,7 @@ spec:
         {{- include "poundcake.logGroupLabel" . | nindent 8 }}
         {{- include "poundcake.logRoleApi" . | nindent 8 }}
     spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "poundcake.poundcakePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "poundcake.bakeryServiceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}

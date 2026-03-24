@@ -1343,7 +1343,6 @@ fi
 
 if [[ "${IMAGE_PULL_SECRET_ENABLED}" == "true" ]]; then
   INSTALLER_SET_ARGS+=(--set-string "poundcakeImage.pullSecrets[0]=${IMAGE_PULL_SECRET_NAME}")
-  INSTALLER_SET_ARGS+=(--set-string "imagePullSecrets[0].name=${IMAGE_PULL_SECRET_NAME}")
 fi
 COMMON_HELM_ARGS=(
   --namespace "${NAMESPACE}"
