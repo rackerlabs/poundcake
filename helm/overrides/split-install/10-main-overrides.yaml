@@ -1,0 +1,48 @@
+# Split-install main override example.
+# Copy to /etc/genestack/helm-configs/poundcake/10-main-overrides.yaml
+# Bakery runs in namespace "bakery". PoundCake runs in namespace "rackspace".
+# Each release keeps its own MariaDB ownership. This file does not enable shared_operator mode.
+
+gateway:
+  enabled: true
+  gatewayName: "<gateway-name>"
+  gatewayNamespace: "<gateway-namespace>"
+  listener:
+    name: "<poundcake-gateway-listener-name>"
+    hostname: "<poundcake-public-url-host>"
+    port: 443
+    protocol: "HTTPS"
+    tlsSecretName: "<poundcake-gateway-tls-secret-name>"
+  hostnames:
+    - "<poundcake-public-url-host>"
+  listeners:
+    api:
+      pathPrefix: /api
+    ui:
+      pathPrefix: /
+
+bakery:
+  gateway:
+    enabled: true
+    gatewayName: "<gateway-name>"
+    gatewayNamespace: "<gateway-namespace>"
+    listener:
+      name: "<bakery-gateway-listener-name>"
+      hostname: "<bakery-public-url-host>"
+      port: 443
+      protocol: "HTTPS"
+      tlsSecretName: "<bakery-gateway-tls-secret-name>"
+    hostnames:
+      - "<bakery-public-url-host>"
+  config:
+    activeProvider: rackspace_core
+    ticketingDryRun: true
+  rackspaceCore:
+    existingSecret: bakery-rackspace-core
+    verifySsl: false
+  client:
+    enabled: true
+    enforceRemoteBaseUrl: true
+    baseUrl: "https://<bakery-public-url-host>"
+    auth:
+      existingSecret: bakery-hmac

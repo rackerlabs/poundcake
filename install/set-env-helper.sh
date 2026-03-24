@@ -17,7 +17,6 @@ export HELM_REGISTRY_PASSWORD="${HELM_REGISTRY_PASSWORD:-}"
 export POUNDCAKE_IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-ghcr-creds}"
 export POUNDCAKE_CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-true}"
 export POUNDCAKE_IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-noreply@local}"
-export POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="${POUNDCAKE_IMAGE_PULL_SECRET_ENABLED:-true}"
 
 # -----------------------------------------------------------------------------
 # Chart source selection
@@ -30,8 +29,6 @@ export POUNDCAKE_CHART_REPO="${POUNDCAKE_CHART_REPO:-}"
 # /etc/genestack/helm-chart-versions.yaml (key: poundcake) when present.
 export POUNDCAKE_CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
 export POUNDCAKE_VERSION_FILE="${POUNDCAKE_VERSION_FILE:-/etc/genestack/helm-chart-versions.yaml}"
-
-export POUNDCAKE_PACK_SYNC_ENDPOINT="${POUNDCAKE_PACK_SYNC_ENDPOINT:-http://poundcake-api:8000/api/v1/cook/packs}"
 
 # -----------------------------------------------------------------------------
 # Release behavior
@@ -81,7 +78,7 @@ echo "  Image refs: configure in values/override files"
 echo "  Override dir: /etc/genestack/helm-configs/poundcake"
 echo "  Namespace:   ${POUNDCAKE_NAMESPACE}"
 echo "  Release:     ${POUNDCAKE_RELEASE_NAME}"
-echo "  Pull secret: ${POUNDCAKE_IMAGE_PULL_SECRET_NAME} (enabled=${POUNDCAKE_IMAGE_PULL_SECRET_ENABLED}, create=${POUNDCAKE_CREATE_IMAGE_PULL_SECRET})"
+echo "  Pull secret management: create=${POUNDCAKE_CREATE_IMAGE_PULL_SECRET} name=${POUNDCAKE_IMAGE_PULL_SECRET_NAME}"
 echo "  Helm wait:   ${POUNDCAKE_HELM_WAIT} (allow_hook_wait=${POUNDCAKE_ALLOW_HOOK_WAIT})"
 echo "  Probe contract: /api/v1/live + /api/v1/ready"
-echo "  Pack endpoint: ${POUNDCAKE_PACK_SYNC_ENDPOINT}"
+echo "  Runtime config: configure in values/override files"

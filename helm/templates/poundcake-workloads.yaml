@@ -156,9 +156,9 @@ spec:
               value: {{ printf "/run/secrets/poundcake-git/%s" .Values.git.secretKeys.sshKey | quote }}
             {{- else }}
             - name: POUNDCAKE_GIT_TOKEN
-              value: {{ .Values.git.token | quote }}
+              value: ""
             - name: POUNDCAKE_GIT_SSH_KEY_PATH
-              value: {{ .Values.git.sshKeyPath | quote }}
+              value: ""
             {{- end }}
             - name: SERVICE_NAME
               value: api

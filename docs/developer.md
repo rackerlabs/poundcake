@@ -198,7 +198,7 @@ Note:
   - `install/install-bakery-helm.sh` installs Bakery only.
   - `install/install-poundcake-helm.sh` installs PoundCake only.
   - Co-located flow in one namespace is Bakery first, then PoundCake.
-  - For non-co-located Bakery, use `./install/install-poundcake-helm.sh --remote-bakery-url <url>`.
+  - For non-co-located Bakery, put remote Bakery settings in override files.
   - For the opinionated split-environment operator flow, see [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 - `install/install-poundcake-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
   - `poundcake`
@@ -231,14 +231,12 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `ghcr-creds` | Optional | Pull secret name created/reused by installer | Override when the target namespace uses a different secret name |
 | `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `true` | Optional | Auto-create/apply docker-registry secret | Disable if secret is pre-provisioned |
 | `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` | `noreply@local` | Optional | Email field used when creating docker-registry secret | Set if your policy requires real address |
-| `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` | `true` | Optional | Inject pull secret into PoundCake workloads | Set `false` only when all images are public or pull handled elsewhere |
-| `POUNDCAKE_PACK_SYNC_ENDPOINT` | `http://poundcake-api:8000/api/v1/cook/packs` | Optional | Canonical StackStorm pack-sync endpoint | Override only for explicit compatibility migrations |
 
 Important clarifications:
 
 - `HELM_REGISTRY_PASSWORD` must have `read:packages` for private GHCR pulls.
 - Image repositories/tags/digests are configured in Helm values or override files, not installer env vars.
-- `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true` injects pull secret into PoundCake workloads.
+- Pull-secret references are configured in values via `poundcakeImage.pullSecrets`.
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET=true` requires namespace and secret create/apply RBAC.
 
 ### 5.2) Chart Pull-Secret Value
@@ -305,7 +303,7 @@ Kubernetes/Helm:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `failed to fetch anonymous token ... 401 Unauthorized` | Pull secret not rendered on PoundCake pod spec, or bad credentials | Ensure `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true`; verify pod `imagePullSecrets`; validate PAT scope (`read:packages`) |
+| `failed to fetch anonymous token ... 401 Unauthorized` | Pull secret not rendered on PoundCake pod spec, or bad credentials | Ensure your values set `poundcakeImage.pullSecrets`; verify pod `imagePullSecrets`; validate PAT scope (`read:packages`) |
 | Pull secret exists but image pull still fails | GHCR package visibility/access mismatch for pulling principal | Grant package read access to user/org/token principal used in secret |
 | Installer fails creating secret | Namespace or RBAC does not permit secret create/apply | Ensure namespace exists or allow installer namespace creation and secret create/apply RBAC |
 
@@ -314,7 +312,7 @@ Kubernetes/Helm:
 Installer safeguards to expect:
 
 - `--wait`/`--atomic` deadlock guard: installer fails fast unless `POUNDCAKE_ALLOW_HOOK_WAIT=true` because startup jobs are hook-driven.
-- Pull-secret preflight render check: installer validates PoundCake manifests include `imagePullSecrets` when pull-secret injection is enabled.
+- Runtime config such as remote Bakery, shared DB mode, and pull-secret references must come from values or override files.
 
 ## 7) Observability/Verification
 

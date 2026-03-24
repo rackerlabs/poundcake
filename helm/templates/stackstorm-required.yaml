@@ -29,4 +29,14 @@
 {{- if .Values.stackstorm.adminPassword -}}
 {{- fail "stackstorm.adminPassword is disabled. Use stackstorm.adminPasswordSecret for secret-based admin password injection." -}}
 {{- end -}}
+
+{{- if .Values.git.token -}}
+{{- fail "git.token is disabled. Use git.existingSecret for secret-based Git credential injection." -}}
+{{- end -}}
+{{- if .Values.git.sshKeyPath -}}
+{{- fail "git.sshKeyPath is disabled. Use git.existingSecret for secret-based Git credential injection." -}}
+{{- end -}}
+{{- if and .Values.git.enabled (not .Values.git.existingSecret) -}}
+{{- fail "git.existingSecret is required when git.enabled=true." -}}
+{{- end -}}
 {{- end }}

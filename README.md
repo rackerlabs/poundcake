@@ -336,8 +336,8 @@ output:
 
 ### Choose The Right Install Path
 
-- Kubernetes installers, same environment: install Bakery first, then install PoundCake in the same namespace with the installer wrappers.
-- Kubernetes installers, split environments: install Bakery in its own namespace or cluster, expose it at an HTTPS URL, then install PoundCake in a different namespace or cluster with the same HMAC key. Start with [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
+- Kubernetes installers, same environment: install Bakery first, then install PoundCake in the same namespace.
+- Kubernetes installers, split environments: install Bakery in its own namespace or cluster, expose it at an HTTPS URL, then install PoundCake in a different namespace or cluster. Configure the remote Bakery URL and auth secret in override files. Start with [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 - Docker Compose: local development only. Use this when working on PoundCake locally, not as the primary documented operator install path.
 
 ### Unified Launchers
@@ -355,35 +355,72 @@ output:
 
 ### Helm Installers
 
-#### Split-Environment Deployment
+The installers resolve chart version from `/etc/genestack/helm-chart-versions.yaml` by default.
 
-Use this when Bakery will live in one environment and PoundCake in another:
+Values-first install rules:
+- Put non-secret runtime settings in `values.yaml` or override files.
+- Use installer flags only for operational behavior and optional secret provisioning.
+- Use Kubernetes secrets plus `existingSecret` references for Git, Bakery provider credentials, and Bakery HMAC auth.
+- The PoundCake installer no longer auto-discovers or injects remote Bakery, shared DB, pack-sync, or pull-secret references.
+
+Example override files live under `helm/overrides/`:
+- `poundcake-only-overrides.yaml`
+- `bakery-only-overrides.yaml`
+- `colocated-shared-db-overrides.yaml`
+- `remote-bakery-overrides.yaml`
+- `ghcr-pull-secret-overrides.yaml`
+
+Typical same-environment flow:
 
 ```bash
-# Generate a shared HMAC key once and reuse it in both environments
+# 1) Bake the Bakery runtime config into your override file.
+cp helm/overrides/bakery-only-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+
+# 2) Install Bakery.
+./install/install-bakery-helm.sh \
+  --bakery-rackspace-url <rackspace-core-url> \
+  --bakery-rackspace-username <rackspace-core-username> \
+  --bakery-rackspace-password '<password>'
+
+# 3) Update the PoundCake override file for the app release.
+cp helm/overrides/poundcake-only-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+
+# 4) If PoundCake should use the Bakery-managed MariaDB server, merge in:
+#    helm/overrides/colocated-shared-db-overrides.yaml
+
+# 5) Install PoundCake.
+./install/install-poundcake-helm.sh
+```
+
+Typical split-environment flow:
+
+```bash
 export SHARED_BAKERY_HMAC_KEY="$(openssl rand -base64 32)"
 
 # Bakery environment
-export POUNDCAKE_NAMESPACE=bakery
-export POUNDCAKE_BAKERY_HMAC_ACTIVE_KEY="${SHARED_BAKERY_HMAC_KEY}"
+kubectl -n bakery create secret generic bakery-hmac \
+  --from-literal=active-key-id=active \
+  --from-literal=active-key="${SHARED_BAKERY_HMAC_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 ./install/install-bakery-helm.sh \
   --bakery-auth-secret-name bakery-hmac \
-  --bakery-rackspace-url https://ws.core.rackspace.com \
-  --bakery-rackspace-username poundcake \
+  --bakery-rackspace-url <rackspace-core-url> \
+  --bakery-rackspace-username <rackspace-core-username> \
   --bakery-rackspace-password '<password>'
 
 # PoundCake environment
-export POUNDCAKE_NAMESPACE=poundcake
+kubectl -n poundcake create secret generic bakery-hmac \
+  --from-literal=active-key-id=active \
+  --from-literal=active-key="${SHARED_BAKERY_HMAC_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-./install/install-poundcake-helm.sh \
-  --remote-bakery-url https://bakery.example.com \
-  --remote-bakery-auth-mode hmac \
-  --remote-bakery-auth-secret bakery-hmac \
-  --remote-bakery-hmac-key "${SHARED_BAKERY_HMAC_KEY}"
+# Merge helm/overrides/remote-bakery-overrides.yaml into your PoundCake override file
+# and set bakery.client.baseUrl to the published Bakery URL.
+./install/install-poundcake-helm.sh
 ```
 
-The installers resolve chart version from `/etc/genestack/helm-chart-versions.yaml` by default. Configure image repositories/tags/digests in Helm values or override files such as `/etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml`, not installer env vars. For the opinionated step-by-step deployment process, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
+For the opinionated split-environment walkthrough, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 
 #### Installer Command Reference
 
@@ -402,8 +439,8 @@ The installers resolve chart version from `/etc/genestack/helm-chart-versions.ya
 
 # Bakery secret bootstrap from CLI credentials (non-interactive)
 ./helm/bin/install-bakery.sh \
-  --bakery-rackspace-url https://ws.core.rackspace.com \
-  --bakery-rackspace-username poundcake \
+  --bakery-rackspace-url <rackspace-core-url> \
+  --bakery-rackspace-username <rackspace-core-username> \
   --bakery-rackspace-password '<password>'
 
 # Add chat/webhook routes using the same installer-managed secret flow
@@ -418,21 +455,15 @@ Installer flags:
 - `--validate` runs `helm lint` + `helm template --debug` before install
 - `--skip-preflight` skips dependency and cluster connectivity checks
 - `--rotate-secrets` deletes known chart-managed secrets before install
-- `--remote-bakery-url` configures PoundCake to use an external/co-located Bakery endpoint
-- `--remote-bakery-auth-secret` sets the PoundCake Bakery HMAC client secret for external Bakery endpoints
-- `--remote-bakery-hmac-key` lets the PoundCake installer create that client secret when it is missing
-- `--remote-bakery-hmac-key-id` sets the created secret key id (default: `active`)
-- `--shared-db-mode <auto|on|off>` and `--shared-db-server-name` control shared MariaDB mode for PoundCake
-- Bakery installer verifies or creates provider secrets for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord, then wires `bakery.<provider>.existingSecret` automatically when those secrets exist
+- Bakery installer verifies or creates provider secrets for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord
 - Use `--update-bakery-secret` to rotate/update an existing Bakery provider secret
-- Bakery installer also creates/reuses a Bakery HMAC auth secret and wires it into Bakery API/client auth values
-- PoundCake installer auto-discovers the colocated Bakery HMAC secret; external remote Bakery can use either an existing `--remote-bakery-auth-secret` or `--remote-bakery-hmac-key` so the installer creates one
+- Bakery installer also creates/reuses a Bakery HMAC auth secret
 - Rackspace Core credentials/URL via `values.yaml` are disabled for Bakery; use `bakery.rackspaceCore.existingSecret` (installer-managed secret) instead
 - Bakery-only install deploys Bakery API + Bakery worker + Bakery DB init job
 - Configure image repositories/tags/digests in values or override files; the installers no longer accept image env vars for these settings
 - Split-environment deployment guide: see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
 
-Detailed Helm startup gate flow: see `/Users/chris.breu/code/poundcake/helm/README.md` under **Startup Order**.
+Detailed Helm startup gate flow: see `helm/README.md` under **Startup Order**.
 
 ### Helm Install With Private GHCR Images
 
@@ -442,25 +473,30 @@ export HELM_REGISTRY_USERNAME="<gh-username>"
 export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
 # Optional OCI chart source override; helper defaults to local chart install (./helm)
 # export POUNDCAKE_CHART_REPO="oci://ghcr.io/<owner>/charts/poundcake"
+# Put the pull-secret reference in your override file:
+# poundcakeImage:
+#   pullSecrets:
+#     - ghcr-creds
 ./install/install-poundcake-helm.sh
 ```
 
-Installer env controls for private pulls:
+Installer env controls for pull-secret creation:
 
 - `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-creds`)
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` (default: `true`)
 - `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` (default: `noreply@local`)
-- `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)
 
 Chart value controls:
 
 - Canonical: `poundcakeImage.pullSecrets`
+- Example: `helm/overrides/ghcr-pull-secret-overrides.yaml`
 
 Troubleshooting `ErrImagePull` / GHCR `401 Unauthorized`:
 
 - Ensure image pins are explicit in your values or override files (`poundcakeImage.*`, `uiImage.*`, `bakery.image.*`, `stackstormImage.*`).
 - Ensure `HELM_REGISTRY_USERNAME`/`HELM_REGISTRY_PASSWORD` are set
 - Ensure PAT has `read:packages` and package visibility grants access
+- Verify your override file sets `poundcakeImage.pullSecrets`
 - Verify pull secret is on a PoundCake or Bakery pod:
   `kubectl -n <namespace> get pod <pod-name> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
 
@@ -576,8 +612,8 @@ POUNDCAKE_STACKSTORM_URL=http://stackstorm-api:9101
 ## API/Bakery Database Separation
 
 PoundCake API and Bakery must keep separate database ownership:
-- API uses the PoundCake migration stream in `/Users/chris.breu/code/poundcake/alembic`.
-- Bakery uses the Bakery migration stream in `/Users/chris.breu/code/poundcake/bakery/alembic`.
+- API uses the PoundCake migration stream in `alembic/`.
+- Bakery uses the Bakery migration stream in `bakery/alembic/`.
 
 For same-namespace co-location, deploy in this order:
 1. `./install/install-bakery-helm.sh`
@@ -585,12 +621,16 @@ For same-namespace co-location, deploy in this order:
 
 In co-located deployments, both services may share the same MariaDB server endpoint, but they must use separate database/schema ownership and separate credentials.
 
-If Bakery is not co-located, configure PoundCake with an explicit external Bakery URL:
+If Bakery is not co-located, configure PoundCake in values:
 
-```bash
-./install/install-poundcake-helm.sh \
-  --remote-bakery-url https://bakery.example.com \
-  --remote-bakery-hmac-key '<shared-hmac-key>'
+```yaml
+bakery:
+  client:
+    enabled: true
+    enforceRemoteBaseUrl: true
+    baseUrl: https://bakery.example.com
+    auth:
+      existingSecret: bakery-hmac
 ```
 
 For the opinionated step-by-step guide where Bakery and PoundCake run in different namespaces or clusters, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
@@ -601,7 +641,7 @@ The root Dockerfile publishes separate runtime targets:
 - `api-runtime` -> `ghcr.io/.../poundcake`
 - `bakery-runtime` -> `ghcr.io/.../poundcake-bakery`
 
-UI remains built from `/Users/chris.breu/code/poundcake/ui/Dockerfile` and published as `ghcr.io/.../poundcake-ui`.
+UI remains built from `ui/Dockerfile` and published as `ghcr.io/.../poundcake-ui`.
 
 ## Alertmanager Integration (Kubernetes)
 

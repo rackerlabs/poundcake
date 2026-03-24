@@ -1,0 +1,13 @@
+# Bakery-only example.
+# Use with ./install/install-bakery-helm.sh
+
+poundcake:
+  enabled: false
+
+bakery:
+  enabled: true
+  config:
+    activeProvider: rackspace_core
+    ticketingDryRun: true
+  rackspaceCore:
+    existingSecret: bakery-rackspace-core

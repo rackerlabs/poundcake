@@ -1,6 +1,5 @@
 suite: bakery-worker-labels
 templates:
-  - templates/bakery-secret.yaml
   - templates/bakery-worker-deployment.yaml
 tests:
   - it: applies poundcake log labels to bakery worker pod template

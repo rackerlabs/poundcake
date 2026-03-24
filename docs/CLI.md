@@ -106,10 +106,10 @@ Inline JSON input is also supported when you only want to supply a few steps or 
 poundcake workflows create \
   --name "Filesystem response" \
   --step-json '{"ingredient_id":42,"run_phase":"firing"}' \
-  --route-json '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"1781738"}}'
+  --route-json '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"<rackspace-account-number>"}}'
 
 poundcake global-communications set \
-  --route-json '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"1781738"}}' \
+  --route-json '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"<rackspace-account-number>"}}' \
   --route-json '{"label":"Discord","execution_target":"discord","destination_target":"ops-alerts"}'
 ```
 

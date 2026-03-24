@@ -33,6 +33,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False),
+        sa.Column("clear_timeout_sec", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("deleted", sa.Boolean(), nullable=False),
@@ -47,6 +48,7 @@ def upgrade() -> None:
         "ingredients",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("execution_target", sa.String(length=100), nullable=False),
+        sa.Column("destination_target", sa.String(length=255), nullable=False, server_default=""),
         sa.Column("task_key_template", sa.String(length=255), nullable=False),
         sa.Column("execution_id", sa.String(length=100), nullable=True),
         sa.Column("execution_payload", mysql.JSON(), nullable=True),
@@ -77,7 +79,7 @@ def upgrade() -> None:
     op.create_index(
         "ux_ingredients_engine_target",
         "ingredients",
-        ["execution_engine", "execution_target"],
+        ["execution_engine", "execution_target", "destination_target", "task_key_template"],
         unique=True,
     )
 
@@ -93,6 +95,7 @@ def upgrade() -> None:
         sa.Column("depth", sa.Integer(), nullable=False),
         sa.Column("execution_parameters_override", mysql.JSON(), nullable=True),
         sa.Column("run_phase", sa.String(length=16), nullable=False, server_default="both"),
+        sa.Column("run_condition", sa.String(length=40), nullable=False),
         sa.ForeignKeyConstraint(["ingredient_id"], ["ingredients.id"]),
         sa.ForeignKeyConstraint(["recipe_id"], ["recipes.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -116,6 +119,11 @@ def upgrade() -> None:
             alert_status VARCHAR(50) NOT NULL,
             processing_status VARCHAR(50) NOT NULL,
             is_active BOOLEAN NOT NULL,
+            remediation_outcome VARCHAR(16) NOT NULL DEFAULT 'pending',
+            clear_timeout_sec INTEGER,
+            clear_deadline_at DATETIME,
+            clear_timed_out_at DATETIME,
+            auto_close_eligible BOOLEAN NOT NULL DEFAULT 0,
             alert_group_name VARCHAR(255) NOT NULL,
             severity VARCHAR(50),
             instance VARCHAR(255),
@@ -145,6 +153,30 @@ def upgrade() -> None:
         op.f("ix_orders_processing_status"), "orders", ["processing_status"], unique=False
     )
     op.create_index(op.f("ix_orders_is_active"), "orders", ["is_active"], unique=False)
+    op.create_index(
+        "ix_orders_remediation_outcome",
+        "orders",
+        ["remediation_outcome"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_orders_clear_deadline_at",
+        "orders",
+        ["clear_deadline_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_orders_clear_timed_out_at",
+        "orders",
+        ["clear_timed_out_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_orders_auto_close_eligible",
+        "orders",
+        ["auto_close_eligible"],
+        unique=False,
+    )
 
     # Create unique index on the generated column
     # Since it's NULL for inactive orders, multiple inactive orders can have the same fingerprint
@@ -220,6 +252,7 @@ def upgrade() -> None:
         sa.Column("task_key", sa.String(length=255), nullable=True),
         sa.Column("execution_engine", sa.String(length=50), nullable=True),
         sa.Column("execution_target", sa.String(length=255), nullable=True),
+        sa.Column("destination_target", sa.String(length=255), nullable=True),
         sa.Column("execution_ref", sa.String(length=100), nullable=True),
         sa.Column("execution_payload", mysql.JSON(), nullable=True),
         sa.Column("execution_parameters", mysql.JSON(), nullable=True),
@@ -272,6 +305,62 @@ def upgrade() -> None:
         "dish_ingredients",
         ["dish_id", "recipe_ingredient_id_norm", "task_key_norm"],
         unique=True,
+    )
+
+    op.create_table(
+        "order_communications",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("order_id", sa.Integer(), nullable=False),
+        sa.Column("execution_target", sa.String(length=100), nullable=False),
+        sa.Column("destination_target", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column("bakery_ticket_id", sa.String(length=36), nullable=True),
+        sa.Column("bakery_operation_id", sa.String(length=36), nullable=True),
+        sa.Column("lifecycle_state", sa.String(length=32), nullable=False, server_default="pending"),
+        sa.Column("remote_state", sa.String(length=64), nullable=True),
+        sa.Column("writable", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("reopenable", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("last_error", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["order_id"], ["orders.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "order_id",
+            "execution_target",
+            "destination_target",
+            name="ux_order_communications_route",
+        ),
+    )
+    op.create_index("ix_order_communications_id", "order_communications", ["id"], unique=False)
+    op.create_index(
+        "ix_order_communications_order_id",
+        "order_communications",
+        ["order_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_order_communications_execution_target",
+        "order_communications",
+        ["execution_target"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_order_communications_bakery_ticket_id",
+        "order_communications",
+        ["bakery_ticket_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_order_communications_bakery_operation_id",
+        "order_communications",
+        ["bakery_operation_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_order_communications_remote_state",
+        "order_communications",
+        ["remote_state"],
+        unique=False,
     )
 
     # Alert suppressions
@@ -628,6 +717,14 @@ def downgrade() -> None:
     op.drop_index("ix_dish_ingredients_dish_id", table_name="dish_ingredients")
     op.drop_table("dish_ingredients")
 
+    op.drop_index("ix_order_communications_remote_state", table_name="order_communications")
+    op.drop_index("ix_order_communications_bakery_operation_id", table_name="order_communications")
+    op.drop_index("ix_order_communications_bakery_ticket_id", table_name="order_communications")
+    op.drop_index("ix_order_communications_execution_target", table_name="order_communications")
+    op.drop_index("ix_order_communications_order_id", table_name="order_communications")
+    op.drop_index("ix_order_communications_id", table_name="order_communications")
+    op.drop_table("order_communications")
+
     op.drop_index(op.f("ix_dishes_run_phase"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_processing_status"), table_name="dishes")
     op.drop_index(op.f("ix_dishes_execution_ref"), table_name="dishes")
@@ -635,6 +732,10 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_dishes_id"), table_name="dishes")
     op.drop_table("dishes")
 
+    op.drop_index("ix_orders_auto_close_eligible", table_name="orders")
+    op.drop_index("ix_orders_clear_timed_out_at", table_name="orders")
+    op.drop_index("ix_orders_clear_deadline_at", table_name="orders")
+    op.drop_index("ix_orders_remediation_outcome", table_name="orders")
     op.drop_index(op.f("ix_orders_bakery_permanent_failure"), table_name="orders")
     op.drop_index(op.f("ix_orders_bakery_ticket_state"), table_name="orders")
     op.drop_index(op.f("ix_orders_bakery_operation_id"), table_name="orders")

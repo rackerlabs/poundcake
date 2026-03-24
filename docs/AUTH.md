@@ -120,7 +120,7 @@ auth:
     ui:
       enabled: true
       clientId: "<regular-web-client-id>"
-      callbackUrl: "https://poundcake.api.ord.cloudmunchers.net/api/v1/auth/oidc/callback"
+      callbackUrl: "https://poundcake.example.com/api/v1/auth/oidc/callback"
       existingSecret: "poundcake-auth0-ui"
     cli:
       enabled: true
@@ -154,22 +154,22 @@ Optional Auth0 shared settings:
 
 If `ui.callbackUrl` is blank, PoundCake derives the OIDC callback URL from the incoming request host.
 
-### Auth0 App Settings For The Lab
+### Example Auth0 App Settings
 
-For the lab host `https://poundcake.api.ord.cloudmunchers.net`:
+For a PoundCake host such as `https://poundcake.example.com`:
 
 - UI Auth0 app type: `Regular Web Application`
 - CLI Auth0 app type: `Native Application`
 - UI Allowed Callback URLs:
-  - `https://poundcake.api.ord.cloudmunchers.net/api/v1/auth/oidc/callback`
+  - `https://poundcake.example.com/api/v1/auth/oidc/callback`
 - UI Allowed Logout URLs:
-  - `https://poundcake.api.ord.cloudmunchers.net/`
+  - `https://poundcake.example.com/`
 - UI Allowed Web Origins:
-  - `https://poundcake.api.ord.cloudmunchers.net`
+  - `https://poundcake.example.com`
 - UI Allowed Origins (CORS):
-  - `https://poundcake.api.ord.cloudmunchers.net`
+  - `https://poundcake.example.com`
 
-For first lab validation, start with an Auth0 database connection and create three test users:
+For initial validation, start with an Auth0 database connection and create three test users:
 
 - `reader`
 - `operator`
@@ -253,7 +253,7 @@ auth:
     ui:
       enabled: true
       clientId: "<regular-web-client-id>"
-      callbackUrl: "https://poundcake.api.ord.cloudmunchers.net/api/v1/auth/oidc/callback"
+      callbackUrl: "https://poundcake.example.com/api/v1/auth/oidc/callback"
       existingSecret: "poundcake-auth0-ui"
     cli:
       enabled: true

@@ -119,7 +119,7 @@ Tune cadence and format with `startupHooks.gateLogging.enabled`, `startupHooks.g
 
 ### Installer Validation and Preflight
 
-`/Users/chris.breu/code/poundcake/helm/bin/install-poundcake.sh` supports installer-specific flags:
+`helm/bin/install-poundcake.sh` supports installer-specific flags:
 
 - `--validate`: run `helm lint` and `helm template --debug` before install
 - `--skip-preflight`: skip dependency/cluster connectivity checks
@@ -156,12 +156,13 @@ kubectl -n rackspace logs -f -l 'poundcake.io/log-group in (poundcake,stackstorm
 
 ### Private Registry Image Pulls (GHCR)
 
-If your PoundCake image is private, use the installer env vars to create and wire a pull secret automatically:
+If your PoundCake image is private, keep the pull-secret reference in values and optionally use the installer to create the secret object:
 
 ```bash
 source ./install/set-env-helper.sh
 export HELM_REGISTRY_USERNAME="<gh-username>"
 export HELM_REGISTRY_PASSWORD="<github_pat_with_read_packages>"
+# Also set poundcakeImage.pullSecrets in your values or override file.
 ./install/install-poundcake-helm.sh
 ```
 
@@ -177,7 +178,6 @@ Installer controls:
 - `POUNDCAKE_IMAGE_PULL_SECRET_NAME` (default: `ghcr-creds`)
 - `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` (default: `true`)
 - `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` (default: `noreply@local`)
-- `POUNDCAKE_IMAGE_PULL_SECRET_ENABLED` (default: `true`)
 
 Chart pull-secret values:
 - Canonical: `poundcakeImage.pullSecrets` (for PoundCake and Bakery workloads, plus startup jobs that pull private images)
@@ -191,6 +191,7 @@ Troubleshooting GHCR 401:
 - Verify PAT includes `read:packages`
 - Verify package visibility/permissions allow the specified username
 - Verify `poundcakeImage.repository` and `poundcakeImage.tag` point to an existing image
+- Verify your values file sets `poundcakeImage.pullSecrets`
 - Verify a PoundCake or Bakery pod renders pull secret:
   `kubectl -n <namespace> get pod <pod-name> -o jsonpath='{.spec.imagePullSecrets[*].name}'`
 
@@ -223,28 +224,25 @@ Install model:
 - `./install/install-bakery-helm.sh` installs Bakery only.
 - `./install/install-poundcake-helm.sh` installs PoundCake only.
 - `install-poundcake-helm.sh` no longer supports `--target`.
-- `install-bakery-helm.sh` is the supported path for Bakery provider credentials and can verify/create secret-backed config for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord, wiring `bakery.<provider>.existingSecret` automatically.
+- `install-bakery-helm.sh` is the supported path for Bakery provider credentials and can verify/create secret-backed config for Rackspace Core, ServiceNow, Jira, GitHub, PagerDuty, Teams, and Discord.
 
 Co-located install order:
 1. Install Bakery first in the namespace.
 2. Install PoundCake second in the same namespace.
-3. PoundCake installer auto-discovers Bakery URL and shared DB host, then enables:
-`bakery.client.enabled=true`, `database.mode=shared_operator`, `database.sharedOperator.serverName=<discovered>`.
-4. You can force explicit shared DB mode with `--shared-db-mode on --shared-db-server-name <server>`.
+3. Configure shared DB mode in values if PoundCake should reuse the Bakery-managed MariaDB server.
+4. Enable `bakery.client.enabled=true` in values when PoundCake should talk to Bakery.
 
 External Bakery mode (not co-located):
-- Set `--remote-bakery-url` / `POUNDCAKE_REMOTE_BAKERY_URL`.
-- Optional: `--remote-bakery-enabled`, `--remote-bakery-auth-mode`, `--remote-bakery-auth-secret`.
-- For first-time split-environment installs, prefer `--remote-bakery-hmac-key` so the PoundCake installer can create the local client auth secret.
-- If no Bakery URL is explicit and no Bakery is discovered in-namespace, PoundCake installer sets `bakery.client.enabled=false`.
+- Set `bakery.client.enabled=true`.
+- Set `bakery.client.enforceRemoteBaseUrl=true`.
+- Set `bakery.client.baseUrl=<remote bakery url>`.
+- Set `bakery.client.auth.existingSecret=<shared bakery hmac secret>`.
 
 Example:
 ```bash
-./install/install-poundcake-helm.sh \
-  --remote-bakery-url https://bakery.example.com \
-  --remote-bakery-auth-mode hmac \
-  --remote-bakery-auth-secret external-bakery-hmac \
-  --remote-bakery-hmac-key '<shared-hmac-key>'
+helm upgrade --install poundcake ./helm \
+  -f helm/overrides/poundcake-only-overrides.yaml \
+  -f helm/overrides/remote-bakery-overrides.yaml
 ```
 
 For the opinionated step-by-step split-environment flow, see [docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](../docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
@@ -332,25 +330,25 @@ internal container port.
 gateway:
   enabled: true
   className: envoyproxy
-  name: poundcake-gateway
+  name: <gateway-resource-name>
   listeners:
     api:
       enabled: true
-      hostname: poundcake.api.ord.cloudmunchers.net
+      hostname: poundcake.example.com
       port: 443
       protocol: HTTPS
       tls:
         mode: Terminate
-        secretName: poundcake-gw-tls-secret
+        secretName: <gateway-tls-secret-name>
       pathPrefix: /api
     ui:
       enabled: true
-      hostname: poundcake.api.ord.cloudmunchers.net
+      hostname: poundcake.example.com
       port: 443
       protocol: HTTPS
       tls:
         mode: Terminate
-        secretName: poundcake-gw-tls-secret
+        secretName: <gateway-tls-secret-name>
       pathPrefix: /
 ```
 
@@ -734,7 +732,7 @@ Hook cleanup behavior:
 - Successful startup jobs are removed automatically after completion.
 - Failed startup jobs are retained by default for troubleshooting.
 
-Docker Compose gate flow is documented in the top-level README Docker section (`/Users/chris.breu/code/poundcake/README.md`).
+Docker Compose gate flow is documented in the top-level README Docker section.
 
 One-time cleanup for existing completed startup jobs:
 

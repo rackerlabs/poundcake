@@ -32,6 +32,9 @@ assert_not_contains() {
   if rg -Fq -- "${needle}" "${file}"; then
     echo "Did not expect to find: ${needle}" >&2
     echo "In file: ${file}" >&2
+    echo "--- file contents ---" >&2
+    cat "${file}" >&2 || true
+    echo "---------------------" >&2
     fail "unexpected content present"
   fi
 }
@@ -53,7 +56,6 @@ assert_contains "https://github.com/rabbitmq/cluster-operator/releases/download/
 assert_contains "https://github.com/rabbitmq/messaging-topology-operator/releases/download/v1.15.0/messaging-topology-operator-with-certmanager.yaml" "${POUNDCAKE_INSTALLER}"
 assert_contains "https://mongodb.github.io/helm-charts" "${POUNDCAKE_INSTALLER}"
 
-# Build mock commands so tests run without a live cluster.
 TMP_DIR="$(mktemp -d)"
 MOCK_BIN="${TMP_DIR}/mockbin"
 mkdir -p "${MOCK_BIN}"
@@ -64,8 +66,7 @@ set -euo pipefail
 : "${TEST_HELM_LOG:?missing TEST_HELM_LOG}"
 printf '%s\n' "$*" >> "${TEST_HELM_LOG}"
 
-cmd="${1:-}"
-case "${cmd}" in
+case "${1:-}" in
   template)
     cat <<'YAML_EOF'
 apiVersion: apps/v1
@@ -83,9 +84,6 @@ spec:
           livenessProbe:
             httpGet:
               path: /api/v1/health
-          env:
-            - name: POUNDCAKE_PACK_SYNC_ENDPOINT
-              value: http://poundcake-api:8000/api/v1/cook/packs
 YAML_EOF
     ;;
   lint|upgrade|registry|pull)
@@ -110,6 +108,9 @@ if [[ "${1:-}" == "get" && "${2:-}" == "namespace" ]]; then
   exit 1
 fi
 if [[ "${1:-}" == "create" && "${2:-}" == "namespace" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "get" && "${2:-}" == "crd" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "secret" ]]; then
@@ -148,10 +149,6 @@ if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "secret" ]]; then
   fi
   exit 1
 fi
-if [[ "${1:-}" == "get" && "${2:-}" == "crd" ]]; then
-  # Default to present so operator checks can pass in verify/skip tests.
-  exit 0
-fi
 if [[ "${1:-}" == "-n" && "${3:-}" == "create" && "${4:-}" == "secret" ]]; then
   secret_name="${6:-mock}"
   printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n' "${secret_name}"
@@ -174,50 +171,6 @@ if [[ "${1:-}" == "apply" && "${2:-}" == "-f" && "${3:-}" == "-" ]]; then
   exit 0
 fi
 
-# Bakery service discovery list call
-if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "service" && "${5:-}" == "-l" ]]; then
-  case "${MOCK_BAKERY_DISCOVERY:-none}" in
-    single)
-      echo "bakery"
-      ;;
-    ambiguous)
-      echo "bakery-a"
-      echo "bakery-b"
-      ;;
-    *)
-      ;;
-  esac
-  exit 0
-fi
-
-# Bakery deployment discovery list call
-if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "deployment" && "${5:-}" == "-l" ]]; then
-  case "${MOCK_BAKERY_DISCOVERY:-none}" in
-    single)
-      echo "bakery"
-      ;;
-    ambiguous)
-      echo "bakery-a"
-      echo "bakery-b"
-      ;;
-    *)
-      ;;
-  esac
-  exit 0
-fi
-
-# Individual bakery service port lookup
-if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "service" && "${5:-}" != "-l" ]]; then
-  echo "${MOCK_BAKERY_PORT:-8000}"
-  exit 0
-fi
-
-# Individual bakery deployment env lookup
-if [[ "${1:-}" == "-n" && "${3:-}" == "get" && "${4:-}" == "deployment" && "${5:-}" != "-l" ]]; then
-  echo "DATABASE_HOST=${MOCK_BAKERY_DB_HOST:-bakery-mariadb}"
-  exit 0
-fi
-
 exit 0
 KUBE_EOF
 chmod +x "${MOCK_BIN}/kubectl"
@@ -229,6 +182,8 @@ bakery:
   image:
     repository: example.registry.local/poundcake-bakery
     tag: values-bakery-tag
+  client:
+    enabled: false
 poundcakeImage:
   repository: example.registry.local/poundcake
   tag: values-pc-tag
@@ -266,7 +221,6 @@ run_with_mocks "${POUNDCAKE_OUT}" \
   POUNDCAKE_OPERATORS_MODE="verify" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${POUNDCAKE_INSTALLER}" \
   --skip-preflight \
   --operators-mode skip
@@ -276,9 +230,12 @@ assert_contains "upgrade --install env-rel" "${TMP_DIR}/helm.log"
 assert_contains "--namespace env-ns" "${TMP_DIR}/helm.log"
 assert_contains "--set poundcake.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set bakery.enabled=false" "${TMP_DIR}/helm.log"
-assert_contains "--set bakery.client.enabled=false" "${TMP_DIR}/helm.log"
-assert_contains "--set database.mode=embedded" "${TMP_DIR}/helm.log"
+assert_contains "--set bakery.worker.enabled=false" "${TMP_DIR}/helm.log"
 assert_contains "-f ${TMP_DIR}/values.yaml" "${TMP_DIR}/helm.log"
+assert_not_contains "bakery.client.enabled" "${TMP_DIR}/helm.log"
+assert_not_contains "database.mode=" "${TMP_DIR}/helm.log"
+assert_not_contains "stackstormPackSync.endpoint" "${TMP_DIR}/helm.log"
+assert_not_contains "poundcakeImage.pullSecrets" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string poundcakeImage.repository=" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string poundcakeImage.tag=" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string uiImage.repository=" "${TMP_DIR}/helm.log"
@@ -288,91 +245,25 @@ assert_not_contains "--set-string bakery.image.tag=" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string stackstormImage.repository=" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string stackstormImage.tag=" "${TMP_DIR}/helm.log"
 
-echo "Validating PoundCake Bakery/DB auto-discovery..."
-DISCOVERY_OUT="${TMP_DIR}/poundcake-discovery.out"
-run_with_mocks "${DISCOVERY_OUT}" \
+echo "Validating PoundCake installer can create the pull secret without wiring Helm values..."
+POUNDCAKE_PULL_SECRET_OUT="${TMP_DIR}/poundcake-pull-secret.out"
+run_with_mocks "${POUNDCAKE_PULL_SECRET_OUT}" \
   env \
-  MOCK_BAKERY_DISCOVERY="single" \
-  MOCK_BAKERY_DB_HOST="bakery-shared-mariadb" \
+  HELM_REGISTRY_USERNAME="gh-user" \
+  HELM_REGISTRY_PASSWORD="gh-pass" \
   POUNDCAKE_NAMESPACE="env-ns" \
   POUNDCAKE_RELEASE_NAME="env-rel" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_OPERATORS_MODE="skip" \
-  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="true" \
   "${POUNDCAKE_INSTALLER}" \
   --skip-preflight
 
-assert_contains "--set bakery.client.enabled=true" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.client.baseUrl=http://bakery.env-ns.svc.cluster.local:8000" "${TMP_DIR}/helm.log"
-assert_contains "--set database.mode=shared_operator" "${TMP_DIR}/helm.log"
-assert_contains "--set-string database.sharedOperator.serverName=bakery-shared-mariadb" "${TMP_DIR}/helm.log"
+assert_contains "create secret docker-registry ghcr-creds" "${TMP_DIR}/kubectl.log"
+assert_not_contains "poundcakeImage.pullSecrets" "${TMP_DIR}/helm.log"
 
-echo "Validating explicit remote Bakery URL precedence over auto-discovery..."
-EXPLICIT_REMOTE_OUT="${TMP_DIR}/poundcake-remote.out"
-run_with_mocks "${EXPLICIT_REMOTE_OUT}" \
-  env \
-  MOCK_BAKERY_DISCOVERY="single" \
-  MOCK_BAKERY_DB_HOST="bakery-shared-mariadb" \
-  POUNDCAKE_NAMESPACE="env-ns" \
-  POUNDCAKE_RELEASE_NAME="env-rel" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
-  POUNDCAKE_OPERATORS_MODE="skip" \
-  POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET="external-bakery-hmac" \
-  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
-  "${POUNDCAKE_INSTALLER}" \
-  --skip-preflight \
-  --remote-bakery-url https://bakery.external.example
-
-assert_contains "--set-string bakery.client.baseUrl=https://bakery.external.example" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.client.auth.existingSecret=external-bakery-hmac" "${TMP_DIR}/helm.log"
-assert_contains "--set bakery.client.enabled=true" "${TMP_DIR}/helm.log"
-assert_contains "--set database.mode=embedded" "${TMP_DIR}/helm.log"
-assert_not_contains "create secret generic external-bakery-hmac" "${TMP_DIR}/kubectl.log"
-
-echo "Validating PoundCake installer can create a default remote Bakery HMAC secret..."
-POUNDCAKE_REMOTE_HMAC_CREATE_OUT="${TMP_DIR}/poundcake-remote-hmac-create.out"
-run_with_mocks "${POUNDCAKE_REMOTE_HMAC_CREATE_OUT}" \
-  env \
-  MOCK_BAKERY_SECRET_EXISTS=0 \
-  POUNDCAKE_NAMESPACE="env-ns" \
-  POUNDCAKE_RELEASE_NAME="env-rel" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
-  POUNDCAKE_OPERATORS_MODE="skip" \
-  POUNDCAKE_REMOTE_BAKERY_HMAC_KEY="shared-hmac-secret" \
-  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
-  "${POUNDCAKE_INSTALLER}" \
-  --skip-preflight \
-  --remote-bakery-url https://bakery.external.example
-
-assert_contains "create secret generic env-rel-poundcake-bakery-secret --from-literal=active-key-id=active --from-literal=active-key=shared-hmac-secret" "${TMP_DIR}/kubectl.log"
-assert_contains "--set-string bakery.client.auth.existingSecret=env-rel-poundcake-bakery-secret" "${TMP_DIR}/helm.log"
-
-echo "Validating PoundCake installer can create a named remote Bakery HMAC secret with an explicit key id..."
-POUNDCAKE_REMOTE_HMAC_NAMED_OUT="${TMP_DIR}/poundcake-remote-hmac-named.out"
-run_with_mocks "${POUNDCAKE_REMOTE_HMAC_NAMED_OUT}" \
-  env \
-  MOCK_BAKERY_SECRET_EXISTS=0 \
-  POUNDCAKE_NAMESPACE="env-ns" \
-  POUNDCAKE_RELEASE_NAME="env-rel" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
-  POUNDCAKE_OPERATORS_MODE="skip" \
-  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
-  "${POUNDCAKE_INSTALLER}" \
-  --skip-preflight \
-  --remote-bakery-url https://bakery.external.example \
-  --remote-bakery-auth-secret external-bakery-hmac \
-  --remote-bakery-hmac-key-id imported-key \
-  --remote-bakery-hmac-key shared-hmac-secret
-
-assert_contains "create secret generic external-bakery-hmac --from-literal=active-key-id=imported-key --from-literal=active-key=shared-hmac-secret" "${TMP_DIR}/kubectl.log"
-assert_contains "--set-string bakery.client.auth.existingSecret=external-bakery-hmac" "${TMP_DIR}/helm.log"
-
-echo "Validating PoundCake installer fails when an external remote Bakery secret is missing and no HMAC key is provided..."
-POUNDCAKE_REMOTE_NO_SECRET_OUT="${TMP_DIR}/poundcake-remote-no-secret.out"
+echo "Validating PoundCake installer rejects removed runtime envs..."
+POUNDCAKE_REMOTE_ENV_OUT="${TMP_DIR}/poundcake-remote-env.out"
 : > "${TMP_DIR}/helm.log"
 : > "${TMP_DIR}/kubectl.log"
 : > "${TMP_DIR}/kubectl-created-secrets.log"
@@ -381,21 +272,18 @@ if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_L
   env \
   POUNDCAKE_NAMESPACE="env-ns" \
   POUNDCAKE_RELEASE_NAME="env-rel" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_REMOTE_BAKERY_URL="https://bakery.example.com" \
   POUNDCAKE_OPERATORS_MODE="skip" \
-  POUNDCAKE_REMOTE_BAKERY_AUTH_SECRET="external-bakery-hmac" \
-  MOCK_BAKERY_SECRET_EXISTS=0 \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" \
-  --skip-preflight \
-  --remote-bakery-url https://bakery.external.example >"${POUNDCAKE_REMOTE_NO_SECRET_OUT}" 2>&1; then
-  fail "expected missing remote Bakery auth secret without HMAC key to fail"
+  --skip-preflight >"${POUNDCAKE_REMOTE_ENV_OUT}" 2>&1; then
+  fail "expected removed runtime env to fail"
 fi
-assert_contains "or pass --remote-bakery-hmac-key so this installer can create one." "${POUNDCAKE_REMOTE_NO_SECRET_OUT}"
+assert_contains "POUNDCAKE_REMOTE_BAKERY_URL is no longer supported by install-poundcake.sh." "${POUNDCAKE_REMOTE_ENV_OUT}"
 
-echo "Validating PoundCake installer fails when a remote Bakery HMAC key is supplied for an existing secret..."
-POUNDCAKE_REMOTE_HMAC_CONFLICT_OUT="${TMP_DIR}/poundcake-remote-hmac-conflict.out"
+echo "Validating PoundCake installer rejects removed runtime flags..."
+POUNDCAKE_REMOTE_FLAG_OUT="${TMP_DIR}/poundcake-remote-flag.out"
 : > "${TMP_DIR}/helm.log"
 : > "${TMP_DIR}/kubectl.log"
 : > "${TMP_DIR}/kubectl-created-secrets.log"
@@ -404,20 +292,37 @@ if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_L
   env \
   POUNDCAKE_NAMESPACE="env-ns" \
   POUNDCAKE_RELEASE_NAME="env-rel" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" \
   --skip-preflight \
-  --remote-bakery-url https://bakery.external.example \
-  --remote-bakery-auth-secret external-bakery-hmac \
-  --remote-bakery-hmac-key shared-hmac-secret >"${POUNDCAKE_REMOTE_HMAC_CONFLICT_OUT}" 2>&1; then
-  fail "expected remote Bakery HMAC key conflict to fail"
+  --remote-bakery-url https://bakery.example.com >"${POUNDCAKE_REMOTE_FLAG_OUT}" 2>&1; then
+  fail "expected removed runtime flag to fail"
 fi
-assert_contains "Use the existing secret or choose a different secret name with --remote-bakery-auth-secret." "${POUNDCAKE_REMOTE_HMAC_CONFLICT_OUT}"
+assert_contains "Configure remote Bakery and shared DB settings in values files or override files instead." "${POUNDCAKE_REMOTE_FLAG_OUT}"
 
-echo "Validating Bakery installer fixed toggles and profile..."
+echo "Validating PoundCake installer rejects removed pull-secret injection env..."
+POUNDCAKE_PULL_SECRET_ENV_OUT="${TMP_DIR}/poundcake-pull-secret-env.out"
+: > "${TMP_DIR}/helm.log"
+: > "${TMP_DIR}/kubectl.log"
+: > "${TMP_DIR}/kubectl-created-secrets.log"
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
+  env \
+  POUNDCAKE_NAMESPACE="env-ns" \
+  POUNDCAKE_RELEASE_NAME="env-rel" \
+  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=true \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
+  "${POUNDCAKE_INSTALLER}" \
+  --skip-preflight >"${POUNDCAKE_PULL_SECRET_ENV_OUT}" 2>&1; then
+  fail "expected removed pull-secret env to fail"
+fi
+assert_contains "POUNDCAKE_IMAGE_PULL_SECRET_ENABLED is no longer supported by install-poundcake.sh." "${POUNDCAKE_PULL_SECRET_ENV_OUT}"
+
+echo "Validating Bakery installer fixed toggles and default secret-name behavior..."
 BAKERY_OUT="${TMP_DIR}/bakery.out"
 run_with_mocks "${BAKERY_OUT}" \
   env \
@@ -427,7 +332,6 @@ run_with_mocks "${BAKERY_OUT}" \
   POUNDCAKE_OPERATORS_MODE="skip" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${BAKERY_INSTALLER}" \
   --skip-preflight
 
@@ -437,30 +341,12 @@ assert_contains "--set poundcake.enabled=false" "${TMP_DIR}/helm.log"
 assert_contains "--set bakery.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set bakery.worker.enabled=true" "${TMP_DIR}/helm.log"
 assert_contains "--set bakery.database.createServer=true" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.auth.existingSecret=" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.client.auth.existingSecret=" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string bakery.image.repository=" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string bakery.image.tag=" "${TMP_DIR}/helm.log"
 assert_not_contains "--set-string bakery.image.digest=" "${TMP_DIR}/helm.log"
-
-echo "Validating Bakery installer with no forwarded args..."
-BAKERY_NOARGS_OUT="${TMP_DIR}/bakery-noargs.out"
-run_with_mocks "${BAKERY_NOARGS_OUT}" \
-  env \
-  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=1 \
-  POUNDCAKE_NAMESPACE="bakery-env-ns" \
-  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
-  POUNDCAKE_OPERATORS_MODE="skip" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
-  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
-  "${BAKERY_INSTALLER}"
-
-assert_contains "Installer profile: bakery" "${BAKERY_NOARGS_OUT}"
-assert_contains "--set poundcake.enabled=false" "${TMP_DIR}/helm.log"
-assert_contains "--set bakery.enabled=true" "${TMP_DIR}/helm.log"
-assert_contains "--set bakery.worker.enabled=true" "${TMP_DIR}/helm.log"
-assert_contains "--set bakery.database.createServer=true" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
 
 echo "Validating Bakery installer secret creation when missing..."
 BAKERY_SECRET_CREATE_OUT="${TMP_DIR}/bakery-secret-create.out"
@@ -472,7 +358,6 @@ run_with_mocks "${BAKERY_SECRET_CREATE_OUT}" \
   POUNDCAKE_OPERATORS_MODE="skip" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${BAKERY_INSTALLER}" \
   --skip-preflight \
   --bakery-rackspace-url https://example.core.local \
@@ -480,27 +365,75 @@ run_with_mocks "${BAKERY_SECRET_CREATE_OUT}" \
   --bakery-rackspace-password bakery-pass
 
 assert_contains "create secret generic bakery-rackspace-core" "${TMP_DIR}/kubectl.log"
-assert_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
 
-echo "Validating Bakery installer provisions ServiceNow secrets the same way..."
-BAKERY_SERVICENOW_SECRET_OUT="${TMP_DIR}/bakery-servicenow-secret.out"
-run_with_mocks "${BAKERY_SERVICENOW_SECRET_OUT}" \
+echo "Validating Bakery installer forwards custom provider secret names only when needed..."
+BAKERY_CUSTOM_SECRET_OUT="${TMP_DIR}/bakery-custom-secret.out"
+run_with_mocks "${BAKERY_CUSTOM_SECRET_OUT}" \
   env \
-  MOCK_BAKERY_SERVICENOW_SECRET_EXISTS=0 \
+  MOCK_BAKERY_SECRET_EXISTS=0 \
   POUNDCAKE_NAMESPACE="bakery-env-ns" \
   POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
   POUNDCAKE_OPERATORS_MODE="skip" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
   "${BAKERY_INSTALLER}" \
   --skip-preflight \
-  --bakery-servicenow-url https://snow.example \
-  --bakery-servicenow-username snow-user \
-  --bakery-servicenow-password snow-pass
+  --bakery-rackspace-secret-name custom-core \
+  --bakery-rackspace-url https://example.core.local \
+  --bakery-rackspace-username bakery-user \
+  --bakery-rackspace-password bakery-pass
 
-assert_contains "create secret generic bakery-servicenow" "${TMP_DIR}/kubectl.log"
-assert_contains "--set-string bakery.servicenow.existingSecret=bakery-servicenow" "${TMP_DIR}/helm.log"
+assert_contains "create secret generic custom-core" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.rackspaceCore.existingSecret=custom-core" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery installer forwards custom auth secret names only when needed..."
+BAKERY_CUSTOM_AUTH_OUT="${TMP_DIR}/bakery-custom-auth.out"
+run_with_mocks "${BAKERY_CUSTOM_AUTH_OUT}" \
+  env \
+  MOCK_BAKERY_SECRET_EXISTS=0 \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=1 \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight \
+  --bakery-auth-secret-name custom-bakery-auth
+
+assert_contains "create secret generic custom-bakery-auth" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.auth.existingSecret=custom-bakery-auth" "${TMP_DIR}/helm.log"
+assert_contains "--set-string bakery.client.auth.existingSecret=custom-bakery-auth" "${TMP_DIR}/helm.log"
+
+echo "Validating Teams-only Bakery installs do not force Rackspace secret wiring..."
+BAKERY_TEAMS_ONLY_OUT="${TMP_DIR}/bakery-teams-only.out"
+run_with_mocks "${BAKERY_TEAMS_ONLY_OUT}" \
+  env \
+  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=0 \
+  MOCK_BAKERY_TEAMS_SECRET_EXISTS=0 \
+  POUNDCAKE_NAMESPACE="bakery-env-ns" \
+  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
+  POUNDCAKE_OPERATORS_MODE="skip" \
+  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
+  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
+  "${BAKERY_INSTALLER}" \
+  --skip-preflight \
+  --bakery-active-provider teams \
+  --bakery-teams-webhook-url https://teams.example/webhook
+
+assert_contains "create secret generic bakery-teams" "${TMP_DIR}/kubectl.log"
+assert_contains "--set-string bakery.config.activeProvider=teams" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.teams.existingSecret=bakery-teams" "${TMP_DIR}/helm.log"
+assert_not_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
+
+echo "Validating Bakery installer requires --update-bakery-secret for credential changes..."
+if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
+  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
+  env MOCK_BAKERY_SECRET_EXISTS=1 POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
+  "${BAKERY_INSTALLER}" --skip-preflight --bakery-rackspace-password rotate-me >/dev/null 2>&1; then
+  fail "expected bakery secret update without --update-bakery-secret to fail"
+fi
 
 echo "Validating PoundCake installer rejects image environment variables..."
 POUNDCAKE_IMAGE_ENV_OUT="${TMP_DIR}/poundcake-image-env.out"
@@ -516,7 +449,6 @@ if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_L
   POUNDCAKE_OPERATORS_MODE="skip" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" \
   --skip-preflight >"${POUNDCAKE_IMAGE_ENV_OUT}" 2>&1; then
   fail "expected image environment variable usage to fail"
@@ -536,7 +468,6 @@ if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_L
   POUNDCAKE_OPERATORS_MODE="skip" \
   POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
   "${POUNDCAKE_INSTALLER}" \
   --skip-preflight \
   --set-string poundcakeImage.tag=cli-tag >"${POUNDCAKE_IMAGE_SET_OUT}" 2>&1; then
@@ -544,60 +475,22 @@ if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_L
 fi
 assert_contains "Image --set overrides are not supported by the Helm installers." "${POUNDCAKE_IMAGE_SET_OUT}"
 
-echo "Validating Teams-only Bakery installs do not force Rackspace Core secrets..."
-BAKERY_TEAMS_ONLY_OUT="${TMP_DIR}/bakery-teams-only.out"
-run_with_mocks "${BAKERY_TEAMS_ONLY_OUT}" \
-  env \
-  MOCK_BAKERY_RACKSPACE_SECRET_EXISTS=0 \
-  MOCK_BAKERY_TEAMS_SECRET_EXISTS=0 \
-  POUNDCAKE_NAMESPACE="bakery-env-ns" \
-  POUNDCAKE_RELEASE_NAME="bakery-env-rel" \
-  POUNDCAKE_OPERATORS_MODE="skip" \
-  POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" \
-  POUNDCAKE_CREATE_IMAGE_PULL_SECRET="false" \
-  POUNDCAKE_IMAGE_PULL_SECRET_ENABLED="false" \
-  "${BAKERY_INSTALLER}" \
-  --skip-preflight \
-  --bakery-active-provider teams \
-  --bakery-teams-webhook-url https://teams.example/webhook
-
-assert_contains "create secret generic bakery-teams" "${TMP_DIR}/kubectl.log"
-assert_contains "--set-string bakery.config.activeProvider=teams" "${TMP_DIR}/helm.log"
-assert_contains "--set-string bakery.teams.existingSecret=bakery-teams" "${TMP_DIR}/helm.log"
-assert_not_contains "--set-string bakery.rackspaceCore.existingSecret=bakery-rackspace-core" "${TMP_DIR}/helm.log"
-
-echo "Validating Bakery installer requires --update-bakery-secret for credential changes..."
-if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
-  env MOCK_BAKERY_SECRET_EXISTS=1 POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
-  "${BAKERY_INSTALLER}" --skip-preflight --bakery-rackspace-password rotate-me >/dev/null 2>&1; then
-  fail "expected bakery secret update without --update-bakery-secret to fail"
-fi
-
-echo "Validating ambiguous discovery guardrail..."
-if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
-  TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
-  env MOCK_BAKERY_DISCOVERY=ambiguous POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
-  "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
-  fail "expected ambiguous Bakery discovery to fail"
-fi
-
 echo "Validating removed mixed-mode guardrails..."
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
   TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
-  env POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  env POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
   "${POUNDCAKE_INSTALLER}" --skip-preflight --enable-bakery >/dev/null 2>&1; then
   fail "expected --enable-bakery to fail for poundcake installer"
 fi
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
   TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
-  env POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  env POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
   "${POUNDCAKE_INSTALLER}" --skip-preflight --mode full >/dev/null 2>&1; then
   fail "expected --mode to fail for poundcake installer"
 fi
 if PATH="${MOCK_BIN}:${PATH}" TEST_HELM_LOG="${TMP_DIR}/helm.log" TEST_KUBECTL_LOG="${TMP_DIR}/kubectl.log" \
   TEST_KUBECTL_CREATED_SECRETS="${TMP_DIR}/kubectl-created-secrets.log" \
-  env POUNDCAKE_INSTALL_MODE=full POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false POUNDCAKE_IMAGE_PULL_SECRET_ENABLED=false \
+  env POUNDCAKE_INSTALL_MODE=full POUNDCAKE_OPERATORS_MODE=skip POUNDCAKE_BASE_OVERRIDES="${TMP_DIR}/values.yaml" POUNDCAKE_CREATE_IMAGE_PULL_SECRET=false \
   "${POUNDCAKE_INSTALLER}" --skip-preflight >/dev/null 2>&1; then
   fail "expected POUNDCAKE_INSTALL_MODE to fail for poundcake installer"
 fi

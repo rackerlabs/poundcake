@@ -2,6 +2,14 @@
 
 This directory stores example override files for Helm installs.
 
+Recommended starter fragments:
+- `poundcake-only-overrides.yaml`
+- `bakery-only-overrides.yaml`
+- `colocated-shared-db-overrides.yaml`
+- `remote-bakery-overrides.yaml`
+- `ghcr-pull-secret-overrides.yaml`
+- `split-install/`
+
 Canonical image keys for overrides:
 - `poundcakeImage.repository` / `poundcakeImage.tag`
 - `uiImage.repository` / `uiImage.tag`
@@ -20,9 +28,10 @@ Installer mapping:
 - `./install/install-bakery-helm.sh` => `poundcake.enabled=false`, `bakery.enabled=true`
 - For co-located deployments in one namespace: install Bakery first, then PoundCake.
 
-Precedence note:
-- installer-emitted `--set` booleans are appended after auto-discovered `-f` files (`POUNDCAKE_BASE_OVERRIDES`, global/service override dirs), so installer defaults can override `poundcake.enabled` and `bakery.enabled` from those files.
-- user-supplied CLI flags passed after the installer command (for example `-f`, `--set`, `--set-string`) are appended last and can override installer defaults.
+Values-first note:
+- Put runtime config such as remote Bakery, shared DB mode, and `poundcakeImage.pullSecrets` in override files.
+- Use installer flags for operational behavior and optional secret creation only.
+- The Bakery installer forwards `existingSecret` names only when you intentionally choose a non-default secret name.
 
 ## Enable HA
 
@@ -53,23 +62,23 @@ kubectl -n rackspace get deploy poundcake poundcake-chef poundcake-timer poundca
 kubectl -n rackspace get svc poundcake
 ```
 
-## Enable Envoy Gateway Route/Listener (Kronos)
+## Enable Envoy Gateway Route/Listener
 
-Use the provided Kronos Gateway override to create/update:
+Use the provided shared-host Gateway override to create/update:
 - Gateway listener on `HTTPS`/`443`
-- HTTPRoute for `poundcake.api.kronos.cloudmunchers.net`
+- HTTPRoute for your published PoundCake hostname
 
 1. Review and adjust gateway object names/namespace and TLS secret:
 
 ```bash
-cat helm/overrides/gateway-kronos-overrides.yaml
+cat helm/overrides/gateway-shared-hostname-overrides.yaml
 ```
 
 2. Copy into the active Genestack PoundCake override path:
 
 ```bash
 sudo mkdir -p /etc/genestack/helm-configs/poundcake
-sudo cp helm/overrides/gateway-kronos-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+sudo cp helm/overrides/gateway-shared-hostname-overrides.yaml /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
 ```
 
 3. Install/upgrade:

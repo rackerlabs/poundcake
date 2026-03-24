@@ -1,8 +1,18 @@
 # Database Migrations
 
-PoundCake uses Alembic. The initial migration defines all tables including `dish_ingredients`.
+PoundCake and Bakery both use Alembic, but during alpha we keep one full-schema baseline revision per service.
 
-Key column naming conventions:
+Current policy:
+- Fresh installs only. Do not upgrade old databases in place for this reset.
+- Do not add chained Alembic revisions.
+- If schema changes are needed, edit the single baseline migration file for that service.
+
+Baseline files:
+- PoundCake API: `alembic/versions/2026_02_03_1600_initial_schema.py`
+- Helm-shipped API copy: `helm/files/poundcake-alembic/versions/2026_02_03_1600_initial_schema.py`
+- Bakery: `bakery/alembic/versions/001_initial_schema.py`
+
+Key column naming conventions still in use:
 - `expected_duration_sec`
 - `timeout_duration_sec`
 
@@ -13,7 +23,7 @@ Examples:
 Commands:
 
 ```bash
-python scripts/migrate.py current
-python scripts/migrate.py upgrade
-python scripts/migrate.py create "description"
+python api/migrate.py current
+python api/migrate.py history
+python api/migrate.py upgrade
 ```

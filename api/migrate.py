@@ -15,7 +15,6 @@ from alembic import command
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from api.core.config import settings
 from api.core.database import get_sync_database_url
 
 
@@ -68,61 +67,32 @@ def history():
     command.history(config)
 
 
-def create_migration(message):
-    """Create a new migration.
-
-    Args:
-        message: Migration message/description
-    """
-    config = get_alembic_config()
-    print(f"Creating new migration: {message}")
-    command.revision(config, message=message, autogenerate=True)
-    print("OK: Migration created")
-
-
-def stamp(revision="head"):
-    """Stamp database with a specific revision without running migrations.
-
-    Useful for marking an existing database as being at a specific version.
-
-    Args:
-        revision: Target revision to stamp (default: "head")
-    """
-    config = get_alembic_config()
-    print(f"Stamping database with revision: {revision}")
-    command.stamp(config, revision)
-    print("OK: Database stamped")
-
-
 def show_help():
     """Show help message."""
-    print(f"""
+    print("""
 PoundCake Database Migration Manager
 
-Usage: python scripts/migrate.py <command> [args]
+Usage: python api/migrate.py <command> [args]
 
 Commands:
     upgrade [revision]      Upgrade to a revision (default: head)
     downgrade [revision]    Downgrade to a revision (default: -1)
     current                 Show current revision
     history                 Show migration history
-    create <message>        Create new migration with autogenerate
-    stamp [revision]        Stamp database with revision (default: head)
     help                    Show this help message
 
-Examples:
-    python scripts/migrate.py upgrade
-    python scripts/migrate.py upgrade +1
-    python scripts/migrate.py downgrade
-    python scripts/migrate.py downgrade -2
-    python scripts/migrate.py create "add user table"
-    python scripts/migrate.py current
-    python scripts/migrate.py history
-    python scripts/migrate.py stamp head
+Alpha migration policy:
+    PoundCake uses a single full-schema baseline revision for fresh installs.
+    Do not create chained Alembic revisions or use stamp for normal workflows.
+    Schema changes should be folded into the baseline migration file instead.
 
-Environment Variables:
-    DATABASE_URL            Database connection string
-                            (default from config: {settings.database_url})
+Examples:
+    python api/migrate.py upgrade
+    python api/migrate.py upgrade +1
+    python api/migrate.py downgrade
+    python api/migrate.py downgrade -2
+    python api/migrate.py current
+    python api/migrate.py history
     """)
 
 
@@ -148,18 +118,6 @@ def main():
 
         elif command_name == "history":
             history()
-
-        elif command_name == "create":
-            if len(sys.argv) < 3:
-                print("Error: Migration message required")
-                print("Usage: python scripts/migrate.py create <message>")
-                sys.exit(1)
-            message = " ".join(sys.argv[2:])
-            create_migration(message)
-
-        elif command_name == "stamp":
-            revision = sys.argv[2] if len(sys.argv) > 2 else "head"
-            stamp(revision)
 
         elif command_name in ["help", "-h", "--help"]:
             show_help()

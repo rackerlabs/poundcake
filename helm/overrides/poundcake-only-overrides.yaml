@@ -1,0 +1,13 @@
+# PoundCake-only example.
+# Use with ./install/install-poundcake-helm.sh
+
+poundcake:
+  enabled: true
+
+bakery:
+  enabled: false
+  client:
+    enabled: false
+
+database:
+  mode: embedded

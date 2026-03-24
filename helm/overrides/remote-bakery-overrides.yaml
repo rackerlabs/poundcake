@@ -1,0 +1,14 @@
+# Remote Bakery example for PoundCake-only installs.
+# Apply this in the PoundCake environment.
+
+bakery:
+  enabled: false
+  client:
+    enabled: true
+    enforceRemoteBaseUrl: true
+    baseUrl: https://bakery.example.com
+    auth:
+      existingSecret: bakery-hmac
+
+database:
+  mode: embedded

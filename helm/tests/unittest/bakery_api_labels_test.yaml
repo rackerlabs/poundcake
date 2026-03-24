@@ -1,6 +1,5 @@
 suite: bakery-api-labels
 templates:
-  - templates/bakery-secret.yaml
   - templates/bakery-deployment.yaml
 tests:
   - it: applies poundcake log labels to bakery api pod template in full mode

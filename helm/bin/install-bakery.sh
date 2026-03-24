@@ -99,11 +99,13 @@ Bakery secret options:
   --update-bakery-secret                  Update existing secret (prompts for missing values)
 
 Behavior:
-  - If a provider secret exists, installer reuses it and wires bakery.<provider>.existingSecret automatically.
+  - If a provider secret exists, installer reuses it.
   - If provider credentials are supplied and the secret is missing, installer creates it.
   - Existing provider secrets are only updated when --update-bakery-secret is provided.
   - The active provider must have credentials from either a discovered secret or the credentials supplied for this run.
-  - Bakery HMAC auth secret is auto-created when missing and wired to both Bakery API auth and PoundCake Bakery client auth values.
+  - Bakery HMAC auth secret is auto-created when missing.
+  - Default secret names come from values.yaml; installer only forwards secret-name overrides when you choose non-default names.
+  - Bakery runtime settings such as active provider should live in values files or override files.
 
 All remaining args are forwarded to install-poundcake.sh.
 USAGE_EOF
@@ -480,127 +482,6 @@ ensure_bakery_auth_secret() {
     --from-literal=next-key-id="${next_id}" \
     --from-literal=next-key="${next_key}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-}
-
-extract_assignment_value() {
-  local key="$1"
-  local assignments="$2"
-  local entry=""
-  local result=""
-
-  IFS=',' read -r -a parsed_entries <<< "${assignments}"
-  for entry in "${parsed_entries[@]}"; do
-    if [[ "${entry}" == "${key}="* ]]; then
-      result="${entry#*=}"
-    fi
-  done
-  printf '%s' "${result}"
-}
-
-extract_forwarded_helm_value() {
-  local key="$1"
-  local token=""
-  local next=""
-  local value=""
-  local result=""
-  local i=0
-
-  while [[ ${i} -lt ${#FORWARD_ARGS[@]} ]]; do
-    token="${FORWARD_ARGS[$i]}"
-    case "${token}" in
-      --set|--set-string|--set-json|--set-literal|--set-file)
-        next="${FORWARD_ARGS[$((i + 1))]:-}"
-        if [[ -n "${next}" ]]; then
-          value="$(extract_assignment_value "${key}" "${next}")"
-          if [[ -n "${value}" ]]; then
-            result="${value}"
-          fi
-        fi
-        i=$((i + 2))
-        continue
-        ;;
-      --set=*|--set-string=*|--set-json=*|--set-literal=*|--set-file=*)
-        value="$(extract_assignment_value "${key}" "${token#*=}")"
-        if [[ -n "${value}" ]]; then
-          result="${value}"
-        fi
-        ;;
-    esac
-    i=$((i + 1))
-  done
-  printf '%s' "${result}"
-}
-
-apply_forwarded_provider_defaults() {
-  local forwarded_value=""
-
-  forwarded_value="$(extract_forwarded_helm_value "bakery.config.activeProvider")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_ACTIVE_PROVIDER="${forwarded_value}"
-  fi
-  if [[ -z "${BAKERY_ACTIVE_PROVIDER}" ]]; then
-    BAKERY_ACTIVE_PROVIDER="rackspace_core"
-  fi
-
-  forwarded_value="$(extract_forwarded_helm_value "bakery.rackspaceCore.existingSecret")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_RACKSPACE_SECRET_NAME="${forwarded_value}"
-  fi
-  forwarded_value="$(extract_forwarded_helm_value "bakery.servicenow.existingSecret")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_SERVICENOW_SECRET_NAME="${forwarded_value}"
-  fi
-  forwarded_value="$(extract_forwarded_helm_value "bakery.jira.existingSecret")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_JIRA_SECRET_NAME="${forwarded_value}"
-  fi
-  forwarded_value="$(extract_forwarded_helm_value "bakery.github.existingSecret")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_GITHUB_SECRET_NAME="${forwarded_value}"
-  fi
-  forwarded_value="$(extract_forwarded_helm_value "bakery.pagerduty.existingSecret")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_PAGERDUTY_SECRET_NAME="${forwarded_value}"
-  fi
-  forwarded_value="$(extract_forwarded_helm_value "bakery.teams.existingSecret")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_TEAMS_SECRET_NAME="${forwarded_value}"
-  fi
-  forwarded_value="$(extract_forwarded_helm_value "bakery.discord.existingSecret")"
-  if [[ -n "${forwarded_value}" ]]; then
-    BAKERY_DISCORD_SECRET_NAME="${forwarded_value}"
-  fi
-
-  if [[ -z "${BAKERY_SERVICENOW_URL}" ]]; then
-    BAKERY_SERVICENOW_URL="$(extract_forwarded_helm_value "bakery.servicenow.url")"
-  fi
-  if [[ -z "${BAKERY_SERVICENOW_USERNAME}" ]]; then
-    BAKERY_SERVICENOW_USERNAME="$(extract_forwarded_helm_value "bakery.servicenow.username")"
-  fi
-  if [[ -z "${BAKERY_SERVICENOW_PASSWORD}" ]]; then
-    BAKERY_SERVICENOW_PASSWORD="$(extract_forwarded_helm_value "bakery.servicenow.password")"
-  fi
-  if [[ -z "${BAKERY_JIRA_URL}" ]]; then
-    BAKERY_JIRA_URL="$(extract_forwarded_helm_value "bakery.jira.url")"
-  fi
-  if [[ -z "${BAKERY_JIRA_USERNAME}" ]]; then
-    BAKERY_JIRA_USERNAME="$(extract_forwarded_helm_value "bakery.jira.username")"
-  fi
-  if [[ -z "${BAKERY_JIRA_API_TOKEN}" ]]; then
-    BAKERY_JIRA_API_TOKEN="$(extract_forwarded_helm_value "bakery.jira.apiToken")"
-  fi
-  if [[ -z "${BAKERY_GITHUB_TOKEN}" ]]; then
-    BAKERY_GITHUB_TOKEN="$(extract_forwarded_helm_value "bakery.github.token")"
-  fi
-  if [[ -z "${BAKERY_PAGERDUTY_API_KEY}" ]]; then
-    BAKERY_PAGERDUTY_API_KEY="$(extract_forwarded_helm_value "bakery.pagerduty.apiKey")"
-  fi
-  if [[ -z "${BAKERY_TEAMS_WEBHOOK_URL}" ]]; then
-    BAKERY_TEAMS_WEBHOOK_URL="$(extract_forwarded_helm_value "bakery.teams.webhookUrl")"
-  fi
-  if [[ -z "${BAKERY_DISCORD_WEBHOOK_URL}" ]]; then
-    BAKERY_DISCORD_WEBHOOK_URL="$(extract_forwarded_helm_value "bakery.discord.webhookUrl")"
-  fi
 }
 
 ensure_provider_secrets() {
@@ -1009,7 +890,10 @@ else
   reject_conflicting_flags
 fi
 
-apply_forwarded_provider_defaults
+if [[ -z "${BAKERY_ACTIVE_PROVIDER}" ]]; then
+  BAKERY_ACTIVE_PROVIDER="rackspace_core"
+fi
+
 ensure_provider_secrets
 ensure_bakery_auth_secret
 
@@ -1022,29 +906,36 @@ INSTALL_CMD=(
   --set bakery.enabled=true
   --set bakery.worker.enabled=true
   --set bakery.database.createServer=true
-  --set-string "bakery.config.activeProvider=${BAKERY_ACTIVE_PROVIDER}"
-  --set-string "bakery.auth.existingSecret=${BAKERY_AUTH_SECRET_NAME}"
-  --set-string "bakery.client.auth.existingSecret=${BAKERY_AUTH_SECRET_NAME}"
 )
-if [[ "${RACKSPACE_SECRET_READY}" == "true" ]]; then
+
+if [[ -n "${POUNDCAKE_BAKERY_ACTIVE_PROVIDER:-}" || "${BAKERY_ACTIVE_PROVIDER}" != "rackspace_core" ]]; then
+  INSTALL_CMD+=(--set-string "bakery.config.activeProvider=${BAKERY_ACTIVE_PROVIDER}")
+fi
+
+if [[ "${BAKERY_AUTH_SECRET_NAME}" != "$(default_bakery_auth_secret_name "${RELEASE_NAME}")" ]]; then
+  INSTALL_CMD+=(--set-string "bakery.auth.existingSecret=${BAKERY_AUTH_SECRET_NAME}")
+  INSTALL_CMD+=(--set-string "bakery.client.auth.existingSecret=${BAKERY_AUTH_SECRET_NAME}")
+fi
+
+if [[ "${RACKSPACE_SECRET_READY}" == "true" && "${BAKERY_RACKSPACE_SECRET_NAME}" != "bakery-rackspace-core" ]]; then
   INSTALL_CMD+=(--set-string "bakery.rackspaceCore.existingSecret=${BAKERY_RACKSPACE_SECRET_NAME}")
 fi
-if [[ "${SERVICENOW_SECRET_READY}" == "true" ]]; then
+if [[ "${SERVICENOW_SECRET_READY}" == "true" && "${BAKERY_SERVICENOW_SECRET_NAME}" != "bakery-servicenow" ]]; then
   INSTALL_CMD+=(--set-string "bakery.servicenow.existingSecret=${BAKERY_SERVICENOW_SECRET_NAME}")
 fi
-if [[ "${JIRA_SECRET_READY}" == "true" ]]; then
+if [[ "${JIRA_SECRET_READY}" == "true" && "${BAKERY_JIRA_SECRET_NAME}" != "bakery-jira" ]]; then
   INSTALL_CMD+=(--set-string "bakery.jira.existingSecret=${BAKERY_JIRA_SECRET_NAME}")
 fi
-if [[ "${GITHUB_SECRET_READY}" == "true" ]]; then
+if [[ "${GITHUB_SECRET_READY}" == "true" && "${BAKERY_GITHUB_SECRET_NAME}" != "bakery-github" ]]; then
   INSTALL_CMD+=(--set-string "bakery.github.existingSecret=${BAKERY_GITHUB_SECRET_NAME}")
 fi
-if [[ "${PAGERDUTY_SECRET_READY}" == "true" ]]; then
+if [[ "${PAGERDUTY_SECRET_READY}" == "true" && "${BAKERY_PAGERDUTY_SECRET_NAME}" != "bakery-pagerduty" ]]; then
   INSTALL_CMD+=(--set-string "bakery.pagerduty.existingSecret=${BAKERY_PAGERDUTY_SECRET_NAME}")
 fi
-if [[ "${TEAMS_SECRET_READY}" == "true" ]]; then
+if [[ "${TEAMS_SECRET_READY}" == "true" && "${BAKERY_TEAMS_SECRET_NAME}" != "bakery-teams" ]]; then
   INSTALL_CMD+=(--set-string "bakery.teams.existingSecret=${BAKERY_TEAMS_SECRET_NAME}")
 fi
-if [[ "${DISCORD_SECRET_READY}" == "true" ]]; then
+if [[ "${DISCORD_SECRET_READY}" == "true" && "${BAKERY_DISCORD_SECRET_NAME}" != "bakery-discord" ]]; then
   INSTALL_CMD+=(--set-string "bakery.discord.existingSecret=${BAKERY_DISCORD_SECRET_NAME}")
 fi
 if (( ${#FORWARD_ARGS[@]} > 0 )); then

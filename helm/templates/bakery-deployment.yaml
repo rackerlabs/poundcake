@@ -21,8 +21,6 @@ spec:
       app.kubernetes.io/component: bakery
   template:
     metadata:
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/bakery-secret.yaml") . | sha256sum }}
       labels:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: bakery
@@ -139,26 +137,19 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.servicenow.existingSecret }}
                   key: {{ .Values.bakery.servicenow.secretKeys.url }}
+                  optional: true
             - name: SERVICENOW_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.bakery.servicenow.existingSecret }}
                   key: {{ .Values.bakery.servicenow.secretKeys.username }}
+                  optional: true
             - name: SERVICENOW_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.bakery.servicenow.existingSecret }}
                   key: {{ .Values.bakery.servicenow.secretKeys.password }}
-            {{- else if and .Values.bakery.servicenow.url .Values.bakery.servicenow.password }}
-            - name: SERVICENOW_URL
-              value: {{ .Values.bakery.servicenow.url | quote }}
-            - name: SERVICENOW_USERNAME
-              value: {{ .Values.bakery.servicenow.username | quote }}
-            - name: SERVICENOW_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakerySecretName" . }}
-                  key: servicenow-password
+                  optional: true
             {{- end }}
             {{- if .Values.bakery.jira.existingSecret }}
             - name: JIRA_URL
@@ -166,26 +157,19 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.jira.existingSecret }}
                   key: {{ .Values.bakery.jira.secretKeys.url }}
+                  optional: true
             - name: JIRA_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.bakery.jira.existingSecret }}
                   key: {{ .Values.bakery.jira.secretKeys.username }}
+                  optional: true
             - name: JIRA_API_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.bakery.jira.existingSecret }}
                   key: {{ .Values.bakery.jira.secretKeys.apiToken }}
-            {{- else if and .Values.bakery.jira.url .Values.bakery.jira.apiToken }}
-            - name: JIRA_URL
-              value: {{ .Values.bakery.jira.url | quote }}
-            - name: JIRA_USERNAME
-              value: {{ .Values.bakery.jira.username | quote }}
-            - name: JIRA_API_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakerySecretName" . }}
-                  key: jira-api-token
+                  optional: true
             {{- end }}
             {{- if .Values.bakery.github.existingSecret }}
             - name: GITHUB_TOKEN
@@ -193,12 +177,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.github.existingSecret }}
                   key: {{ .Values.bakery.github.secretKeys.token }}
-            {{- else if .Values.bakery.github.token }}
-            - name: GITHUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakerySecretName" . }}
-                  key: github-token
+                  optional: true
             {{- end }}
             {{- if .Values.bakery.pagerduty.existingSecret }}
             - name: PAGERDUTY_API_KEY
@@ -206,12 +185,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.pagerduty.existingSecret }}
                   key: {{ .Values.bakery.pagerduty.secretKeys.apiKey }}
-            {{- else if .Values.bakery.pagerduty.apiKey }}
-            - name: PAGERDUTY_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakerySecretName" . }}
-                  key: pagerduty-api-key
+                  optional: true
             {{- end }}
             {{- if .Values.bakery.teams.existingSecret }}
             - name: TEAMS_WEBHOOK_URL
@@ -219,12 +193,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.teams.existingSecret }}
                   key: {{ .Values.bakery.teams.secretKeys.webhookUrl }}
-            {{- else if .Values.bakery.teams.webhookUrl }}
-            - name: TEAMS_WEBHOOK_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakerySecretName" . }}
-                  key: teams-webhook-url
+                  optional: true
             {{- end }}
             {{- if .Values.bakery.discord.existingSecret }}
             - name: DISCORD_WEBHOOK_URL
@@ -232,12 +201,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.discord.existingSecret }}
                   key: {{ .Values.bakery.discord.secretKeys.webhookUrl }}
-            {{- else if .Values.bakery.discord.webhookUrl }}
-            - name: DISCORD_WEBHOOK_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "poundcake.bakerySecretName" . }}
-                  key: discord-webhook-url
+                  optional: true
             {{- end }}
             {{- if .Values.bakery.rackspaceCore.existingSecret }}
             - name: RACKSPACE_CORE_URL
@@ -245,16 +209,19 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bakery.rackspaceCore.existingSecret }}
                   key: {{ .Values.bakery.rackspaceCore.secretKeys.url }}
+                  optional: true
             - name: RACKSPACE_CORE_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.bakery.rackspaceCore.existingSecret }}
                   key: {{ .Values.bakery.rackspaceCore.secretKeys.username }}
+                  optional: true
             - name: RACKSPACE_CORE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.bakery.rackspaceCore.existingSecret }}
                   key: {{ .Values.bakery.rackspaceCore.secretKeys.password }}
+                  optional: true
             {{- end }}
             - name: RACKSPACE_CORE_DEFAULT_QUEUE
               value: {{ .Values.bakery.rackspaceCore.defaultQueue | quote }}

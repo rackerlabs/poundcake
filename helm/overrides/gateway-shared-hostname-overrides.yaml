@@ -1,0 +1,26 @@
+# Envoy Gateway overrides for a shared-host PoundCake deployment.
+# Creates or updates an HTTPS listener and the PoundCake HTTPRoutes.
+# Copy to /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
+# or merge into your active overrides.
+
+gateway:
+  enabled: true
+
+  # Set these to your existing Envoy Gateway object.
+  gatewayName: "<gateway-name>"
+  gatewayNamespace: "<gateway-namespace>"
+
+  listener:
+    name: "<gateway-listener-name>"
+    hostname: "<poundcake-public-hostname>"
+    port: 443
+    protocol: "HTTPS"
+    tlsSecretName: "<gateway-tls-secret-name>"
+    allowedNamespaces: "All"
+    updateIfExists: true
+
+  hostnames:
+    - "<poundcake-public-hostname>"
+
+  # Optional annotations for the HTTPRoute
+  annotations: {}

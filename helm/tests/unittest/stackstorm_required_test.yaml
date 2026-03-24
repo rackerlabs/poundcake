@@ -7,6 +7,22 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: fails when git repo sync is enabled without an existing secret
+    set:
+      git.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "git.existingSecret is required when git.enabled=true."
+        template: templates/stackstorm-required.yaml
+
+  - it: fails when git token is provided directly
+    set:
+      git.token: secret-token
+    asserts:
+      - failedTemplate:
+          errorMessage: "git.token is disabled. Use git.existingSecret for secret-based Git credential injection."
+        template: templates/stackstorm-required.yaml
+
   - it: fails when URL-addressable service ports are duplicated
     set:
       services.ui.port: 8000

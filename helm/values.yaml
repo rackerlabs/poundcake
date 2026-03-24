@@ -76,9 +76,10 @@ ui:
 ingress:
   enabled: false
   className: ""
-  annotations:
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
+  annotations: {}
+  # Example:
+  #   kubernetes.io/ingress.class: nginx
+  #   kubernetes.io/tls-acme: "true"
   hosts:
     - host: poundcake.local
       paths:
@@ -98,34 +99,35 @@ gateway:
   # Parent Gateway reference.
   # gatewayName should point to an existing shared Gateway.
   # gatewayNamespace is optional; if omitted, the HTTPRoute namespace is used.
-  gatewayName: ""  # Example: flex-gateway
-  gatewayNamespace: ""  # Example: envoy-gateway
+  gatewayName: ""  # Example: <gateway-name>
+  gatewayNamespace: ""  # Example: <gateway-namespace>
 
   # Existing listener section on the parent Gateway.
   # If omitted, route defaults are derived from gateway.listeners.* compatibility fields.
   listener:
     # Existing listener section name on parent Gateway (used as HTTPRoute parentRefs.sectionName)
-    name: ""  # Example: poundcake-https
+    name: ""  # Example: <gateway-listener-name>
 
     # Optional default hostname used by both API/UI HTTPRoutes when gateway.hostnames is empty.
-    hostname: ""  # Example: poundcake.api.ord.cloudmunchers.net
+    hostname: ""  # Example: poundcake.example.com
 
     # Informational/compatibility fields.
     port: 443
     protocol: "HTTPS"
-    tlsSecretName: ""  # Example: poundcake-gw-tls-secret
+    tlsSecretName: ""  # Example: <gateway-tls-secret-name>
     allowedNamespaces: "All"
     updateIfExists: true
 
   # HTTPRoute hostnames. Applied to both API and UI routes.
   # If empty, listener.hostname is used, then legacy listeners.api/ui.hostname values.
-  # - poundcake.api.ord.cloudmunchers.net
+  # - poundcake.example.com
   hostnames: []
 
   # Optional annotations for HTTPRoute
-  annotations:
-    # application: gateway-api
-    # route: poundcake
+  annotations: {}
+  # Example:
+  #   application: gateway-api
+  #   route: poundcake
 
   # Legacy compatibility fields used for path prefix and fallback section names.
   # If gatewayName is empty, gateway.name is used as parentRefs.name.
@@ -481,10 +483,10 @@ git:
   filePattern: "{alert_name}.yaml"
 
   # Git authentication
-  # For HTTPS: use token
-  # For SSH: use sshKeyPath (mount SSH key as secret)
-  token: ""
-  sshKeyPath: ""
+  # Git credentials must come from an existing secret.
+  # The secret may contain either or both of:
+  # - git-token
+  # - git-ssh-key
 
   # Git commit author
   userName: PoundCake
@@ -864,16 +866,16 @@ bakery:
     allowInsecureHttp: false
 
     # Gateway reference (required if enabled)
-    gatewayName: ""  # Example: flex-gateway
-    gatewayNamespace: ""  # Example: envoy-gateway
+    gatewayName: ""  # Example: <gateway-name>
+    gatewayNamespace: ""  # Example: <gateway-namespace>
 
     # Listener configuration to create/update on the target Gateway
     listener:
-      name: ""  # Example: bakery-https
-      hostname: ""  # Example: bakery.api.ord.cloudmunchers.net
+      name: ""  # Example: <bakery-gateway-listener-name>
+      hostname: ""  # Example: bakery.example.com
       port: 443
       protocol: "HTTPS"  # HTTPS or HTTP
-      tlsSecretName: ""  # Required when protocol is HTTPS
+      tlsSecretName: ""  # Example: <bakery-gateway-tls-secret-name>
       allowedNamespaces: "All"
       updateIfExists: true
 
@@ -919,14 +921,11 @@ bakery:
       nextKeyId: "next-key-id"
       nextKey: "next-key"
     hmac:
-      activeKeyId: ""
-      activeKey: ""
-      nextKeyId: ""
-      nextKey: ""
       timestampSkewSec: 300
 
   client:
-    enabled: true
+    enabled: false
+    # Set enabled=true for co-located or remote Bakery installs.
     # Enforce explicit remote base URL when operating without in-cluster Bakery.
     enforceRemoteBaseUrl: false
     baseUrl: ""
@@ -936,8 +935,6 @@ bakery:
       secretKeys:
         keyId: "active-key-id"
         key: "active-key"
-      keyId: ""
-      key: ""
     requestTimeoutSeconds: 15
     maxRetries: 2
     pollIntervalSeconds: 2
@@ -945,11 +942,8 @@ bakery:
 
   # ServiceNow configuration
   servicenow:
-    url: ""
-    username: ""
-    password: ""
-    # Reference to existing secret
-    existingSecret: ""
+    # Credentials and endpoint must come from existingSecret keys.
+    existingSecret: "bakery-servicenow"
     secretKeys:
       url: "servicenow-url"
       username: "servicenow-username"
@@ -957,11 +951,8 @@ bakery:
 
   # Jira configuration
   jira:
-    url: ""
-    username: ""
-    apiToken: ""
-    # Reference to existing secret
-    existingSecret: ""
+    # Credentials and endpoint must come from existingSecret keys.
+    existingSecret: "bakery-jira"
     secretKeys:
       url: "jira-url"
       username: "jira-username"
@@ -969,33 +960,29 @@ bakery:
 
   # GitHub configuration
   github:
-    token: ""
-    # Reference to existing secret
-    existingSecret: ""
+    # Credentials must come from existingSecret keys.
+    existingSecret: "bakery-github"
     secretKeys:
       token: "github-token"
 
   # PagerDuty configuration
   pagerduty:
-    apiKey: ""
-    # Reference to existing secret
-    existingSecret: ""
+    # Credentials must come from existingSecret keys.
+    existingSecret: "bakery-pagerduty"
     secretKeys:
       apiKey: "pagerduty-api-key"
 
   # Microsoft Teams configuration
   teams:
-    webhookUrl: ""
-    # Reference to existing secret
-    existingSecret: ""
+    # Webhook credentials must come from existingSecret keys.
+    existingSecret: "bakery-teams"
     secretKeys:
       webhookUrl: "teams-webhook-url"
 
   # Discord configuration
   discord:
-    webhookUrl: ""
-    # Reference to existing secret
-    existingSecret: ""
+    # Webhook credentials must come from existingSecret keys.
+    existingSecret: "bakery-discord"
     secretKeys:
       webhookUrl: "discord-webhook-url"
 
@@ -1007,9 +994,8 @@ bakery:
     # Default CTK queue/subcategory for ticket creation if not provided in context
     defaultQueue: "CloudBuilders Support"
     defaultSubcategory: "Monitoring"
-    # Reference to existing secret (required when activeProvider=rackspace_core)
-    # Installer default secret name: bakery-rackspace-core
-    existingSecret: ""
+    # Credentials and endpoint must come from existingSecret keys.
+    existingSecret: "bakery-rackspace-core"
     secretKeys:
       url: "rackspace-core-url"
       username: "rackspace-core-username"

@@ -1,7 +1,6 @@
 suite: bakery-disabled-rendering
 templates:
   - templates/bakery-serviceaccount.yaml
-  - templates/bakery-secret.yaml
   - templates/bakery-deployment.yaml
   - templates/bakery-worker-deployment.yaml
   - templates/bakery-init-job.yaml

@@ -1,14 +1,16 @@
 # Alembic Quick Reference
 
+Alpha rule:
+- Keep one full-schema baseline revision per service.
+- Edit the baseline file when schema changes are needed.
+- Do not create chained revisions for fresh-install alpha work.
+
 ```bash
 # Current version
-python scripts/migrate.py current
+python api/migrate.py current
 
 # Apply migrations
-python scripts/migrate.py upgrade
-
-# Create new migration
-python scripts/migrate.py create "description"
+python api/migrate.py upgrade
 ```
 
 Naming conventions:

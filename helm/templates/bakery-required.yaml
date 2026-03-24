@@ -1,34 +1,52 @@
 {{- if .Values.bakery.enabled }}
 {{- if or .Values.bakery.rackspaceCore.url .Values.bakery.rackspaceCore.username .Values.bakery.rackspaceCore.password }}
-{{- fail "Rackspace Core credentials and URL via values are disabled. Use bakery.rackspaceCore.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- fail "Rackspace Core direct values are disabled. Use bakery.rackspaceCore.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if or .Values.bakery.servicenow.url .Values.bakery.servicenow.username .Values.bakery.servicenow.password }}
+{{- fail "ServiceNow direct values are disabled. Use bakery.servicenow.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if or .Values.bakery.jira.url .Values.bakery.jira.username .Values.bakery.jira.apiToken }}
+{{- fail "Jira direct values are disabled. Use bakery.jira.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if .Values.bakery.github.token }}
+{{- fail "GitHub direct values are disabled. Use bakery.github.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if .Values.bakery.pagerduty.apiKey }}
+{{- fail "PagerDuty direct values are disabled. Use bakery.pagerduty.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if .Values.bakery.teams.webhookUrl }}
+{{- fail "Teams direct values are disabled. Use bakery.teams.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if .Values.bakery.discord.webhookUrl }}
+{{- fail "Discord direct values are disabled. Use bakery.discord.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if or .Values.bakery.auth.hmac.activeKeyId .Values.bakery.auth.hmac.activeKey .Values.bakery.auth.hmac.nextKeyId .Values.bakery.auth.hmac.nextKey }}
+{{- fail "Bakery auth direct values are disabled. Use bakery.auth.existingSecret and install-bakery.sh secret provisioning." -}}
+{{- end }}
+{{- if or .Values.bakery.client.auth.keyId .Values.bakery.client.auth.key }}
+{{- fail "Bakery client auth direct values are disabled. Use bakery.client.auth.existingSecret and install-bakery.sh secret provisioning." -}}
 {{- end }}
 {{- $activeProvider := (.Values.bakery.config.activeProvider | default "rackspace_core") -}}
-{{- $hasServiceNowConfig := or .Values.bakery.servicenow.existingSecret (and .Values.bakery.servicenow.url .Values.bakery.servicenow.password) -}}
-{{- $hasJiraConfig := or .Values.bakery.jira.existingSecret (and .Values.bakery.jira.url .Values.bakery.jira.apiToken) -}}
-{{- $hasGithubConfig := or .Values.bakery.github.existingSecret .Values.bakery.github.token -}}
-{{- $hasPagerDutyConfig := or .Values.bakery.pagerduty.existingSecret .Values.bakery.pagerduty.apiKey -}}
-{{- $hasTeamsConfig := or .Values.bakery.teams.existingSecret .Values.bakery.teams.webhookUrl -}}
-{{- $hasDiscordConfig := or .Values.bakery.discord.existingSecret .Values.bakery.discord.webhookUrl -}}
 {{- if and (eq $activeProvider "rackspace_core") (not .Values.bakery.rackspaceCore.existingSecret) }}
 {{- fail "bakery.rackspaceCore.existingSecret is required when bakery.config.activeProvider=rackspace_core. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
-{{- if and (eq $activeProvider "servicenow") (not $hasServiceNowConfig) }}
-{{- fail "bakery.servicenow.existingSecret or ServiceNow direct values are required when bakery.config.activeProvider=servicenow. Use install-bakery.sh secret provisioning or reference an existing secret." -}}
+{{- if and (eq $activeProvider "servicenow") (not .Values.bakery.servicenow.existingSecret) }}
+{{- fail "bakery.servicenow.existingSecret is required when bakery.config.activeProvider=servicenow. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
-{{- if and (eq $activeProvider "jira") (not $hasJiraConfig) }}
-{{- fail "bakery.jira.existingSecret or Jira direct values are required when bakery.config.activeProvider=jira. Use install-bakery.sh secret provisioning or reference an existing secret." -}}
+{{- if and (eq $activeProvider "jira") (not .Values.bakery.jira.existingSecret) }}
+{{- fail "bakery.jira.existingSecret is required when bakery.config.activeProvider=jira. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
-{{- if and (eq $activeProvider "github") (not $hasGithubConfig) }}
-{{- fail "bakery.github.existingSecret or bakery.github.token is required when bakery.config.activeProvider=github. Use install-bakery.sh secret provisioning or reference an existing secret." -}}
+{{- if and (eq $activeProvider "github") (not .Values.bakery.github.existingSecret) }}
+{{- fail "bakery.github.existingSecret is required when bakery.config.activeProvider=github. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
-{{- if and (eq $activeProvider "pagerduty") (not $hasPagerDutyConfig) }}
-{{- fail "bakery.pagerduty.existingSecret or bakery.pagerduty.apiKey is required when bakery.config.activeProvider=pagerduty. Use install-bakery.sh secret provisioning or reference an existing secret." -}}
+{{- if and (eq $activeProvider "pagerduty") (not .Values.bakery.pagerduty.existingSecret) }}
+{{- fail "bakery.pagerduty.existingSecret is required when bakery.config.activeProvider=pagerduty. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
-{{- if and (eq $activeProvider "teams") (not $hasTeamsConfig) }}
-{{- fail "bakery.teams.existingSecret or bakery.teams.webhookUrl is required when bakery.config.activeProvider=teams. Use install-bakery.sh secret provisioning or reference an existing secret." -}}
+{{- if and (eq $activeProvider "teams") (not .Values.bakery.teams.existingSecret) }}
+{{- fail "bakery.teams.existingSecret is required when bakery.config.activeProvider=teams. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
-{{- if and (eq $activeProvider "discord") (not $hasDiscordConfig) }}
-{{- fail "bakery.discord.existingSecret or bakery.discord.webhookUrl is required when bakery.config.activeProvider=discord. Use install-bakery.sh secret provisioning or reference an existing secret." -}}
+{{- if and (eq $activeProvider "discord") (not .Values.bakery.discord.existingSecret) }}
+{{- fail "bakery.discord.existingSecret is required when bakery.config.activeProvider=discord. Use install-bakery.sh to verify/create the secret." -}}
 {{- end }}
 {{- if .Values.bakery.gateway.enabled }}
 {{- $bakeryGatewayProtocol := upper (default "HTTPS" .Values.bakery.gateway.listener.protocol) -}}

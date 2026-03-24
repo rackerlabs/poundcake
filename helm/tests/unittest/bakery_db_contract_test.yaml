@@ -1,7 +1,6 @@
 suite: bakery-db-contract
 templates:
   - templates/bakery-mariadb.yaml
-  - templates/bakery-secret.yaml
   - templates/bakery-deployment.yaml
   - templates/bakery-worker-deployment.yaml
   - templates/bakery-init-job.yaml
