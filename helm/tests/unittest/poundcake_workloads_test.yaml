@@ -42,11 +42,11 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
-          value: ""
+          value: worker
         documentIndex: 0
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
-          value: ""
+          value: worker
         documentIndex: 5
 
   - it: applies image and interval values to key containers

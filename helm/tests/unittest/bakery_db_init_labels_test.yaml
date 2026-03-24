@@ -18,4 +18,4 @@ tests:
           value: worker
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
-          value: ""
+          value: worker

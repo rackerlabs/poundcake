@@ -138,11 +138,11 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
-          value: ""
+          value: worker
         documentIndex: 0
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
-          value: ""
+          value: worker
         documentIndex: 8
 
   - it: creates API key only in stackstorm-bootstrap

@@ -550,7 +550,7 @@
       "type": "object",
       "description": "Node selector for pod placement",
       "default": {
-        "node-role.kubernetes.io/worker": ""
+        "node-role.kubernetes.io/worker": "worker"
       }
     },
     "tolerations": {

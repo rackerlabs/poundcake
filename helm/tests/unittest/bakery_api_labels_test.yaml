@@ -61,5 +61,5 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
-          value: ""
+          value: worker
         template: templates/bakery-deployment.yaml

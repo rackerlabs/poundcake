@@ -178,8 +178,8 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 nodeSelector:
-  # Set to {} to disable worker-only scheduling or override with your cluster's worker label.
-  node-role.kubernetes.io/worker: ""
+  # Set to {} to disable worker-only scheduling or override with your cluster's worker label/value.
+  node-role.kubernetes.io/worker: "worker"
 
 tolerations: []
 
