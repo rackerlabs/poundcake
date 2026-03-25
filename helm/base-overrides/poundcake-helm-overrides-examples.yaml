@@ -1,23 +1,11 @@
-# Example Helm overrides for PoundCake/Bakery.
+# Example Helm overrides for PoundCake.
 # Start by setting real FQDNs for Envoy Gateway listeners/routes.
 # Copy this file to /etc/genestack/helm-configs/poundcake/poundcake-helm-overrides.yaml
 # (or another location consumed via -f/--values), then adjust values for your environment.
 #
-# Service selection profiles (installer mapping only):
-# - PoundCake installer: poundcake.enabled=true, bakery.enabled=false
-# - Bakery installer: poundcake.enabled=false, bakery.enabled=true
-#
-# Wrapper mapping:
-# - ./install/install-poundcake-helm.sh => true/false
-# - ./install/install-bakery-helm.sh    => false/true
-#
-# Keep runtime config in this file:
-# - bakery.client.*
-# - database.mode / database.sharedOperator.*
-# - poundcakeImage.pullSecrets
-# - git.*
+# Bakery is deployed separately from https://github.com/rackerlabs/bakery .
+# This file keeps only the PoundCake-side remote Bakery client settings.
 
-# Canonical service-selection defaults for this example:
 poundcake:
   enabled: true
 
@@ -34,19 +22,14 @@ uiImage:
   pullPolicy: Always
 
 bakery:
-  enabled: false
+  config:
+    activeProvider: rackspace_core
   client:
     enabled: false
-  image:
-    repository: ghcr.io/rackerlabs/poundcake-bakery
-    tag: latest
-    pullPolicy: Always
-  config:
-    # Keep true during validation windows to avoid creating external tickets.
-    ticketingDryRun: true
-  rackspaceCore:
-    # Set false for lab endpoints using certs that do not match hostnames.
-    verifySsl: false
+    enforceRemoteBaseUrl: true
+    baseUrl: ""
+    auth:
+      existingSecret: bakery-hmac
 
 gateway:
   enabled: true
@@ -64,22 +47,6 @@ gateway:
       port: 80
       pathPrefix: /
 
-# Alternate service-selection snippets:
-# Bakery-only:
-# poundcake:
-#   enabled: false
-# bakery:
-#   enabled: true
-#
-# Co-located shared-DB example for the PoundCake release:
-# bakery:
-#   client:
-#     enabled: true
-# database:
-#   mode: shared_operator
-#   sharedOperator:
-#     serverName: bakery-poundcake-bakery-mariadb
-#
 # Remote Bakery example for the PoundCake release:
 # bakery:
 #   client:

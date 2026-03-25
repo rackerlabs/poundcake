@@ -47,7 +47,7 @@ tests:
     set:
       poundcake.enabled: true
       database.mode: shared_operator
-      database.sharedOperator.serverName: bakery-pc-bakery-mariadb
+      database.sharedOperator.serverName: shared-pc-mariadb
     asserts:
       - equal:
           path: metadata.name
@@ -84,19 +84,19 @@ tests:
         documentIndex: 2
       - equal:
           path: spec.mariaDbRef.name
-          value: bakery-pc-bakery-mariadb
+          value: shared-pc-mariadb
         template: templates/poundcake-shared-mariadb.yaml
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_DATABASE_URL
-            value: mysql+pymysql://$(DB_USER):$(DB_PASSWORD)@bakery-pc-bakery-mariadb:3306/$(DB_NAME)
+            value: mysql+pymysql://$(DB_USER):$(DB_PASSWORD)@shared-pc-mariadb:3306/$(DB_NAME)
         template: templates/poundcake-workloads.yaml
         documentIndex: 0
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'DB_SVC="bakery-pc-bakery-mariadb"'
+          pattern: 'DB_SVC="shared-pc-mariadb"'
         template: templates/stackstorm-startup-order-jobs.yaml
         documentIndex: 7
 
@@ -104,7 +104,7 @@ tests:
     set:
       poundcake.enabled: true
       database.mode: shared_operator
-      database.sharedOperator.serverName: bakery-pc-bakery-mariadb
+      database.sharedOperator.serverName: shared-pc-mariadb
       database.sharedOperator.provisionResources: false
     asserts:
       - hasDocuments:

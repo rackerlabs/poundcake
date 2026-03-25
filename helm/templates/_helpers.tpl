@@ -36,21 +36,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
-{{- define "poundcake.bakeryServiceAccountName" -}}
-{{- $bakery := .Values.bakery | default dict -}}
-{{- $bakeryServiceAccount := $bakery.serviceAccount | default dict -}}
-{{- $name := $bakeryServiceAccount.name | default "" -}}
-{{- $create := .Values.serviceAccount.create -}}
-{{- if hasKey $bakeryServiceAccount "create" -}}
-{{- $create = $bakeryServiceAccount.create -}}
-{{- end -}}
-{{- if $create -}}
-{{- default (printf "%s-bakery" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-") $name -}}
-{{- else -}}
-{{- default "default" $name -}}
-{{- end -}}
-{{- end -}}
-
 {{- define "poundcake.stackstormActionrunnerServiceAccountName" -}}
 {{- $cfg := .Values.stackstormActionrunner | default dict -}}
 {{- $serviceAccount := $cfg.serviceAccount | default dict -}}
@@ -103,9 +88,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- if eq (include "poundcake.stackstormServiceEnabled" (dict "root" . "name" "web")) "true" -}}
 {{- $urlServices = append $urlServices (dict "name" "services.stackstormWeb.port" "port" (int .Values.services.stackstormWeb.port)) -}}
-{{- end -}}
-{{- if .Values.bakery.enabled -}}
-{{- $urlServices = append $urlServices (dict "name" "bakery.service.port" "port" (int .Values.bakery.service.port)) -}}
 {{- end -}}
 {{- $seen := dict -}}
 {{- range $service := $urlServices -}}
@@ -165,47 +147,12 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
-{{- define "poundcake.bakeryName" -}}
-{{- printf "%s-bakery" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{- define "poundcake.bakeryGatewayManagerName" -}}
-{{- printf "%s-%s-gateway-manager" .Release.Namespace (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
 {{- define "poundcake.bakeryBaseUrl" -}}
-{{- if .Values.bakery.client.baseUrl -}}
-{{- .Values.bakery.client.baseUrl -}}
-{{- else -}}
-{{- printf "http://%s:%v" (include "poundcake.bakeryName" .) .Values.bakery.service.port -}}
-{{- end -}}
+{{- .Values.bakery.client.baseUrl | default "" -}}
 {{- end -}}
 
 {{- define "poundcake.bakerySecretName" -}}
-{{- printf "%s-secret" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{- define "poundcake.bakeryDbHost" -}}
-{{- $bakery := .Values.bakery | default dict -}}
-{{- $database := $bakery.database | default dict -}}
-{{- $host := $database.host | default "" -}}
-{{- if $host -}}
-{{- $host -}}
-{{- else -}}
-{{- printf "%s-mariadb" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "poundcake.bakeryDbSecretName" -}}
-{{- if .Values.bakery.database.user.passwordSecret -}}
-{{- .Values.bakery.database.user.passwordSecret -}}
-{{- else -}}
-{{- printf "%s-db-user" (include "poundcake.bakeryName" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "poundcake.bakeryDbSecretKey" -}}
-{{- .Values.bakery.database.user.passwordSecretKey | default "password" -}}
+{{- printf "%s-bakery-secret" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "poundcake.databaseMode" -}}
@@ -261,22 +208,6 @@ poundcake-mariadb
   "bakeryClient" ($bakery.client | default dict)
 -}}
 {{ toYaml $material }}
-{{- end -}}
-
-{{- define "poundcake.bakeryWaitForDbInitContainer" -}}
-- name: wait-for-db
-  image: {{ .Values.images.busybox | quote }}
-  securityContext:
-    {{- toYaml .Values.utilitySecurityContext | nindent 4 }}
-  command:
-    - sh
-    - -c
-    - |
-      until nc -z -v -w30 {{ include "poundcake.bakeryDbHost" . }} 3306; do
-        echo "Waiting for MariaDB..."
-        sleep 5
-      done
-      echo "MariaDB is ready"
 {{- end -}}
 
 {{- define "poundcake.logGroupLabel" -}}
@@ -348,24 +279,6 @@ tolerations:
 {{- $digest -}}
 {{- else -}}
 {{- default .Chart.AppVersion .Values.poundcakeImage.tag -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "poundcake.bakeryImageRef" -}}
-{{- $digest := .Values.bakery.image.digest | default .Values.poundcakeImage.digest | default "" -}}
-{{- if $digest -}}
-{{- printf "%s@%s" .Values.bakery.image.repository $digest -}}
-{{- else -}}
-{{- printf "%s:%s" .Values.bakery.image.repository (default .Chart.AppVersion .Values.bakery.image.tag) -}}
-{{- end -}}
-{{- end -}}
-
-{{- define "poundcake.bakeryImageVersion" -}}
-{{- $digest := .Values.bakery.image.digest | default .Values.poundcakeImage.digest | default "" -}}
-{{- if $digest -}}
-{{- $digest -}}
-{{- else -}}
-{{- default .Chart.AppVersion .Values.bakery.image.tag -}}
 {{- end -}}
 {{- end -}}
 

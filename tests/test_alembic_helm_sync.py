@@ -21,8 +21,7 @@ def test_helm_alembic_migration_matches_source() -> None:
         assert source.read_text(encoding="utf-8") == helm_copy.read_text(encoding="utf-8")
 
 
-def test_bakery_uses_a_single_baseline_migration() -> None:
+def test_poundcake_repo_no_longer_contains_in_repo_bakery_runtime() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    bakery_versions = repo_root / "bakery/alembic/versions"
 
-    assert _migration_filenames(bakery_versions) == ["001_initial_schema.py"]
+    assert not (repo_root / "bakery").exists()

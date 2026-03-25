@@ -12,7 +12,6 @@ on:
           - all
           - poundcake
           - ui
-          - bakery
           - chart
 
 permissions:
@@ -80,20 +79,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=poundcake-ui
           platforms: linux/amd64
 
-      - name: Build and push Bakery Docker image
-        if: ${{ inputs.target == 'all' || inputs.target == 'bakery' }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: bakery-runtime
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-bakery:${{ steps.tags.outputs.sha_tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-bakery:latest
-          cache-from: type=gha,scope=poundcake-bakery
-          cache-to: type=gha,mode=max,scope=poundcake-bakery
-          platforms: linux/amd64
-
       - name: Make UI Docker image public
         if: ${{ inputs.target == 'all' || inputs.target == 'ui' }}
         run: |
@@ -112,16 +97,6 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/${{ env.REPO_NAME }} \
-            -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
-
-      - name: Make Bakery Docker image public
-        if: ${{ inputs.target == 'all' || inputs.target == 'bakery' }}
-        run: |
-          curl -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/${{ env.REPO_NAME }}-bakery \
             -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
 
       - name: Set up Helm

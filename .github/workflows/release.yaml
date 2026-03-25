@@ -117,40 +117,6 @@ jobs:
             https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/${{ env.REPO_NAME }} \
             -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
 
-      - name: Extract metadata for Bakery Docker
-        id: meta-bakery
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-bakery
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-
-      - name: Build and push Bakery Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: bakery-runtime
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-bakery.outputs.tags }}
-          labels: ${{ steps.meta-bakery.outputs.labels }}
-          cache-from: type=gha,scope=poundcake-bakery
-          cache-to: type=gha,mode=max,scope=poundcake-bakery
-          platforms: linux/amd64
-
-      - name: Make Bakery Docker image public
-        if: github.event_name != 'pull_request'
-        run: |
-          curl -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/${{ env.PACKAGE_OWNER }}/packages/container/${{ env.REPO_NAME }}-bakery \
-            -d '{"visibility":"public"}' || echo "Package may already be public or API call failed (non-fatal)"
-
   build-and-push-chart:
     runs-on: ubuntu-latest
     needs: build-and-push-image

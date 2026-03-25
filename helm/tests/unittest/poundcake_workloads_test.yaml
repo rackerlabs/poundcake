@@ -778,10 +778,10 @@ tests:
             name: POUNDCAKE_AUTH_SERVICE_TOKEN
         documentIndex: 5
 
-  - it: injects bakery client env vars into poundcake-api with integrated defaults
+  - it: injects remote bakery client env vars into poundcake-api
     set:
-      bakery.enabled: true
       bakery.client.enabled: true
+      bakery.client.baseUrl: https://bakery.example.com
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -793,7 +793,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_BASE_URL
-            value: http://RELEASE-NAME-poundcake-bakery:8000
+            value: https://bakery.example.com
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
@@ -846,9 +846,8 @@ tests:
                 optional: true
         documentIndex: 0
 
-  - it: supports bakery baseUrl and auth secret overrides for poundcake-api
+  - it: supports bakery auth secret overrides for poundcake-api
     set:
-      bakery.enabled: false
       bakery.client.enabled: true
       bakery.client.enforceRemoteBaseUrl: true
       bakery.client.baseUrl: https://bakery.example.com
@@ -881,12 +880,10 @@ tests:
                 optional: true
         documentIndex: 0
 
-  - it: fails fast when remote bakery client is enabled without baseUrl and local bakery is disabled
+  - it: fails fast when remote bakery client is enabled without baseUrl
     set:
-      bakery.enabled: false
       bakery.client.enabled: true
-      bakery.client.enforceRemoteBaseUrl: true
       bakery.client.baseUrl: ""
     asserts:
       - failedTemplate:
-          errorMessage: "bakery.client.baseUrl must be set when bakery.client.enforceRemoteBaseUrl=true (remote Bakery mode)"
+          errorMessage: "bakery.client.baseUrl must be set when bakery.client.enabled=true (remote Bakery mode)"

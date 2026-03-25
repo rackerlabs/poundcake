@@ -1,4 +1,0 @@
-{{/*
-Integrated/shared Bakery startup marker secret removed.
-Bakery now uses dedicated MariaDB operator resources only.
-*/}}

@@ -9,7 +9,8 @@ for arg in "$@"; do
   case "${arg}" in
     --target|--target=*)
       echo "install-poundcake-helm.sh no longer supports --target." >&2
-      echo "Use install/install-poundcake-helm.sh for PoundCake or install/install-bakery-helm.sh for Bakery." >&2
+      echo "PoundCake now installs only PoundCake." >&2
+      echo "Install Bakery from the standalone bakery repo: https://github.com/rackerlabs/bakery" >&2
       exit 1
       ;;
   esac

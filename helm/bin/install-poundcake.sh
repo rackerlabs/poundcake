@@ -31,7 +31,6 @@ POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/gene
 
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
-INSTALL_PROFILE="${POUNDCAKE_INSTALL_PROFILE:-poundcake}"
 OPERATOR_MODE="${POUNDCAKE_OPERATORS_MODE:-install-missing}"
 MARIADB_OPERATOR_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_RELEASE_NAME:-mariadb-operator}"
 MARIADB_OPERATOR_CRDS_RELEASE_NAME="${POUNDCAKE_MARIADB_OPERATOR_CRDS_RELEASE_NAME:-mariadb-operator-crds}"
@@ -474,11 +473,6 @@ ensure_required_operators() {
 
   install_or_verify_mariadb_operator
 
-  if [[ "${INSTALL_PROFILE}" == "bakery" ]]; then
-    log_info "Installer profile is bakery-only; skipping non-MariaDB operator installs."
-    return 0
-  fi
-
   install_or_verify_helm_operator \
     "redis-operator" \
     "redis.redis.redis.opstreelabs.in,redis.redis.opstreelabs.in" \
@@ -734,7 +728,8 @@ fi
 
 if [[ -n "${POUNDCAKE_INSTALL_MODE:-}" ]]; then
   log_error "POUNDCAKE_INSTALL_MODE is no longer supported."
-  log_error "Use install/install-poundcake-helm.sh for PoundCake or install/install-bakery-helm.sh for Bakery."
+  log_error "PoundCake now installs only PoundCake from this repo."
+  log_error "Deploy Bakery from https://github.com/rackerlabs/bakery."
   exit 1
 fi
 
@@ -750,7 +745,7 @@ for deprecated_toggle_env in \
 do
   if [[ -n "${!deprecated_toggle_env:-}" ]]; then
     log_error "${deprecated_toggle_env} is no longer supported."
-    log_error "PoundCake installer now always renders poundcake.enabled=true and bakery.enabled=false."
+    log_error "PoundCake installer now installs PoundCake resources only."
     exit 1
   fi
 done
@@ -782,7 +777,7 @@ for deprecated_env in \
 do
   if [[ -n "${!deprecated_env:-}" ]]; then
     log_error "${deprecated_env} is no longer supported."
-    log_error "Bakery DB settings are managed by install-bakery.sh."
+    log_error "Bakery database settings now live in the standalone Bakery repo."
     exit 1
   fi
 done
@@ -801,12 +796,13 @@ while [[ $# -gt 0 ]]; do
     --enable-bakery)
       log_error "Option '$1' was removed."
       log_error "PoundCake installer always deploys PoundCake only."
-      log_error "Use install/install-bakery-helm.sh to deploy Bakery."
+      log_error "Deploy Bakery from https://github.com/rackerlabs/bakery."
       exit 1
       ;;
     --mode|--mode=*)
       log_error "Option '$1' was removed."
-      log_error "Use install/install-poundcake-helm.sh for PoundCake or install/install-bakery-helm.sh for Bakery."
+      log_error "PoundCake now installs only PoundCake from this repo."
+      log_error "Deploy Bakery from https://github.com/rackerlabs/bakery."
       exit 1
       ;;
     --operators-mode)
@@ -831,12 +827,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --interactive-bakery-creds|--interactive-bakery-credentials)
       log_error "Option '$1' is not supported by install-poundcake.sh."
-      log_error "Bakery credentials are configured via install-bakery.sh."
+      log_error "Bakery credentials are configured from the standalone Bakery repo."
       exit 1
       ;;
     --bakery-rackspace-url|--bakery-rackspace-username|--bakery-rackspace-password|--bakery-rackspace-secret-name)
       log_error "Option '$1' is not supported by install-poundcake.sh."
-      log_error "Use install-bakery.sh to configure Bakery credentials and secrets."
+      log_error "Use the standalone Bakery repo to configure Bakery credentials and secrets."
       exit 1
       ;;
     --remote-bakery-url|--remote-bakery-enabled|--remote-bakery-auth-mode|--remote-bakery-auth-secret|--remote-bakery-hmac-key|--remote-bakery-hmac-key-id|--shared-db-mode|--shared-db-server-name)
@@ -856,7 +852,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --bakery-db-integrated|--bakery-db-host|--bakery-db-name|--bakery-db-user|--bakery-db-password|--bakery-db-password-secret-name|--bakery-db-password-secret-key|--bakery-db-admin-secret-name|--bakery-db-admin-password-key|--bakery-db-sql-image)
       log_error "Option '$1' is no longer supported."
-      log_error "Bakery DB flags are managed by install-bakery.sh."
+      log_error "Bakery DB flags now belong to the standalone Bakery repo."
       exit 1
       ;;
     *)
@@ -875,9 +871,10 @@ if [[ "${OPERATOR_MODE}" != "install-missing" && "${OPERATOR_MODE}" != "verify" 
   exit 1
 fi
 
-if [[ "${INSTALL_PROFILE}" != "poundcake" && "${INSTALL_PROFILE}" != "bakery" ]]; then
-  log_error "Invalid installer profile '${INSTALL_PROFILE}'."
-  log_error "Valid values: poundcake, bakery."
+if [[ -n "${POUNDCAKE_INSTALL_PROFILE:-}" && "${POUNDCAKE_INSTALL_PROFILE}" != "poundcake" ]]; then
+  log_error "Invalid installer profile '${POUNDCAKE_INSTALL_PROFILE}'."
+  log_error "This repo supports only the 'poundcake' installer profile."
+  log_error "Deploy Bakery from https://github.com/rackerlabs/bakery."
   exit 1
 fi
 
@@ -887,7 +884,6 @@ if [[ "${INSTALL_DEBUG}" == "true" ]]; then
   set -x
 fi
 
-log_info "Installer profile: ${INSTALL_PROFILE}"
 log_info "Installer options: operators_mode=${OPERATOR_MODE}, validate=${VALIDATE}, skip_preflight=${SKIP_PREFLIGHT}, rotate_secrets=${ROTATE_SECRETS}, debug=${INSTALL_DEBUG}"
 
 log_phase "preflight checks"
@@ -982,11 +978,7 @@ if [[ -f "${POST_RENDERER}" && -d "${POST_RENDERER_OVERLAY_DIR}" ]]; then
   fi
 fi
 
-INSTALLER_SET_ARGS=(
-  --set "poundcake.enabled=true"
-  --set "bakery.enabled=false"
-  --set "bakery.worker.enabled=false"
-)
+INSTALLER_SET_ARGS=(--set "poundcake.enabled=true")
 
 COMMON_HELM_ARGS=(
   --namespace "${NAMESPACE}"
@@ -1061,21 +1053,14 @@ else
   "${HELM_TEMPLATE_CMD[@]}" > "${RENDERED_MANIFEST}"
 fi
 
-if [[ "${INSTALL_PROFILE}" == "poundcake" ]]; then
-  verify_rendered_endpoint_contract "${RENDERED_MANIFEST}"
-fi
+verify_rendered_endpoint_contract "${RENDERED_MANIFEST}"
 rm -f "${RENDERED_MANIFEST}"
 
 log_phase "helm install execution"
 log_info "Installing PoundCake release: ${RELEASE_NAME}"
 log_info "Namespace: ${NAMESPACE}"
-if [[ "${INSTALL_PROFILE}" == "bakery" ]]; then
-  log_info "PoundCake resources: disabled"
-  log_info "Bakery resources: enabled"
-else
-  log_info "PoundCake resources: enabled"
-  log_info "Bakery resources: disabled"
-fi
+log_info "PoundCake resources: enabled"
+log_info "Bakery resources: external only"
 log_info "Chart source: ${CHART_SOURCE}"
 if [[ "${CHART_SOURCE}" == oci://* ]]; then
   log_info "Chart version: ${CHART_VERSION:-"(not set)"}"

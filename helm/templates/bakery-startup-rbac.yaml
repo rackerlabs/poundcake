@@ -1,4 +1,0 @@
-{{/*
-Integrated/shared Bakery DB bootstrap RBAC removed.
-Bakery now uses dedicated MariaDB operator resources only.
-*/}}

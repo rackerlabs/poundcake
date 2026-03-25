@@ -350,7 +350,7 @@ class Settings(BaseSettings):
     # Bakery Integration Settings
     # ==========================================================================
     bakery_enabled: bool = False
-    bakery_base_url: str = "http://bakery:8000"
+    bakery_base_url: str = ""
     bakery_auth_mode: str = "hmac"
     bakery_hmac_key_id: str = ""
     bakery_hmac_key: str = ""

@@ -189,7 +189,6 @@ export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake"
 # export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake"
 # Configure image repositories/tags in your Helm override files.
 
-./install/install-bakery-helm.sh
 ./install/install-poundcake-helm.sh --validate
 ./install/install-poundcake-helm.sh
 ```
@@ -197,11 +196,10 @@ export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake"
 Note:
 
 - Installers:
-  - `install/install-bakery-helm.sh` installs Bakery only.
   - `install/install-poundcake-helm.sh` installs PoundCake only.
-  - Co-located flow in one namespace is Bakery first, then PoundCake.
-  - For non-co-located Bakery, put remote Bakery settings in override files.
-  - For the opinionated split-environment operator flow, see [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
+  - Bakery now lives in the standalone [rackerlabs/bakery](https://github.com/rackerlabs/bakery) repo.
+  - For remote Bakery, put PoundCake client settings in override files.
+  - For the PoundCake side of the split-environment flow, see [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
 - `install/install-poundcake-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
   - `poundcake`
   - `stackstorm`

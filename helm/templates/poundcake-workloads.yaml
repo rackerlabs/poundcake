@@ -1,5 +1,5 @@
-{{- if and .Values.poundcake.enabled .Values.bakery.client.enforceRemoteBaseUrl .Values.bakery.client.enabled (not .Values.bakery.client.baseUrl) }}
-{{- fail "bakery.client.baseUrl must be set when bakery.client.enforceRemoteBaseUrl=true (remote Bakery mode)" }}
+{{- if and .Values.poundcake.enabled .Values.bakery.client.enabled (not .Values.bakery.client.baseUrl) }}
+{{- fail "bakery.client.baseUrl must be set when bakery.client.enabled=true (remote Bakery mode)" }}
 {{- end }}
 {{- if .Values.poundcake.enabled }}
 apiVersion: apps/v1

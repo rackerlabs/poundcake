@@ -16,7 +16,7 @@ from api.schemas.schemas import (
     StackStormWorkflowRegistrationRequest,
 )
 from api.services.repo_sync_service import RepoWorkflowDocument
-from bakery.schemas import TicketCreateRequest
+from shared.bakery_contract import CommunicationOpenRequest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -103,9 +103,9 @@ def test_alertmanager_webhook_request_still_allows_extra_fields() -> None:
     assert payload.alerts[0].labels["alertname"] == "DiskFull"
 
 
-def test_bakery_ticket_schema_rejects_unknown_fields() -> None:
+def test_bakery_open_contract_schema_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
-        TicketCreateRequest.model_validate(
+        CommunicationOpenRequest.model_validate(
             {
                 "title": "Disk alert",
                 "description": "details",
@@ -168,7 +168,7 @@ def test_public_json_routes_define_response_models() -> None:
     }
     missing: list[str] = []
 
-    for relative_dir in ("api/api", "bakery/api"):
+    for relative_dir in ("api/api",):
         for path in sorted((REPO_ROOT / relative_dir).glob("*.py")):
             module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(module):

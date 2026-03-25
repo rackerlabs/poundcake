@@ -27,11 +27,6 @@ FROM python-builder-base AS api-deps
 COPY requirements.txt /build/requirements.txt
 RUN pip install --no-cache-dir -r /build/requirements.txt
 
-# Bakery dependency set
-FROM python-builder-base AS bakery-deps
-COPY bakery/requirements.txt /build/requirements-bakery.txt
-RUN pip install --no-cache-dir -r /build/requirements-bakery.txt
-
 # ============================================================================
 # Stage 2: Shared runtime base
 # ============================================================================
@@ -74,23 +69,3 @@ RUN chmod +x /app/api/scripts/entrypoint-auto-migrate.sh \
 USER appuser
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
-# ============================================================================
-# Stage 3B: Bakery runtime image
-# ============================================================================
-FROM python-runtime-base AS bakery-runtime
-
-COPY --from=bakery-deps /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-COPY --chown=appuser:appuser bakery/ /app/bakery/
-COPY --chown=appuser:appuser shared/ /app/shared/
-
-USER appuser
-
-EXPOSE 8000
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
-
-CMD ["uvicorn", "bakery.main:app", "--host", "0.0.0.0", "--port", "8000"]

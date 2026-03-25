@@ -14,16 +14,14 @@
 #
 # High-level chart shape:
 # - PoundCake API + UI + workers
-# - optional Bakery API + worker + DB init job
-# - StackStorm and supporting infra rendered by the PoundCake profile
+# - StackStorm and supporting infra
 # - PoundCake DB can be embedded or shared-operator backed
-# - Bakery owns its own database contract when installed
+# - remote Bakery is configured through bakery.client.*
 
 replicaCount: 1
 
 # Service selection:
 # - poundcake.enabled=true renders PoundCake + StackStorm resources
-# - bakery.enabled=true renders Bakery resources
 poundcake:
   enabled: true
 
@@ -592,7 +590,6 @@ auth:
       clientId: ""
 
 # Database configuration (MySQL/MariaDB) for PoundCake API only.
-# Bakery uses a separate database contract under bakery.database.
 database:
   # Database deployment mode for PoundCake:
   # - embedded: deploy in-chart poundcake-mariadb Deployment/Service/PVC
@@ -816,123 +813,16 @@ stackstormActionrunner:
   pvcPatchRbac:
     enabled: true
 
-# Bakery service configuration
-# API proxy/translator for ticketing systems (ServiceNow, Jira, GitHub, PagerDuty, Rackspace Core)
+# Remote Bakery client configuration.
+# Bakery is now deployed from the standalone bakery repo and PoundCake talks to it over HTTP.
 bakery:
-  # Enable Bakery deployment.
-  enabled: false
-
-  # Number of Bakery replicas
-  replicaCount: 1
-
-  # Service account used by Bakery API/worker/jobs.
-  # Use this account for external ticketing/workload-identity annotations.
-  serviceAccount:
-    create: true
-    annotations: {}
-    name: ""
-
-  worker:
-    enabled: true
-    replicaCount: 1
-    pollIntervalSec: 2
-    batchSize: 10
-    maxAttempts: 5
-    backoffBaseSec: 5
-    backoffMaxSec: 300
-
-  dbInit:
-    resources:
-      limits:
-        cpu: 200m
-        memory: 128Mi
-      requests:
-        cpu: 100m
-        memory: 64Mi
-
-  # Bakery image configuration
-  image:
-    repository: ghcr.io/rackerlabs/poundcake-bakery
-    pullPolicy: Always
-    tag: ""
-    # Optional immutable image digest (sha256:...); overrides tag when set.
-    digest: ""
-
-  # Service configuration
-  service:
-    type: ClusterIP
-    port: 8000
-
-  # Gateway API exposure for Bakery (optional)
-  # Useful when PoundCake is deployed in a different environment/cluster.
-  gateway:
-    enabled: false
-    # Security guardrail: deny HTTP listeners unless explicitly allowed.
-    allowInsecureHttp: false
-
-    # Gateway reference (required if enabled)
-    gatewayName: ""  # Example: <gateway-name>
-    gatewayNamespace: ""  # Example: <gateway-namespace>
-
-    # Listener configuration to create/update on the target Gateway
-    listener:
-      name: ""  # Example: <bakery-gateway-listener-name>
-      hostname: ""  # Example: bakery.example.com
-      port: 443
-      protocol: "HTTPS"  # HTTPS or HTTP
-      tlsSecretName: ""  # Example: <bakery-gateway-tls-secret-name>
-      allowedNamespaces: "All"
-      updateIfExists: true
-
-    # HTTPRoute hostnames (should match listener.hostname)
-    hostnames: []
-
-    # Optional HTTPRoute annotations
-    annotations: {}
-
-  # Resource limits
-  resources:
-    limits:
-      cpu: 500m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
-
-  # Environment configuration
   config:
-    # Application settings
-    environment: production
-    logLevel: INFO
     activeProvider: rackspace_core
-    # If true, Bakery logs all requests and skips outbound calls to external ticketing systems.
-    ticketingDryRun: false
-
-    # Message queue settings
-    messageRetentionHours: 24
-    maxMessagesPerPoll: 100
-
-    # Mixer settings
-    mixerTimeoutSec: 30
-    mixerMaxRetries: 3
-
-  auth:
-    enabled: true
-    mode: hmac
-    existingSecret: ""
-    secretKeys:
-      activeKeyId: "active-key-id"
-      activeKey: "active-key"
-      nextKeyId: "next-key-id"
-      nextKey: "next-key"
-    hmac:
-      timestampSkewSec: 300
 
   client:
     enabled: false
-    # Set enabled=true for co-located or remote Bakery installs.
-    # Enforce explicit remote base URL when operating without in-cluster Bakery.
-    enforceRemoteBaseUrl: false
+    # Remote Bakery is the only supported mode in PoundCake after the repo split.
+    enforceRemoteBaseUrl: true
     baseUrl: ""
     auth:
       mode: hmac
@@ -944,86 +834,6 @@ bakery:
     maxRetries: 2
     pollIntervalSeconds: 2
     pollTimeoutSeconds: 60
-
-  # ServiceNow configuration
-  servicenow:
-    # Credentials and endpoint must come from existingSecret keys.
-    existingSecret: "bakery-servicenow"
-    secretKeys:
-      url: "servicenow-url"
-      username: "servicenow-username"
-      password: "servicenow-password"
-
-  # Jira configuration
-  jira:
-    # Credentials and endpoint must come from existingSecret keys.
-    existingSecret: "bakery-jira"
-    secretKeys:
-      url: "jira-url"
-      username: "jira-username"
-      apiToken: "jira-api-token"
-
-  # GitHub configuration
-  github:
-    # Credentials must come from existingSecret keys.
-    existingSecret: "bakery-github"
-    secretKeys:
-      token: "github-token"
-
-  # PagerDuty configuration
-  pagerduty:
-    # Credentials must come from existingSecret keys.
-    existingSecret: "bakery-pagerduty"
-    secretKeys:
-      apiKey: "pagerduty-api-key"
-
-  # Microsoft Teams configuration
-  teams:
-    # Webhook credentials must come from existingSecret keys.
-    existingSecret: "bakery-teams"
-    secretKeys:
-      webhookUrl: "teams-webhook-url"
-
-  # Discord configuration
-  discord:
-    # Webhook credentials must come from existingSecret keys.
-    existingSecret: "bakery-discord"
-    secretKeys:
-      webhookUrl: "discord-webhook-url"
-
-  # Rackspace Core configuration
-  rackspaceCore:
-    # Credentials and endpoint must come from existingSecret keys
-    # (rackspace-core-url, rackspace-core-username, rackspace-core-password by default).
-    verifySsl: true
-    # Default CTK queue/subcategory for ticket creation if not provided in context
-    defaultQueue: "CloudBuilders Support"
-    defaultSubcategory: "Monitoring"
-    # Credentials and endpoint must come from existingSecret keys.
-    existingSecret: "bakery-rackspace-core"
-    secretKeys:
-      url: "rackspace-core-url"
-      username: "rackspace-core-username"
-      password: "rackspace-core-password"
-
-  # MariaDB database configuration for Bakery
-  # Bakery creates and owns an operator-managed MariaDB server, database, and migration stream.
-  # PoundCake can later share this server when co-located, but must use separate DB/user ownership.
-  database:
-    # Optional host override. Leave empty to use "<release>-poundcake-bakery-mariadb".
-    host: ""
-    # Database name
-    name: bakery
-    # User configuration
-    user:
-      name: bakery
-      password: ""  # Auto-generated if not provided
-      passwordSecret: ""
-      passwordSecretKey: "password"
-      maxUserConnections: 20
-    # Server configuration (inherits from mariadbOperator.server)
-    # Must remain true for supported installs.
-    createServer: true
 
 poundcakeImage:
   repository: ghcr.io/rackerlabs/poundcake

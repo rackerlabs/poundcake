@@ -83,29 +83,6 @@ tests:
           pattern: "required endpoint missing: \\$\\{PACK_SYNC_ENDPOINT\\}"
         documentIndex: 8
 
-  - it: inserts bakery db-init stage after infra when bakery is enabled
-    set:
-      bakery.enabled: true
-    asserts:
-      - hasDocuments:
-          count: 10
-      - equal:
-          path: metadata.name
-          value: poundcake-bakery-db-init
-        documentIndex: 3
-      - equal:
-          path: metadata.annotations["helm.sh/hook-weight"]
-          value: "3"
-        documentIndex: 3
-      - matchRegex:
-          path: spec.template.spec.initContainers[2].command[2]
-          pattern: "bakery.db_init"
-        documentIndex: 3
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "bakery_db_init_ready"
-        documentIndex: 3
-
   - it: allows overriding bootstrap wait-api pack sync endpoint
     set:
       stackstormPackSync.endpoint: "http://poundcake-api:8000/api/v1/internal/stackstorm/pack.tgz"
@@ -318,20 +295,6 @@ tests:
           path: spec.template.spec.imagePullSecrets[0].name
           value: ghcr-pull
         documentIndex: 8
-
-  - it: renders canonical pull secret on bakery db-init startup job when bakery is enabled
-    set:
-      bakery.enabled: true
-      poundcakeImage.pullSecrets[0]: ghcr-creds
-    asserts:
-      - equal:
-          path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-creds
-        documentIndex: 3
-      - equal:
-          path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-creds
-        documentIndex: 9
 
   - it: supports hardened override for utility security context
     set:
