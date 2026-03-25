@@ -130,7 +130,9 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
 
 
 @pytest.mark.asyncio
-async def test_sync_stackstorm_refreshes_remote_bootstrap_catalog_on_periodic_runs(monkeypatch) -> None:
+async def test_sync_stackstorm_refreshes_remote_bootstrap_catalog_on_periodic_runs(
+    monkeypatch,
+) -> None:
     mock_db = AsyncMock()
     monkeypatch.setattr(dishwasher_service, "SessionLocal", lambda: _SessionContext(mock_db))
     monkeypatch.setattr(
@@ -235,7 +237,9 @@ async def test_sync_stackstorm_refreshes_remote_bootstrap_catalog_on_periodic_ru
 
 
 @pytest.mark.asyncio
-async def test_sync_stackstorm_preserves_periodic_recipes_when_remote_refresh_fails(monkeypatch) -> None:
+async def test_sync_stackstorm_preserves_periodic_recipes_when_remote_refresh_fails(
+    monkeypatch,
+) -> None:
     mock_db = AsyncMock()
     monkeypatch.setattr(dishwasher_service, "SessionLocal", lambda: _SessionContext(mock_db))
     monkeypatch.setattr(

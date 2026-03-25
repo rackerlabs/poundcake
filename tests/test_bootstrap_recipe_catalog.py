@@ -228,7 +228,9 @@ recipe:
 
 
 @pytest.mark.asyncio
-async def test_upsert_bootstrap_recipe_catalog_reports_conflict_for_non_managed_recipe(tmp_path) -> None:
+async def test_upsert_bootstrap_recipe_catalog_reports_conflict_for_non_managed_recipe(
+    tmp_path,
+) -> None:
     recipes_dir = tmp_path / "recipes"
     recipes_dir.mkdir()
     (recipes_dir / "node-a.yaml").write_text(

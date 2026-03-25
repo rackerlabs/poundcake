@@ -270,7 +270,9 @@ def test_repo_bootstrap_ingredient_directory_contains_full_mixer_action_matrix()
 
 
 @pytest.mark.asyncio
-async def test_upsert_bootstrap_ingredient_catalogs_is_idempotent_for_existing_matrix(tmp_path) -> None:
+async def test_upsert_bootstrap_ingredient_catalogs_is_idempotent_for_existing_matrix(
+    tmp_path,
+) -> None:
     catalog_dir = tmp_path / "ingredients"
     nested_dir = catalog_dir / "rackspace_core"
     nested_dir.mkdir(parents=True)

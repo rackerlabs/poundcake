@@ -53,8 +53,7 @@ def render_managed_recipe_payload(
         "recipe": {
             "name": alert_name,
             "description": (
-                f"{MANAGED_DESCRIPTION_PREFIX} {alert_name} "
-                f"[source-sha256:{rule_hash[:12]}]"
+                f"{MANAGED_DESCRIPTION_PREFIX} {alert_name} " f"[source-sha256:{rule_hash[:12]}]"
             ),
             "enabled": True,
             "recipe_ingredients": [

@@ -13,7 +13,9 @@ def _write_rule_file(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
-def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml(monkeypatch, tmp_path) -> None:
+def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml(
+    monkeypatch, tmp_path
+) -> None:
     repo_root = tmp_path / "repo"
     alerts_root = repo_root / "alerts"
     _write_rule_file(
