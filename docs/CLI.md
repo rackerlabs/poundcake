@@ -1,4 +1,4 @@
-# CLI Notes
+# CLI Install And Quickstart
 
 For the full command and flag inventory, see [REFERENCE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REFERENCE.md).
 
@@ -6,13 +6,74 @@ This page keeps the short, practical CLI quickstart.
 
 ## Install
 
-From the repo root:
+The PoundCake CLI ships inside this repo. There is not a separate published CLI package.
+
+Python 3.11+ is required.
+
+### Recommended Operator Install
+
+If the repo is already checked out on a host, install the CLI from that checkout into a dedicated virtual environment.
+
+Example using the common host checkout path:
 
 ```bash
-python3 -m pip install -e .
+python3 -m venv ~/.venvs/poundcake-cli
+source ~/.venvs/poundcake-cli/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install /opt/poundcake
 ```
 
-The installed command is `poundcake`.
+From the repo root, the equivalent non-editable install is:
+
+```bash
+python3 -m pip install .
+```
+
+You can also use:
+
+```bash
+make install
+```
+
+Installed commands:
+
+- `poundcake`
+- `poundcake-cli`
+
+Use `poundcake` as the standard command name.
+
+### Developer Install
+
+If you are working on the repo and want CLI changes to apply without reinstalling:
+
+```bash
+python3 -m pip install --upgrade pip setuptools wheel
+python3 -m pip install -e ".[dev]"
+```
+
+Or:
+
+```bash
+make dev-install
+```
+
+### Verify The Install
+
+```bash
+poundcake --help
+poundcake --url https://poundcake.example.com auth providers
+```
+
+If you installed into a dedicated virtual environment and `poundcake` is not on your shell `PATH`, either activate the virtual environment again or invoke the full path directly:
+
+```bash
+~/.venvs/poundcake-cli/bin/poundcake --help
+```
+
+### Troubleshooting
+
+- If `pip install -e .` fails with a `build_editable` or PEP 660 error, upgrade `pip`, `setuptools`, and `wheel`, or use the non-editable install path `python3 -m pip install .`.
+- If the CLI cannot reach PoundCake, pass `--url` explicitly. The default is `http://localhost:8080`, but local Docker Compose examples in this repo use `http://localhost:8000`.
 
 ## Global Options
 

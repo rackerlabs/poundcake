@@ -14,6 +14,7 @@ This is a reference, not a deployment walkthrough. For guided operator flows, us
 - [DEPLOY.md](/Users/aedan/Documents/GitHub/poundcake/docs/DEPLOY.md)
 - [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
 - [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md)
+- [CLI.md](/Users/aedan/Documents/GitHub/poundcake/docs/CLI.md)
 
 ## Assumptions
 

@@ -339,6 +339,8 @@ poundcake --url https://poundcake.example.com auth principals list --provider az
 
 Useful CLI commands:
 
+If `poundcake` is not installed yet, start with [CLI.md](/Users/aedan/Documents/GitHub/poundcake/docs/CLI.md).
+
 ```bash
 poundcake --url https://poundcake.example.com auth providers
 poundcake --url https://poundcake.example.com auth login --provider local --username admin

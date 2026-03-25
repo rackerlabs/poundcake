@@ -20,7 +20,7 @@ help:
 	@echo "  make db-init      - Initialize database"
 
 install:
-	pip install -e .
+	pip install .
 
 dev-install:
 	pip install -e ".[dev]"

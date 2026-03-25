@@ -285,6 +285,8 @@ provider_config:
 
 CLI path:
 
+Install the CLI first if it is not already available on your workstation or jump host. Use the host checkout install flow in [CLI.md](/Users/aedan/Documents/GitHub/poundcake/docs/CLI.md).
+
 ```bash
 poundcake --url https://<poundcake-public-url-host> auth login --provider local --username admin
 

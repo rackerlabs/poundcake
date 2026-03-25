@@ -264,6 +264,24 @@ def test_cli_is_packaged_as_console_application() -> None:
     assert any(dependency.startswith("click") for dependency in dependencies)
 
 
+def test_editable_install_uses_pep660_capable_setuptools() -> None:
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    build_requires = pyproject["build-system"]["requires"]
+    setuptools_requirement = next(
+        (requirement for requirement in build_requires if requirement.startswith("setuptools>=")),
+        None,
+    )
+
+    assert setuptools_requirement is not None
+
+    version_text = setuptools_requirement.split(">=", 1)[1]
+    major_version = int(version_text.split(".", 1)[0])
+
+    assert major_version >= 64
+
+
 def test_auth_login_persists_session_and_logout_clears_it(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,

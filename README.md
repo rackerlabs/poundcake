@@ -353,6 +353,27 @@ output:
 ./install/install-bakery-helm.sh
 ```
 
+### CLI Install
+
+The CLI is installed from a local PoundCake checkout. It is not bundled into the Kubernetes install flow and it is not a separate published package.
+
+Recommended host install:
+
+```bash
+python3 -m venv ~/.venvs/poundcake-cli
+source ~/.venvs/poundcake-cli/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install /opt/poundcake
+```
+
+From the repo root, you can also run:
+
+```bash
+python3 -m pip install .
+```
+
+For CLI usage and troubleshooting, see [docs/CLI.md](docs/CLI.md).
+
 ### Helm Installers
 
 The installers resolve chart version from `/etc/genestack/helm-chart-versions.yaml` by default.
