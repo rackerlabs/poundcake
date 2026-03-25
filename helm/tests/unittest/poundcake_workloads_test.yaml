@@ -232,6 +232,46 @@ tests:
               optional: true
         documentIndex: 0
 
+  - it: wires bootstrap remote sync env for periodic dishwasher from helm values
+    set:
+      bootstrap.ingredientsDir: /custom/bootstrap/ingredients
+      bootstrap.recipesDir: /custom/bootstrap/recipes
+      bootstrap.remoteSyncEnabled: true
+      bootstrap.rulesRepoUrl: https://github.com/example/monitoring.git
+      bootstrap.rulesBranch: release-1
+      bootstrap.rulesPath: alerts/team-a
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_INGREDIENTS_DIR
+            value: "/custom/bootstrap/ingredients"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RECIPES_DIR
+            value: "/custom/bootstrap/recipes"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_REPO_URL
+            value: "https://github.com/example/monitoring.git"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_BRANCH
+            value: "release-1"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_PATH
+            value: "alerts/team-a"
+        documentIndex: 5
+
   - it: defaults PoundCake workload image tag to chart appVersion when unset
     set:
       poundcakeImage.tag: ""

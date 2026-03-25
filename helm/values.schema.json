@@ -512,6 +512,28 @@
         }
       }
     },
+    "bootstrap": {
+      "type": "object",
+      "properties": {
+        "ingredientsDir": { "type": "string", "default": "/app/bootstrap/ingredients" },
+        "recipesDir": { "type": "string", "default": "/app/bootstrap/recipes" },
+        "remoteSyncEnabled": { "type": "boolean", "default": true },
+        "rulesRepoUrl": {
+          "type": "string",
+          "default": "https://github.com/rackerlabs/genestack-monitoring.git"
+        },
+        "rulesBranch": { "type": "string", "default": "main" },
+        "rulesPath": { "type": "string", "default": "alerts" },
+        "poundcakeBootstrap": {
+          "type": "object",
+          "properties": {
+            "defaultDuration": { "type": "integer", "default": 60 },
+            "defaultTimeout": { "type": "integer", "default": 300 },
+            "pruneMissing": { "type": "boolean", "default": false }
+          }
+        }
+      }
+    },
     "intervals": {
       "type": "object",
       "properties": {

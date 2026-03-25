@@ -14,13 +14,12 @@ rm -f config/st2_api_key
 docker compose restart st2client
 ```
 
-## bootstrap/ingredients/bakery.yaml
+## bootstrap/ingredients/*.yaml
 
-Versioned bootstrap ingredient catalog loaded by `/api/v1/cook/sync` when called with
-`mark_bootstrap=true`.
+Source-controlled bootstrap ingredient catalogs loaded by `/api/v1/cook/sync`.
 
-- Default runtime path: `/app/bootstrap/ingredients/bakery.yaml`
-- Override with env var: `POUNDCAKE_BOOTSTRAP_INGREDIENTS_FILE`
+- Default runtime directory: `/app/bootstrap/ingredients`
+- Override with env var: `POUNDCAKE_BOOTSTRAP_INGREDIENTS_DIR`
 - Schema:
   - `apiVersion: poundcake/v1`
   - `kind: IngredientCatalog`
@@ -28,19 +27,15 @@ Versioned bootstrap ingredient catalog loaded by `/api/v1/cook/sync` when called
 
 ## bootstrap/recipes/*.yaml
 
-Versioned bootstrap recipe catalog entries loaded by `/api/v1/cook/sync` when called with
-`mark_bootstrap=true`.
+Runtime-generated bootstrap recipe catalog entries loaded by `/api/v1/cook/sync`.
 
-- Source-controlled directory: `config/bootstrap/recipes`
 - Runtime default directory: `/app/bootstrap/recipes`
 - Override with env var: `POUNDCAKE_BOOTSTRAP_RECIPES_DIR`
+- Remote source defaults:
+  - `POUNDCAKE_BOOTSTRAP_RULES_REPO_URL=https://github.com/rackerlabs/genestack-monitoring.git`
+  - `POUNDCAKE_BOOTSTRAP_RULES_BRANCH=main`
+  - `POUNDCAKE_BOOTSTRAP_RULES_PATH=alerts`
 - Schema (per file):
   - `apiVersion: poundcake/v1`
   - `kind: RecipeCatalogEntry`
   - `recipe: { name, description, enabled, recipe_ingredients[] }`
-
-Generate from temp rules:
-
-```bash
-./.venv/bin/python scripts/generate_bootstrap_recipes_from_rules.py
-```

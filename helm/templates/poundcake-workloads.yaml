@@ -854,6 +854,18 @@ spec:
               value: "false"
             - name: DISHWASHER_INTERVAL
               value: {{ .Values.intervals.dishwasher | quote }}
+            - name: POUNDCAKE_BOOTSTRAP_INGREDIENTS_DIR
+              value: {{ .Values.bootstrap.ingredientsDir | quote }}
+            - name: POUNDCAKE_BOOTSTRAP_RECIPES_DIR
+              value: {{ .Values.bootstrap.recipesDir | quote }}
+            - name: POUNDCAKE_BOOTSTRAP_REMOTE_SYNC_ENABLED
+              value: {{ .Values.bootstrap.remoteSyncEnabled | quote }}
+            - name: POUNDCAKE_BOOTSTRAP_RULES_REPO_URL
+              value: {{ .Values.bootstrap.rulesRepoUrl | quote }}
+            - name: POUNDCAKE_BOOTSTRAP_RULES_BRANCH
+              value: {{ .Values.bootstrap.rulesBranch | quote }}
+            - name: POUNDCAKE_BOOTSTRAP_RULES_PATH
+              value: {{ .Values.bootstrap.rulesPath | quote }}
             - name: SERVICE_NAME
               value: dishwasher
             {{- if .Values.auth.enabled }}

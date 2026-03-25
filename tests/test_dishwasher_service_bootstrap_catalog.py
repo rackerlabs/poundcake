@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -48,7 +49,7 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
     )
     monkeypatch.setattr(
         dishwasher_service,
-        "upsert_bootstrap_bakery_ingredients",
+        "upsert_bootstrap_ingredient_catalogs",
         AsyncMock(
             return_value={
                 "created": 2,
@@ -56,9 +57,27 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
                 "skipped": 0,
                 "errors": 0,
                 "error_messages": [],
-                "source": "/app/bootstrap/ingredients/bakery.yaml",
+                "source": "/app/bootstrap/ingredients",
+                "files_scanned": 28,
             }
         ),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "refresh_bootstrap_recipe_catalog_from_remote",
+        lambda **_kwargs: {
+            "enabled": True,
+            "refreshed": True,
+            "files_scanned": 4,
+            "rules_discovered": 3,
+            "generated": 3,
+            "errors": 0,
+            "error_messages": [],
+            "source": "/app/bootstrap/recipes",
+            "repo_url": "https://github.com/rackerlabs/genestack-monitoring.git",
+            "branch": "main",
+            "path": "alerts",
+        },
     )
     monkeypatch.setattr(
         dishwasher_service,
@@ -69,6 +88,7 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
                 "updated": 2,
                 "skipped": 1,
                 "processed": 6,
+                "conflicts": 0,
                 "errors": 0,
                 "error_messages": [],
                 "source": "/app/bootstrap/recipes",
@@ -78,14 +98,15 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
     monkeypatch.setattr(
         dishwasher_service,
         "get_settings",
-        lambda: type(
-            "Settings",
-            (),
-            {
-                "bootstrap_ingredients_file": "catalog.yaml",
-                "bootstrap_recipes_dir": "recipes",
-            },
-        )(),
+        lambda: SimpleNamespace(
+            bootstrap_ingredients_dir="catalogs",
+            bootstrap_ingredients_file="",
+            bootstrap_recipes_dir="recipes",
+            bootstrap_remote_sync_enabled=True,
+            bootstrap_rules_repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+            bootstrap_rules_branch="main",
+            bootstrap_rules_path="alerts",
+        ),
     )
     monkeypatch.setattr(
         dishwasher_service,
@@ -101,13 +122,15 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
     assert stats["ingredients"] == {"created": 0, "updated": 0, "pruned": 0}
     assert stats["recipes"] == {"created": 0, "updated": 0}
     assert stats["bootstrap_catalog"]["ingredients"]["created"] == 2
+    assert stats["bootstrap_catalog"]["ingredients"]["files_scanned"] == 28
     assert stats["bootstrap_catalog"]["recipes"]["created"] == 3
+    assert stats["bootstrap_catalog"]["remote_recipes"]["refreshed"] is True
     assert stats["bootstrap_marked"] is True
     assert marker.exists()
 
 
 @pytest.mark.asyncio
-async def test_sync_stackstorm_skips_bootstrap_catalog_when_not_marked(monkeypatch) -> None:
+async def test_sync_stackstorm_refreshes_remote_bootstrap_catalog_on_periodic_runs(monkeypatch) -> None:
     mock_db = AsyncMock()
     monkeypatch.setattr(dishwasher_service, "SessionLocal", lambda: _SessionContext(mock_db))
     monkeypatch.setattr(
@@ -132,11 +155,32 @@ async def test_sync_stackstorm_skips_bootstrap_catalog_when_not_marked(monkeypat
         "upsert_recipes",
         AsyncMock(return_value={"created": 0, "updated": 0}),
     )
-    upsert_ingredients_catalog = AsyncMock()
-    upsert_recipes_catalog = AsyncMock()
+    upsert_ingredients_catalog = AsyncMock(
+        return_value={
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "errors": 0,
+            "error_messages": [],
+            "source": "/app/bootstrap/ingredients",
+            "files_scanned": 1,
+        }
+    )
+    upsert_recipes_catalog = AsyncMock(
+        return_value={
+            "created": 0,
+            "updated": 1,
+            "skipped": 0,
+            "processed": 1,
+            "conflicts": 0,
+            "errors": 0,
+            "error_messages": [],
+            "source": "/app/bootstrap/recipes",
+        }
+    )
     monkeypatch.setattr(
         dishwasher_service,
-        "upsert_bootstrap_bakery_ingredients",
+        "upsert_bootstrap_ingredient_catalogs",
         upsert_ingredients_catalog,
     )
     monkeypatch.setattr(
@@ -144,13 +188,200 @@ async def test_sync_stackstorm_skips_bootstrap_catalog_when_not_marked(monkeypat
         "upsert_bootstrap_recipe_catalog",
         upsert_recipes_catalog,
     )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "refresh_bootstrap_recipe_catalog_from_remote",
+        lambda **_kwargs: {
+            "enabled": True,
+            "refreshed": True,
+            "files_scanned": 6,
+            "rules_discovered": 4,
+            "generated": 4,
+            "errors": 0,
+            "error_messages": [],
+            "source": "/app/bootstrap/recipes",
+            "repo_url": "https://github.com/rackerlabs/genestack-monitoring.git",
+            "branch": "main",
+            "path": "alerts",
+        },
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            bootstrap_ingredients_dir="catalogs",
+            bootstrap_ingredients_file="",
+            bootstrap_recipes_dir="recipes",
+            bootstrap_remote_sync_enabled=True,
+            bootstrap_rules_repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+            bootstrap_rules_branch="main",
+            bootstrap_rules_path="alerts",
+        ),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "ensure_fallback_recipe",
+        AsyncMock(return_value=None),
+    )
 
     stats = await dishwasher_service.sync_stackstorm(mark_bootstrap=False)
 
-    assert stats["bootstrap_catalog"]["ingredients"]["created"] == 0
-    assert stats["bootstrap_catalog"]["ingredients"]["errors"] == 0
-    assert stats["bootstrap_catalog"]["recipes"]["created"] == 0
-    assert stats["bootstrap_catalog"]["recipes"]["errors"] == 0
+    assert stats["bootstrap_catalog"]["ingredients"]["created"] == 1
+    assert stats["bootstrap_catalog"]["recipes"]["updated"] == 1
+    assert stats["bootstrap_catalog"]["remote_recipes"]["generated"] == 4
     assert "bootstrap_marked" not in stats
-    upsert_ingredients_catalog.assert_not_called()
-    upsert_recipes_catalog.assert_not_called()
+    upsert_ingredients_catalog.assert_called_once()
+    upsert_recipes_catalog.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_sync_stackstorm_preserves_periodic_recipes_when_remote_refresh_fails(monkeypatch) -> None:
+    mock_db = AsyncMock()
+    monkeypatch.setattr(dishwasher_service, "SessionLocal", lambda: _SessionContext(mock_db))
+    monkeypatch.setattr(
+        dishwasher_service,
+        "get_action_manager",
+        lambda: type(
+            "Manager",
+            (),
+            {
+                "list_non_orquesta_actions": AsyncMock(return_value=[]),
+                "list_orquesta_actions": AsyncMock(return_value=[]),
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "upsert_ingredients",
+        AsyncMock(return_value={"created": 0, "updated": 0, "pruned": 0}),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "upsert_recipes",
+        AsyncMock(return_value={"created": 0, "updated": 0}),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "upsert_bootstrap_ingredient_catalogs",
+        AsyncMock(
+            return_value={
+                "created": 0,
+                "updated": 0,
+                "skipped": 0,
+                "errors": 0,
+                "error_messages": [],
+                "source": "/app/bootstrap/ingredients",
+                "files_scanned": 1,
+            }
+        ),
+    )
+    recipe_catalog = AsyncMock(
+        return_value={
+            "created": 0,
+            "updated": 0,
+            "skipped": 1,
+            "processed": 1,
+            "conflicts": 0,
+            "errors": 0,
+            "error_messages": [],
+            "source": "/app/bootstrap/recipes",
+        }
+    )
+    monkeypatch.setattr(dishwasher_service, "upsert_bootstrap_recipe_catalog", recipe_catalog)
+    monkeypatch.setattr(
+        dishwasher_service,
+        "refresh_bootstrap_recipe_catalog_from_remote",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            dishwasher_service.BootstrapRemoteRecipeSyncError("boom")
+        ),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            bootstrap_ingredients_dir="catalogs",
+            bootstrap_ingredients_file="",
+            bootstrap_recipes_dir="recipes",
+            bootstrap_remote_sync_enabled=True,
+            bootstrap_rules_repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+            bootstrap_rules_branch="main",
+            bootstrap_rules_path="alerts",
+        ),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "ensure_fallback_recipe",
+        AsyncMock(return_value=None),
+    )
+
+    stats = await dishwasher_service.sync_stackstorm(mark_bootstrap=False)
+
+    assert stats["bootstrap_catalog"]["remote_recipes"]["errors"] == 1
+    assert stats["bootstrap_catalog"]["recipes"]["processed"] == 1
+    recipe_catalog.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_sync_stackstorm_fails_bootstrap_when_remote_refresh_fails(monkeypatch) -> None:
+    mock_db = AsyncMock()
+    monkeypatch.setattr(dishwasher_service, "SessionLocal", lambda: _SessionContext(mock_db))
+    monkeypatch.setattr(
+        dishwasher_service,
+        "get_action_manager",
+        lambda: type(
+            "Manager",
+            (),
+            {
+                "list_non_orquesta_actions": AsyncMock(return_value=[]),
+                "list_orquesta_actions": AsyncMock(return_value=[]),
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "upsert_ingredients",
+        AsyncMock(return_value={"created": 0, "updated": 0, "pruned": 0}),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "upsert_recipes",
+        AsyncMock(return_value={"created": 0, "updated": 0}),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "upsert_bootstrap_ingredient_catalogs",
+        AsyncMock(
+            return_value={
+                "created": 0,
+                "updated": 0,
+                "skipped": 0,
+                "errors": 0,
+                "error_messages": [],
+                "source": "/app/bootstrap/ingredients",
+                "files_scanned": 1,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "refresh_bootstrap_recipe_catalog_from_remote",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            dishwasher_service.BootstrapRemoteRecipeSyncError("boom")
+        ),
+    )
+    monkeypatch.setattr(
+        dishwasher_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            bootstrap_ingredients_dir="catalogs",
+            bootstrap_ingredients_file="",
+            bootstrap_recipes_dir="recipes",
+            bootstrap_remote_sync_enabled=True,
+            bootstrap_rules_repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+            bootstrap_rules_branch="main",
+            bootstrap_rules_path="alerts",
+        ),
+    )
+
+    with pytest.raises(dishwasher_service.BootstrapRemoteRecipeSyncError):
+        await dishwasher_service.sync_stackstorm(mark_bootstrap=True)

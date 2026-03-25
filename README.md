@@ -196,10 +196,9 @@ stateDiagram-v2
 - **Timer**: Monitors StackStorm workflow execution and records results.
 - **Suppression Lifecycle (via Timer)**: Finalizes ended suppression windows and creates/auto-closes summary tickets through Bakery.
 - **Dishwasher**: Periodically syncs StackStorm actions and packs into Ingredients/Recipes.
-  During `poundcake-bootstrap`, sync also loads bootstrap Bakery comms ingredients from
-  `config/bootstrap/ingredients/bakery.yaml` (runtime path `/app/bootstrap/ingredients/bakery.yaml`)
-  and bootstrap recipe catalog entries from `config/bootstrap/recipes/*.yaml`
-  (runtime directory `/app/bootstrap/recipes`).
+  During bootstrap and periodic syncs, Dishwasher also loads source-controlled bootstrap
+  ingredient catalogs from `config/bootstrap/ingredients/*.yaml` and refreshes the runtime
+  bootstrap recipe catalog from the configured monitoring repo into `/app/bootstrap/recipes`.
 - **StackStorm**: Executes remediation workflows.
 - **MariaDB**: Central state store.
 

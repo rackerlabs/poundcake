@@ -41,6 +41,7 @@ recipe:
   recipe_ingredients:
     - execution_engine: bakery
       execution_target: core
+      task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
       on_success: continue
@@ -95,6 +96,7 @@ recipe:
   recipe_ingredients:
     - execution_engine: bakery
       execution_target: core
+      task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
       on_success: continue
@@ -115,6 +117,7 @@ recipe:
   recipe_ingredients:
     - execution_engine: bakery
       execution_target: core
+      task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
       on_success: continue
@@ -129,15 +132,16 @@ recipe:
         id=41,
         execution_engine="bakery",
         execution_target="rackspace_core",
-        task_key_template="fallback",
+        task_key_template="rackspace_core.update",
         destination_target="",
     )
     existing_recipe = SimpleNamespace(
         id=7,
         name="node-a",
-        description="old",
+        description="Bootstrap-managed remote recipe for alert rule node-a [source-sha256:old]",
         enabled=False,
         clear_timeout_sec=None,
+        recipe_ingredients=[],
         deleted=True,
         deleted_at="2026-01-01",
         updated_at=None,
@@ -163,6 +167,7 @@ recipe:
     assert stats["processed"] == 2
     assert stats["created"] == 1
     assert stats["updated"] == 1
+    assert stats["conflicts"] == 0
     assert stats["errors"] == 0
 
     assert existing_recipe.description == "generated"
@@ -201,6 +206,7 @@ recipe:
   recipe_ingredients:
     - execution_engine: bakery
       execution_target: core
+      task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
       on_success: continue
@@ -219,3 +225,66 @@ recipe:
     assert stats["processed"] == 0
     assert stats["errors"] == 1
     assert "missing ingredient refs" in stats["error_messages"][0]
+
+
+@pytest.mark.asyncio
+async def test_upsert_bootstrap_recipe_catalog_reports_conflict_for_non_managed_recipe(tmp_path) -> None:
+    recipes_dir = tmp_path / "recipes"
+    recipes_dir.mkdir()
+    (recipes_dir / "node-a.yaml").write_text(
+        """
+apiVersion: poundcake/v1
+kind: RecipeCatalogEntry
+recipe:
+  name: node-a
+  description: generated
+  enabled: true
+  recipe_ingredients:
+    - execution_engine: bakery
+      execution_target: core
+      task_key_template: rackspace_core.update
+      step_order: 1
+      run_phase: resolving
+      on_success: continue
+      parallel_group: 0
+      depth: 0
+      execution_parameters_override: null
+""".strip(),
+        encoding="utf-8",
+    )
+    ingredient = SimpleNamespace(
+        id=41,
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        task_key_template="rackspace_core.update",
+        destination_target="",
+    )
+    existing_recipe = SimpleNamespace(
+        id=7,
+        name="node-a",
+        description="User workflow",
+        enabled=True,
+        clear_timeout_sec=None,
+        recipe_ingredients=[],
+        deleted=False,
+        deleted_at=None,
+        updated_at=None,
+    )
+    db = AsyncMock()
+    db.add = Mock()
+    db.execute = AsyncMock(
+        side_effect=[
+            _ScalarResult(all_=[ingredient]),
+            _ScalarResult(first=existing_recipe),
+        ]
+    )
+    db.commit = AsyncMock(return_value=None)
+
+    stats = await upsert_bootstrap_recipe_catalog(db, recipes_dir=str(recipes_dir))
+
+    assert stats["processed"] == 1
+    assert stats["created"] == 0
+    assert stats["updated"] == 0
+    assert stats["conflicts"] == 1
+    assert stats["errors"] == 1
+    assert "existing non-managed recipe conflicts" in stats["error_messages"][0]

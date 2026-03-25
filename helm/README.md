@@ -707,10 +707,13 @@ The chart uses Helm hooks to ensure proper startup order:
 9. Run PoundCake bootstrap
 
 PoundCake bootstrap catalog behavior:
-- During `poundcake-bootstrap`, Dishwasher sync reads bootstrap Bakery ingredients from `/app/bootstrap/ingredients/bakery.yaml`.
-- During `poundcake-bootstrap`, Dishwasher sync reads bootstrap recipe catalog entries from `/app/bootstrap/recipes`.
-- Override file path with `POUNDCAKE_BOOTSTRAP_INGREDIENTS_FILE`.
+- Dishwasher sync reads source-controlled bootstrap ingredient catalogs from `/app/bootstrap/ingredients`.
+- Dishwasher sync writes and then reads runtime bootstrap recipe catalog entries from `/app/bootstrap/recipes`.
+- Override ingredients directory with `POUNDCAKE_BOOTSTRAP_INGREDIENTS_DIR`.
 - Override recipes directory with `POUNDCAKE_BOOTSTRAP_RECIPES_DIR`.
+- Remote recipe sync is controlled by `POUNDCAKE_BOOTSTRAP_REMOTE_SYNC_ENABLED`,
+  `POUNDCAKE_BOOTSTRAP_RULES_REPO_URL`, `POUNDCAKE_BOOTSTRAP_RULES_BRANCH`,
+  and `POUNDCAKE_BOOTSTRAP_RULES_PATH`.
 
 #### Gate Flow Diagram
 
