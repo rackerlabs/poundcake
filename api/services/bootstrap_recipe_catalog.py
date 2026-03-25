@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.core.logging import get_logger
 from api.models.models import Ingredient, Recipe, RecipeIngredient
@@ -27,6 +28,14 @@ CATALOG_API_VERSION = "poundcake/v1"
 CATALOG_KIND = "RecipeCatalogEntry"
 VALID_RUN_PHASES = RUN_PHASES
 VALID_ON_SUCCESS = {"continue", "stop"}
+
+
+def _is_managed_bootstrap_recipe_description(description: str | None) -> bool:
+    if not isinstance(description, str):
+        return False
+    return description.startswith(
+        "Bootstrap-managed remote recipe for alert rule"
+    ) or description.startswith("Bootstrap-generated recipe for alert group ")
 
 
 def load_bootstrap_recipe_catalog(
@@ -281,11 +290,39 @@ async def upsert_bootstrap_recipe_catalog(
     updated = 0
     skipped = 0
     processed = 0
+    conflicts = 0
+
+    def _step_signature(step: RecipeIngredient | dict[str, Any]) -> tuple[Any, ...]:
+        if isinstance(step, RecipeIngredient):
+            return (
+                step.ingredient_id,
+                step.step_order,
+                step.on_success,
+                step.parallel_group,
+                step.depth,
+                step.execution_parameters_override,
+                step.run_phase,
+                step.run_condition,
+            )
+        return (
+            step["resolved_ingredient_id"],
+            step["step_order"],
+            step["on_success"],
+            step["parallel_group"],
+            step["depth"],
+            step["execution_parameters_override"],
+            step["run_phase"],
+            step["run_condition"],
+        )
 
     for payload in valid_recipes:
         processed += 1
         recipe_name = payload["name"]
-        recipe_result = await db.execute(select(Recipe).where(Recipe.name == recipe_name))
+        recipe_result = await db.execute(
+            select(Recipe)
+            .options(selectinload(Recipe.recipe_ingredients))
+            .where(Recipe.name == recipe_name)
+        )
         db_recipe: Recipe | None = recipe_result.scalars().first()
         if db_recipe is None:
             db_recipe = Recipe(
@@ -301,6 +338,12 @@ async def upsert_bootstrap_recipe_catalog(
             await db.flush()
             created += 1
         else:
+            if not _is_managed_bootstrap_recipe_description(db_recipe.description):
+                conflicts += 1
+                load_errors.append(
+                    f"recipe '{recipe_name}': existing non-managed recipe conflicts with managed bootstrap sync"
+                )
+                continue
             changed = False
             if db_recipe.description != payload["description"]:
                 db_recipe.description = payload["description"]
@@ -315,11 +358,21 @@ async def upsert_bootstrap_recipe_catalog(
                 db_recipe.deleted = False
                 db_recipe.deleted_at = None
                 changed = True
-            if changed:
+            existing_steps = [
+                _step_signature(step)
+                for step in sorted(db_recipe.recipe_ingredients, key=lambda s: s.step_order)
+            ]
+            desired_steps = [
+                _step_signature(step)
+                for step in sorted(payload["recipe_ingredients"], key=lambda s: s["step_order"])
+            ]
+            steps_changed = existing_steps != desired_steps
+            if changed or steps_changed:
                 db_recipe.updated_at = now
                 updated += 1
             else:
                 skipped += 1
+                continue
 
         await delete_recipe_ingredients_safely(db, recipe_id=db_recipe.id)
         for step in sorted(payload["recipe_ingredients"], key=lambda s: s["step_order"]):
@@ -341,8 +394,10 @@ async def upsert_bootstrap_recipe_catalog(
     return {
         "created": created,
         "updated": updated,
+        "unchanged": skipped,
         "skipped": skipped,
         "processed": processed,
+        "conflicts": conflicts,
         "errors": len(load_errors),
         "error_messages": load_errors,
         "source": recipes_dir,

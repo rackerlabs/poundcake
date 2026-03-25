@@ -216,6 +216,46 @@ tests:
             value: "true"
         documentIndex: 8
 
+  - it: wires bootstrap remote sync env for poundcake-bootstrap from helm values
+    set:
+      bootstrap.ingredientsDir: /custom/bootstrap/ingredients
+      bootstrap.recipesDir: /custom/bootstrap/recipes
+      bootstrap.remoteSyncEnabled: true
+      bootstrap.rulesRepoUrl: https://github.com/example/monitoring.git
+      bootstrap.rulesBranch: release-1
+      bootstrap.rulesPath: alerts/team-a
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_INGREDIENTS_DIR
+            value: "/custom/bootstrap/ingredients"
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RECIPES_DIR
+            value: "/custom/bootstrap/recipes"
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_REPO_URL
+            value: "https://github.com/example/monitoring.git"
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_BRANCH
+            value: "release-1"
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_PATH
+            value: "alerts/team-a"
+        documentIndex: 8
+
   - it: wires runtime auth flag for startup bootstrap when auth is disabled
     set:
       auth.enabled: false

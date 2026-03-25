@@ -984,12 +984,22 @@ class StackStormSyncStepResponse(BaseModel):
 
     created: int = 0
     updated: int = 0
+    unchanged: Optional[int] = None
     pruned: Optional[int] = None
     skipped: Optional[int] = None
     processed: Optional[int] = None
+    conflicts: Optional[int] = None
     errors: Optional[int] = None
     error_messages: List[str] = Field(default_factory=list)
     source: Optional[str] = None
+    files_scanned: Optional[int] = None
+    rules_discovered: Optional[int] = None
+    generated: Optional[int] = None
+    enabled: Optional[bool] = None
+    refreshed: Optional[bool] = None
+    repo_url: Optional[str] = None
+    branch: Optional[str] = None
+    path: Optional[str] = None
 
 
 class StackStormBootstrapCatalogResponse(BaseModel):
@@ -997,6 +1007,7 @@ class StackStormBootstrapCatalogResponse(BaseModel):
 
     ingredients: StackStormSyncStepResponse
     recipes: StackStormSyncStepResponse
+    remote_recipes: StackStormSyncStepResponse
 
 
 class StackStormSyncResponse(BaseModel):

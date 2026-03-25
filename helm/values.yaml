@@ -795,6 +795,12 @@ dishwasher:
 # Bootstrap runtime configuration
 # Startup orchestration jobs are defined in stackstorm-startup-order-jobs.yaml.
 bootstrap:
+  ingredientsDir: /app/bootstrap/ingredients
+  recipesDir: /app/bootstrap/recipes
+  remoteSyncEnabled: true
+  rulesRepoUrl: https://github.com/rackerlabs/genestack-monitoring.git
+  rulesBranch: main
+  rulesPath: alerts
   # One-shot job that mirrors poundcake-bootstrap (dishwasher in bootstrap mode).
   poundcakeBootstrap:
     defaultDuration: 60

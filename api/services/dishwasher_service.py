@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -21,7 +22,11 @@ from api.core.database import SessionLocal
 from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.models.models import Ingredient, Recipe, RecipeIngredient
-from api.services.bootstrap_ingredient_catalog import upsert_bootstrap_bakery_ingredients
+from api.services.bootstrap_ingredient_catalog import upsert_bootstrap_ingredient_catalogs
+from api.services.bootstrap_remote_recipe_sync import (
+    BootstrapRemoteRecipeSyncError,
+    refresh_bootstrap_recipe_catalog_from_remote,
+)
 from api.services.bootstrap_recipe_catalog import upsert_bootstrap_recipe_catalog
 from api.services.fallback_recipe import ensure_fallback_recipe
 from api.services.recipe_ingredient_cleanup import delete_recipe_ingredients_safely
@@ -36,42 +41,104 @@ STRICT_RECIPE_SYNC = os.getenv("DISHWASHER_STRICT_RECIPE_SYNC", "false").lower()
 BOOTSTRAP_DONE_FILE = "/tmp/poundcake_bootstrap.done"
 
 
+def _empty_sync_stats(**extra: Any) -> dict[str, Any]:
+    payload = {
+        "created": 0,
+        "updated": 0,
+        "skipped": 0,
+        "processed": 0,
+        "conflicts": 0,
+        "errors": 0,
+        "error_messages": [],
+        "source": "",
+    }
+    payload.update(extra)
+    return payload
+
+
 async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
     """Sync StackStorm actions/workflows into Ingredients/Recipes."""
     manager = get_action_manager()
     actions = await manager.list_non_orquesta_actions(limit=1000)
     workflows = await manager.list_orquesta_actions(limit=1000)
+    settings = get_settings()
+    ingredients_dir = settings.bootstrap_ingredients_dir
+    if not Path(ingredients_dir).exists() and settings.bootstrap_ingredients_file:
+        legacy_file = Path(settings.bootstrap_ingredients_file)
+        if legacy_file.exists():
+            ingredients_dir = str(legacy_file.parent)
 
     async with SessionLocal() as db:
         ingredient_stats = await upsert_ingredients(db, actions)
         recipe_stats = await upsert_recipes(db, workflows)
         bootstrap_catalog_stats = {
-            "ingredients": {
-                "created": 0,
-                "updated": 0,
-                "skipped": 0,
+            "ingredients": _empty_sync_stats(files_scanned=0),
+            "recipes": _empty_sync_stats(files_scanned=0, rules_discovered=0, generated=0),
+            "remote_recipes": {
+                "enabled": bool(settings.bootstrap_remote_sync_enabled),
+                "refreshed": False,
+                "files_scanned": 0,
+                "rules_discovered": 0,
+                "generated": 0,
                 "errors": 0,
                 "error_messages": [],
-                "source": "",
-            },
-            "recipes": {
-                "created": 0,
-                "updated": 0,
-                "skipped": 0,
-                "processed": 0,
-                "errors": 0,
-                "error_messages": [],
-                "source": "",
+                "source": settings.bootstrap_recipes_dir,
+                "repo_url": settings.bootstrap_rules_repo_url,
+                "branch": settings.bootstrap_rules_branch,
+                "path": settings.bootstrap_rules_path,
             },
         }
-        if mark_bootstrap:
-            settings = get_settings()
-            bootstrap_catalog_stats["ingredients"] = await upsert_bootstrap_bakery_ingredients(
-                db, file_path=settings.bootstrap_ingredients_file
+        bootstrap_catalog_stats["ingredients"] = await upsert_bootstrap_ingredient_catalogs(
+            db, ingredients_dir=ingredients_dir
+        )
+        if mark_bootstrap and bootstrap_catalog_stats["ingredients"]["errors"]:
+            raise RuntimeError(
+                "Bootstrap ingredient catalog sync failed: "
+                + "; ".join(bootstrap_catalog_stats["ingredients"]["error_messages"])
             )
+
+        if settings.bootstrap_remote_sync_enabled:
+            try:
+                bootstrap_catalog_stats["remote_recipes"] = (
+                    refresh_bootstrap_recipe_catalog_from_remote(
+                        repo_url=settings.bootstrap_rules_repo_url,
+                        branch=settings.bootstrap_rules_branch,
+                        rules_path=settings.bootstrap_rules_path,
+                        destination_dir=settings.bootstrap_recipes_dir,
+                    )
+                )
+            except BootstrapRemoteRecipeSyncError as exc:
+                bootstrap_catalog_stats["remote_recipes"]["errors"] = 1
+                bootstrap_catalog_stats["remote_recipes"]["error_messages"] = [str(exc)]
+                logger.warning(
+                    "Remote bootstrap recipe refresh failed",
+                    extra={
+                        "mark_bootstrap": mark_bootstrap,
+                        "error": str(exc),
+                        "repo_url": settings.bootstrap_rules_repo_url,
+                        "branch": settings.bootstrap_rules_branch,
+                        "rules_path": settings.bootstrap_rules_path,
+                    },
+                )
+                if mark_bootstrap:
+                    raise
+
+        if mark_bootstrap or settings.bootstrap_remote_sync_enabled:
             bootstrap_catalog_stats["recipes"] = await upsert_bootstrap_recipe_catalog(
                 db, recipes_dir=settings.bootstrap_recipes_dir
             )
+            if mark_bootstrap and (
+                bootstrap_catalog_stats["recipes"]["errors"]
+                or bootstrap_catalog_stats["recipes"]["conflicts"]
+            ):
+                recipe_errors = list(bootstrap_catalog_stats["recipes"]["error_messages"])
+                if bootstrap_catalog_stats["recipes"]["conflicts"]:
+                    recipe_errors.append(
+                        f"{bootstrap_catalog_stats['recipes']['conflicts']} recipe conflict(s)"
+                    )
+                raise RuntimeError(
+                    "Bootstrap recipe catalog sync failed: " + "; ".join(recipe_errors)
+                )
             await ensure_fallback_recipe(db, req_id="SYSTEM-DISHWASHER")
             await db.commit()
 

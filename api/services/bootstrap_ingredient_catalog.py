@@ -27,10 +27,10 @@ CANONICAL_BAKERY_TARGETS = DESTINATION_TYPES
 LEGACY_BAKERY_TARGETS = {"tickets.create", "tickets.update", "tickets.comment", "tickets.close"}
 
 
-def load_bootstrap_ingredient_catalog(
+def load_bootstrap_ingredient_catalog_file(
     file_path: str,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Load and validate bootstrap ingredient catalog from YAML file."""
+    """Load and validate a single bootstrap ingredient catalog YAML file."""
     errors: list[str] = []
     path = Path(file_path)
     if not path.exists():
@@ -67,6 +67,29 @@ def load_bootstrap_ingredient_catalog(
         parsed.append(payload)
 
     return parsed, errors
+
+
+def load_bootstrap_ingredient_catalogs(
+    ingredients_dir: str,
+) -> tuple[list[dict[str, Any]], list[str], int]:
+    """Load and validate all bootstrap ingredient catalog files from a directory tree."""
+    base = Path(ingredients_dir)
+    if not base.exists():
+        return [], [f"catalog directory not found: {ingredients_dir}"], 0
+    if not base.is_dir():
+        return [], [f"catalog path is not a directory: {ingredients_dir}"], 0
+
+    payloads: list[dict[str, Any]] = []
+    errors: list[str] = []
+    files_scanned = 0
+    for path in sorted(base.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".yaml", ".yml"}:
+            continue
+        files_scanned += 1
+        items, file_errors = load_bootstrap_ingredient_catalog_file(str(path))
+        payloads.extend(items)
+        errors.extend(f"{path.relative_to(base)}: {message}" for message in file_errors)
+    return payloads, errors, files_scanned
 
 
 def _validate_catalog_entry(entry: dict[str, Any], idx: int) -> tuple[dict[str, Any], str | None]:
@@ -142,17 +165,17 @@ def _validate_catalog_entry(entry: dict[str, Any], idx: int) -> tuple[dict[str, 
     return payload, None
 
 
-async def upsert_bootstrap_bakery_ingredients(
+async def upsert_bootstrap_ingredient_catalogs(
     db: AsyncSession,
     *,
-    file_path: str,
+    ingredients_dir: str,
 ) -> dict[str, Any]:
-    """Upsert bootstrap-managed Bakery comms ingredients from catalog YAML."""
-    payloads, load_errors = load_bootstrap_ingredient_catalog(file_path)
+    """Upsert bootstrap-managed ingredients from catalog YAML files."""
+    payloads, load_errors, files_scanned = load_bootstrap_ingredient_catalogs(ingredients_dir)
     if load_errors:
         logger.warning(
             "Bootstrap ingredient catalog validation errors",
-            extra={"file": file_path, "errors": load_errors},
+            extra={"directory": ingredients_dir, "errors": load_errors},
         )
 
     now = datetime.now(timezone.utc)
@@ -220,8 +243,28 @@ async def upsert_bootstrap_bakery_ingredients(
     return {
         "created": created,
         "updated": updated,
+        "unchanged": skipped,
         "skipped": skipped,
         "errors": len(load_errors),
         "error_messages": load_errors,
-        "source": file_path,
+        "source": ingredients_dir,
+        "files_scanned": files_scanned,
     }
+
+
+def load_bootstrap_ingredient_catalog(
+    file_path: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Backward-compatible single-file loader alias."""
+    return load_bootstrap_ingredient_catalog_file(file_path)
+
+
+async def upsert_bootstrap_bakery_ingredients(
+    db: AsyncSession,
+    *,
+    file_path: str,
+) -> dict[str, Any]:
+    """Backward-compatible single-file upsert wrapper."""
+    path = Path(file_path)
+    ingredients_dir = str(path.parent) if path.name else file_path
+    return await upsert_bootstrap_ingredient_catalogs(db, ingredients_dir=ingredients_dir)
