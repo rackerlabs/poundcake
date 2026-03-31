@@ -214,6 +214,7 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
                 execution_parameters=parameters,
                 execution_engine="stackstorm",
                 execution_purpose="remediation",
+                is_active=True,
                 is_blocking=True,
                 expected_duration_sec=DEFAULT_DURATION,
                 timeout_duration_sec=DEFAULT_TIMEOUT,
@@ -242,6 +243,7 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
                 or ing.execution_payload != payload
                 or ing.execution_parameters != parameters
                 or ing.execution_engine != "stackstorm"
+                or ing.is_active is False
                 or ing.deleted is True
                 or ing.deleted_at is not None
             ):
@@ -251,6 +253,7 @@ async def upsert_ingredients(db: AsyncSession, actions: list[dict]) -> dict[str,
                 ing.execution_parameters = parameters
                 ing.execution_engine = "stackstorm"
                 ing.execution_purpose = "remediation"
+                ing.is_active = True
                 ing.deleted = False
                 ing.deleted_at = None
                 ing.updated_at = now

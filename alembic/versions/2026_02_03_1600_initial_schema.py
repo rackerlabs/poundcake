@@ -54,6 +54,7 @@ def upgrade() -> None:
         sa.Column("execution_payload", mysql.JSON(), nullable=True),
         sa.Column("execution_parameters", mysql.JSON(), nullable=True),
         sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
         sa.Column(
             "execution_engine", sa.String(length=50), nullable=False, server_default="undefined"
         ),
@@ -93,7 +94,10 @@ def upgrade() -> None:
         sa.Column("on_success", sa.String(length=50), nullable=False, server_default="continue"),
         sa.Column("parallel_group", sa.Integer(), nullable=False),
         sa.Column("depth", sa.Integer(), nullable=False),
+        sa.Column("execution_payload_override", mysql.JSON(), nullable=True),
         sa.Column("execution_parameters_override", mysql.JSON(), nullable=True),
+        sa.Column("expected_duration_sec_override", sa.Integer(), nullable=True),
+        sa.Column("timeout_duration_sec_override", sa.Integer(), nullable=True),
         sa.Column("run_phase", sa.String(length=16), nullable=False, server_default="both"),
         sa.Column("run_condition", sa.String(length=40), nullable=False),
         sa.ForeignKeyConstraint(["ingredient_id"], ["ingredients.id"]),
@@ -256,6 +260,11 @@ def upgrade() -> None:
         sa.Column("execution_ref", sa.String(length=100), nullable=True),
         sa.Column("execution_payload", mysql.JSON(), nullable=True),
         sa.Column("execution_parameters", mysql.JSON(), nullable=True),
+        sa.Column("expected_duration_sec", sa.Integer(), nullable=True),
+        sa.Column("timeout_duration_sec", sa.Integer(), nullable=True),
+        sa.Column("retry_count", sa.Integer(), nullable=True),
+        sa.Column("retry_delay", sa.Integer(), nullable=True),
+        sa.Column("on_failure", sa.String(length=50), nullable=True),
         sa.Column("attempt", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column(
             "execution_ref_norm",

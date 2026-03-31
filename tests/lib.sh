@@ -13,6 +13,7 @@
 : "${POLL_INTERVAL_SEC:=2}"
 : "${DEBUG:=0}"
 : "${TEST_TARGET_STARTED:=0}"
+: "${TEST_AUTH_PREFLIGHT_DONE:=0}"
 
 if [ -z "${API_URL:-}" ]; then
   if [ "${TEST_TARGET}" = "k8s" ]; then
@@ -195,6 +196,69 @@ wait_for_api_ready() {
   done
 }
 
+check_e2e_auth_preflight() {
+  if [ "${TEST_AUTH_PREFLIGHT_DONE}" = "1" ]; then
+    debug_log "Auth preflight already completed; skipping"
+    return 0
+  fi
+
+  local settings_url="${API_URL}/settings"
+  local curl_args=("-sS" "${settings_url}")
+  local resp body code auth_enabled
+
+  if [ -n "${POUNDCAKE_AUTH_SERVICE_TOKEN}" ]; then
+    curl_args+=("-H" "X-Auth-Token: ${POUNDCAKE_AUTH_SERVICE_TOKEN}")
+  elif [ -n "${POUNDCAKE_SESSION_TOKEN}" ]; then
+    curl_args+=("--cookie" "session_token=${POUNDCAKE_SESSION_TOKEN}")
+  fi
+
+  resp=$(curl "${curl_args[@]}" -w $'\n%{http_code}')
+  code="${resp##*$'\n'}"
+  body="${resp%$'\n'*}"
+  debug_log "Auth preflight GET ${settings_url} -> HTTP ${code}"
+
+  case "${code}" in
+    200)
+      auth_enabled="$(echo "${body}" | jq -r '.auth_enabled')"
+      if [ "${auth_enabled}" != "true" ] && [ "${auth_enabled}" != "false" ]; then
+        log_error "Auth preflight received an unexpected /settings payload from ${settings_url}"
+        echo "${body}" >&2
+        exit 1
+      fi
+      if [ "${auth_enabled}" = "true" ]; then
+        if [ -n "${POUNDCAKE_AUTH_SERVICE_TOKEN}" ]; then
+          log_info "Auth preflight passed using service-token auth"
+        elif [ -n "${POUNDCAKE_SESSION_TOKEN}" ]; then
+          log_info "Auth preflight passed using session-cookie auth"
+        else
+          log_warn "Auth is enabled but settings were reachable without explicit e2e credentials"
+        fi
+      else
+        debug_log "Auth is disabled for ${API_URL}"
+      fi
+      ;;
+    401|403)
+      if [ -n "${POUNDCAKE_AUTH_SERVICE_TOKEN}" ] || [ -n "${POUNDCAKE_SESSION_TOKEN}" ]; then
+        log_error "Auth preflight failed for ${settings_url} (HTTP ${code})"
+        echo "${body}" >&2
+        exit 1
+      fi
+      log_error "Auth appears to be enabled for ${API_URL}, but no e2e credentials were provided"
+      log_error "Set POUNDCAKE_AUTH_SERVICE_TOKEN for internal-service auth or POUNDCAKE_SESSION_TOKEN for a session override"
+      echo "${body}" >&2
+      exit 1
+      ;;
+    *)
+      log_error "Auth preflight could not determine API auth state from ${settings_url} (HTTP ${code})"
+      echo "${body}" >&2
+      exit 1
+      ;;
+  esac
+
+  TEST_AUTH_PREFLIGHT_DONE=1
+  export TEST_AUTH_PREFLIGHT_DONE
+}
+
 start_k8s_port_forward() {
   require_cmd kubectl
 
@@ -251,6 +315,7 @@ start_test_target() {
 
   TEST_TARGET_STARTED=1
   export TEST_TARGET_STARTED
+  check_e2e_auth_preflight
 }
 
 stop_test_target() {

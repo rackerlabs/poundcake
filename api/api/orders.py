@@ -39,6 +39,7 @@ from api.services.dish_planner import expected_duration_for_phase, seed_dish_ing
 
 router = APIRouter()
 logger = get_logger(__name__)
+GLOBAL_COMMS_INHERIT_PHASES = {"firing", "escalation", "resolving"}
 
 
 def _recipe_has_phase_remediation(recipe: Recipe, *, phase: str) -> bool:
@@ -54,6 +55,24 @@ def _recipe_has_phase_remediation(recipe: Recipe, *, phase: str) -> bool:
         if str(ingredient.execution_purpose or "").strip().lower() == "remediation":
             return True
     return False
+
+
+def _inactive_ingredients(recipe: Recipe) -> list[tuple[int, str]]:
+    inactive: list[tuple[int, str]] = []
+    for item in recipe.recipe_ingredients or []:
+        ingredient = item.ingredient
+        if ingredient is None or bool(getattr(ingredient, "is_active", True)):
+            continue
+        inactive.append(
+            (
+                int(item.ingredient_id),
+                str(
+                    getattr(ingredient, "task_key_template", "")
+                    or f"ingredient-{item.ingredient_id}"
+                ),
+            )
+        )
+    return sorted(set(inactive))
 
 
 @router.get("/orders", response_model=List[OrderResponse])
@@ -335,7 +354,7 @@ async def dispatch_order(
             has_local_policy = policy_has_enabled_routes(local_routes)
             if not has_local_policy and not global_policy_is_configured:
                 recipe = None
-            elif run_phase in {"escalation", "resolving"} and not has_local_policy:
+            elif run_phase in GLOBAL_COMMS_INHERIT_PHASES and not has_local_policy:
                 global_policy_recipe = await get_global_policy_recipe_for_dispatch(db)
                 extra_policy_steps = (
                     list(global_policy_recipe.recipe_ingredients) if global_policy_recipe else []
@@ -360,6 +379,19 @@ async def dispatch_order(
                 reason=f"No recipe for {order.alert_group_name}",
             )
         else:
+            inactive_ingredients = _inactive_ingredients(recipe)
+            if inactive_ingredients:
+                inactive_labels = ", ".join(
+                    f"{ingredient_id}:{task_name}"
+                    for ingredient_id, task_name in inactive_ingredients
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Recipe references inactive ingredients and cannot execute until updated: "
+                        f"{inactive_labels}"
+                    ),
+                )
             if run_phase == "firing":
                 order.processing_status = "processing"
                 if _recipe_has_phase_remediation(recipe, phase="firing"):

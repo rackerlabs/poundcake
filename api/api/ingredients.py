@@ -80,6 +80,7 @@ async def create_ingredient(
         execution_payload=ingredient.execution_payload,
         execution_parameters=ingredient.execution_parameters,
         is_default=ingredient.is_default,
+        is_active=ingredient.is_active,
         execution_engine=ingredient.execution_engine,
         execution_purpose=ingredient.execution_purpose,
         is_blocking=ingredient.is_blocking,
@@ -189,7 +190,7 @@ async def get_ingredients_by_recipe_id(recipe_id: int, db: AsyncSession = Depend
 async def update_ingredient(
     ingredient_id: int, payload: IngredientUpdate, db: AsyncSession = Depends(get_db)
 ) -> IngredientResponse:
-    """Update a global ingredient."""
+    """Retire a global ingredient without mutating its execution template."""
     ingredient: Ingredient | None = None
     async with db.begin():
         result = await db.execute(
@@ -200,6 +201,20 @@ async def update_ingredient(
             raise HTTPException(status_code=404, detail="Ingredient not found")
 
         update_data = payload.dict(exclude_unset=True)
+        allowed_keys = {"is_active"}
+        if set(update_data) - allowed_keys:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Ingredients are immutable after creation. Create a replacement ingredient and "
+                    "retire the old one with is_active=false."
+                ),
+            )
+        if update_data.get("is_active") is not False:
+            raise HTTPException(
+                status_code=409,
+                detail="Only retirement updates with is_active=false are allowed for ingredients",
+            )
         if "destination_target" in update_data and update_data["destination_target"] is None:
             update_data["destination_target"] = ""
         for key, value in update_data.items():

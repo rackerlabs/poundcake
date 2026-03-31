@@ -281,6 +281,11 @@ async def upsert_dish_ingredients(
                 "execution_ref": execution_ref,
                 "execution_payload": item.execution_payload,
                 "execution_parameters": item.execution_parameters,
+                "expected_duration_sec": item.expected_duration_sec,
+                "timeout_duration_sec": item.timeout_duration_sec,
+                "retry_count": item.retry_count,
+                "retry_delay": item.retry_delay,
+                "on_failure": item.on_failure,
                 "execution_status": item.execution_status,
                 "attempt": item.attempt or 0,
                 "started_at": item.started_at,
@@ -311,6 +316,26 @@ async def upsert_dish_ingredients(
                 ),
                 "execution_parameters": func.coalesce(
                     insert_stmt.inserted.execution_parameters, DishIngredient.execution_parameters
+                ),
+                "expected_duration_sec": func.coalesce(
+                    DishIngredient.expected_duration_sec,
+                    insert_stmt.inserted.expected_duration_sec,
+                ),
+                "timeout_duration_sec": func.coalesce(
+                    DishIngredient.timeout_duration_sec,
+                    insert_stmt.inserted.timeout_duration_sec,
+                ),
+                "retry_count": func.coalesce(
+                    DishIngredient.retry_count,
+                    insert_stmt.inserted.retry_count,
+                ),
+                "retry_delay": func.coalesce(
+                    DishIngredient.retry_delay,
+                    insert_stmt.inserted.retry_delay,
+                ),
+                "on_failure": func.coalesce(
+                    DishIngredient.on_failure,
+                    insert_stmt.inserted.on_failure,
                 ),
                 "execution_status": insert_stmt.inserted.execution_status,
                 "attempt": insert_stmt.inserted.attempt,

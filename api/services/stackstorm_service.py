@@ -769,7 +769,9 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             task_id = ingredient.get("execution_target")
             input_parameters = _runtime_input_parameters(ingredient.get("execution_parameters"))
             input_parameters.update(_dict_or_empty(ri.get("execution_parameters_override")))
-            timeout_duration_sec = _positive_int_or_none(ingredient.get("timeout_duration_sec"))
+            timeout_duration_sec = _positive_int_or_none(
+                ri.get("timeout_duration_sec_override")
+            ) or _positive_int_or_none(ingredient.get("timeout_duration_sec"))
             retry_count = ingredient.get("retry_count") or 0
             retry_delay = ingredient.get("retry_delay")
             is_blocking = ingredient.get("is_blocking", True)
@@ -784,7 +786,9 @@ def generate_orquesta_yaml(recipe_object: Recipe | dict[str, Any]) -> str:
             task_id = ingredient.execution_target
             input_parameters = _runtime_input_parameters(ingredient.execution_parameters)
             input_parameters.update(_dict_or_empty(ri.execution_parameters_override))
-            timeout_duration_sec = _positive_int_or_none(ingredient.timeout_duration_sec)
+            timeout_duration_sec = _positive_int_or_none(ri.timeout_duration_sec_override) or (
+                _positive_int_or_none(ingredient.timeout_duration_sec)
+            )
             retry_count = ingredient.retry_count
             retry_delay = ingredient.retry_delay
             is_blocking = ingredient.is_blocking

@@ -56,9 +56,14 @@ class RecipeIngredient(Base):
     # Depth in the task graph (for parallel/linear ordering)
     depth: Mapped[int] = mapped_column(default=0, nullable=False)
     # Optional per-step execution parameter overrides.
+    execution_payload_override: Mapped[dict[str, Any] | None] = mapped_column(
+        MYSQL_JSON, nullable=True
+    )
     execution_parameters_override: Mapped[dict[str, Any] | None] = mapped_column(
         MYSQL_JSON, nullable=True
     )
+    expected_duration_sec_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timeout_duration_sec_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Controls when this step is eligible to run in the order lifecycle.
     run_phase: Mapped[str] = mapped_column(String(16), default="both", nullable=False)
     # Optional lifecycle condition gate for the step.
@@ -136,6 +141,7 @@ class Ingredient(Base):
     execution_payload: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     execution_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     is_blocking: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_duration_sec: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -242,6 +248,11 @@ class DishIngredient(Base):
     execution_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     execution_payload: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     execution_parameters: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    expected_duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timeout_duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retry_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retry_delay: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    on_failure: Mapped[str | None] = mapped_column(String(50), nullable=True)
     attempt: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     execution_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
