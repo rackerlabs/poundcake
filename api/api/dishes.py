@@ -175,7 +175,13 @@ async def claim_dish_for_finalize(
             .where(
                 Dish.id == dish_id,
                 or_(
-                    Dish.processing_status == "processing",
+                    and_(
+                        Dish.processing_status == "processing",
+                        or_(
+                            Dish.execution_ref.is_not(None),
+                            Dish.updated_at < stale_cutoff,
+                        ),
+                    ),
                     and_(
                         Dish.processing_status == "finalizing",
                         Dish.updated_at < stale_cutoff,

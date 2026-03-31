@@ -6,7 +6,7 @@
 #
 """Unit tests for orders and dishes API routes."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -328,6 +328,46 @@ def test_dish_claim__when_claimable__returns_dish(client, mock_db_session):
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == dish.id
+
+
+def test_dish_finalize_claim__active_bakery_only_processing_dish_returns_409(
+    client, mock_db_session
+):
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=0))
+
+    response = client.post("/api/v1/dishes/1/finalize-claim")
+
+    assert response.status_code == 409
+
+
+def test_dish_finalize_claim__processing_dish_with_execution_ref_is_claimable(
+    client, mock_db_session
+):
+    dish = _make_dish(status="processing")
+    dish.execution_ref = "st2-123"
+    update_result = SimpleNamespace(rowcount=1)
+    select_result = ScalarResult(first=dish)
+    mock_db_session.execute = AsyncMock(side_effect=[update_result, select_result])
+
+    response = client.post("/api/v1/dishes/1/finalize-claim")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == dish.id
+
+
+def test_dish_finalize_claim__stale_processing_dish_without_execution_ref_is_claimable(
+    client, mock_db_session
+):
+    dish = _make_dish(status="processing")
+    dish.updated_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    update_result = SimpleNamespace(rowcount=1)
+    select_result = ScalarResult(first=dish)
+    mock_db_session.execute = AsyncMock(side_effect=[update_result, select_result])
+
+    response = client.post("/api/v1/dishes/1/finalize-claim")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == dish.id
 
 
 def test_dish_update__when_firing_complete__moves_order_to_waiting_clear(client, mock_db_session):
