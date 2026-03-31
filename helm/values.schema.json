@@ -374,6 +374,69 @@
         }
       }
     },
+    "stackstorm": {
+      "type": "object",
+      "properties": {
+        "releaseName": { "type": "string", "default": "" },
+        "url": { "type": "string", "default": "" },
+        "authUrl": { "type": "string", "default": "" },
+        "verifySsl": { "type": "boolean", "default": false },
+        "apiKeySecretName": { "type": "string", "default": "" },
+        "apiKeySecretKey": { "type": "string", "default": "api-key" },
+        "autoDiscover": { "type": "boolean", "default": true },
+        "discoverAcrossNamespaces": { "type": "boolean", "default": true },
+        "adminUser": { "type": "string", "default": "st2admin" },
+        "adminPassword": { "type": "string", "default": "" },
+        "adminPasswordSecret": { "type": "string", "default": "" },
+        "adminPasswordSecretKey": { "type": "string", "default": "ST2_AUTH_PASSWORD" },
+        "resourceNames": {
+          "type": "object",
+          "properties": {
+            "mongodb": { "type": "string", "default": "st2-mongodb" },
+            "rabbitmq": { "type": "string", "default": "st2-rabbitmq" },
+            "redis": { "type": "string", "default": "st2-redis" }
+          }
+        },
+        "bootstrap": {
+          "type": "object",
+          "properties": {
+            "packs": {
+              "type": "object",
+              "properties": {
+                "kubernetes": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean", "default": false },
+                    "version": { "type": "string", "default": "" },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "kubeconfig": { "type": "string", "default": "" },
+                        "caCert": { "type": "string", "default": "" }
+                      }
+                    }
+                  }
+                },
+                "openstack": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean", "default": false },
+                    "version": { "type": "string", "default": "" },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "cloudsYaml": { "type": "string", "default": "" },
+                        "caCert": { "type": "string", "default": "" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "poundcakeApi": {
       "type": "object",
       "properties": {

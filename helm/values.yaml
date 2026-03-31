@@ -240,6 +240,20 @@ stackstorm:
     mongodb: "st2-mongodb"
     rabbitmq: "st2-rabbitmq"
     redis: "st2-redis"
+  bootstrap:
+    packs:
+      kubernetes:
+        enabled: false
+        version: ""
+        config:
+          kubeconfig: ""
+          caCert: ""
+      openstack:
+        enabled: false
+        version: ""
+        config:
+          cloudsYaml: ""
+          caCert: ""
 
 # Redis configuration (used by StackStorm for coordination and optionally by PoundCake for caching)
 # Uses Redis Operator (OpsTree Labs) to deploy Redis

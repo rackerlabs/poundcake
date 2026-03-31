@@ -131,6 +131,105 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "poundcake.stackstormPackConfigSecretName" -}}
+{{- printf "stackstorm-pack-configs" -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormThirdPartyPacksEnabled" -}}
+{{- $bootstrap := .Values.stackstorm.bootstrap | default dict -}}
+{{- $packs := $bootstrap.packs | default dict -}}
+{{- $kubernetes := $packs.kubernetes | default dict -}}
+{{- $openstack := $packs.openstack | default dict -}}
+{{- ternary "true" "false" (or ($kubernetes.enabled | default false) ($openstack.enabled | default false)) -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormThirdPartyPackConfigSecretEnabled" -}}
+{{- $bootstrap := .Values.stackstorm.bootstrap | default dict -}}
+{{- $packs := $bootstrap.packs | default dict -}}
+{{- $kubernetes := $packs.kubernetes | default dict -}}
+{{- $openstack := $packs.openstack | default dict -}}
+{{- $kubernetesConfig := $kubernetes.config | default dict -}}
+{{- $openstackConfig := $openstack.config | default dict -}}
+{{- $enabled := eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" -}}
+{{- ternary "true" "false" (or $enabled (ne ($kubernetesConfig.kubeconfig | default "") "") (ne ($kubernetesConfig.caCert | default "") "") (ne ($openstackConfig.cloudsYaml | default "") "") (ne ($openstackConfig.caCert | default "") "")) -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormThirdPartyPackInitContainer" -}}
+- name: install-third-party-packs
+  image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
+  imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
+  securityContext:
+    {{- toYaml .Values.utilitySecurityContext | nindent 4 }}
+  envFrom:
+    - secretRef:
+        name: stackstorm-secrets
+  env:
+    - name: ST2_INSTALL_KUBERNETES_PACK
+      value: {{ default false .Values.stackstorm.bootstrap.packs.kubernetes.enabled | quote }}
+    - name: ST2_INSTALL_KUBERNETES_PACK_VERSION
+      value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.version | quote }}
+    - name: ST2_INSTALL_OPENSTACK_PACK
+      value: {{ default false .Values.stackstorm.bootstrap.packs.openstack.enabled | quote }}
+    - name: ST2_INSTALL_OPENSTACK_PACK_VERSION
+      value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.version | quote }}
+    - name: ST2_CONFIG_FILE
+      value: /tmp/st2/st2.conf
+  command: ["/bin/bash", "/st2-entrypoint.sh"]
+  args: ["/install-third-party-packs.sh"]
+  volumeMounts:
+    - name: stackstorm-config
+      mountPath: /etc/st2/st2.conf.template
+      subPath: st2.conf.template
+    - name: scripts
+      mountPath: /st2-entrypoint.sh
+      subPath: st2-entrypoint.sh
+    - name: scripts
+      mountPath: /install-third-party-packs.sh
+      subPath: install-third-party-packs.sh
+    - name: stackstorm-pack-configs
+      mountPath: /opt/stackstorm/configs
+      readOnly: true
+    - name: stackstorm-pack-kubernetes
+      mountPath: /opt/stackstorm/packs/kubernetes
+    - name: stackstorm-pack-openstack
+      mountPath: /opt/stackstorm/packs/openstack
+    - name: stackstorm-virtualenv-kubernetes
+      mountPath: /opt/stackstorm/virtualenvs/kubernetes
+    - name: stackstorm-virtualenv-openstack
+      mountPath: /opt/stackstorm/virtualenvs/openstack
+    - name: app-config
+      mountPath: /app/config
+{{- end -}}
+
+{{- define "poundcake.stackstormThirdPartyPackVolumeMounts" -}}
+- name: stackstorm-pack-configs
+  mountPath: /opt/stackstorm/configs
+  readOnly: true
+- name: stackstorm-pack-kubernetes
+  mountPath: /opt/stackstorm/packs/kubernetes
+- name: stackstorm-pack-openstack
+  mountPath: /opt/stackstorm/packs/openstack
+- name: stackstorm-virtualenv-kubernetes
+  mountPath: /opt/stackstorm/virtualenvs/kubernetes
+- name: stackstorm-virtualenv-openstack
+  mountPath: /opt/stackstorm/virtualenvs/openstack
+{{- end -}}
+
+{{- define "poundcake.stackstormThirdPartyPackVolumes" -}}
+- name: stackstorm-pack-configs
+  secret:
+    secretName: {{ include "poundcake.stackstormPackConfigSecretName" . }}
+    optional: true
+- name: stackstorm-pack-kubernetes
+  emptyDir: {}
+- name: stackstorm-pack-openstack
+  emptyDir: {}
+- name: stackstorm-virtualenv-kubernetes
+  emptyDir: {}
+- name: stackstorm-virtualenv-openstack
+  emptyDir: {}
+{{- end -}}
+
 {{- define "poundcake.stackstormMongoName" -}}
 {{- if .Values.stackstorm.resourceNames.mongodb -}}
 {{- .Values.stackstorm.resourceNames.mongodb -}}

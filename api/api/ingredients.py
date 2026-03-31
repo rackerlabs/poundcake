@@ -200,7 +200,7 @@ async def update_ingredient(
         if not ingredient or is_managed_communications_ingredient(ingredient):
             raise HTTPException(status_code=404, detail="Ingredient not found")
 
-        update_data = payload.dict(exclude_unset=True)
+        update_data = payload.model_dump(exclude_unset=True)
         allowed_keys = {"is_active"}
         if set(update_data) - allowed_keys:
             raise HTTPException(

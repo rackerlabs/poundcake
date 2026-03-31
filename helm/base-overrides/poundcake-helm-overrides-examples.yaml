@@ -56,6 +56,54 @@ gateway:
 #     auth:
 #       existingSecret: bakery-monitor-bootstrap
 #
+# Optional StackStorm pack bootstrap example:
+# stackstorm:
+#   bootstrap:
+#     packs:
+#       kubernetes:
+#         enabled: true
+#         version: ""
+#         config:
+#           kubeconfig: |
+#             apiVersion: v1
+#             kind: Config
+#             current-context: admin@target-cluster
+#             clusters:
+#               - name: target-cluster
+#                 cluster:
+#                   server: https://kubernetes.example.com:6443
+#                   certificate-authority-data: <base64-cluster-ca>
+#             contexts:
+#               - name: admin@target-cluster
+#                 context:
+#                   cluster: target-cluster
+#                   user: admin-user
+#             users:
+#               - name: admin-user
+#                 user:
+#                   client-certificate-data: <base64-admin-client-certificate>
+#                   client-key-data: <base64-admin-client-key>
+#           caCert: ""
+#       openstack:
+#         enabled: true
+#         version: ""
+#         config:
+#           cloudsYaml: |
+#             clouds:
+#               target:
+#                 auth:
+#                   auth_url: https://keystone.example.com:5000/v3
+#                   username: <openstack-username>
+#                   password: <openstack-password>
+#                   project_name: <openstack-project>
+#                   user_domain_name: Default
+#                   project_domain_name: Default
+#                 region_name: RegionOne
+#           caCert: ""
+#
+# Keep real certificate data, kubeconfig contents, and OpenStack credentials only in secured
+# operator-managed override files, not in committed example files.
+#
 # Private GHCR example:
 # poundcakeImage:
 #   pullSecrets:

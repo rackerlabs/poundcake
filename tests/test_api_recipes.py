@@ -472,6 +472,7 @@ def test_recipe_create_validates_ingredients_inside_transaction(client, mock_db)
     async def _validate_ingredients(db, *, step_specs):
         assert getattr(db, "_in_begin_context", False) is True
         assert step_specs[0]["ingredient_id"] == 12
+        return {12: _make_ingredient(12, "core.local")}
 
     serialized_recipe = {
         "id": 42,
@@ -628,7 +629,10 @@ def test_recipe_create_local_communications_use_created_managed_ingredient_ids(c
     }
 
     with (
-        patch("api.api.recipes._validate_ingredient_ids", new=AsyncMock()),
+        patch(
+            "api.api.recipes._validate_ingredient_ids",
+            new=AsyncMock(return_value={12: _make_ingredient(12, "core.local")}),
+        ),
         patch("api.api.recipes._validate_effective_communications", new=AsyncMock()),
         patch(
             "api.api.recipes.build_recipe_local_policy_step_specs",

@@ -71,29 +71,33 @@ def build_step_task_key(ri: RecipeIngredient) -> str:
 
 def build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
     base = dict((ri.ingredient.execution_parameters if ri.ingredient else None) or {})
-    if ri.execution_parameters_override:
-        base.update(ri.execution_parameters_override)
+    overrides = getattr(ri, "execution_parameters_override", None)
+    if overrides:
+        base.update(overrides)
     return base or None
 
 
 def build_step_payload(ri: RecipeIngredient) -> dict[str, Any] | None:
     base = dict((ri.ingredient.execution_payload if ri.ingredient else None) or {})
-    if ri.execution_payload_override:
-        base.update(ri.execution_payload_override)
+    overrides = getattr(ri, "execution_payload_override", None)
+    if overrides:
+        base.update(overrides)
     return base or None
 
 
 def resolved_expected_duration_sec(ri: RecipeIngredient) -> int | None:
-    if ri.expected_duration_sec_override is not None:
-        return int(ri.expected_duration_sec_override)
+    override = getattr(ri, "expected_duration_sec_override", None)
+    if override is not None:
+        return int(override)
     if ri.ingredient is None or getattr(ri.ingredient, "expected_duration_sec", None) is None:
         return None
     return int(ri.ingredient.expected_duration_sec)
 
 
 def resolved_timeout_duration_sec(ri: RecipeIngredient) -> int | None:
-    if ri.timeout_duration_sec_override is not None:
-        return int(ri.timeout_duration_sec_override)
+    override = getattr(ri, "timeout_duration_sec_override", None)
+    if override is not None:
+        return int(override)
     if ri.ingredient is None or getattr(ri.ingredient, "timeout_duration_sec", None) is None:
         return None
     return int(ri.ingredient.timeout_duration_sec)

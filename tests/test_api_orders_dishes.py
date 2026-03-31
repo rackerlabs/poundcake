@@ -194,7 +194,10 @@ def _make_recipe_step(
         ingredient=ingredient,
         step_order=step_order,
         run_phase=run_phase,
+        execution_payload_override=None,
         execution_parameters_override=None,
+        expected_duration_sec_override=None,
+        timeout_duration_sec_override=None,
     )
 
 
@@ -518,6 +521,10 @@ def test_order_dispatch__without_group_recipe__uses_fallback_recipe(client, mock
             return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
         ),
         patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=True)),
+        patch(
+            "api.api.orders.get_global_policy_recipe_for_dispatch",
+            new=AsyncMock(return_value=SimpleNamespace(recipe_ingredients=[])),
+        ),
         patch("api.api.orders.ensure_fallback_recipe", new=AsyncMock()) as ensure_fallback,
         patch("api.api.orders.expected_duration_for_phase", new=AsyncMock(return_value=15)),
     ):

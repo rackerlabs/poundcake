@@ -430,7 +430,6 @@ spec:
             - name: poundcake-alembic
               mountPath: /app/alembic/script.py.mako
               subPath: script.py.mako
-              subPath: alembic
       volumes:
         - name: app-config
           projected:
