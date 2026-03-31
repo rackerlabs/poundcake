@@ -187,6 +187,9 @@ def _discover_alert_rules(source_dir: Path) -> tuple[dict[str, dict[str, Any]], 
     discovered: dict[str, dict[str, Any]] = {}
     files_scanned = 0
     for path in sorted(source_dir.rglob("*")):
+        relative_path = path.relative_to(source_dir) if path.exists() else path
+        if "not-yet-finished" in relative_path.parts:
+            continue
         if not path.is_file() or path.suffix.lower() not in {".yaml", ".yml"}:
             continue
         files_scanned += 1

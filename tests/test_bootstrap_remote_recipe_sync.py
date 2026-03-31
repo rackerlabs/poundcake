@@ -97,6 +97,34 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_rejects_conflicting_duplic
         )
 
 
+def test_refresh_bootstrap_recipe_catalog_from_remote_ignores_not_yet_finished_duplicates(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = tmp_path / "repo"
+    alerts_root = repo_root / "alerts"
+    _write_rule_file(
+        alerts_root / "node" / "memory.yaml",
+        {"groups": [{"rules": [{"alert": "SharedAlert", "expr": "up == 0"}]}]},
+    )
+    _write_rule_file(
+        alerts_root / "not-yet-finished" / "node" / "memory.yaml",
+        {"groups": [{"rules": [{"alert": "SharedAlert", "expr": "up == 1"}]}]},
+    )
+    monkeypatch.setattr(sync, "_ensure_repo_checkout", lambda **_kwargs: repo_root)
+
+    stats = sync.refresh_bootstrap_recipe_catalog_from_remote(
+        repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+        branch="main",
+        rules_path="alerts",
+        destination_dir=str(tmp_path / "generated"),
+    )
+
+    assert stats["files_scanned"] == 1
+    assert stats["rules_discovered"] == 1
+    generated_files = sorted(path.name for path in (tmp_path / "generated").glob("*.yaml"))
+    assert generated_files == ["sharedalert.yaml"]
+
+
 def test_ensure_repo_checkout_uses_git_credentials(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
