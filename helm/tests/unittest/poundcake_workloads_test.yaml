@@ -73,7 +73,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: /api/v1/health
+          value: /api/v1/ready
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
@@ -85,7 +85,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
-          value: /api/v1/health
+          value: /api/v1/live
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].env[7].value
@@ -511,7 +511,7 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "gate_wait_for_http_status \\\"http://poundcake-api:8000/api/v1/health\\\""
+          pattern: "gate_wait_for_http_status \\\"http://poundcake-api:8000/api/v1/ready\\\""
         documentIndex: 2
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
@@ -532,7 +532,7 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "gate_wait_for_http_status \\\"http://poundcake-api:9000/api/v1/health\\\""
+          pattern: "gate_wait_for_http_status \\\"http://poundcake-api:9000/api/v1/ready\\\""
         documentIndex: 2
 
   - it: supports gate logging overrides on poundcake init gates

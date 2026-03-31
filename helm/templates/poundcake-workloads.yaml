@@ -393,7 +393,7 @@ spec:
               name: http
           readinessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /api/v1/ready
               port: 8000
             initialDelaySeconds: {{ .Values.poundcakeApi.readiness.initialDelaySeconds }}
             periodSeconds: 5
@@ -401,7 +401,7 @@ spec:
             failureThreshold: 6
           livenessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /api/v1/live
               port: 8000
             initialDelaySeconds: 40
             periodSeconds: 10
@@ -509,7 +509,7 @@ spec:
             - |
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               gate_wait_for_tcp "poundcake-api" "{{ .Values.services.api.port }}" "wait-api-port" "tcp poundcake-api:{{ .Values.services.api.port }}"
-              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/health" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/health" 200
+              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/ready" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/ready" 200
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -592,7 +592,7 @@ spec:
             - |
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               gate_wait_for_tcp "poundcake-api" "{{ .Values.services.api.port }}" "wait-stage10-api-port" "tcp poundcake-api:{{ .Values.services.api.port }}"
-              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/health" "wait-stage10-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/health" 200
+              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/ready" "wait-stage10-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/ready" 200
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -689,7 +689,7 @@ spec:
             - |
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               gate_wait_for_tcp "poundcake-api" "{{ .Values.services.api.port }}" "wait-api-port" "tcp poundcake-api:{{ .Values.services.api.port }}"
-              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/health" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/health" 200
+              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/ready" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/ready" 200
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -772,7 +772,7 @@ spec:
             - |
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               gate_wait_for_tcp "poundcake-api" "{{ .Values.services.api.port }}" "wait-api-port" "tcp poundcake-api:{{ .Values.services.api.port }}"
-              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/health" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/health" 200
+              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/ready" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/ready" 200
           volumeMounts:
             - name: app-config
               mountPath: /app/config
@@ -862,7 +862,7 @@ spec:
             - |
               {{- include "poundcake.gateLogHelpers" . | nindent 14 }}
               gate_wait_for_tcp "poundcake-api" "{{ .Values.services.api.port }}" "wait-api-port" "tcp poundcake-api:{{ .Values.services.api.port }}"
-              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/health" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/health" 200
+              gate_wait_for_http_status "{{ include "poundcake.apiServiceUrl" . }}/api/v1/ready" "wait-api-ready" "http endpoint poundcake-api:{{ .Values.services.api.port }}/api/v1/ready" 200
           volumeMounts:
             - name: app-config
               mountPath: /app/config
