@@ -246,12 +246,54 @@ tests:
           content:
             name: POUNDCAKE_BOOTSTRAP_INGREDIENTS_DIR
             value: "/custom/bootstrap/ingredients"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RECIPES_DIR
+            value: "/custom/bootstrap/recipes"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_REMOTE_SYNC_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_REPO_URL
+            value: "https://github.com/example/monitoring.git"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_BRANCH
+            value: "release-1"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_RULES_PATH
+            value: "alerts/team-a"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_INGREDIENTS_DIR
+            value: "/custom/bootstrap/ingredients"
         documentIndex: 5
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BOOTSTRAP_RECIPES_DIR
             value: "/custom/bootstrap/recipes"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BOOTSTRAP_REMOTE_SYNC_ENABLED
+            value: "true"
         documentIndex: 5
       - contains:
           path: spec.template.spec.containers[0].env
