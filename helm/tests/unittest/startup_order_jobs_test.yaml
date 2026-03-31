@@ -201,6 +201,11 @@ tests:
       bootstrap.rulesRepoUrl: https://github.com/example/monitoring.git
       bootstrap.rulesBranch: release-1
       bootstrap.rulesPath: alerts/team-a
+      git.enabled: true
+      git.repoUrl: https://github.com/example/config.git
+      git.branch: main
+      git.provider: github
+      git.existingSecret: poundcake-git
     asserts:
       - contains:
           path: spec.template.spec.initContainers[2].env
@@ -231,6 +236,37 @@ tests:
           content:
             name: POUNDCAKE_BOOTSTRAP_RULES_PATH
             value: "alerts/team-a"
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-git
+                key: git-token
+                optional: true
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.initContainers[2].env
+          content:
+            name: POUNDCAKE_GIT_SSH_KEY_PATH
+            value: "/run/secrets/poundcake-git/git-ssh-key"
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.initContainers[2].volumeMounts
+          content:
+            name: poundcake-git
+            mountPath: /run/secrets/poundcake-git
+            readOnly: true
+        documentIndex: 8
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: poundcake-git
+            secret:
+              secretName: poundcake-git
+              optional: true
         documentIndex: 8
 
   - it: wires runtime auth flag for startup bootstrap when auth is disabled

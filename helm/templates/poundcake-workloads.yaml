@@ -903,6 +903,29 @@ spec:
               value: {{ .Values.bootstrap.rulesBranch | quote }}
             - name: POUNDCAKE_BOOTSTRAP_RULES_PATH
               value: {{ .Values.bootstrap.rulesPath | quote }}
+            - name: POUNDCAKE_GIT_ENABLED
+              value: {{ .Values.git.enabled | quote }}
+            - name: POUNDCAKE_GIT_REPO_URL
+              value: {{ .Values.git.repoUrl | quote }}
+            - name: POUNDCAKE_GIT_BRANCH
+              value: {{ .Values.git.branch | quote }}
+            - name: POUNDCAKE_GIT_PROVIDER
+              value: {{ .Values.git.provider | quote }}
+            {{- if .Values.git.existingSecret }}
+            - name: POUNDCAKE_GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.git.existingSecret }}
+                  key: {{ .Values.git.secretKeys.token }}
+                  optional: true
+            - name: POUNDCAKE_GIT_SSH_KEY_PATH
+              value: {{ printf "/run/secrets/poundcake-git/%s" .Values.git.secretKeys.sshKey | quote }}
+            {{- else }}
+            - name: POUNDCAKE_GIT_TOKEN
+              value: ""
+            - name: POUNDCAKE_GIT_SSH_KEY_PATH
+              value: ""
+            {{- end }}
             - name: SERVICE_NAME
               value: dishwasher
             {{- if .Values.auth.enabled }}
@@ -915,6 +938,11 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+            {{- if .Values.git.existingSecret }}
+            - name: poundcake-git
+              mountPath: /run/secrets/poundcake-git
+              readOnly: true
+            {{- end }}
       volumes:
         - name: app-config
           projected:
@@ -925,4 +953,10 @@ spec:
               - secret:
                   name: stackstorm-apikeys
                   optional: true
+        {{- if .Values.git.existingSecret }}
+        - name: poundcake-git
+          secret:
+            secretName: {{ .Values.git.existingSecret }}
+            optional: true
+        {{- end }}
 {{- end }}
