@@ -824,6 +824,14 @@ bakery:
     # Remote Bakery is the only supported mode in PoundCake after the repo split.
     enforceRemoteBaseUrl: true
     baseUrl: ""
+    monitor:
+      id: ""
+      environmentLabel: ""
+      region: ""
+      clusterName: ""
+      namespace: ""
+      releaseName: ""
+      tags: []
     auth:
       mode: hmac
       existingSecret: ""

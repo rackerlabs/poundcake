@@ -75,8 +75,23 @@ bakery:
 ## Bootstrap Credential
 
 Bakery owns the long-lived monitor identity. PoundCake uses a Bakery-issued bootstrap credential
-once, registers itself as `<namespace>/<release>`, then stores the returned per-monitor secret
-locally.
+once, registers itself with a monitor ID, then stores the returned per-monitor secret locally.
+
+If multiple PoundCake environments point at the same Bakery, do not reuse the default
+`<namespace>/<release>` identity in every cluster. Set a unique explicit monitor ID and label in
+the PoundCake override file for each environment, for example:
+
+```yaml
+bakery:
+  client:
+    monitor:
+      id: kronos/rackspace/poundcake
+      environmentLabel: kronos
+      clusterName: kronos-logging
+      tags:
+        - shared-bakery
+        - kronos
+```
 
 Create the PoundCake-side secret after the Bakery admin endpoint returns the bootstrap key:
 
@@ -129,7 +144,7 @@ Expected shape:
 - `bakery.client.enforceRemoteBaseUrl: true`
 - `bakery.client.baseUrl: ${BAKERY_URL}`
 - `bakery.client.auth.existingSecret: bakery-monitor-bootstrap`
-- `POUNDCAKE_BAKERY_MONITOR_ID: <namespace>/<release>`
+- `POUNDCAKE_BAKERY_MONITOR_ID: <explicit monitor id or namespace/release default>`
 - `POUNDCAKE_BAKERY_ENABLED=true`
 
 Confirm the public PoundCake endpoint:

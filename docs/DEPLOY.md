@@ -133,7 +133,8 @@ Things to confirm:
 - `bakery.client.enforceRemoteBaseUrl: true`
 - `bakery.client.baseUrl` points at the external Bakery URL
 - `bakery.client.auth.existingSecret` matches the bootstrap secret name
-- `POUNDCAKE_BAKERY_MONITOR_ID` matches `<namespace>/<release>`
+- `POUNDCAKE_BAKERY_MONITOR_ID` defaults to `<namespace>/<release>`
+- if multiple PoundCake environments share one Bakery instance, set a unique explicit monitor ID per environment
 - `POUNDCAKE_BAKERY_ENABLED=true`
 
 Confirm PoundCake persisted monitor state locally:

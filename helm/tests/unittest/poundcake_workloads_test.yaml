@@ -828,6 +828,24 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: POUNDCAKE_BAKERY_MONITOR_REGION
+            value: ""
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_CLUSTER_NAME
+            value: ""
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_TAGS
+            value: ""
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: POUNDCAKE_BAKERY_MONITOR_HEARTBEAT_INTERVAL_SECONDS
             value: "30"
         documentIndex: 0
@@ -934,6 +952,49 @@ tests:
                 name: external-bakery-hmac
                 key: monitor-encryption-key
                 optional: true
+        documentIndex: 0
+
+  - it: allows explicit bakery monitor identity overrides for shared bakery deployments
+    set:
+      bakery.client.enabled: true
+      bakery.client.baseUrl: https://bakery.example.com
+      bakery.client.monitor.id: kronos/rackspace/poundcake
+      bakery.client.monitor.environmentLabel: kronos
+      bakery.client.monitor.region: ord
+      bakery.client.monitor.clusterName: kronos-logging
+      bakery.client.monitor.namespace: rackspace
+      bakery.client.monitor.releaseName: poundcake
+      bakery.client.monitor.tags[0]: logging
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_ID
+            value: kronos/rackspace/poundcake
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_ENVIRONMENT_LABEL
+            value: kronos
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_REGION
+            value: ord
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_CLUSTER_NAME
+            value: kronos-logging
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_TAGS
+            value: logging
         documentIndex: 0
 
   - it: fails fast when remote bakery client is enabled without baseUrl
