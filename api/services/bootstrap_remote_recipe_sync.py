@@ -63,6 +63,7 @@ def render_managed_recipe_payload(
                 {
                     "execution_engine": "bakery",
                     "execution_target": "core",
+                    "task_key_template": "core",
                     "step_order": 1,
                     "run_phase": "resolving",
                     "on_success": "continue",

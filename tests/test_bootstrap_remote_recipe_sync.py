@@ -72,6 +72,7 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml(
     payload = yaml.safe_load((destination / "highcpuusage.yaml").read_text(encoding="utf-8"))
     assert payload["recipe"]["name"] == "HighCPUUsage"
     assert payload["recipe"]["recipe_ingredients"][0]["execution_target"] == "core"
+    assert payload["recipe"]["recipe_ingredients"][0]["task_key_template"] == "core"
 
 
 def test_refresh_bootstrap_recipe_catalog_from_remote_rejects_conflicting_duplicate_alerts(
