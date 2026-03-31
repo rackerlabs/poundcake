@@ -10,6 +10,7 @@ For guided deployment steps, use:
 - [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
 - [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md)
 - [CLI.md](/Users/aedan/Documents/GitHub/poundcake/docs/CLI.md)
+- [DEVELOPER.md](/Users/aedan/Documents/GitHub/poundcake/docs/DEVELOPER.md)
 
 ## Install Entry Points
 

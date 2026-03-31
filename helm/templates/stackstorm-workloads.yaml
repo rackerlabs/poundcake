@@ -43,6 +43,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-register
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -70,6 +73,9 @@ spec:
               subPath: st2-entrypoint.sh
             - name: packs
               mountPath: /opt/stackstorm/packs/poundcake
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
         {{- if .Values.stackstormPackSync.enabled }}
@@ -110,6 +116,9 @@ spec:
             defaultMode: 0755
         - name: packs
           emptyDir: {}
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:
@@ -255,6 +264,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-api
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -283,6 +295,9 @@ spec:
               subPath: st2-entrypoint.sh
             - name: packs
               mountPath: /opt/stackstorm/packs/poundcake
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
         {{- if .Values.stackstormPackSync.enabled }}
@@ -323,6 +338,9 @@ spec:
             defaultMode: 0755
         - name: packs
           emptyDir: {}
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:
@@ -375,6 +393,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-actionrunner
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -395,6 +416,9 @@ spec:
               subPath: st2-entrypoint.sh
             - name: packs
               mountPath: /opt/stackstorm/packs/poundcake
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
         {{- if .Values.stackstormPackSync.enabled }}
@@ -435,6 +459,9 @@ spec:
             defaultMode: 0755
         - name: packs
           emptyDir: {}
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:
@@ -504,6 +531,9 @@ spec:
             - name: scripts
               mountPath: /st2-entrypoint.sh
               subPath: st2-entrypoint.sh
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
       volumes:
@@ -514,6 +544,9 @@ spec:
           configMap:
             name: stackstorm-scripts
             defaultMode: 0755
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:
@@ -565,6 +598,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-workflowengine
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -585,6 +621,9 @@ spec:
               subPath: st2-entrypoint.sh
             - name: packs
               mountPath: /opt/stackstorm/packs/poundcake
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
         {{- if .Values.stackstormPackSync.enabled }}
@@ -625,6 +664,9 @@ spec:
             defaultMode: 0755
         - name: packs
           emptyDir: {}
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:
@@ -694,6 +736,9 @@ spec:
             - name: scripts
               mountPath: /st2-entrypoint.sh
               subPath: st2-entrypoint.sh
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
       volumes:
@@ -704,6 +749,9 @@ spec:
           configMap:
             name: stackstorm-scripts
             defaultMode: 0755
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:
@@ -997,6 +1045,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-sensorcontainer
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -1015,6 +1066,9 @@ spec:
             - name: scripts
               mountPath: /st2-entrypoint.sh
               subPath: st2-entrypoint.sh
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
       volumes:
@@ -1025,6 +1079,9 @@ spec:
           configMap:
             name: stackstorm-scripts
             defaultMode: 0755
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:
@@ -1246,6 +1303,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-client
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -1273,6 +1333,9 @@ spec:
             - name: scripts
               mountPath: /st2-entrypoint.sh
               subPath: st2-entrypoint.sh
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
       volumes:
@@ -1283,6 +1346,9 @@ spec:
           configMap:
             name: stackstorm-scripts
             defaultMode: 0755
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
         - name: app-config
           projected:
             sources:

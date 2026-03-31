@@ -1,0 +1,92 @@
+suite: stackstorm-third-party-workloads
+templates:
+  - templates/stackstorm-workloads.yaml
+tests:
+  - it: keeps pack installer disabled by default
+    documentSelector:
+      path: metadata.name
+      value: stackstorm-api
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-stage2
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: stackstorm-pack-configs
+
+  - it: adds pack installer init container and mounts to stackstorm api
+    set:
+      stackstorm.bootstrap.packs.kubernetes.enabled: true
+      stackstorm.bootstrap.packs.kubernetes.version: "1.2.3"
+      stackstorm.bootstrap.packs.openstack.enabled: true
+      stackstorm.bootstrap.packs.openstack.version: "2.3.4"
+    documentSelector:
+      path: metadata.name
+      value: stackstorm-api
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: install-third-party-packs
+      - equal:
+          path: spec.template.spec.initContainers[1].env[0].name
+          value: ST2_INSTALL_KUBERNETES_PACK
+      - equal:
+          path: spec.template.spec.initContainers[1].env[1].value
+          value: "1.2.3"
+      - equal:
+          path: spec.template.spec.initContainers[1].env[3].value
+          value: "2.3.4"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: stackstorm-pack-configs
+            mountPath: /opt/stackstorm/configs
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: stackstorm-pack-kubernetes
+            mountPath: /opt/stackstorm/packs/kubernetes
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: stackstorm-virtualenv-openstack
+            emptyDir: {}
+
+  - it: adds pack installer to optional stackstorm workloads when enabled
+    set:
+      stackstorm.bootstrap.packs.kubernetes.enabled: true
+      stackstormServices.register.enabled: true
+      stackstormServices.sensorcontainer.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: install-third-party-packs
+        documentSelector:
+          path: metadata.name
+          value: stackstorm-register
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: install-third-party-packs
+        documentSelector:
+          path: metadata.name
+          value: stackstorm-sensorcontainer
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: stackstorm-pack-openstack
+            mountPath: /opt/stackstorm/packs/openstack
+        documentSelector:
+          path: metadata.name
+          value: stackstorm-register
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: stackstorm-pack-configs
+            secret:
+              secretName: stackstorm-pack-configs
+              optional: true
+        documentSelector:
+          path: metadata.name
+          value: stackstorm-sensorcontainer

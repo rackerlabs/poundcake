@@ -13,13 +13,30 @@ def test_helm_alembic_migration_matches_source() -> None:
     assert source_files == ["2026_02_03_1600_initial_schema.py"]
 
     helm_versions = repo_root / "helm/files/poundcake-alembic/versions"
-    assert _migration_filenames(helm_versions) == []
+    helm_files = _migration_filenames(helm_versions)
+    assert helm_files == source_files
+
+    for filename in source_files:
+        source_text = (source_versions / filename).read_text(encoding="utf-8")
+        helm_text = (helm_versions / filename).read_text(encoding="utf-8")
+        assert helm_text == source_text
 
 
 def test_poundcake_repo_no_longer_contains_in_repo_bakery_runtime() -> None:
     repo_root = Path(__file__).resolve().parents[1]
+    bakery_dir = repo_root / "bakery"
 
-    assert not (repo_root / "bakery").exists()
+    if not bakery_dir.exists():
+        return
+
+    # Bakery was moved to a standalone repo. Local __pycache__ residue is harmless,
+    # but no in-repo Bakery source/runtime files should remain here.
+    unexpected_files = [
+        path
+        for path in bakery_dir.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    ]
+    assert unexpected_files == []
 
 
 def test_helm_chart_version_reset_to_0_1_0() -> None:

@@ -41,3 +41,53 @@ Use the repo wrapper for PoundCake:
 ```
 
 Use the standalone Bakery repo for Bakery installs.
+
+## Optional StackStorm Packs
+
+The chart can install the StackStorm `kubernetes` and `openstack` packs into
+the StackStorm pods during startup. Both are opt-in.
+
+```yaml
+stackstorm:
+  bootstrap:
+    packs:
+      kubernetes:
+        enabled: true
+        version: ""
+        config:
+          kubeconfig: |
+            apiVersion: v1
+            clusters: []
+            contexts: []
+            current-context: ""
+            kind: Config
+            users: []
+          caCert: ""
+      openstack:
+        enabled: true
+        version: ""
+        config:
+          cloudsYaml: |
+            clouds:
+              target:
+                auth:
+                  auth_url: https://keystone.example.com:5000/v3
+                  username: example
+                  password: example
+                  project_name: example
+                  user_domain_name: Default
+                  project_domain_name: Default
+                region_name: RegionOne
+          caCert: ""
+```
+
+Operational requirements:
+
+- StackStorm pods need outbound access to StackStorm Exchange / GitHub to install the packs.
+- The `kubernetes` pack needs a valid kubeconfig and enough RBAC on the target cluster.
+- The `openstack` pack needs a valid `clouds.yaml`-style config and credentials that can reach Keystone and the requested service APIs.
+- If either remote endpoint uses a private CA, provide the CA content in `caCert` and reference it from the corresponding config.
+
+For the operator override-file version of these examples, including how to place Kubernetes admin
+cert/key material and OpenStack credentials into `10-main-overrides.yaml`, see
+[docs/DEPLOY.md](../docs/DEPLOY.md).

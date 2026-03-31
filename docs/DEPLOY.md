@@ -77,6 +77,82 @@ Optional examples:
 - Put non-secret Auth0 or Azure values in `20-auth-overrides.yaml`.
 - Put non-secret Git sync values in `30-git-sync-overrides.yaml`.
 
+## Optional StackStorm Packs
+
+If you want PoundCake's StackStorm deployment to install the `kubernetes` and `openstack` packs
+during bootstrap, add the pack settings directly to `10-main-overrides.yaml`.
+
+Example `10-main-overrides.yaml` addition:
+
+```yaml
+stackstorm:
+  bootstrap:
+    packs:
+      kubernetes:
+        enabled: true
+        version: ""
+        config:
+          kubeconfig: |
+            apiVersion: v1
+            kind: Config
+            current-context: admin@target-cluster
+            clusters:
+              - name: target-cluster
+                cluster:
+                  server: https://kubernetes.example.com:6443
+                  certificate-authority-data: <base64-cluster-ca>
+            contexts:
+              - name: admin@target-cluster
+                context:
+                  cluster: target-cluster
+                  user: admin-user
+            users:
+              - name: admin-user
+                user:
+                  client-certificate-data: <base64-admin-client-certificate>
+                  client-key-data: <base64-admin-client-key>
+          caCert: ""
+      openstack:
+        enabled: true
+        version: ""
+        config:
+          cloudsYaml: |
+            clouds:
+              target:
+                auth:
+                  auth_url: https://keystone.example.com:5000/v3
+                  username: <openstack-username>
+                  password: <openstack-password>
+                  project_name: <openstack-project>
+                  user_domain_name: Default
+                  project_domain_name: Default
+                region_name: RegionOne
+          caCert: ""
+```
+
+Important notes:
+
+- Put the Kubernetes admin client certificate and private key inside the embedded `kubeconfig`.
+- `stackstorm.bootstrap.packs.kubernetes.config.caCert` is optional and only needed if you want to
+  mount the cluster CA separately instead of using kubeconfig-embedded `certificate-authority-data`.
+- `stackstorm.bootstrap.packs.openstack.config.caCert` is optional and only needed when the target
+  cloud uses a private CA that should be mounted separately.
+- These values are secrets. Keep them only in secured operator-managed override files such as
+  `/etc/genestack/helm-configs/poundcake/10-main-overrides.yaml`, and do not commit real
+  credentials or certificate material to the repo.
+
+Once these values are present, the PoundCake Helm bootstrap flow will install and configure the
+enabled StackStorm packs automatically.
+
+Documented operator-facing values:
+
+- `stackstorm.bootstrap.packs.kubernetes.enabled`
+- `stackstorm.bootstrap.packs.kubernetes.config.kubeconfig`
+- `stackstorm.bootstrap.packs.kubernetes.config.caCert`
+- `stackstorm.bootstrap.packs.openstack.enabled`
+- `stackstorm.bootstrap.packs.openstack.config.cloudsYaml`
+- `stackstorm.bootstrap.packs.openstack.config.caCert`
+
 ## Bakery Bootstrap Secret
 
 The monitor ID is auto-derived by the chart as `<namespace>/<release>`. Create the PoundCake-side

@@ -40,9 +40,20 @@ tests:
           path: data["st2-entrypoint.sh"]
           pattern: "not found and .* is not in PATH"
         documentIndex: 1
+      - isNotNull:
+          path: data["install-third-party-packs.sh"]
+        documentIndex: 1
+      - matchRegex:
+          path: data["install-third-party-packs.sh"]
+          pattern: "st2 pack install"
+        documentIndex: 1
+      - matchRegex:
+          path: data["install-third-party-packs.sh"]
+          pattern: "register-setup-virtualenvs"
+        documentIndex: 1
       - matchRegex:
           path: data["automated-setup.sh"]
-          pattern: "kubectl -n <namespace> exec -it deploy/stackstorm-client -- st2 pack install <pack-name>"
+          pattern: "stackstorm.bootstrap.packs.<pack>.enabled"
         documentIndex: 1
       - matchRegex:
           path: data["automated-setup.sh"]

@@ -237,10 +237,16 @@ def _workflow_export_payload(recipe: Any) -> dict[str, Any]:
                     "on_success": step.on_success,
                     "parallel_group": step.parallel_group,
                     "depth": step.depth,
-                    "execution_payload_override": step.execution_payload_override,
-                    "execution_parameters_override": step.execution_parameters_override,
-                    "expected_duration_sec_override": step.expected_duration_sec_override,
-                    "timeout_duration_sec_override": step.timeout_duration_sec_override,
+                    "execution_payload_override": getattr(step, "execution_payload_override", None),
+                    "execution_parameters_override": getattr(
+                        step, "execution_parameters_override", None
+                    ),
+                    "expected_duration_sec_override": getattr(
+                        step, "expected_duration_sec_override", None
+                    ),
+                    "timeout_duration_sec_override": getattr(
+                        step, "timeout_duration_sec_override", None
+                    ),
                     "run_phase": step.run_phase,
                     "run_condition": step.run_condition,
                     "action": {

@@ -25,6 +25,16 @@ CATALOG_API_VERSION = "poundcake/v1"
 CATALOG_KIND = "IngredientCatalog"
 CANONICAL_BAKERY_TARGETS = DESTINATION_TYPES
 LEGACY_BAKERY_TARGETS = {"tickets.create", "tickets.update", "tickets.comment", "tickets.close"}
+CATALOG_DEFAULTS = {
+    "is_default": False,
+    "is_active": True,
+    "is_blocking": True,
+    "expected_duration_sec": 30,
+    "timeout_duration_sec": 120,
+    "retry_count": 0,
+    "retry_delay": 5,
+    "on_failure": "stop",
+}
 
 
 def load_bootstrap_ingredient_catalog_file(
@@ -216,10 +226,14 @@ async def upsert_bootstrap_ingredient_catalogs(
 
         changed = False
         for key, value in payload.items():
-            if getattr(ingredient, key) != value:
+            current_value = getattr(ingredient, key, CATALOG_DEFAULTS.get(key))
+            if current_value != value:
                 setattr(ingredient, key, value)
                 changed = True
-        if ingredient.deleted is True or ingredient.deleted_at is not None:
+        if (
+            getattr(ingredient, "deleted", False) is True
+            or getattr(ingredient, "deleted_at", None) is not None
+        ):
             ingredient.deleted = False
             ingredient.deleted_at = None
             changed = True
