@@ -107,9 +107,7 @@ def _get_git_env(*, repo_url: str, git_token: str, git_ssh_key_path: str) -> dic
             env["GIT_PASSWORD"] = git_token
 
     if git_ssh_key_path:
-        env["GIT_SSH_COMMAND"] = (
-            f"ssh -i {git_ssh_key_path} -o StrictHostKeyChecking=no"
-        )
+        env["GIT_SSH_COMMAND"] = f"ssh -i {git_ssh_key_path} -o StrictHostKeyChecking=no"
 
     return env
 
