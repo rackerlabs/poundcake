@@ -361,6 +361,31 @@ class OrderCommunication(Base):
     order: Mapped["Order"] = relationship("Order", back_populates="communications")
 
 
+class BakeryMonitorState(Base):
+    """Persisted Bakery monitor credentials and sync state for this installation."""
+
+    __tablename__ = "bakery_monitor_state"
+    __table_args__ = (
+        UniqueConstraint("monitor_id", name="ux_bakery_monitor_state_monitor_id"),
+        UniqueConstraint("monitor_uuid", name="ux_bakery_monitor_state_monitor_uuid"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    monitor_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    monitor_uuid: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    hmac_key_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    encrypted_hmac_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    installation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_route_catalog_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    route_sync_dirty: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_heartbeat_status: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+
 class AlertSuppression(Base):
     """Maintenance window for suppressing webhook alerts."""
 

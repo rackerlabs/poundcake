@@ -324,6 +324,10 @@ spec:
               value: {{ include "poundcake.bakeryBaseUrl" . | quote }}
             - name: POUNDCAKE_BAKERY_AUTH_MODE
               value: {{ .Values.bakery.client.auth.mode | quote }}
+            - name: POUNDCAKE_BAKERY_MONITOR_ID
+              value: {{ printf "%s/%s" .Release.Namespace .Release.Name | quote }}
+            - name: POUNDCAKE_BAKERY_MONITOR_HEARTBEAT_INTERVAL_SECONDS
+              value: {{ .Values.bakery.client.heartbeatIntervalSeconds | quote }}
             - name: POUNDCAKE_BAKERY_REQUEST_TIMEOUT_SECONDS
               value: {{ .Values.bakery.client.requestTimeoutSeconds | quote }}
             - name: POUNDCAKE_BAKERY_MAX_RETRIES
@@ -339,17 +343,23 @@ spec:
             - name: POUNDCAKE_BAKERY_RACKSPACE_CONFIRMED_SOLVED_STATUS
               value: {{ .Values.poundcakeApi.ticketing.rackspaceConfirmedSolvedStatus | default "confirmed solved" | quote }}
             {{- $bakeryClientSecretName := .Values.bakery.client.auth.existingSecret | default (include "poundcake.bakerySecretName" .) }}
-            - name: POUNDCAKE_BAKERY_HMAC_KEY_ID
+            - name: POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ $bakeryClientSecretName }}
-                  key: {{ .Values.bakery.client.auth.secretKeys.keyId }}
+                  key: {{ .Values.bakery.client.auth.secretKeys.bootstrapKeyId }}
                   optional: true
-            - name: POUNDCAKE_BAKERY_HMAC_KEY
+            - name: POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $bakeryClientSecretName }}
-                  key: {{ .Values.bakery.client.auth.secretKeys.key }}
+                  key: {{ .Values.bakery.client.auth.secretKeys.bootstrapKey }}
+                  optional: true
+            - name: POUNDCAKE_BAKERY_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $bakeryClientSecretName }}
+                  key: {{ .Values.bakery.client.auth.secretKeys.monitorEncryptionKey }}
                   optional: true
           ports:
             - containerPort: 8000

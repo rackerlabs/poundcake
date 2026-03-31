@@ -363,6 +363,50 @@ def upgrade() -> None:
         unique=False,
     )
 
+    op.create_table(
+        "bakery_monitor_state",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("monitor_id", sa.String(length=255), nullable=False),
+        sa.Column("monitor_uuid", sa.String(length=36), nullable=True),
+        sa.Column("hmac_key_id", sa.String(length=255), nullable=True),
+        sa.Column("encrypted_hmac_secret", sa.Text(), nullable=True),
+        sa.Column("installation_id", sa.String(length=255), nullable=True),
+        sa.Column("last_route_catalog_hash", sa.String(length=64), nullable=True),
+        sa.Column("route_sync_dirty", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("last_heartbeat_status", sa.String(length=64), nullable=True),
+        sa.Column("last_heartbeat_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("monitor_id", name="ux_bakery_monitor_state_monitor_id"),
+        sa.UniqueConstraint("monitor_uuid", name="ux_bakery_monitor_state_monitor_uuid"),
+    )
+    op.create_index("ix_bakery_monitor_state_id", "bakery_monitor_state", ["id"], unique=False)
+    op.create_index(
+        "ix_bakery_monitor_state_monitor_id",
+        "bakery_monitor_state",
+        ["monitor_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_bakery_monitor_state_monitor_uuid",
+        "bakery_monitor_state",
+        ["monitor_uuid"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_bakery_monitor_state_last_heartbeat_status",
+        "bakery_monitor_state",
+        ["last_heartbeat_status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_bakery_monitor_state_last_heartbeat_at",
+        "bakery_monitor_state",
+        ["last_heartbeat_at"],
+        unique=False,
+    )
+
     # Alert suppressions
     op.create_table(
         "alert_suppressions",
@@ -652,6 +696,25 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_bakery_monitor_state_last_heartbeat_at",
+        table_name="bakery_monitor_state",
+    )
+    op.drop_index(
+        "ix_bakery_monitor_state_last_heartbeat_status",
+        table_name="bakery_monitor_state",
+    )
+    op.drop_index(
+        "ix_bakery_monitor_state_monitor_uuid",
+        table_name="bakery_monitor_state",
+    )
+    op.drop_index(
+        "ix_bakery_monitor_state_monitor_id",
+        table_name="bakery_monitor_state",
+    )
+    op.drop_index("ix_bakery_monitor_state_id", table_name="bakery_monitor_state")
+    op.drop_table("bakery_monitor_state")
+
     op.drop_index("ix_auth_role_bindings_external_group", table_name="auth_role_bindings")
     op.drop_index("ix_auth_role_bindings_principal_id", table_name="auth_role_bindings")
     op.drop_index("ix_auth_role_bindings_role", table_name="auth_role_bindings")

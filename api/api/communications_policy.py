@@ -22,6 +22,7 @@ from api.services.communications_policy import (
     sync_fallback_policy_recipe,
     sync_global_policy_routes,
 )
+from api.services.bakery_monitor import mark_route_catalog_dirty, sync_monitor_route_catalog
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -64,6 +65,14 @@ async def put_communications_policy(
             "route_count": len(routes),
         },
     )
+    try:
+        await sync_monitor_route_catalog(force=True)
+    except Exception as exc:  # noqa: BLE001
+        await mark_route_catalog_dirty()
+        logger.warning(
+            "Failed to refresh Bakery monitor route catalog after global policy update",
+            extra={"req_id": req_id, "error": str(exc)},
+        )
     return CommunicationPolicyResponse(
         configured=policy_has_enabled_routes(routes),
         routes=_response_routes(routes),

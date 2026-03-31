@@ -217,8 +217,9 @@ def build_summary_ticket_payload(
         "title": f"[PoundCake Suppression Summary] {suppression.name} ({starts} - {ends})",
         "description": description,
         "severity": "info",
-        "source": "poundcake",
+        "source": "poundcake_system",
         "context": {
+            "source": "poundcake_system",
             "suppression_id": suppression.id,
             "scope": suppression.scope,
             "total_suppressed": summary.total_suppressed,

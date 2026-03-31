@@ -828,8 +828,10 @@ bakery:
       mode: hmac
       existingSecret: ""
       secretKeys:
-        keyId: "active-key-id"
-        key: "active-key"
+        bootstrapKeyId: "bootstrap-key-id"
+        bootstrapKey: "bootstrap-key"
+        monitorEncryptionKey: "monitor-encryption-key"
+    heartbeatIntervalSeconds: 30
     requestTimeoutSeconds: 15
     maxRetries: 2
     pollIntervalSeconds: 2

@@ -26,6 +26,21 @@ def _default_redis_url() -> str:
     return f"redis://{auth}{host}:{port}/{db}"
 
 
+def _default_bakery_monitor_id() -> str:
+    explicit = os.getenv("POUNDCAKE_BAKERY_MONITOR_ID", "").strip()
+    if explicit:
+        return explicit
+    namespace = os.getenv("POD_NAMESPACE", "").strip()
+    release_name = (
+        os.getenv("POUNDCAKE_BAKERY_MONITOR_RELEASE_NAME", "").strip()
+        or os.getenv("HELM_RELEASE_NAME", "").strip()
+        or os.getenv("RELEASE_NAME", "").strip()
+    )
+    if namespace and release_name:
+        return f"{namespace}/{release_name}"
+    return ""
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -354,6 +369,11 @@ class Settings(BaseSettings):
     bakery_auth_mode: str = "hmac"
     bakery_hmac_key_id: str = ""
     bakery_hmac_key: str = ""
+    bakery_bootstrap_hmac_key_id: str = ""
+    bakery_bootstrap_hmac_key: str = ""
+    bakery_secret_encryption_key: str = ""
+    bakery_monitor_id: str = Field(default_factory=_default_bakery_monitor_id)
+    bakery_monitor_heartbeat_interval_seconds: int = 30
     bakery_request_timeout_seconds: int = 15
     bakery_max_retries: int = 2
     bakery_poll_interval_seconds: float = 2.0

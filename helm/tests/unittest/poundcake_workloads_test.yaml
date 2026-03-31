@@ -804,6 +804,18 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: POUNDCAKE_BAKERY_MONITOR_ID
+            value: NAMESPACE/RELEASE-NAME
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_HEARTBEAT_INTERVAL_SECONDS
+            value: "30"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: POUNDCAKE_BAKERY_REQUEST_TIMEOUT_SECONDS
             value: "15"
         documentIndex: 0
@@ -828,21 +840,31 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_BAKERY_HMAC_KEY_ID
+            name: POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY_ID
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-poundcake-bakery-secret
-                key: active-key-id
+                key: bootstrap-key-id
                 optional: true
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_BAKERY_HMAC_KEY
+            name: POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY
             valueFrom:
               secretKeyRef:
                 name: RELEASE-NAME-poundcake-bakery-secret
-                key: active-key
+                key: bootstrap-key
+                optional: true
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_SECRET_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-poundcake-bakery-secret
+                key: monitor-encryption-key
                 optional: true
         documentIndex: 0
 
@@ -862,21 +884,31 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_BAKERY_HMAC_KEY_ID
+            name: POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY_ID
             valueFrom:
               secretKeyRef:
                 name: external-bakery-hmac
-                key: active-key-id
+                key: bootstrap-key-id
                 optional: true
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POUNDCAKE_BAKERY_HMAC_KEY
+            name: POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY
             valueFrom:
               secretKeyRef:
                 name: external-bakery-hmac
-                key: active-key
+                key: bootstrap-key
+                optional: true
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_SECRET_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: external-bakery-hmac
+                key: monitor-encryption-key
                 optional: true
         documentIndex: 0
 

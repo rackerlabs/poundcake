@@ -59,7 +59,7 @@ bakery:
     enforceRemoteBaseUrl: true
     baseUrl: "https://<bakery-public-url-host>"
     auth:
-      existingSecret: bakery-hmac
+      existingSecret: bakery-monitor-bootstrap
 ```
 
 Optional examples:
@@ -68,23 +68,30 @@ Optional examples:
 - Put non-secret Git sync values in `30-git-sync-overrides.yaml`.
 - Put `poundcakeImage.pullSecrets` in `00-pull-secret-overrides.yaml` when private GHCR pulls are required.
 
-## Shared HMAC Secret
+## Bakery Bootstrap Secret
 
-PoundCake and Bakery must use the same HMAC key material.
+PoundCake no longer shares the normal Bakery HMAC secret. Instead, Bakery issues a bootstrap
+credential per monitor ID, and PoundCake stores the Bakery-issued per-monitor secret locally after
+registration.
 
-Create the PoundCake-side secret in the PoundCake namespace:
+The monitor ID is auto-derived by the chart as `<namespace>/<release>`. Create the PoundCake-side
+secret in the PoundCake namespace with the bootstrap credential returned by Bakery plus a local
+encryption key for the stored per-monitor secret:
 
 ```bash
-export SHARED_BAKERY_HMAC_KEY="$(openssl rand -base64 32)"
+export POUNDCAKE_BAKERY_BOOTSTRAP_KEY_ID="bootstrap"
+export POUNDCAKE_BAKERY_BOOTSTRAP_KEY="<value returned by Bakery admin bootstrap endpoint>"
+export POUNDCAKE_BAKERY_MONITOR_ENCRYPTION_KEY="$(openssl rand -base64 32)"
 
-kubectl -n rackspace create secret generic bakery-hmac \
-  --from-literal=active-key-id=active \
-  --from-literal=active-key="${SHARED_BAKERY_HMAC_KEY}" \
+kubectl -n rackspace create secret generic bakery-monitor-bootstrap \
+  --from-literal=bootstrap-key-id="${POUNDCAKE_BAKERY_BOOTSTRAP_KEY_ID}" \
+  --from-literal=bootstrap-key="${POUNDCAKE_BAKERY_BOOTSTRAP_KEY}" \
+  --from-literal=monitor-encryption-key="${POUNDCAKE_BAKERY_MONITOR_ENCRYPTION_KEY}" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-Create the matching Bakery-side secret in the Bakery environment using the standalone Bakery repo's
-deployment flow:
+Create the Bakery-side admin auth and monitor-encryption secret in the Bakery environment using the
+standalone Bakery repo's deployment flow, then issue the bootstrap credential for this monitor ID:
 
 - [bakery/docs/DEPLOY.md](https://github.com/rackerlabs/bakery/blob/main/docs/DEPLOY.md)
 - [bakery/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](https://github.com/rackerlabs/bakery/blob/main/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
@@ -113,7 +120,7 @@ Confirm PoundCake is wired for remote Bakery:
 
 ```bash
 helm get values poundcake -n rackspace -o yaml
-kubectl -n rackspace get secret bakery-hmac
+kubectl -n rackspace get secret bakery-monitor-bootstrap
 kubectl -n rackspace exec deploy/poundcake-api -- printenv | grep '^POUNDCAKE_BAKERY_'
 curl -fsS https://<poundcake-public-url-host>/api/v1/health
 ```
@@ -126,7 +133,8 @@ Things to confirm:
 - `bakery.client.enabled: true`
 - `bakery.client.enforceRemoteBaseUrl: true`
 - `bakery.client.baseUrl` points at the external Bakery URL
-- `bakery.client.auth.existingSecret` matches the shared HMAC secret name
+- `bakery.client.auth.existingSecret` matches the bootstrap secret name
+- `POUNDCAKE_BAKERY_MONITOR_ID` matches `<namespace>/<release>`
 
 ## Post-Install Bootstrap
 

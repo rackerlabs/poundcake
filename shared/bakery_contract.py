@@ -119,3 +119,85 @@ class CommunicationOperationListResponse(_BakeryContractModel):
     communication_id: str
     operations: list[CommunicationOperationResponse]
     count: int
+
+
+class MonitorRouteCatalogEntry(_BakeryContractModel):
+    """Normalized communication route entry registered by PoundCake."""
+
+    scope: str = Field(..., min_length=1, max_length=32)
+    owner_key: str = Field(..., min_length=1, max_length=255)
+    route_id: str = Field(..., min_length=1, max_length=255)
+    label: str = Field(..., min_length=1, max_length=255)
+    execution_target: str = Field(..., min_length=1, max_length=100)
+    destination_target: str = Field(default="", max_length=255)
+    provider_config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    outage_enabled: bool = False
+    position: int = Field(default=1, ge=1)
+
+
+class MonitorBootstrapCredentialResponse(_BakeryContractModel):
+    """Bootstrap credential returned by Bakery admin APIs."""
+
+    monitor_id: str
+    key_id: str
+    secret: str
+    created_at: datetime
+
+
+class MonitorRegistrationRequest(_BakeryContractModel):
+    """Register or recover a PoundCake monitor identity."""
+
+    monitor_id: str = Field(..., min_length=1, max_length=255)
+    installation_id: str | None = Field(default=None, max_length=255)
+    app_version: str | None = Field(default=None, max_length=100)
+
+
+class MonitorRegistrationResponse(_BakeryContractModel):
+    """Monitor credential response returned after successful registration."""
+
+    monitor_uuid: str
+    monitor_id: str
+    hmac_key_id: str
+    hmac_secret: str
+    heartbeat_interval_sec: int
+    miss_threshold: int
+    route_sync_required: bool
+    created_at: datetime
+
+
+class MonitorRouteCatalogSyncRequest(_BakeryContractModel):
+    """Full route catalog snapshot for one monitor."""
+
+    catalog_hash: str = Field(..., min_length=1, max_length=64)
+    routes: list[MonitorRouteCatalogEntry] = Field(default_factory=list)
+
+
+class MonitorRouteCatalogSyncResponse(_BakeryContractModel):
+    """Acknowledges a monitor route catalog sync."""
+
+    monitor_uuid: str
+    catalog_hash: str
+    route_count: int
+    updated_at: datetime
+
+
+class MonitorHeartbeatRequest(_BakeryContractModel):
+    """Liveness heartbeat sent by PoundCake."""
+
+    catalog_hash: str | None = Field(default=None, max_length=64)
+    installation_id: str | None = Field(default=None, max_length=255)
+    app_version: str | None = Field(default=None, max_length=100)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class MonitorHeartbeatResponse(_BakeryContractModel):
+    """Heartbeat acknowledgement and route sync hint."""
+
+    monitor_uuid: str
+    monitor_id: str
+    status: str
+    route_sync_required: bool
+    heartbeat_interval_sec: int
+    miss_threshold: int
+    recorded_at: datetime

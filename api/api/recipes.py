@@ -33,6 +33,7 @@ from api.services.communications_policy import (
     policy_has_enabled_routes,
     route_payloads_for_response,
 )
+from api.services.bakery_monitor import mark_route_catalog_dirty, sync_monitor_route_catalog
 from api.services.recipe_ingredient_cleanup import delete_recipe_ingredients_safely
 
 router = APIRouter()
@@ -269,6 +270,14 @@ async def create_recipe(
     db_recipe = result.unique().scalars().first()
     if db_recipe is None:
         raise HTTPException(status_code=500, detail="Recipe retrieval failed after create")
+    try:
+        await sync_monitor_route_catalog(force=True)
+    except Exception as exc:  # noqa: BLE001
+        await mark_route_catalog_dirty()
+        logger.warning(
+            "Failed to refresh Bakery monitor route catalog after recipe create",
+            extra={"req_id": req_id, "recipe_name": recipe.name, "error": str(exc)},
+        )
     return await _serialize_recipe(db, db_recipe)
 
 
@@ -331,6 +340,14 @@ async def delete_recipe(
         recipe_name = recipe.name
         await delete_recipe_ingredients_safely(db, recipe_id=recipe.id)
         await db.delete(recipe)
+    try:
+        await sync_monitor_route_catalog(force=True)
+    except Exception as exc:  # noqa: BLE001
+        await mark_route_catalog_dirty()
+        logger.warning(
+            "Failed to refresh Bakery monitor route catalog after recipe delete",
+            extra={"req_id": req_id, "recipe_id": recipe_id, "error": str(exc)},
+        )
 
     return DeleteResponse(
         status="deleted", id=recipe_id, message=f"Recipe '{recipe_name}' deleted successfully"
@@ -339,8 +356,14 @@ async def delete_recipe(
 
 @router.put("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
 @router.patch("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
-async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession = Depends(get_db)):
+async def update_recipe(
+    request: Request,
+    recipe_id: int,
+    payload: RecipeUpdate,
+    db: AsyncSession = Depends(get_db),
+):
     """Update a workflow, preserving comms when omitted and normalizing local comms when supplied."""
+    req_id = request.state.req_id
     recipe: Recipe | None = None
     async with db.begin():
         result = await db.execute(_recipe_query().where(Recipe.id == recipe_id).with_for_update())
@@ -443,4 +466,12 @@ async def update_recipe(recipe_id: int, payload: RecipeUpdate, db: AsyncSession 
     updated_recipe = result.unique().scalars().first()
     if updated_recipe is None:
         raise HTTPException(status_code=500, detail="Recipe update failed")
+    try:
+        await sync_monitor_route_catalog(force=True)
+    except Exception as exc:  # noqa: BLE001
+        await mark_route_catalog_dirty()
+        logger.warning(
+            "Failed to refresh Bakery monitor route catalog after recipe update",
+            extra={"req_id": req_id, "recipe_id": recipe_id, "error": str(exc)},
+        )
     return await _serialize_recipe(db, updated_recipe)

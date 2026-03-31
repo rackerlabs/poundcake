@@ -10,6 +10,8 @@ from shared.bakery_contract import (
     CommunicationCloseRequest,
     CommunicationNotifyRequest,
     CommunicationOpenRequest,
+    MonitorHeartbeatResponse,
+    MonitorRouteCatalogEntry,
 )
 
 
@@ -72,6 +74,42 @@ def test_communication_accepted_response_rejects_unknown_fields() -> None:
                 "action": "create",
                 "status": "queued",
                 "created_at": datetime.now(timezone.utc),
+                "unexpected": "boom",
+            }
+        )
+
+
+def test_monitor_route_catalog_entry_requires_normalized_identity_fields() -> None:
+    payload = MonitorRouteCatalogEntry.model_validate(
+        {
+            "scope": "global",
+            "owner_key": "global",
+            "route_id": "core-primary",
+            "label": "Primary Core",
+            "execution_target": "rackspace_core",
+            "destination_target": "primary-core",
+            "provider_config": {"account_number": "1781738"},
+            "enabled": True,
+            "outage_enabled": True,
+            "position": 1,
+        }
+    )
+
+    assert payload.route_id == "core-primary"
+    assert payload.outage_enabled is True
+
+
+def test_monitor_heartbeat_response_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        MonitorHeartbeatResponse.model_validate(
+            {
+                "monitor_uuid": "uuid-1",
+                "monitor_id": "rackspace/poundcake",
+                "status": "healthy",
+                "route_sync_required": False,
+                "heartbeat_interval_sec": 30,
+                "miss_threshold": 5,
+                "recorded_at": datetime.now(timezone.utc),
                 "unexpected": "boom",
             }
         )

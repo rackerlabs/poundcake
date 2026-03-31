@@ -8,8 +8,9 @@ remote Bakery deployment.
 
 - PoundCake API, workers, UI, and StackStorm stay in this repo.
 - Bakery now lives in its own repo: [rackerlabs/bakery](https://github.com/rackerlabs/bakery).
-- PoundCake talks to Bakery through the shared HMAC-authenticated client contract in
-  `api/services/bakery_client.py` and `shared/bakery_contract.py`.
+- PoundCake talks to Bakery through a monitor registration, route-sync, heartbeat, and per-monitor
+  HMAC client contract in `api/services/bakery_client.py`, `api/services/bakery_monitor.py`, and
+  `shared/bakery_contract.py`.
 
 ## Local Validation
 
@@ -41,7 +42,7 @@ bakery:
     enforceRemoteBaseUrl: true
     baseUrl: https://bakery.example.com
     auth:
-      existingSecret: bakery-hmac
+      existingSecret: bakery-monitor-bootstrap
 ```
 
 The corresponding Bakery deployment and install flow live in

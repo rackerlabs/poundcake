@@ -15,6 +15,12 @@ from api.core.config import get_settings
 from api.core.http_client import request_with_retry
 from api.core.logging import get_logger
 from api.core.metrics import record_bakery_request_failure
+from api.services.bakery_monitor import (
+    build_monitor_auth_headers,
+    ensure_monitor_route_catalog_current,
+    prepare_managed_payload,
+    reregister_monitor,
+)
 from shared.bakery_contract import (
     CommunicationAcceptedResponse,
     CommunicationCloseRequest,
@@ -24,7 +30,7 @@ from shared.bakery_contract import (
     CommunicationResponse,
     CommunicationUpdateRequest,
 )
-from shared.hmac import build_hmac_signing_payload, canonical_json_body, hmac_sha256_hex
+from shared.hmac import canonical_json_body
 
 logger = get_logger(__name__)
 
@@ -83,22 +89,12 @@ def _model_payload(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(mode="json", exclude_none=True)
 
 
-def _sign_request(method: str, path: str, body: str, ts: str) -> str:
-    settings = get_settings()
-    signing_payload = build_hmac_signing_payload(ts, method, path, body.encode("utf-8"))
-    digest = hmac_sha256_hex(settings.bakery_hmac_key, signing_payload)
-    return f"HMAC {settings.bakery_hmac_key_id}:{digest}"
-
-
-def _build_headers(method: str, path: str, payload: dict[str, Any] | None) -> dict[str, str]:
+async def _build_headers(method: str, path: str, payload: dict[str, Any] | None) -> dict[str, str]:
     settings = get_settings()
     headers = {"Content-Type": "application/json"}
     if settings.bakery_auth_mode.lower() != "hmac":
         return headers
-    body = _canonical_body(payload)
-    ts = str(int(time.time()))
-    headers["Authorization"] = _sign_request(method, path, body, ts)
-    headers["X-Timestamp"] = ts
+    headers.update(await build_monitor_auth_headers(method, path, payload))
     return headers
 
 
@@ -120,11 +116,12 @@ async def _request(
     *,
     payload: dict[str, Any] | None = None,
     idempotency_key: str | None = None,
+    retry_auth: bool = True,
 ) -> dict[str, Any]:
     settings = get_settings()
     url = f"{settings.bakery_base_url.rstrip('/')}{path}"
     body = _canonical_body(payload)
-    headers = _build_headers(method, path, payload)
+    headers = await _build_headers(method, path, payload)
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
 
@@ -145,6 +142,21 @@ async def _request(
         )
         raise
 
+    if response.status_code == 401 and retry_auth and settings.bakery_auth_mode.lower() == "hmac":
+        logger.warning(
+            "Bakery request received unauthorized response; attempting monitor re-registration",
+            extra={"action": action, "path": path},
+        )
+        await reregister_monitor()
+        return await _request(
+            action,
+            method,
+            path,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            retry_auth=False,
+        )
+
     if response.status_code >= 400:
         reason = f"http_{response.status_code}"
         record_bakery_request_failure(action, reason)
@@ -161,6 +173,15 @@ async def _request(
         response.raise_for_status()
 
     return response.json()
+
+
+async def _prepare_managed_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    settings = get_settings()
+    if settings.bakery_auth_mode.lower() != "hmac":
+        return payload
+    normalized = await prepare_managed_payload(payload)
+    await ensure_monitor_route_catalog_current()
+    return normalized
 
 
 def _ticket_accepted_from_communication(
@@ -219,11 +240,12 @@ async def open_communication_with_key(
     req_id: str, payload: dict[str, Any], idempotency_key: str | None
 ) -> CommunicationAcceptedResponse:
     request_payload = CommunicationOpenRequest.model_validate(payload)
+    request_payload_dict = await _prepare_managed_request_payload(_model_payload(request_payload))
     response_payload = await _request(
         "open",
         "POST",
         "/api/v1/communications",
-        payload=_model_payload(request_payload),
+        payload=request_payload_dict,
         idempotency_key=idempotency_key or build_idempotency_key(req_id, "open"),
     )
     return CommunicationAcceptedResponse.model_validate(response_payload)
@@ -247,11 +269,12 @@ async def close_communication_with_key(
     idempotency_key: str | None,
 ) -> CommunicationAcceptedResponse:
     request_payload = CommunicationCloseRequest.model_validate(payload)
+    request_payload_dict = await _prepare_managed_request_payload(_model_payload(request_payload))
     response_payload = await _request(
         "close",
         "POST",
         f"/api/v1/communications/{communication_id}/close",
-        payload=_model_payload(request_payload),
+        payload=request_payload_dict,
         idempotency_key=idempotency_key or build_idempotency_key(req_id, "close"),
     )
     return CommunicationAcceptedResponse.model_validate(response_payload)
@@ -275,11 +298,12 @@ async def update_communication_with_key(
     idempotency_key: str | None,
 ) -> CommunicationAcceptedResponse:
     request_payload = CommunicationUpdateRequest.model_validate(payload)
+    request_payload_dict = await _prepare_managed_request_payload(_model_payload(request_payload))
     response_payload = await _request(
         "update",
         "PATCH",
         f"/api/v1/communications/{communication_id}",
-        payload=_model_payload(request_payload),
+        payload=request_payload_dict,
         idempotency_key=idempotency_key or build_idempotency_key(req_id, "update"),
     )
     return CommunicationAcceptedResponse.model_validate(response_payload)
@@ -303,11 +327,12 @@ async def notify_communication_with_key(
     idempotency_key: str | None,
 ) -> CommunicationAcceptedResponse:
     request_payload = CommunicationNotifyRequest.model_validate(payload)
+    request_payload_dict = await _prepare_managed_request_payload(_model_payload(request_payload))
     response_payload = await _request(
         "notify",
         "POST",
         f"/api/v1/communications/{communication_id}/notifications",
-        payload=_model_payload(request_payload),
+        payload=request_payload_dict,
         idempotency_key=idempotency_key or build_idempotency_key(req_id, "notify"),
     )
     return CommunicationAcceptedResponse.model_validate(response_payload)

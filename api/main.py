@@ -32,6 +32,10 @@ from api.api.webhook import router as webhook_router
 from api.api.observability import router as observability_router
 from api.api.repo_sync import router as repo_sync_router
 from api.api.suppressions import router as suppressions_router
+from api.services.bakery_monitor import (
+    start_bakery_monitor_heartbeat,
+    stop_bakery_monitor_heartbeat,
+)
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -43,7 +47,9 @@ async def lifespan(app: FastAPI):
     # init_db() is removed from here
     logger.info("PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
     await wait_for_stackstorm_ready()
+    await start_bakery_monitor_heartbeat()
     yield
+    await stop_bakery_monitor_heartbeat()
     await close_async_http_client()
     close_sync_http_client()
     logger.info("Powering down PoundCake", extra={"req_id": "SYSTEM-SHUTDOWN"})

@@ -8,4 +8,4 @@ bakery:
     enforceRemoteBaseUrl: true
     baseUrl: https://bakery.example.com
     auth:
-      existingSecret: bakery-hmac
+      existingSecret: bakery-monitor-bootstrap

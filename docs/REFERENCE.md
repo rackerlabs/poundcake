@@ -98,7 +98,7 @@ bakery:
     enforceRemoteBaseUrl: true
     baseUrl: https://bakery.example.com
     auth:
-      existingSecret: bakery-hmac
+      existingSecret: bakery-monitor-bootstrap
 ```
 
 Relevant keys:
@@ -110,7 +110,7 @@ Relevant keys:
 | `bakery.client.enforceRemoteBaseUrl` | Forces explicit remote URL usage |
 | `bakery.client.baseUrl` | External Bakery base URL |
 | `bakery.client.auth.mode` | Remote auth mode, typically HMAC |
-| `bakery.client.auth.existingSecret` | Secret containing HMAC material |
+| `bakery.client.auth.existingSecret` | Secret containing the Bakery bootstrap credential and local monitor encryption key |
 | `bakery.client.requestTimeoutSeconds` | Request timeout |
 | `bakery.client.maxRetries` | Retry count |
 | `bakery.client.pollIntervalSeconds` | Poll interval for async Bakery operations |

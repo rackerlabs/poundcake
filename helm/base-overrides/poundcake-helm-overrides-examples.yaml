@@ -29,7 +29,7 @@ bakery:
     enforceRemoteBaseUrl: true
     baseUrl: ""
     auth:
-      existingSecret: bakery-hmac
+      existingSecret: bakery-monitor-bootstrap
 
 gateway:
   enabled: true
@@ -54,7 +54,7 @@ gateway:
 #     enforceRemoteBaseUrl: true
 #     baseUrl: https://bakery.example.com
 #     auth:
-#       existingSecret: bakery-hmac
+#       existingSecret: bakery-monitor-bootstrap
 #
 # Private GHCR example:
 # poundcakeImage:
