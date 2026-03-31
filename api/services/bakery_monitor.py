@@ -366,7 +366,10 @@ async def ensure_monitor_registered(*, force: bool = False) -> MonitorCredential
                     return credentials
 
                 settings = get_settings()
-                if not settings.bakery_bootstrap_hmac_key_id or not settings.bakery_bootstrap_hmac_key:
+                if (
+                    not settings.bakery_bootstrap_hmac_key_id
+                    or not settings.bakery_bootstrap_hmac_key
+                ):
                     raise RuntimeError(
                         "POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY_ID and "
                         "POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY are required for Bakery registration"
@@ -439,7 +442,9 @@ async def mark_route_catalog_dirty() -> None:
             await db.flush()
 
 
-async def sync_monitor_route_catalog(*, force: bool = False) -> MonitorRouteCatalogSyncResponse | None:
+async def sync_monitor_route_catalog(
+    *, force: bool = False
+) -> MonitorRouteCatalogSyncResponse | None:
     if not monitor_auth_enabled():
         return None
     async with _ROUTE_SYNC_LOCK:
