@@ -711,12 +711,12 @@ verify_rendered_endpoint_contract() {
     }
     want && /^[[:space:]]+readinessProbe:[[:space:]]*$/ { probe="ready"; next }
     want && /^[[:space:]]+livenessProbe:[[:space:]]*$/ { probe="live"; next }
-    want && probe=="ready" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/health[[:space:]]*$/ { ready=1; next }
-    want && probe=="live" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/health[[:space:]]*$/ { live=1; next }
+    want && probe=="ready" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/ready[[:space:]]*$/ { ready=1; next }
+    want && probe=="live" && /^[[:space:]]+path:[[:space:]]*\/api\/v1\/live[[:space:]]*$/ { live=1; next }
     /^---[[:space:]]*$/ { kind=""; name=""; inmeta=0; want=0; probe="" }
     END { exit((ready && live) ? 0 : 1) }
   ' "${rendered_manifest}"; then
-    log_error "Rendered manifest contract failed: poundcake-api probes must target /api/v1/health."
+    log_error "Rendered manifest contract failed: poundcake-api probes must target /api/v1/ready and /api/v1/live."
     exit 1
   fi
 }

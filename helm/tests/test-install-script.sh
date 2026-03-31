@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WRAPPER="${SCRIPT_DIR}/../../install/install-poundcake-helm.sh"
+INSTALLER="${SCRIPT_DIR}/../bin/install-poundcake.sh"
 
 fail() {
   echo "[FAIL] $*" >&2
@@ -39,6 +40,12 @@ echo "Checking PoundCake installer wrapper..."
 [[ -x "${WRAPPER}" ]] || fail "missing ${WRAPPER}"
 assert_contains 'exec "$PROJECT_ROOT/helm/bin/install-poundcake.sh" "$@"' "${WRAPPER}"
 assert_not_contains "install-bakery-helm.sh" "${WRAPPER}"
+
+echo "Checking rendered manifest probe contract..."
+[[ -x "${INSTALLER}" ]] || fail "missing ${INSTALLER}"
+assert_contains '/api/v1/ready' "${INSTALLER}"
+assert_contains '/api/v1/live' "${INSTALLER}"
+assert_not_contains '/api/v1/health.' "${INSTALLER}"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
