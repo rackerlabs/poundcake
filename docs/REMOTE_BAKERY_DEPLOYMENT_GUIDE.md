@@ -5,17 +5,26 @@ standalone [rackerlabs/bakery](https://github.com/rackerlabs/bakery) repo.
 
 Use this sequence:
 
-1. Deploy Bakery from the standalone Bakery repo.
-2. Publish Bakery at an HTTPS URL.
-3. Create a Bakery bootstrap credential for this PoundCake monitor ID.
-4. Create the PoundCake bootstrap secret with that credential and a local encryption key.
-5. Configure PoundCake with `bakery.client.*` values.
-6. Install and verify PoundCake.
+1. deploy Bakery from the standalone Bakery repo
+2. publish Bakery at an HTTPS URL
+3. create a Bakery bootstrap credential for this PoundCake monitor ID
+4. create the PoundCake bootstrap secret with that credential and a local encryption key
+5. configure PoundCake with `bakery.client.*` values
+6. install and verify PoundCake
+7. run live provider and heartbeat validation, then return Bakery to dry-run
+
+## Canonical Operator Paths
+
+- PoundCake repo root: `/opt/poundcake`
+- Bakery repo root: `/opt/bakery`
+- PoundCake overrides: `/etc/genestack/helm-configs/poundcake/`
+- Bakery overrides: `/etc/genestack/helm-configs/bakery/`
+- Shared chart versions file: `/etc/genestack/helm-chart-versions.yaml`
 
 ## Bakery Deployment Source
 
 Deploy Bakery from the standalone repo and follow its install docs for Gateway publication,
-provider secrets, and Bakery-side HMAC configuration:
+provider secrets, Bakery-side HMAC configuration, and monitor bootstrap:
 
 - [bakery/docs/DEPLOY.md](https://github.com/rackerlabs/bakery/blob/main/docs/DEPLOY.md)
 - [bakery/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](https://github.com/rackerlabs/bakery/blob/main/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
@@ -28,7 +37,7 @@ export BAKERY_URL="https://bakery.example.com"
 
 ## PoundCake Override Example
 
-Put the PoundCake-side remote Bakery settings in the active PoundCake override file, typically
+Put the PoundCake-side remote Bakery settings in the active override file, typically
 `/etc/genestack/helm-configs/poundcake/10-main-overrides.yaml`:
 
 ```yaml
@@ -83,22 +92,21 @@ kubectl -n rackspace create secret generic bakery-monitor-bootstrap \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-The Bakery-side flow, including the admin endpoint used to mint the bootstrap credential for the
-`<namespace>/<release>` monitor ID, is documented in the standalone Bakery repo.
-
 ## Install PoundCake
 
-Run the PoundCake install from this repo:
+Update `/etc/genestack/helm-chart-versions.yaml` so the `poundcake` entry matches the chart you
+intend to deploy, then install PoundCake from this repo:
 
 ```bash
+cd /opt/poundcake
 ./install/install-poundcake-helm.sh
 ```
 
 Wait for rollout:
 
 ```bash
-kubectl -n rackspace rollout status deploy/poundcake-api --timeout=180s
-kubectl -n rackspace rollout status deploy/poundcake-ui --timeout=180s
+kubectl -n rackspace rollout status deploy/poundcake-api --timeout=300s
+kubectl -n rackspace rollout status deploy/poundcake-ui --timeout=300s
 ```
 
 ## Verify Remote Bakery Wiring
@@ -122,6 +130,7 @@ Expected shape:
 - `bakery.client.baseUrl: ${BAKERY_URL}`
 - `bakery.client.auth.existingSecret: bakery-monitor-bootstrap`
 - `POUNDCAKE_BAKERY_MONITOR_ID: <namespace>/<release>`
+- `POUNDCAKE_BAKERY_ENABLED=true`
 
 Confirm the public PoundCake endpoint:
 
@@ -129,5 +138,56 @@ Confirm the public PoundCake endpoint:
 curl -fsS https://<poundcake-public-hostname>/api/v1/health
 ```
 
+Confirm local monitor persistence:
+
+```bash
+kubectl -n rackspace exec deploy/poundcake-mariadb -- \
+  mariadb -u"$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_USER}' | base64 -d)" \
+  -p"$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
+  "$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_NAME}' | base64 -d)" \
+  -N -e "SELECT monitor_id, monitor_uuid, last_heartbeat_status, last_heartbeat_at FROM bakery_monitor_state;"
+```
+
 If PoundCake still shows `POUNDCAKE_BAKERY_ENABLED=false` or an in-cluster Bakery URL, the release
 was not redeployed with the remote Bakery client settings.
+
+## Live Validation
+
+Leave Bakery in dry-run for normal deployments. For live provider validation:
+
+1. set Bakery `ticketingDryRun` to `false`
+2. redeploy Bakery
+3. run the validation below
+4. set Bakery `ticketingDryRun` back to `true`
+5. redeploy Bakery
+
+Suggested validation flow:
+
+1. Retrieve the PoundCake service token:
+
+```bash
+kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.internal-api-key}' | base64 -d; echo
+```
+
+2. Run the PVC-expand validation webhook through PoundCake.
+   Note:
+   The validation recipe and its target PVC name are runtime data. Confirm the recipe’s execution
+   overrides still point at the PVC you intend to use, or create the expected PVC target before
+   firing the webhook.
+3. Wait for firing remediation to finish, then send the matching resolved webhook with the same
+   fingerprint.
+4. Verify the PoundCake order timeline shows successful Bakery operations and capture the external
+   provider ticket number.
+5. Scale the PoundCake API deployment to zero:
+
+```bash
+kubectl -n rackspace scale deploy/poundcake-api --replicas=0
+```
+
+6. Wait longer than 5 missed 30-second heartbeats and verify the Bakery outage alert fired.
+7. Scale the PoundCake API deployment back to one replica and confirm heartbeats resume:
+
+```bash
+kubectl -n rackspace scale deploy/poundcake-api --replicas=1
+kubectl -n rackspace rollout status deploy/poundcake-api --timeout=300s
+```
