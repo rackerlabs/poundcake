@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -162,6 +163,29 @@ def test_ensure_repo_checkout_uses_git_credentials(monkeypatch, tmp_path: Path) 
     assert captured["env"]["GIT_ASKPASS"] == "echo"
     assert captured["env"]["GIT_USERNAME"] == "oauth2"
     assert captured["env"]["GIT_SSH_COMMAND"] == "ssh -i /tmp/test-key -o StrictHostKeyChecking=no"
+
+
+def test_promote_generated_directory_falls_back_on_cross_device_moves(
+    monkeypatch, tmp_path: Path
+) -> None:
+    destination = tmp_path / "bootstrap" / "recipes"
+    destination.mkdir(parents=True)
+    (destination / "old.yaml").write_text("old\n", encoding="utf-8")
+
+    temp_dir = tmp_path / "generated"
+    temp_dir.mkdir()
+    (temp_dir / "new.yaml").write_text("new\n", encoding="utf-8")
+
+    def _raise_exdev(self: Path, target: Path) -> Path:
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(Path, "rename", _raise_exdev)
+
+    sync._promote_generated_directory(temp_dir=temp_dir, destination_dir=destination)
+
+    assert not temp_dir.exists()
+    assert (destination / "new.yaml").read_text(encoding="utf-8") == "new\n"
+    assert not (destination / "old.yaml").exists()
 
 
 def test_repo_no_longer_tracks_source_controlled_bootstrap_recipes() -> None:

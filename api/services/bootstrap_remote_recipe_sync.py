@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import json
 import os
+import errno
 import shutil
 import tempfile
 from pathlib import Path
@@ -240,18 +241,29 @@ def _write_generated_recipes(
     return len(alert_rules)
 
 
+def _move_tree(source: Path, target: Path) -> None:
+    """Move a directory tree, falling back to copy+remove across filesystems."""
+    try:
+        source.rename(target)
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+        shutil.copytree(source, target)
+        shutil.rmtree(source)
+
+
 def _promote_generated_directory(*, temp_dir: Path, destination_dir: Path) -> None:
     destination_dir.parent.mkdir(parents=True, exist_ok=True)
     backup_dir = destination_dir.parent / f".{destination_dir.name}.bak"
     if backup_dir.exists():
         shutil.rmtree(backup_dir)
     if destination_dir.exists():
-        destination_dir.rename(backup_dir)
+        _move_tree(destination_dir, backup_dir)
     try:
-        shutil.move(str(temp_dir), str(destination_dir))
+        _move_tree(temp_dir, destination_dir)
     except Exception:
         if backup_dir.exists() and not destination_dir.exists():
-            backup_dir.rename(destination_dir)
+            _move_tree(backup_dir, destination_dir)
         raise
     else:
         if backup_dir.exists():

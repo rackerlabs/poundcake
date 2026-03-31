@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-__version__ = "2.0.179"
+__version__ = "2.0.180"
 
 
 def resolve_version(*env_vars: str) -> str:
