@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -94,6 +95,46 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_rejects_conflicting_duplic
             rules_path="alerts",
             destination_dir=str(tmp_path / "generated"),
         )
+
+
+def test_ensure_repo_checkout_uses_git_credentials(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeRepoApi:
+        @staticmethod
+        def clone_from(url: str, path: Path, *, branch: str, env: dict[str, str]) -> None:
+            captured["url"] = url
+            captured["path"] = path
+            captured["branch"] = branch
+            captured["env"] = env
+
+    monkeypatch.setattr(sync, "_load_git_module", lambda: SimpleNamespace(Repo=_FakeRepoApi))
+    monkeypatch.setattr(
+        sync,
+        "get_settings",
+        lambda: SimpleNamespace(
+            git_token="ghp_secret",
+            git_ssh_key_path="/tmp/test-key",
+        ),
+    )
+    monkeypatch.setattr(sync.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    repo_path = sync._ensure_repo_checkout(
+        repo_url="https://github.com/example/private-rules.git",
+        branch="main",
+    )
+
+    assert repo_path == tmp_path / "poundcake-bootstrap-rules" / "private-rules"
+    assert captured["url"] == "https://x-access-token:ghp_secret@github.com/example/private-rules.git"
+    assert captured["branch"] == "main"
+    assert captured["path"] == repo_path
+    assert captured["env"]["GIT_PASSWORD"] == "ghp_secret"
+    assert captured["env"]["GIT_ASKPASS"] == "echo"
+    assert captured["env"]["GIT_USERNAME"] == "oauth2"
+    assert (
+        captured["env"]["GIT_SSH_COMMAND"]
+        == "ssh -i /tmp/test-key -o StrictHostKeyChecking=no"
+    )
 
 
 def test_repo_no_longer_tracks_source_controlled_bootstrap_recipes() -> None:

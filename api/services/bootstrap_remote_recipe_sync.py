@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.services.bootstrap_recipe_catalog import load_bootstrap_recipe_catalog
 
@@ -79,12 +81,54 @@ def _load_git_module() -> Any:
         raise BootstrapRemoteRecipeSyncError(f"Git repository support unavailable: {exc}") from exc
 
 
+def _credentialed_repo_url(*, repo_url: str, git_token: str) -> str:
+    """Embed HTTPS token credentials into the repo URL when supported."""
+    if not git_token or not repo_url.startswith("https://"):
+        return repo_url
+    if "github.com" in repo_url:
+        return repo_url.replace("https://", f"https://x-access-token:{git_token}@")
+    if "gitlab.com" in repo_url:
+        return repo_url.replace("https://", f"https://oauth2:{git_token}@")
+    return repo_url
+
+
+def _get_git_env(*, repo_url: str, git_token: str, git_ssh_key_path: str) -> dict[str, str]:
+    """Build Git environment variables for token and SSH-key backed access."""
+    env = os.environ.copy()
+
+    if git_token:
+        if "github.com" in repo_url:
+            env["GIT_ASKPASS"] = "echo"
+            env["GIT_USERNAME"] = "oauth2"
+            env["GIT_PASSWORD"] = git_token
+        elif "gitlab.com" in repo_url:
+            env["GIT_ASKPASS"] = "echo"
+            env["GIT_USERNAME"] = "oauth2"
+            env["GIT_PASSWORD"] = git_token
+
+    if git_ssh_key_path:
+        env["GIT_SSH_COMMAND"] = (
+            f"ssh -i {git_ssh_key_path} -o StrictHostKeyChecking=no"
+        )
+
+    return env
+
+
 def _ensure_repo_checkout(
     *,
     repo_url: str,
     branch: str,
 ) -> Path:
     git = _load_git_module()
+    settings = get_settings()
+    git_token = str(settings.git_token or "").strip()
+    git_ssh_key_path = str(settings.git_ssh_key_path or "").strip()
+    credentialed_repo_url = _credentialed_repo_url(repo_url=repo_url, git_token=git_token)
+    git_env = _get_git_env(
+        repo_url=repo_url,
+        git_token=git_token,
+        git_ssh_key_path=git_ssh_key_path,
+    )
     work_dir = Path(tempfile.gettempdir()) / "poundcake-bootstrap-rules"
     work_dir.mkdir(parents=True, exist_ok=True)
     repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "") or "bootstrap-rules"
@@ -93,14 +137,16 @@ def _ensure_repo_checkout(
         if repo_path.exists():
             repo = git.Repo(repo_path)
             origin = repo.remotes.origin
-            origin.fetch()
+            if credentialed_repo_url != repo_url:
+                origin.set_url(credentialed_repo_url)
+            origin.fetch(env=git_env)
             try:
                 repo.git.checkout(branch)
             except Exception:
                 repo.git.checkout("-B", branch, f"origin/{branch}")
-            origin.pull(branch)
+            origin.pull(branch, env=git_env)
         else:
-            git.Repo.clone_from(repo_url, repo_path, branch=branch)
+            git.Repo.clone_from(credentialed_repo_url, repo_path, branch=branch, env=git_env)
     except Exception as exc:  # noqa: BLE001
         raise BootstrapRemoteRecipeSyncError(
             f"failed to clone/pull bootstrap rules repo '{repo_url}' branch '{branch}': {exc}"
