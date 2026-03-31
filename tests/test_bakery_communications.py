@@ -15,6 +15,8 @@ from api.services.bakery_client import (
     BakeryTicketResource,
 )
 from shared.bakery_contract import (
+    CollectionJobClaimResponse,
+    CollectionJobResponse,
     CommunicationAcceptedResponse,
     CommunicationOperationResponse,
     CommunicationResponse,
@@ -49,7 +51,14 @@ def _client_settings() -> SimpleNamespace:
         bakery_bootstrap_hmac_key="",
         bakery_secret_encryption_key="",
         bakery_monitor_id="",
+        bakery_monitor_environment_label="rackspace/poundcake",
+        bakery_monitor_region="ord",
+        bakery_monitor_cluster_name="ord-cluster",
+        bakery_monitor_namespace="rackspace",
+        bakery_monitor_release_name="poundcake",
+        bakery_monitor_tags=["prod", "rackspace"],
         bakery_monitor_heartbeat_interval_seconds=30,
+        bakery_collection_poll_interval_seconds=10,
     )
 
 
@@ -312,3 +321,124 @@ async def test_bakery_client_uses_monitor_auth_headers_for_hmac_calls(
     sent_headers = request.await_args.kwargs["headers"]
     assert sent_headers["Authorization"] == "HMAC active:signature"
     assert sent_headers["X-Bakery-Monitor-UUID"] == "monitor-uuid-1"
+
+
+def test_monitor_registration_request_accepts_metadata_fields() -> None:
+    payload = bakery_monitor.MonitorRegistrationRequest(
+        monitor_id="rackspace/poundcake",
+        installation_id="pod-1",
+        app_version="2.0.0",
+        environment_label="rackspace/poundcake",
+        region="ord",
+        cluster_name="ord-cluster",
+        namespace="rackspace",
+        release_name="poundcake",
+        tags=["prod", "rackspace"],
+    )
+
+    assert payload.environment_label == "rackspace/poundcake"
+    assert payload.region == "ord"
+    assert payload.tags == ["prod", "rackspace"]
+
+
+@pytest.mark.asyncio
+async def test_process_next_collection_job_completes_successfully(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bakery_monitor, "monitor_auth_enabled", lambda: True)
+    monkeypatch.setattr(
+        bakery_monitor,
+        "claim_next_collection_job",
+        AsyncMock(
+            return_value=CollectionJobClaimResponse(
+                available=True,
+                job=CollectionJobResponse(
+                    job_id="job-1",
+                    monitor_uuid="monitor-1",
+                    monitor_id="rackspace/poundcake",
+                    collector_type="monitor_diagnostics",
+                    status="leased",
+                    parameters={"include_health": True},
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                ),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        bakery_monitor,
+        "run_collection_job",
+        AsyncMock(return_value={"collector_type": "monitor_diagnostics"}),
+    )
+    complete = AsyncMock(
+        return_value=CollectionJobResponse(
+            job_id="job-1",
+            monitor_uuid="monitor-1",
+            monitor_id="rackspace/poundcake",
+            collector_type="monitor_diagnostics",
+            status="succeeded",
+            result={"collector_type": "monitor_diagnostics"},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    monkeypatch.setattr(bakery_monitor, "complete_collection_job", complete)
+
+    response = await bakery_monitor.process_next_collection_job()
+
+    assert response is not None
+    assert response.status == "succeeded"
+    complete.assert_awaited_once()
+    assert complete.await_args.kwargs["job_id"] == "job-1"
+    assert complete.await_args.kwargs["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_process_next_collection_job_marks_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bakery_monitor, "monitor_auth_enabled", lambda: True)
+    monkeypatch.setattr(
+        bakery_monitor,
+        "claim_next_collection_job",
+        AsyncMock(
+            return_value=CollectionJobClaimResponse(
+                available=True,
+                job=CollectionJobResponse(
+                    job_id="job-2",
+                    monitor_uuid="monitor-1",
+                    monitor_id="rackspace/poundcake",
+                    collector_type="ticket_context",
+                    status="leased",
+                    parameters={"req_id": "REQ-2"},
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                ),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        bakery_monitor,
+        "run_collection_job",
+        AsyncMock(side_effect=RuntimeError("collector boom")),
+    )
+    complete = AsyncMock(
+        return_value=CollectionJobResponse(
+            job_id="job-2",
+            monitor_uuid="monitor-1",
+            monitor_id="rackspace/poundcake",
+            collector_type="ticket_context",
+            status="failed",
+            error="collector boom",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    monkeypatch.setattr(bakery_monitor, "complete_collection_job", complete)
+
+    response = await bakery_monitor.process_next_collection_job()
+
+    assert response is not None
+    assert response.status == "failed"
+    assert complete.await_args.kwargs["status"] == "failed"
+    assert complete.await_args.kwargs["error"] == "collector boom"

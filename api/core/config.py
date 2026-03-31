@@ -41,6 +41,55 @@ def _default_bakery_monitor_id() -> str:
     return ""
 
 
+def _default_bakery_monitor_namespace() -> str:
+    return os.getenv("POUNDCAKE_BAKERY_MONITOR_NAMESPACE", "").strip() or os.getenv(
+        "POD_NAMESPACE", ""
+    ).strip()
+
+
+def _default_bakery_monitor_release_name() -> str:
+    return (
+        os.getenv("POUNDCAKE_BAKERY_MONITOR_RELEASE_NAME", "").strip()
+        or os.getenv("HELM_RELEASE_NAME", "").strip()
+        or os.getenv("RELEASE_NAME", "").strip()
+    )
+
+
+def _default_bakery_monitor_environment_label() -> str:
+    explicit = os.getenv("POUNDCAKE_BAKERY_MONITOR_ENVIRONMENT_LABEL", "").strip()
+    if explicit:
+        return explicit
+    namespace = _default_bakery_monitor_namespace()
+    release_name = _default_bakery_monitor_release_name()
+    if namespace and release_name:
+        return f"{namespace}/{release_name}"
+    return namespace or release_name or ""
+
+
+def _default_bakery_monitor_region() -> str:
+    return (
+        os.getenv("POUNDCAKE_BAKERY_MONITOR_REGION", "").strip()
+        or os.getenv("REGION", "").strip()
+        or os.getenv("CLOUD_REGION", "").strip()
+    )
+
+
+def _default_bakery_monitor_cluster_name() -> str:
+    return (
+        os.getenv("POUNDCAKE_BAKERY_MONITOR_CLUSTER_NAME", "").strip()
+        or os.getenv("CLUSTER_NAME", "").strip()
+        or os.getenv("KUBERNETES_CLUSTER_NAME", "").strip()
+    )
+
+
+def _default_bakery_monitor_tags() -> list[str]:
+    raw = os.getenv("POUNDCAKE_BAKERY_MONITOR_TAGS", "").strip()
+    if not raw:
+        return []
+    values = [item.strip() for item in raw.split(",")]
+    return [item for item in values if item]
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -373,7 +422,14 @@ class Settings(BaseSettings):
     bakery_bootstrap_hmac_key: str = ""
     bakery_secret_encryption_key: str = ""
     bakery_monitor_id: str = Field(default_factory=_default_bakery_monitor_id)
+    bakery_monitor_environment_label: str = Field(default_factory=_default_bakery_monitor_environment_label)
+    bakery_monitor_region: str = Field(default_factory=_default_bakery_monitor_region)
+    bakery_monitor_cluster_name: str = Field(default_factory=_default_bakery_monitor_cluster_name)
+    bakery_monitor_namespace: str = Field(default_factory=_default_bakery_monitor_namespace)
+    bakery_monitor_release_name: str = Field(default_factory=_default_bakery_monitor_release_name)
+    bakery_monitor_tags: list[str] = Field(default_factory=_default_bakery_monitor_tags)
     bakery_monitor_heartbeat_interval_seconds: int = 30
+    bakery_collection_poll_interval_seconds: int = 10
     bakery_request_timeout_seconds: int = 15
     bakery_max_retries: int = 2
     bakery_poll_interval_seconds: float = 2.0

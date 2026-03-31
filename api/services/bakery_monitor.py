@@ -20,6 +20,7 @@ from api.core.database import SessionLocal
 from api.core.http_client import request_with_retry
 from api.core.logging import get_logger
 from api.models.models import BakeryMonitorState, Recipe, RecipeIngredient
+from api.services.bakery_collectors import run_collection_job
 from api.services.bakery_secret_store import decrypt_secret, encrypt_secret
 from api.services.communications_policy import (
     POLICY_METADATA_KEY,
@@ -29,6 +30,9 @@ from api.services.communications_policy import (
     is_hidden_workflow_recipe,
 )
 from shared.bakery_contract import (
+    CollectionJobClaimResponse,
+    CollectionJobCompleteRequest,
+    CollectionJobResponse,
     MonitorHeartbeatRequest,
     MonitorHeartbeatResponse,
     MonitorRegistrationRequest,
@@ -44,6 +48,7 @@ logger = get_logger(__name__)
 _REGISTER_LOCK = asyncio.Lock()
 _ROUTE_SYNC_LOCK = asyncio.Lock()
 _HEARTBEAT_TASK: asyncio.Task[None] | None = None
+_COLLECTION_TASK: asyncio.Task[None] | None = None
 
 ROUTE_VALIDATION_BYPASS_SOURCES = {"poundcake_system"}
 SCOPE_SORT_ORDER = {"global": 0, "fallback": 1, "recipe": 2}
@@ -72,6 +77,28 @@ def _monitor_id() -> str:
     if not monitor_id:
         raise RuntimeError("POUNDCAKE_BAKERY_MONITOR_ID is required for Bakery monitor auth")
     return monitor_id
+
+
+def _monitor_tags() -> list[str]:
+    seen: dict[str, str] = {}
+    for tag in get_settings().bakery_monitor_tags or []:
+        value = str(tag or "").strip()
+        if not value:
+            continue
+        seen[value.casefold()] = value
+    return sorted(seen.values(), key=str.casefold)
+
+
+def _monitor_metadata_fields() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "environment_label": str(settings.bakery_monitor_environment_label or "").strip() or None,
+        "region": str(settings.bakery_monitor_region or "").strip() or None,
+        "cluster_name": str(settings.bakery_monitor_cluster_name or "").strip() or None,
+        "namespace": str(settings.bakery_monitor_namespace or "").strip() or None,
+        "release_name": str(settings.bakery_monitor_release_name or "").strip() or None,
+        "tags": _monitor_tags(),
+    }
 
 
 def monitor_auth_enabled() -> bool:
@@ -379,6 +406,7 @@ async def ensure_monitor_registered(*, force: bool = False) -> MonitorCredential
                     monitor_id=_monitor_id(),
                     installation_id=settings.instance_id,
                     app_version=settings.app_version,
+                    **_monitor_metadata_fields(),
                 )
                 request_payload = request_model.model_dump(mode="json", exclude_none=True)
                 headers = _request_headers(
@@ -525,6 +553,77 @@ async def ensure_monitor_route_catalog_current() -> str:
     return catalog_hash
 
 
+async def _monitor_request_json(
+    *,
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    credentials = await ensure_monitor_registered()
+    headers = _request_headers(
+        method=method,
+        path=path,
+        payload=payload,
+        key_id=credentials.hmac_key_id,
+        secret=credentials.hmac_secret,
+        monitor_uuid=credentials.monitor_uuid,
+    )
+    try:
+        return await _request_json(
+            method=method,
+            path=path,
+            payload=payload,
+            headers=headers,
+        )
+    except Exception as exc:  # noqa: BLE001
+        if not _is_unauthorized(exc):
+            raise
+        credentials = await ensure_monitor_registered(force=True)
+        headers = _request_headers(
+            method=method,
+            path=path,
+            payload=payload,
+            key_id=credentials.hmac_key_id,
+            secret=credentials.hmac_secret,
+            monitor_uuid=credentials.monitor_uuid,
+        )
+        return await _request_json(
+            method=method,
+            path=path,
+            payload=payload,
+            headers=headers,
+        )
+
+
+async def claim_next_collection_job() -> CollectionJobClaimResponse:
+    payload = await _monitor_request_json(
+        method="POST",
+        path="/api/v1/monitors/jobs/claim-next",
+        payload=None,
+    )
+    return CollectionJobClaimResponse.model_validate(payload)
+
+
+async def complete_collection_job(
+    *,
+    job_id: str,
+    status: str,
+    result: dict[str, Any] | None = None,
+    error: str | None = None,
+) -> CollectionJobResponse:
+    request_model = CollectionJobCompleteRequest(
+        status=status,
+        result=result,
+        error=error,
+    )
+    payload = await _monitor_request_json(
+        method="POST",
+        path=f"/api/v1/monitors/jobs/{job_id}/complete",
+        payload=request_model.model_dump(mode="json", exclude_none=True),
+    )
+    return CollectionJobResponse.model_validate(payload)
+
+
 async def heartbeat_once() -> MonitorHeartbeatResponse:
     settings = get_settings()
     credentials = await ensure_monitor_registered()
@@ -534,6 +633,7 @@ async def heartbeat_once() -> MonitorHeartbeatResponse:
         catalog_hash=catalog_hash,
         installation_id=settings.instance_id,
         app_version=settings.app_version,
+        **_monitor_metadata_fields(),
         details={"instance_id": settings.instance_id},
     )
     request_payload = request_model.model_dump(mode="json", exclude_none=True)
@@ -591,6 +691,38 @@ async def reregister_monitor() -> MonitorCredentials:
     return credentials
 
 
+async def process_next_collection_job() -> CollectionJobResponse | None:
+    if not monitor_auth_enabled():
+        return None
+    claim = await claim_next_collection_job()
+    if not claim.available or claim.job is None:
+        return None
+
+    job = claim.job
+    try:
+        result = await run_collection_job(job.collector_type, job.parameters)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Bakery collection job failed",
+            extra={
+                "job_id": job.job_id,
+                "collector_type": job.collector_type,
+                "error": str(exc),
+            },
+        )
+        return await complete_collection_job(
+            job_id=job.job_id,
+            status="failed",
+            error=str(exc),
+        )
+
+    return await complete_collection_job(
+        job_id=job.job_id,
+        status="succeeded",
+        result=result,
+    )
+
+
 async def _heartbeat_loop() -> None:
     settings = get_settings()
     interval = max(int(settings.bakery_monitor_heartbeat_interval_seconds or 30), 5)
@@ -609,8 +741,27 @@ async def _heartbeat_loop() -> None:
         await asyncio.sleep(interval)
 
 
+async def _collection_loop() -> None:
+    settings = get_settings()
+    interval = max(int(settings.bakery_collection_poll_interval_seconds or 10), 5)
+    while True:
+        try:
+            for _ in range(5):
+                completed = await process_next_collection_job()
+                if completed is None:
+                    break
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Bakery collection loop failed",
+                extra={"error": str(exc), "monitor_id": settings.bakery_monitor_id},
+            )
+        await asyncio.sleep(interval)
+
+
 async def start_bakery_monitor_heartbeat() -> None:
-    global _HEARTBEAT_TASK
+    global _HEARTBEAT_TASK, _COLLECTION_TASK
     settings = get_settings()
     if not monitor_auth_enabled():
         return
@@ -624,15 +775,29 @@ async def start_bakery_monitor_heartbeat() -> None:
             extra={"error": str(exc), "monitor_id": settings.bakery_monitor_id},
         )
     _HEARTBEAT_TASK = asyncio.create_task(_heartbeat_loop(), name="bakery-monitor-heartbeat")
+    if _COLLECTION_TASK is None or _COLLECTION_TASK.done():
+        _COLLECTION_TASK = asyncio.create_task(
+            _collection_loop(),
+            name="bakery-monitor-collection",
+        )
 
 
 async def stop_bakery_monitor_heartbeat() -> None:
-    global _HEARTBEAT_TASK
+    global _HEARTBEAT_TASK, _COLLECTION_TASK
     if _HEARTBEAT_TASK is None:
-        return
-    _HEARTBEAT_TASK.cancel()
-    try:
-        await _HEARTBEAT_TASK
-    except asyncio.CancelledError:
-        pass
-    _HEARTBEAT_TASK = None
+        if _COLLECTION_TASK is None:
+            return
+    if _HEARTBEAT_TASK is not None:
+        _HEARTBEAT_TASK.cancel()
+        try:
+            await _HEARTBEAT_TASK
+        except asyncio.CancelledError:
+            pass
+        _HEARTBEAT_TASK = None
+    if _COLLECTION_TASK is not None:
+        _COLLECTION_TASK.cancel()
+        try:
+            await _COLLECTION_TASK
+        except asyncio.CancelledError:
+            pass
+        _COLLECTION_TASK = None

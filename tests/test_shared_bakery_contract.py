@@ -6,11 +6,16 @@ import pytest
 from pydantic import ValidationError
 
 from shared.bakery_contract import (
+    CollectionJobClaimResponse,
+    CollectionJobCompleteRequest,
+    CollectionJobCreateRequest,
     CommunicationAcceptedResponse,
     CommunicationCloseRequest,
     CommunicationNotifyRequest,
     CommunicationOpenRequest,
+    MonitorHeartbeatRequest,
     MonitorHeartbeatResponse,
+    MonitorRegistrationRequest,
     MonitorRouteCatalogEntry,
 )
 
@@ -113,3 +118,72 @@ def test_monitor_heartbeat_response_rejects_unknown_fields() -> None:
                 "unexpected": "boom",
             }
         )
+
+
+def test_monitor_registration_and_heartbeat_accept_metadata_fields() -> None:
+    registration = MonitorRegistrationRequest.model_validate(
+        {
+            "monitor_id": "rackspace/poundcake",
+            "environment_label": "rackspace/poundcake",
+            "region": "ord",
+            "cluster_name": "ord-cluster",
+            "namespace": "rackspace",
+            "release_name": "poundcake",
+            "tags": ["prod", "rackspace"],
+        }
+    )
+    heartbeat = MonitorHeartbeatRequest.model_validate(
+        {
+            "catalog_hash": "abc123",
+            "environment_label": "rackspace/poundcake",
+            "region": "ord",
+            "cluster_name": "ord-cluster",
+            "namespace": "rackspace",
+            "release_name": "poundcake",
+            "tags": ["prod", "rackspace"],
+            "details": {"instance_id": "pod-1"},
+        }
+    )
+
+    assert registration.environment_label == "rackspace/poundcake"
+    assert registration.tags == ["prod", "rackspace"]
+    assert heartbeat.cluster_name == "ord-cluster"
+    assert heartbeat.details["instance_id"] == "pod-1"
+
+
+def test_collection_job_contracts_validate_expected_shapes() -> None:
+    create_request = CollectionJobCreateRequest.model_validate(
+        {
+            "monitor_uuid": "monitor-1",
+            "collector_type": "monitor_diagnostics",
+            "parameters": {"include_health": True},
+            "reason": "Investigate heartbeat drift",
+        }
+    )
+    claim = CollectionJobClaimResponse.model_validate(
+        {
+            "available": True,
+            "job": {
+                "job_id": "job-1",
+                "monitor_uuid": "monitor-1",
+                "monitor_id": "rackspace/poundcake",
+                "collector_type": "monitor_diagnostics",
+                "status": "leased",
+                "parameters": {"include_health": True},
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+            },
+        }
+    )
+    completion = CollectionJobCompleteRequest.model_validate(
+        {
+            "status": "succeeded",
+            "result": {"summary": "ok"},
+        }
+    )
+
+    assert create_request.collector_type == "monitor_diagnostics"
+    assert claim.available is True
+    assert claim.job is not None
+    assert claim.job.job_id == "job-1"
+    assert completion.status == "succeeded"

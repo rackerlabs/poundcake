@@ -810,8 +810,32 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: POUNDCAKE_BAKERY_MONITOR_ENVIRONMENT_LABEL
+            value: NAMESPACE/RELEASE-NAME
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_NAMESPACE
+            value: NAMESPACE
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_MONITOR_RELEASE_NAME
+            value: RELEASE-NAME
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: POUNDCAKE_BAKERY_MONITOR_HEARTBEAT_INTERVAL_SECONDS
             value: "30"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_BAKERY_COLLECTION_POLL_INTERVAL_SECONDS
+            value: "10"
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env

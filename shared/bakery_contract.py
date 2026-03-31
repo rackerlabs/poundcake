@@ -121,6 +121,17 @@ class CommunicationOperationListResponse(_BakeryContractModel):
     count: int
 
 
+class MonitorMetadata(_BakeryContractModel):
+    """Report-friendly metadata for one PoundCake monitor."""
+
+    environment_label: str | None = Field(default=None, max_length=255)
+    region: str | None = Field(default=None, max_length=100)
+    cluster_name: str | None = Field(default=None, max_length=255)
+    namespace: str | None = Field(default=None, max_length=255)
+    release_name: str | None = Field(default=None, max_length=255)
+    tags: list[str] = Field(default_factory=list)
+
+
 class MonitorRouteCatalogEntry(_BakeryContractModel):
     """Normalized communication route entry registered by PoundCake."""
 
@@ -151,6 +162,12 @@ class MonitorRegistrationRequest(_BakeryContractModel):
     monitor_id: str = Field(..., min_length=1, max_length=255)
     installation_id: str | None = Field(default=None, max_length=255)
     app_version: str | None = Field(default=None, max_length=100)
+    environment_label: str | None = Field(default=None, max_length=255)
+    region: str | None = Field(default=None, max_length=100)
+    cluster_name: str | None = Field(default=None, max_length=255)
+    namespace: str | None = Field(default=None, max_length=255)
+    release_name: str | None = Field(default=None, max_length=255)
+    tags: list[str] = Field(default_factory=list)
 
 
 class MonitorRegistrationResponse(_BakeryContractModel):
@@ -188,6 +205,12 @@ class MonitorHeartbeatRequest(_BakeryContractModel):
     catalog_hash: str | None = Field(default=None, max_length=64)
     installation_id: str | None = Field(default=None, max_length=255)
     app_version: str | None = Field(default=None, max_length=100)
+    environment_label: str | None = Field(default=None, max_length=255)
+    region: str | None = Field(default=None, max_length=100)
+    cluster_name: str | None = Field(default=None, max_length=255)
+    namespace: str | None = Field(default=None, max_length=255)
+    release_name: str | None = Field(default=None, max_length=255)
+    tags: list[str] = Field(default_factory=list)
     details: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -201,3 +224,47 @@ class MonitorHeartbeatResponse(_BakeryContractModel):
     heartbeat_interval_sec: int
     miss_threshold: int
     recorded_at: datetime
+
+
+class CollectionJobCreateRequest(_BakeryContractModel):
+    """Operator-requested read-only collection job queued for one monitor."""
+
+    monitor_uuid: str = Field(..., min_length=1, max_length=36)
+    collector_type: str = Field(..., min_length=1, max_length=100)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = Field(default=None, max_length=1024)
+
+
+class CollectionJobResponse(_BakeryContractModel):
+    """Collection job state returned by Bakery."""
+
+    job_id: str
+    monitor_uuid: str
+    monitor_id: str
+    collector_type: str
+    status: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = None
+    requested_by: str | None = None
+    lease_expires_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CollectionJobClaimResponse(_BakeryContractModel):
+    """Claim-next-job response returned to PoundCake monitors."""
+
+    available: bool
+    job: CollectionJobResponse | None = None
+
+
+class CollectionJobCompleteRequest(_BakeryContractModel):
+    """Structured collection-job completion payload sent by PoundCake."""
+
+    status: str = Field(..., min_length=1, max_length=32)
+    result: dict[str, Any] | None = None
+    error: str | None = Field(default=None, max_length=4096)

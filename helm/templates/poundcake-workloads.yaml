@@ -326,8 +326,16 @@ spec:
               value: {{ .Values.bakery.client.auth.mode | quote }}
             - name: POUNDCAKE_BAKERY_MONITOR_ID
               value: {{ printf "%s/%s" .Release.Namespace .Release.Name | quote }}
+            - name: POUNDCAKE_BAKERY_MONITOR_ENVIRONMENT_LABEL
+              value: {{ printf "%s/%s" .Release.Namespace .Release.Name | quote }}
+            - name: POUNDCAKE_BAKERY_MONITOR_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: POUNDCAKE_BAKERY_MONITOR_RELEASE_NAME
+              value: {{ .Release.Name | quote }}
             - name: POUNDCAKE_BAKERY_MONITOR_HEARTBEAT_INTERVAL_SECONDS
               value: {{ .Values.bakery.client.heartbeatIntervalSeconds | quote }}
+            - name: POUNDCAKE_BAKERY_COLLECTION_POLL_INTERVAL_SECONDS
+              value: {{ .Values.bakery.client.collectionPollIntervalSeconds | quote }}
             - name: POUNDCAKE_BAKERY_REQUEST_TIMEOUT_SECONDS
               value: {{ .Values.bakery.client.requestTimeoutSeconds | quote }}
             - name: POUNDCAKE_BAKERY_MAX_RETRIES

@@ -832,6 +832,7 @@ bakery:
         bootstrapKey: "bootstrap-key"
         monitorEncryptionKey: "monitor-encryption-key"
     heartbeatIntervalSeconds: 30
+    collectionPollIntervalSeconds: 10
     requestTimeoutSeconds: 15
     maxRetries: 2
     pollIntervalSeconds: 2
