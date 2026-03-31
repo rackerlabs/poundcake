@@ -103,7 +103,9 @@ async def _monitor_diagnostics() -> dict[str, Any]:
     async with SessionLocal() as db:
         health = await _collector_health_snapshot()
         result = await db.execute(
-            select(BakeryMonitorState).where(BakeryMonitorState.monitor_id == settings.bakery_monitor_id)
+            select(BakeryMonitorState).where(
+                BakeryMonitorState.monitor_id == settings.bakery_monitor_id
+            )
         )
         monitor_state = result.scalars().first()
 
@@ -232,7 +234,11 @@ async def _ticket_context(parameters: dict[str, Any]) -> dict[str, Any]:
                     Order.bakery_comms_id == bakery_ticket_id,
                 )
             )
-        orders = (await db.execute(order_query.order_by(Order.updated_at.desc()).limit(limit))).scalars().all()
+        orders = (
+            (await db.execute(order_query.order_by(Order.updated_at.desc()).limit(limit)))
+            .scalars()
+            .all()
+        )
 
         if not orders and bakery_ticket_id:
             comm_query = select(OrderCommunication).where(
@@ -242,10 +248,16 @@ async def _ticket_context(parameters: dict[str, Any]) -> dict[str, Any]:
             order_ids = [item.order_id for item in comms]
             if order_ids:
                 orders = (
-                    await db.execute(
-                        select(Order).where(Order.id.in_(order_ids)).order_by(Order.updated_at.desc())
+                    (
+                        await db.execute(
+                            select(Order)
+                            .where(Order.id.in_(order_ids))
+                            .order_by(Order.updated_at.desc())
+                        )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
 
         order_ids = [item.id for item in orders]
         req_ids = [item.req_id for item in orders]
@@ -253,19 +265,29 @@ async def _ticket_context(parameters: dict[str, Any]) -> dict[str, Any]:
         communications: list[OrderCommunication] = []
         if order_ids:
             communications = (
-                await db.execute(
-                    select(OrderCommunication)
-                    .where(OrderCommunication.order_id.in_(order_ids))
-                    .order_by(OrderCommunication.updated_at.desc())
+                (
+                    await db.execute(
+                        select(OrderCommunication)
+                        .where(OrderCommunication.order_id.in_(order_ids))
+                        .order_by(OrderCommunication.updated_at.desc())
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         dish_query = select(Dish)
         if order_ids:
-            dish_query = dish_query.where(or_(Dish.order_id.in_(order_ids), Dish.req_id.in_(req_ids)))
+            dish_query = dish_query.where(
+                or_(Dish.order_id.in_(order_ids), Dish.req_id.in_(req_ids))
+            )
         elif req_id:
             dish_query = dish_query.where(Dish.req_id == req_id)
-        dishes = (await db.execute(dish_query.order_by(Dish.updated_at.desc()).limit(limit))).scalars().all()
+        dishes = (
+            (await db.execute(dish_query.order_by(Dish.updated_at.desc()).limit(limit)))
+            .scalars()
+            .all()
+        )
 
     return TicketContextResult(
         collected_at=_now(),
@@ -321,7 +343,9 @@ async def _ticket_context(parameters: dict[str, Any]) -> dict[str, Any]:
     ).model_dump(mode="json")
 
 
-async def run_collection_job(collector_type: str, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+async def run_collection_job(
+    collector_type: str, parameters: dict[str, Any] | None = None
+) -> dict[str, Any]:
     normalized = str(collector_type or "").strip()
     payload = dict(parameters or {})
     if normalized not in ALLOWED_COLLECTOR_TYPES:

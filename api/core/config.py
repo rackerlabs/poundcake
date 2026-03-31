@@ -42,9 +42,10 @@ def _default_bakery_monitor_id() -> str:
 
 
 def _default_bakery_monitor_namespace() -> str:
-    return os.getenv("POUNDCAKE_BAKERY_MONITOR_NAMESPACE", "").strip() or os.getenv(
-        "POD_NAMESPACE", ""
-    ).strip()
+    return (
+        os.getenv("POUNDCAKE_BAKERY_MONITOR_NAMESPACE", "").strip()
+        or os.getenv("POD_NAMESPACE", "").strip()
+    )
 
 
 def _default_bakery_monitor_release_name() -> str:
@@ -422,7 +423,9 @@ class Settings(BaseSettings):
     bakery_bootstrap_hmac_key: str = ""
     bakery_secret_encryption_key: str = ""
     bakery_monitor_id: str = Field(default_factory=_default_bakery_monitor_id)
-    bakery_monitor_environment_label: str = Field(default_factory=_default_bakery_monitor_environment_label)
+    bakery_monitor_environment_label: str = Field(
+        default_factory=_default_bakery_monitor_environment_label
+    )
     bakery_monitor_region: str = Field(default_factory=_default_bakery_monitor_region)
     bakery_monitor_cluster_name: str = Field(default_factory=_default_bakery_monitor_cluster_name)
     bakery_monitor_namespace: str = Field(default_factory=_default_bakery_monitor_namespace)
