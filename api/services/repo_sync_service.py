@@ -80,7 +80,10 @@ class RepoWorkflowStep(BaseModel):
     on_success: str = Field(default="continue")
     parallel_group: int = Field(default=0, ge=0)
     depth: int = Field(default=0, ge=0)
+    execution_payload_override: dict[str, Any] | None = None
     execution_parameters_override: dict[str, Any] | None = None
+    expected_duration_sec_override: int | None = Field(default=None, gt=0)
+    timeout_duration_sec_override: int | None = Field(default=None, gt=0)
     run_phase: str = Field(default="both")
     run_condition: str = Field(default="always")
     action: RepoActionReference
@@ -193,6 +196,7 @@ def _action_export_payload(action: Any) -> dict[str, Any]:
                 "execution_engine": getattr(action, "execution_engine", ""),
                 "execution_purpose": getattr(action, "execution_purpose", ""),
                 "is_default": bool(getattr(action, "is_default", False)),
+                "is_active": bool(getattr(action, "is_active", True)),
                 "is_blocking": bool(getattr(action, "is_blocking", True)),
                 "expected_duration_sec": int(getattr(action, "expected_duration_sec", 1) or 1),
                 "timeout_duration_sec": int(getattr(action, "timeout_duration_sec", 300) or 300),
@@ -233,7 +237,10 @@ def _workflow_export_payload(recipe: Any) -> dict[str, Any]:
                     "on_success": step.on_success,
                     "parallel_group": step.parallel_group,
                     "depth": step.depth,
+                    "execution_payload_override": step.execution_payload_override,
                     "execution_parameters_override": step.execution_parameters_override,
+                    "expected_duration_sec_override": step.expected_duration_sec_override,
+                    "timeout_duration_sec_override": step.timeout_duration_sec_override,
                     "run_phase": step.run_phase,
                     "run_condition": step.run_condition,
                     "action": {
@@ -622,7 +629,10 @@ class RepoSyncService:
                             "on_success": step.on_success,
                             "parallel_group": step.parallel_group,
                             "depth": step.depth,
+                            "execution_payload_override": step.execution_payload_override,
                             "execution_parameters_override": step.execution_parameters_override,
+                            "expected_duration_sec_override": step.expected_duration_sec_override,
+                            "timeout_duration_sec_override": step.timeout_duration_sec_override,
                             "run_phase": step.run_phase,
                             "run_condition": step.run_condition,
                         }

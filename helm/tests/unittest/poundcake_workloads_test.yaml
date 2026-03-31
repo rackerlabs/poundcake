@@ -604,7 +604,7 @@ tests:
           value: ghcr-creds
         documentIndex: 5
 
-  - it: mounts alembic config and migration files into poundcake-api
+  - it: mounts alembic config files into poundcake-api without shadowing image migrations
     asserts:
       - equal:
           path: spec.template.spec.containers[0].volumeMounts[2].name
@@ -617,6 +617,22 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].volumeMounts[2].subPath
           value: alembic.ini
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[3].mountPath
+          value: /app/alembic/env.py
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[3].subPath
+          value: env.py
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[4].mountPath
+          value: /app/alembic/script.py.mako
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[4].subPath
+          value: script.py.mako
         documentIndex: 0
       - equal:
           path: spec.template.spec.volumes[2].name

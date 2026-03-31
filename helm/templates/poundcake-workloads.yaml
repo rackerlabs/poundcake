@@ -425,7 +425,11 @@ spec:
               mountPath: /app/alembic.ini
               subPath: alembic.ini
             - name: poundcake-alembic
-              mountPath: /app/alembic
+              mountPath: /app/alembic/env.py
+              subPath: env.py
+            - name: poundcake-alembic
+              mountPath: /app/alembic/script.py.mako
+              subPath: script.py.mako
               subPath: alembic
       volumes:
         - name: app-config
@@ -461,13 +465,9 @@ spec:
               - key: alembic.ini
                 path: alembic.ini
               - key: env.py
-                path: alembic/env.py
+                path: env.py
               - key: script.py.mako
-                path: alembic/script.py.mako
-              {{- range $path, $_ := .Files.Glob "files/poundcake-alembic/versions/*.py" }}
-              - key: {{ base $path }}
-                path: alembic/versions/{{ base $path }}
-              {{- end }}
+                path: script.py.mako
 ---
 apiVersion: apps/v1
 kind: Deployment

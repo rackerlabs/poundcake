@@ -27,6 +27,7 @@ from api.services.communications_policy import (
     get_recipe_local_routes,
     get_visible_recipe_steps,
     global_policy_configured,
+    is_communication_ingredient,
     is_communication_step,
     is_hidden_workflow_recipe,
     normalize_routes,
@@ -53,7 +54,10 @@ def _recipe_to_step_spec(step: RecipeIngredient) -> dict[str, Any]:
         "on_success": step.on_success,
         "parallel_group": step.parallel_group,
         "depth": step.depth,
+        "execution_payload_override": step.execution_payload_override,
         "execution_parameters_override": step.execution_parameters_override,
+        "expected_duration_sec_override": step.expected_duration_sec_override,
+        "timeout_duration_sec_override": step.timeout_duration_sec_override,
         "run_phase": step.run_phase,
         "run_condition": step.run_condition,
     }
@@ -75,7 +79,10 @@ def _recipe_ingredient_row(
         on_success=spec["on_success"],
         parallel_group=spec["parallel_group"],
         depth=spec["depth"],
+        execution_payload_override=spec["execution_payload_override"],
         execution_parameters_override=spec["execution_parameters_override"],
+        expected_duration_sec_override=spec["expected_duration_sec_override"],
+        timeout_duration_sec_override=spec["timeout_duration_sec_override"],
         run_phase=spec["run_phase"],
         run_condition=spec["run_condition"],
     )
@@ -88,15 +95,63 @@ def _queue_recipe_steps(
         db.add(_recipe_ingredient_row(recipe_id=recipe_id, spec=spec))
 
 
-async def _validate_ingredient_ids(db: AsyncSession, *, step_specs: list[dict[str, Any]]) -> None:
+async def _validate_ingredient_ids(
+    db: AsyncSession, *, step_specs: list[dict[str, Any]]
+) -> dict[int, Ingredient]:
     ingredient_ids = [int(item["ingredient_id"]) for item in step_specs]
     if not ingredient_ids:
-        return
+        return {}
     result = await db.execute(select(Ingredient).where(Ingredient.id.in_(ingredient_ids)))
-    found_ids = {ingredient.id for ingredient in result.scalars().all()}
+    ingredients = result.scalars().all()
+    found_ids = {ingredient.id for ingredient in ingredients}
     missing = [ingredient_id for ingredient_id in ingredient_ids if ingredient_id not in found_ids]
     if missing:
         raise HTTPException(status_code=404, detail=f"Missing ingredients: {missing}")
+    return {ingredient.id: ingredient for ingredient in ingredients}
+
+
+def _inactive_ingredient_ids(recipe: Recipe) -> list[int]:
+    return sorted(
+        {
+            int(step.ingredient_id)
+            for step in recipe.recipe_ingredients
+            if step.ingredient is not None and not bool(getattr(step.ingredient, "is_active", True))
+        }
+    )
+
+
+def _validate_active_ingredients(
+    ingredients_by_id: dict[int, Ingredient], *, allow_inactive: bool
+) -> None:
+    if allow_inactive:
+        return
+    inactive = sorted(
+        ingredient_id
+        for ingredient_id, ingredient in ingredients_by_id.items()
+        if not bool(getattr(ingredient, "is_active", True))
+    )
+    if inactive:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Inactive ingredients cannot be used to build recipes: {inactive}",
+        )
+
+
+def _validate_non_communication_ingredients(ingredients_by_id: dict[int, Ingredient]) -> None:
+    disallowed = sorted(
+        ingredient_id
+        for ingredient_id, ingredient in ingredients_by_id.items()
+        if is_communication_ingredient(ingredient)
+    )
+    if disallowed:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Communication ingredients cannot be persisted in recipe_ingredients; "
+                "use communications.mode='local' routes or inherited global communications: "
+                f"{disallowed}"
+            ),
+        )
 
 
 async def _serialize_recipe(db: AsyncSession, recipe: Recipe) -> dict[str, Any]:
@@ -116,6 +171,7 @@ async def _serialize_recipe(db: AsyncSession, recipe: Recipe) -> dict[str, Any]:
             routes=global_routes,
         )
 
+    inactive_ingredient_ids = _inactive_ingredient_ids(recipe)
     return {
         "id": recipe.id,
         "name": recipe.name,
@@ -128,6 +184,8 @@ async def _serialize_recipe(db: AsyncSession, recipe: Recipe) -> dict[str, Any]:
         "deleted_at": recipe.deleted_at,
         "recipe_ingredients": visible_steps,
         "communications": communications,
+        "can_execute": len(inactive_ingredient_ids) == 0,
+        "inactive_ingredient_ids": inactive_ingredient_ids,
     }
 
 
@@ -189,7 +247,10 @@ def _step_specs_from_payload(step_items: list[dict[str, Any]]) -> list[dict[str,
             "on_success": item.get("on_success", "continue"),
             "parallel_group": item.get("parallel_group", 0),
             "depth": item.get("depth", 0),
+            "execution_payload_override": item.get("execution_payload_override"),
             "execution_parameters_override": item.get("execution_parameters_override"),
+            "expected_duration_sec_override": item.get("expected_duration_sec_override"),
+            "timeout_duration_sec_override": item.get("timeout_duration_sec_override"),
             "run_phase": item.get("run_phase", "both"),
             "run_condition": item.get("run_condition", "always"),
         }
@@ -212,7 +273,9 @@ async def create_recipe(
     local_routes = normalize_routes(_communications_payload_routes(recipe) or [])
 
     async with db.begin():
-        await _validate_ingredient_ids(db, step_specs=visible_step_specs)
+        ingredients_by_id = await _validate_ingredient_ids(db, step_specs=visible_step_specs)
+        _validate_active_ingredients(ingredients_by_id, allow_inactive=False)
+        _validate_non_communication_ingredients(ingredients_by_id)
         await _validate_effective_communications(
             db,
             enabled=recipe.enabled,
@@ -390,7 +453,9 @@ async def update_recipe(
         final_visible_specs = existing_visible_specs
         if recipe_ingredients is not None:
             final_visible_specs = _step_specs_from_payload(recipe_ingredients)
-            await _validate_ingredient_ids(db, step_specs=final_visible_specs)
+            ingredients_by_id = await _validate_ingredient_ids(db, step_specs=final_visible_specs)
+            _validate_active_ingredients(ingredients_by_id, allow_inactive=False)
+            _validate_non_communication_ingredients(ingredients_by_id)
 
         final_communications_mode = "local" if current_local_routes else "inherit"
         final_local_routes = current_local_routes

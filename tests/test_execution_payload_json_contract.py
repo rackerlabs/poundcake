@@ -156,6 +156,7 @@ def test_create_ingredient_persists_is_default_true(client, mock_db_session):
     assert response.status_code == 201
     body = response.json()
     assert body["is_default"] is True
+    assert body["is_active"] is True
 
 
 def test_ingredient_create__with_deprecated_aliases__returns_canonical_fields(
@@ -197,6 +198,71 @@ def test_ingredient_update__with_array_execution_payload__returns_422(client, mo
     payload = {"execution_payload": ["bad"]}
     response = client.put("/api/v1/ingredients/1", json=payload)
     assert response.status_code == 422
+
+
+def test_ingredient_update__rejects_mutating_template_fields(client, mock_db_session):
+    ingredient = SimpleNamespace(
+        id=1,
+        execution_target="core.local",
+        destination_target="",
+        task_key_template="core.local",
+        execution_id=None,
+        execution_payload=None,
+        execution_parameters={},
+        execution_engine="stackstorm",
+        execution_purpose="remediation",
+        is_default=False,
+        is_active=True,
+        is_blocking=True,
+        expected_duration_sec=30,
+        timeout_duration_sec=300,
+        retry_count=0,
+        retry_delay=5,
+        on_failure="stop",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        deleted=False,
+        deleted_at=None,
+    )
+    mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=ingredient))
+
+    response = client.put("/api/v1/ingredients/1", json={"expected_duration_sec": 45})
+
+    assert response.status_code == 409
+    assert "immutable after creation" in response.json()["detail"]
+
+
+def test_ingredient_update__allows_retirement_to_inactive(client, mock_db_session):
+    ingredient = SimpleNamespace(
+        id=1,
+        execution_target="core.local",
+        destination_target="",
+        task_key_template="core.local",
+        execution_id=None,
+        execution_payload=None,
+        execution_parameters={},
+        execution_engine="stackstorm",
+        execution_purpose="remediation",
+        is_default=False,
+        is_active=True,
+        is_blocking=True,
+        expected_duration_sec=30,
+        timeout_duration_sec=300,
+        retry_count=0,
+        retry_delay=5,
+        on_failure="stop",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        deleted=False,
+        deleted_at=None,
+    )
+    mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=ingredient))
+    mock_db_session.refresh = AsyncMock(return_value=None)
+
+    response = client.put("/api/v1/ingredients/1", json={"is_active": False})
+
+    assert response.status_code == 200
+    assert ingredient.is_active is False
 
 
 def test_ingredient_create__same_target_different_engines__allowed(client, mock_db_session):

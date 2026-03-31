@@ -232,6 +232,7 @@ class IngredientBase(BaseModel):
         None, description="Deprecated alias for execution_purpose"
     )
     is_default: bool = False
+    is_active: bool = True
     is_blocking: bool = True
     expected_duration_sec: int = Field(..., gt=0)
     timeout_duration_sec: int = Field(default=300, gt=0)
@@ -296,6 +297,7 @@ class IngredientUpdate(BaseModel):
         None, description="Deprecated alias for execution_purpose"
     )
     is_default: Optional[bool] = None
+    is_active: Optional[bool] = None
     is_blocking: Optional[bool] = None
     expected_duration_sec: Optional[int] = Field(None, gt=0)
     timeout_duration_sec: Optional[int] = Field(None, gt=0)
@@ -362,7 +364,10 @@ class RecipeIngredientBase(BaseModel):
     on_success: OnSuccessAction = Field(default="continue")
     parallel_group: int = Field(default=0, ge=0)
     depth: int = Field(default=0, ge=0)
+    execution_payload_override: Optional[Dict[str, Any]] = None
     execution_parameters_override: Optional[Dict[str, Any]] = None
+    expected_duration_sec_override: Optional[int] = Field(default=None, gt=0)
+    timeout_duration_sec_override: Optional[int] = Field(default=None, gt=0)
     run_phase: RunPhase = Field(default="both")
     run_condition: RunCondition = Field(default="always")
 
@@ -430,6 +435,8 @@ class RecipeDetailResponse(RecipeResponse):
     communications: RecipeCommunicationsResponse = Field(
         default_factory=lambda: RecipeCommunicationsResponse(mode="inherit")
     )
+    can_execute: bool = True
+    inactive_ingredient_ids: List[int] = Field(default_factory=list)
 
 
 # =============================================================================
@@ -578,6 +585,11 @@ class DishIngredientUpsert(BaseModel):
     destination_target: Optional[str] = None
     execution_payload: Optional[Dict[str, Any]] = None
     execution_parameters: Optional[Dict[str, Any]] = None
+    expected_duration_sec: Optional[int] = None
+    timeout_duration_sec: Optional[int] = None
+    retry_count: Optional[int] = None
+    retry_delay: Optional[int] = None
+    on_failure: Optional[str] = None
     execution_status: Optional[str] = None
     attempt: Optional[int] = None
     started_at: Optional[datetime] = None
@@ -610,6 +622,11 @@ class DishIngredientResponse(BaseModel):
     execution_ref: Optional[str] = None
     execution_payload: Optional[Dict[str, Any]] = None
     execution_parameters: Optional[Dict[str, Any]] = None
+    expected_duration_sec: Optional[int] = None
+    timeout_duration_sec: Optional[int] = None
+    retry_count: Optional[int] = None
+    retry_delay: Optional[int] = None
+    on_failure: Optional[str] = None
     execution_status: Optional[str] = None
     attempt: int
     started_at: Optional[datetime] = None

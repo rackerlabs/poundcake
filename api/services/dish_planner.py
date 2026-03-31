@@ -76,6 +76,29 @@ def build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
     return base or None
 
 
+def build_step_payload(ri: RecipeIngredient) -> dict[str, Any] | None:
+    base = dict((ri.ingredient.execution_payload if ri.ingredient else None) or {})
+    if ri.execution_payload_override:
+        base.update(ri.execution_payload_override)
+    return base or None
+
+
+def resolved_expected_duration_sec(ri: RecipeIngredient) -> int | None:
+    if ri.expected_duration_sec_override is not None:
+        return int(ri.expected_duration_sec_override)
+    if ri.ingredient is None or getattr(ri.ingredient, "expected_duration_sec", None) is None:
+        return None
+    return int(ri.ingredient.expected_duration_sec)
+
+
+def resolved_timeout_duration_sec(ri: RecipeIngredient) -> int | None:
+    if ri.timeout_duration_sec_override is not None:
+        return int(ri.timeout_duration_sec_override)
+    if ri.ingredient is None or getattr(ri.ingredient, "timeout_duration_sec", None) is None:
+        return None
+    return int(ri.ingredient.timeout_duration_sec)
+
+
 async def expected_duration_for_phase(
     db: AsyncSession,
     *,
@@ -114,7 +137,7 @@ async def expected_duration_for_phase(
                 "resolving",
             } and not is_non_firing_ingredient_eligible(ri):
                 continue
-            total += int(getattr(ri.ingredient, "expected_duration_sec", 0) or 0)
+            total += int(resolved_expected_duration_sec(ri) or 0)
     return total
 
 
@@ -155,8 +178,13 @@ def seed_dish_ingredients_for_phase(
                 execution_engine=ri.ingredient.execution_engine,
                 execution_target=ri.ingredient.execution_target,
                 destination_target=getattr(ri.ingredient, "destination_target", "") or "",
-                execution_payload=ri.ingredient.execution_payload,
+                execution_payload=build_step_payload(ri),
                 execution_parameters=build_step_parameters(ri),
+                expected_duration_sec=resolved_expected_duration_sec(ri),
+                timeout_duration_sec=resolved_timeout_duration_sec(ri),
+                retry_count=getattr(ri.ingredient, "retry_count", None),
+                retry_delay=getattr(ri.ingredient, "retry_delay", None),
+                on_failure=getattr(ri.ingredient, "on_failure", None),
                 execution_status="pending",
             )
         )

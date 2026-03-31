@@ -186,6 +186,41 @@ def _validate_recipe_step(
             f"{filename}: recipe_ingredients[{idx}].execution_parameters_override must be "
             "an object when provided",
         )
+    payload_override = entry.get("execution_payload_override")
+    if payload_override is not None and not isinstance(payload_override, dict):
+        return (
+            {},
+            f"{filename}: recipe_ingredients[{idx}].execution_payload_override must be "
+            "an object when provided",
+        )
+    expected_duration_sec_override = entry.get("expected_duration_sec_override")
+    if expected_duration_sec_override is not None:
+        try:
+            expected_duration_sec_override = int(expected_duration_sec_override)
+        except Exception:  # noqa: BLE001
+            return (
+                {},
+                f"{filename}: recipe_ingredients[{idx}].expected_duration_sec_override must be an integer",
+            )
+        if expected_duration_sec_override < 1:
+            return (
+                {},
+                f"{filename}: recipe_ingredients[{idx}].expected_duration_sec_override must be >= 1",
+            )
+    timeout_duration_sec_override = entry.get("timeout_duration_sec_override")
+    if timeout_duration_sec_override is not None:
+        try:
+            timeout_duration_sec_override = int(timeout_duration_sec_override)
+        except Exception:  # noqa: BLE001
+            return (
+                {},
+                f"{filename}: recipe_ingredients[{idx}].timeout_duration_sec_override must be an integer",
+            )
+        if timeout_duration_sec_override < 1:
+            return (
+                {},
+                f"{filename}: recipe_ingredients[{idx}].timeout_duration_sec_override must be >= 1",
+            )
     run_condition = normalize_run_condition(entry.get("run_condition"))
     if run_condition not in RUN_CONDITIONS:
         return (
@@ -203,9 +238,12 @@ def _validate_recipe_step(
         "on_success": on_success,
         "parallel_group": parallel_group,
         "depth": depth,
+        "execution_payload_override": payload_override,
         "run_phase": run_phase,
         "run_condition": run_condition,
         "execution_parameters_override": override,
+        "expected_duration_sec_override": expected_duration_sec_override,
+        "timeout_duration_sec_override": timeout_duration_sec_override,
     }, None
 
 
@@ -300,7 +338,10 @@ async def upsert_bootstrap_recipe_catalog(
                 step.on_success,
                 step.parallel_group,
                 step.depth,
+                step.execution_payload_override,
                 step.execution_parameters_override,
+                step.expected_duration_sec_override,
+                step.timeout_duration_sec_override,
                 step.run_phase,
                 step.run_condition,
             )
@@ -310,7 +351,10 @@ async def upsert_bootstrap_recipe_catalog(
             step["on_success"],
             step["parallel_group"],
             step["depth"],
+            step["execution_payload_override"],
             step["execution_parameters_override"],
+            step["expected_duration_sec_override"],
+            step["timeout_duration_sec_override"],
             step["run_phase"],
             step["run_condition"],
         )
@@ -384,7 +428,10 @@ async def upsert_bootstrap_recipe_catalog(
                     on_success=step["on_success"],
                     parallel_group=step["parallel_group"],
                     depth=step["depth"],
+                    execution_payload_override=step["execution_payload_override"],
                     execution_parameters_override=step["execution_parameters_override"],
+                    expected_duration_sec_override=step["expected_duration_sec_override"],
+                    timeout_duration_sec_override=step["timeout_duration_sec_override"],
                     run_phase=step["run_phase"],
                     run_condition=step["run_condition"],
                 )

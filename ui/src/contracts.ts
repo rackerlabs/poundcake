@@ -375,6 +375,7 @@ export const ingredientRecordSchema = strictObject({
   execution_purpose: z.string(),
   ingredient_kind: z.string().nullable().optional(),
   is_default: z.boolean(),
+  is_active: z.boolean(),
   is_blocking: z.boolean(),
   expected_duration_sec: z.number(),
   timeout_duration_sec: z.number(),
@@ -397,7 +398,10 @@ export const recipeStepRecordSchema = strictObject({
   on_success: z.string(),
   parallel_group: z.number().int(),
   depth: z.number().int(),
+  execution_payload_override: unknownRecordSchema.nullable().optional(),
   execution_parameters_override: unknownRecordSchema.nullable().optional(),
+  expected_duration_sec_override: z.number().int().positive().nullable().optional(),
+  timeout_duration_sec_override: z.number().int().positive().nullable().optional(),
   run_phase: z.string(),
   run_condition: z.string(),
   ingredient: ingredientRecordSchema.nullable().optional(),
@@ -416,6 +420,8 @@ export const recipeRecordSchema = strictObject({
   deleted_at: z.string().nullable().optional(),
   recipe_ingredients: z.array(recipeStepRecordSchema),
   communications: recipeCommunicationsRecordSchema,
+  can_execute: z.boolean(),
+  inactive_ingredient_ids: z.array(z.number().int()),
 });
 export type RecipeRecord = z.infer<typeof recipeRecordSchema>;
 export const recipeRecordArraySchema = z.array(recipeRecordSchema);
@@ -488,6 +494,7 @@ export const ingredientCreateRequestSchema = strictObject({
   execution_purpose: z.string().optional(),
   ingredient_kind: z.string().nullable().optional(),
   is_default: z.boolean().optional(),
+  is_active: z.boolean().optional(),
   is_blocking: z.boolean().optional(),
   expected_duration_sec: z.number().int().positive(),
   timeout_duration_sec: z.number().int().positive().optional(),
@@ -504,7 +511,10 @@ export const recipeStepRequestSchema = strictObject({
   on_success: z.string().optional(),
   parallel_group: z.number().int().nonnegative().optional(),
   depth: z.number().int().nonnegative().optional(),
+  execution_payload_override: unknownRecordSchema.nullable().optional(),
   execution_parameters_override: unknownRecordSchema.nullable().optional(),
+  expected_duration_sec_override: z.number().int().positive().nullable().optional(),
+  timeout_duration_sec_override: z.number().int().positive().nullable().optional(),
   run_phase: z.string().optional(),
   run_condition: z.string().optional(),
 });

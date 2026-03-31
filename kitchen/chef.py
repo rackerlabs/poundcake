@@ -118,20 +118,6 @@ def _execute_bakery_steps(
     req_id: str,
     ingredients: list[dict[str, Any]],
 ) -> tuple[bool, str | None]:
-    raw_recipe = dish.get("recipe")
-    recipe = raw_recipe if isinstance(raw_recipe, dict) else {}
-    raw_ri_defs = recipe.get("recipe_ingredients")
-    ri_defs = raw_ri_defs if isinstance(raw_ri_defs, list) else []
-    on_failure_by_ri_id: dict[int, str] = {}
-    for ri in ri_defs:
-        if not isinstance(ri, dict):
-            continue
-        raw_ingredient = ri.get("ingredient")
-        ingredient = raw_ingredient if isinstance(raw_ingredient, dict) else {}
-        ri_id = ri.get("id")
-        if isinstance(ri_id, int):
-            on_failure_by_ri_id[ri_id] = str(ingredient.get("on_failure") or "stop").lower()
-
     dish_id = _coerce_int(dish.get("id"))
     if dish_id is None:
         raise ValueError("Dish id is required")
@@ -166,6 +152,9 @@ def _execute_bakery_steps(
                 "execution_target": item.get("execution_target"),
                 "execution_payload": item.get("execution_payload") or {},
                 "execution_parameters": item.get("execution_parameters") or {},
+                "retry_count": int(item.get("retry_count") or 0),
+                "retry_delay": int(item.get("retry_delay") or 0),
+                "timeout_duration_sec": int(item.get("timeout_duration_sec") or 300),
                 "context": {
                     "order_id": order_id,
                     "recipe_ingredient_id": recipe_ingredient_id,
@@ -211,11 +200,7 @@ def _execute_bakery_steps(
             },
         )
 
-        on_failure = (
-            on_failure_by_ri_id.get(recipe_ingredient_id, "stop")
-            if recipe_ingredient_id is not None
-            else "stop"
-        )
+        on_failure = str(item.get("on_failure") or "stop").lower()
         if not success and on_failure != "continue":
             return False, error_message
 

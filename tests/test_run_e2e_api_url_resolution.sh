@@ -41,6 +41,83 @@ run_expect_failure() {
   echo "${output}"
 }
 
+make_temp_runner() {
+  local runner
+  runner="$(mktemp "${TMPDIR:-/tmp}/poundcake-e2e-runner.XXXXXX")"
+  cat >"${runner}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${runner}"
+  echo "${runner}"
+}
+
+make_mock_curl_dir() {
+  local dir
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/poundcake-mock-curl.XXXXXX")"
+  cat >"${dir}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+url=""
+header=""
+cookie=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -H)
+      header="${2:-}"
+      shift 2
+      ;;
+    --cookie)
+      cookie="${2:-}"
+      shift 2
+      ;;
+    -w|-o|-m|-X|-d)
+      shift 2
+      ;;
+    -s|-S|-sS)
+      shift
+      ;;
+    http://*|https://*)
+      url="$1"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+case "${url}" in
+  */api/v1/settings)
+    if [ "${MOCK_AUTH_ENABLED:-false}" = "true" ]; then
+      if [ -n "${EXPECTED_SERVICE_TOKEN:-}" ] && [ "${header}" = "X-Auth-Token: ${EXPECTED_SERVICE_TOKEN}" ]; then
+        printf '{"auth_enabled":true}\n200\n'
+        exit 0
+      fi
+      if [ -n "${EXPECTED_SESSION_TOKEN:-}" ] && [ "${cookie}" = "session_token=${EXPECTED_SESSION_TOKEN}" ]; then
+        printf '{"auth_enabled":true}\n200\n'
+        exit 0
+      fi
+      printf '{"detail":"Not authenticated"}\n401\n'
+      exit 0
+    fi
+    printf '{"auth_enabled":false}\n200\n'
+    exit 0
+    ;;
+  */api/v1/health)
+    printf '\n200\n'
+    exit 0
+    ;;
+esac
+
+printf '{"detail":"Unhandled URL"}\n500\n'
+EOF
+  chmod +x "${dir}/curl"
+  echo "${dir}"
+}
+
 output="$(run_expect_success "compose default URL" env DEBUG=1 "${RUN_E2E}" --list)"
 assert_contains "${output}" "Resolved poundcake_api URL: http://localhost:8000/api/v1" "compose default URL"
 
@@ -58,5 +135,31 @@ assert_contains "${output}" "Resolved poundcake_api URL: http://example:9999/api
 
 output="$(run_expect_failure "api-rul typo guidance" env DEBUG=1 "${RUN_E2E}" --api-rul http://x --list)"
 assert_contains "${output}" "Unknown argument --api-rul; did you mean --api-url?" "api-rul typo guidance"
+
+runner="$(make_temp_runner)"
+mock_curl_dir="$(make_mock_curl_dir)"
+trap 'rm -f "${runner}"; rm -rf "${mock_curl_dir}"' EXIT
+
+output="$(run_expect_success \
+  "auth disabled proceeds without credentials" \
+  env PATH="${mock_curl_dir}:$PATH" MOCK_AUTH_ENABLED=false DEBUG=1 "${RUN_E2E}" --single "${runner}")"
+assert_contains "${output}" "Running single e2e runner" "auth disabled proceeds without credentials"
+
+output="$(run_expect_failure \
+  "auth enabled missing credentials fails fast" \
+  env PATH="${mock_curl_dir}:$PATH" MOCK_AUTH_ENABLED=true DEBUG=1 "${RUN_E2E}" --single "${runner}")"
+assert_contains "${output}" "Auth appears to be enabled" "auth enabled missing credentials fails fast"
+
+output="$(run_expect_success \
+  "auth enabled service token proceeds" \
+  env PATH="${mock_curl_dir}:$PATH" MOCK_AUTH_ENABLED=true EXPECTED_SERVICE_TOKEN=shared-internal-key \
+    POUNDCAKE_AUTH_SERVICE_TOKEN=shared-internal-key DEBUG=1 "${RUN_E2E}" --single "${runner}")"
+assert_contains "${output}" "Auth preflight passed using service-token auth" "auth enabled service token proceeds"
+
+output="$(run_expect_success \
+  "auth enabled session token proceeds" \
+  env PATH="${mock_curl_dir}:$PATH" MOCK_AUTH_ENABLED=true EXPECTED_SESSION_TOKEN=session-123 \
+    POUNDCAKE_SESSION_TOKEN=session-123 DEBUG=1 "${RUN_E2E}" --single "${runner}")"
+assert_contains "${output}" "Auth preflight passed using session-cookie auth" "auth enabled session token proceeds"
 
 echo "run_e2e API_URL resolution tests passed."

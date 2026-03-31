@@ -107,6 +107,7 @@ def _ingredient_payload(
         "execution_purpose": execution_purpose,
         "ingredient_kind": execution_purpose,
         "is_default": False,
+        "is_active": True,
         "is_blocking": True,
         "expected_duration_sec": 60,
         "timeout_duration_sec": 300,
@@ -133,6 +134,8 @@ def _recipe_payload(*, recipe_id: int, name: str) -> dict[str, Any]:
         "deleted_at": None,
         "recipe_ingredients": [],
         "communications": {"mode": "inherit", "routes": []},
+        "can_execute": True,
+        "inactive_ingredient_ids": [],
     }
 
 

@@ -370,20 +370,6 @@ def _execute_pending_bakery_ingredients(
         if not pending_bakery:
             return True, None, False
 
-        on_failure_by_ri_id: dict[int, str] = {}
-        recipe = dish.get("recipe")
-        if isinstance(recipe, dict):
-            ri_items = recipe.get("recipe_ingredients")
-            if isinstance(ri_items, list):
-                for ri in ri_items:
-                    if not isinstance(ri, dict):
-                        continue
-                    ri_id = ri.get("id")
-                    ingredient = ri.get("ingredient")
-                    if not isinstance(ingredient, dict) or not isinstance(ri_id, int):
-                        continue
-                    on_failure_by_ri_id[ri_id] = str(ingredient.get("on_failure") or "stop").lower()
-
         for item in pending_bakery:
             recipe_ingredient_id = _coerce_int(item.get("recipe_ingredient_id"))
             task_key = item.get("task_key")
@@ -416,6 +402,9 @@ def _execute_pending_bakery_ingredients(
                     "execution_target": item.get("execution_target"),
                     "execution_payload": item.get("execution_payload") or {},
                     "execution_parameters": item.get("execution_parameters") or {},
+                    "retry_count": int(item.get("retry_count") or 0),
+                    "retry_delay": int(item.get("retry_delay") or 0),
+                    "timeout_duration_sec": int(item.get("timeout_duration_sec") or 300),
                     "context": {
                         "order_id": dish.get("order_id"),
                         "recipe_ingredient_id": recipe_ingredient_id,
@@ -465,11 +454,7 @@ def _execute_pending_bakery_ingredients(
                 retries=POLLER_RETRIES,
             )
 
-            on_failure = (
-                on_failure_by_ri_id.get(recipe_ingredient_id, "stop")
-                if recipe_ingredient_id is not None
-                else "stop"
-            )
+            on_failure = str(item.get("on_failure") or "stop").lower()
             if not success and on_failure != "continue":
                 return False, error_message, True
 

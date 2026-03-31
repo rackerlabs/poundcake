@@ -90,7 +90,10 @@ def _make_recipe() -> Recipe:
             on_success="continue",
             parallel_group=0,
             depth=0,
+            execution_payload_override=None,
             execution_parameters_override=None,
+            expected_duration_sec_override=None,
+            timeout_duration_sec_override=None,
             run_phase="firing",
             run_condition="always",
         )
@@ -111,6 +114,7 @@ def _make_ingredient(ingredient_id: int, target: str) -> Ingredient:
         execution_payload=None,
         execution_parameters={"operation": "notify"} if target == "teams" else {},
         is_default=False,
+        is_active=True,
         is_blocking=True,
         expected_duration_sec=60,
         timeout_duration_sec=300,
@@ -126,7 +130,7 @@ def _make_ingredient(ingredient_id: int, target: str) -> Ingredient:
 
 def test_recipe_update_replaces_workflow_steps(client, mock_db):
     recipe = _make_recipe()
-    ingredient_one = _make_ingredient(11, "teams")
+    ingredient_one = _make_ingredient(11, "core.local")
     ingredient_two = _make_ingredient(12, "rackspace_core")
     global_route = SimpleNamespace(
         id="global-primary",
@@ -198,6 +202,7 @@ def test_recipe_update_replaces_workflow_steps(client, mock_db):
     assert [item.ingredient_id for item in recipe.recipe_ingredients] == [12, 11]
     assert recipe.recipe_ingredients[1].run_phase == "resolving"
     assert response.json()["communications"]["effective_source"] == "global"
+    assert len(response.json()["recipe_ingredients"]) == 2
 
 
 def test_recipe_update_applies_default_step_fields_when_optionals_are_omitted(client, mock_db):
@@ -262,6 +267,61 @@ def test_recipe_update_applies_default_step_fields_when_optionals_are_omitted(cl
     assert step.run_phase == "both"
     assert step.run_condition == "always"
     assert response.json()["communications"]["effective_source"] == "global"
+
+
+def test_recipe_update_rejects_inactive_ingredients(client, mock_db):
+    recipe = _make_recipe()
+    ingredient = _make_ingredient(12, "core.noop")
+    ingredient.is_active = False
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=recipe),
+            ScalarResult(all_=[ingredient]),
+        ]
+    )
+
+    response = client.patch(
+        "/api/v1/recipes/9",
+        json={
+            "recipe_ingredients": [
+                {
+                    "ingredient_id": 12,
+                    "step_order": 1,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Inactive ingredients cannot be used to build recipes" in response.json()["detail"]
+
+
+def test_recipe_update_rejects_communication_ingredients_in_recipe_steps(client, mock_db):
+    recipe = _make_recipe()
+    ingredient = _make_ingredient(12, "teams")
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=recipe),
+            ScalarResult(all_=[ingredient]),
+        ]
+    )
+
+    response = client.patch(
+        "/api/v1/recipes/9",
+        json={
+            "recipe_ingredients": [
+                {
+                    "ingredient_id": 12,
+                    "step_order": 1,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "cannot be persisted in recipe_ingredients" in response.json()["detail"]
 
 
 def test_recipe_update_refreshes_recipe_with_populate_existing(client, mock_db):
