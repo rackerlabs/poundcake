@@ -841,7 +841,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_MONITOR_TAGS
-            value: ""
+            value: "[]"
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
@@ -994,7 +994,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_MONITOR_TAGS
-            value: logging
+            value: "[\"logging\"]"
         documentIndex: 0
 
   - it: fails fast when remote bakery client is enabled without baseUrl

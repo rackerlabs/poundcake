@@ -338,7 +338,7 @@ spec:
             - name: POUNDCAKE_BAKERY_MONITOR_CLUSTER_NAME
               value: {{ .Values.bakery.client.monitor.clusterName | quote }}
             - name: POUNDCAKE_BAKERY_MONITOR_TAGS
-              value: {{ join "," .Values.bakery.client.monitor.tags | quote }}
+              value: {{ toJson .Values.bakery.client.monitor.tags | quote }}
             - name: POUNDCAKE_BAKERY_MONITOR_HEARTBEAT_INTERVAL_SECONDS
               value: {{ .Values.bakery.client.heartbeatIntervalSeconds | quote }}
             - name: POUNDCAKE_BAKERY_COLLECTION_POLL_INTERVAL_SECONDS
