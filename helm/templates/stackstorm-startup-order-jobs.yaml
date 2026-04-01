@@ -551,9 +551,9 @@ spec:
             - name: scripts
               mountPath: /install-third-party-packs.sh
               subPath: install-third-party-packs.sh
-            - name: stackstorm-pack-configs
-              mountPath: /opt/stackstorm/configs
-              readOnly: true
+            {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumeMounts" . | indent 12 }}
+            {{- end }}
             - name: app-config
               mountPath: /app/config
             - name: apikey
@@ -593,10 +593,9 @@ spec:
           secret:
             secretName: stackstorm-apikeys
             optional: true
-        - name: stackstorm-pack-configs
-          secret:
-            secretName: {{ include "poundcake.stackstormPackConfigSecretName" . }}
-            optional: true
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackVolumes" . | indent 8 }}
+        {{- end }}
 ---
 apiVersion: batch/v1
 kind: Job

@@ -153,6 +153,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- ternary "true" "false" (or ($kubernetes.enabled | default false) ($openstack.enabled | default false)) -}}
 {{- end -}}
 
+{{- define "poundcake.stackstormSharedStorageEnabled" -}}
+{{- ternary "true" "false" (.Values.persistence.stackstormSharedStorage.enabled | default false) -}}
+{{- end -}}
+
+{{- define "poundcake.stackstormSharedStorageClassName" -}}
+{{- $shared := .Values.persistence.stackstormSharedStorage | default dict -}}
+{{- if ($shared.storageClassName | default "") -}}
+{{- $shared.storageClassName -}}
+{{- else if and (.Values.longhorn) (.Values.longhorn.rwxStorageClass) (.Values.longhorn.rwxStorageClass.create | default false) -}}
+{{- .Values.longhorn.rwxStorageClass.name -}}
+{{- else if .Values.persistence.storageClassName -}}
+{{- .Values.persistence.storageClassName -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.stackstormThirdPartyPackConfigSecretEnabled" -}}
 {{- $bootstrap := .Values.stackstorm.bootstrap | default dict -}}
 {{- $packs := $bootstrap.packs | default dict -}}
@@ -232,6 +247,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   secret:
     secretName: {{ include "poundcake.stackstormPackConfigSecretName" . }}
     optional: true
+{{- if eq (include "poundcake.stackstormSharedStorageEnabled" .) "true" }}
+- name: stackstorm-pack-kubernetes
+  persistentVolumeClaim:
+    claimName: stackstorm-pack-kubernetes
+- name: stackstorm-pack-openstack
+  persistentVolumeClaim:
+    claimName: stackstorm-pack-openstack
+- name: stackstorm-virtualenv-kubernetes
+  persistentVolumeClaim:
+    claimName: stackstorm-virtualenv-kubernetes
+- name: stackstorm-virtualenv-openstack
+  persistentVolumeClaim:
+    claimName: stackstorm-virtualenv-openstack
+{{- else }}
 - name: stackstorm-pack-kubernetes
   emptyDir: {}
 - name: stackstorm-pack-openstack
@@ -240,6 +269,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   emptyDir: {}
 - name: stackstorm-virtualenv-openstack
   emptyDir: {}
+{{- end }}
 {{- end -}}
 
 {{- define "poundcake.stackstormMongoName" -}}

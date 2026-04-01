@@ -144,6 +144,36 @@ Important notes:
 Once these values are present, the PoundCake Helm bootstrap flow will install and configure the
 enabled StackStorm packs automatically.
 
+For horizontally scaled StackStorm deployments, use shared RWX storage for third-party pack files
+and virtualenvs so newly created pods can immediately access the same pack content.
+
+Example:
+
+```yaml
+longhorn:
+  rwxStorageClass:
+    create: true
+    name: longhorn-rwx
+
+persistence:
+  stackstormSharedStorage:
+    enabled: true
+    storageClassName: longhorn-rwx
+    accessMode: ReadWriteMany
+    packVolumeSize: 5Gi
+    virtualenvVolumeSize: 10Gi
+```
+
+This chart can create the Longhorn RWX `StorageClass` during Helm install when
+`longhorn.rwxStorageClass.create=true`. A repo-local example manifest also lives at
+[config/storage/longhorn-rwx-storageclass.yaml](/Users/chris.breu/code/poundcake/config/storage/longhorn-rwx-storageclass.yaml).
+
+Longhorn RWX notes:
+
+- Longhorn RWX volumes are served by share-manager pods over NFSv4.
+- Each Kubernetes node mounting the volume needs an NFSv4 client installed.
+- Longhorn recommends `migratable: "false"` for RWX volumes.
+
 Documented operator-facing values:
 
 - `stackstorm.bootstrap.packs.kubernetes.enabled`
@@ -152,6 +182,12 @@ Documented operator-facing values:
 - `stackstorm.bootstrap.packs.openstack.enabled`
 - `stackstorm.bootstrap.packs.openstack.config.cloudsYaml`
 - `stackstorm.bootstrap.packs.openstack.config.caCert`
+- `persistence.stackstormSharedStorage.enabled`
+- `persistence.stackstormSharedStorage.storageClassName`
+- `persistence.stackstormSharedStorage.packVolumeSize`
+- `persistence.stackstormSharedStorage.virtualenvVolumeSize`
+- `longhorn.rwxStorageClass.create`
+- `longhorn.rwxStorageClass.name`
 
 ## Bakery Bootstrap Secret
 

@@ -436,6 +436,26 @@ persistence:
     size: 1Gi
     accessMode: ReadWriteMany
     storageClassName: ""
+  stackstormSharedStorage:
+    enabled: false
+    accessMode: ReadWriteMany
+    storageClassName: ""
+    packVolumeSize: 5Gi
+    virtualenvVolumeSize: 10Gi
+
+longhorn:
+  rwxStorageClass:
+    create: false
+    name: longhorn-rwx
+    isDefaultClass: false
+    numberOfReplicas: "3"
+    staleReplicaTimeout: "30"
+    fsType: ext4
+    dataLocality: disabled
+    migratable: "false"
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
 
 # Prometheus integration
 prometheus:

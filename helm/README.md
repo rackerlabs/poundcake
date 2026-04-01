@@ -47,6 +47,11 @@ Use the standalone Bakery repo for Bakery installs.
 The chart can install the StackStorm `kubernetes` and `openstack` packs into
 the StackStorm pods during startup. Both are opt-in.
 
+For horizontally scaled StackStorm components, enable shared RWX storage for third-party pack files
+and virtualenvs so new pods can mount the same content immediately. Longhorn RWX is supported via
+`longhorn.rwxStorageClass.create=true` together with
+`persistence.stackstormSharedStorage.enabled=true`.
+
 ```yaml
 stackstorm:
   bootstrap:
