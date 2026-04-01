@@ -52,6 +52,11 @@ and virtualenvs so new pods can mount the same content immediately. Longhorn RWX
 `longhorn.rwxStorageClass.create=true` together with
 `persistence.stackstormSharedStorage.enabled=true`.
 
+When those shared PVC-backed pack or virtualenv directories already contain content from a previous
+install, the bootstrap flow now reuses the existing directories instead of deleting them. This keeps
+re-runs idempotent on RWX storage. Replacing existing third-party pack content requires a deliberate
+manual cleanup step before rerunning bootstrap.
+
 ```yaml
 stackstorm:
   bootstrap:
