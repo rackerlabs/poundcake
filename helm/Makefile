@@ -10,9 +10,11 @@ lint: ## Run helm lint on the chart
 test: ## Run chart tests
 	./tests/test-chart-lint.sh
 	./tests/test-install-script.sh
+	./tests/test-third-party-pack-installer.sh
 
 test-installer: ## Validate install script safety defaults
 	./tests/test-install-script.sh
+	./tests/test-third-party-pack-installer.sh
 
 unittest: ## Run helm-unittest suites
 	helm unittest . --file 'tests/unittest/*_test.yaml'

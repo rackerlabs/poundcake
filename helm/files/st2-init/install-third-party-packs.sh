@@ -5,6 +5,11 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+dir_has_content() {
+  local dir="$1"
+  [[ -d "${dir}" && -n "$(find "${dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]
+}
+
 require_command() {
   local cmd="$1"
   if ! command -v "${cmd}" >/dev/null 2>&1; then
@@ -46,20 +51,30 @@ install_pack() {
     exit 1
   fi
 
-  log "Installing StackStorm pack ${pack_ref} from ${pack_repo_url}"
-
-  rm -rf "${pack_dir}" "${venv_dir}"
-
-  if [ -n "${pack_version}" ]; then
-    git clone --depth 1 --branch "${pack_version}" "${pack_repo_url}" "${pack_dir}"
+  if dir_has_content "${pack_dir}"; then
+    log "Reusing existing StackStorm pack directory ${pack_dir}"
   else
-    git clone --depth 1 "${pack_repo_url}" "${pack_dir}"
+    log "Installing StackStorm pack ${pack_ref} from ${pack_repo_url}"
+    rm -rf "${pack_dir}"
+    mkdir -p "$(dirname "${pack_dir}")"
+    if [ -n "${pack_version}" ]; then
+      git clone --depth 1 --branch "${pack_version}" "${pack_repo_url}" "${pack_dir}"
+    else
+      git clone --depth 1 "${pack_repo_url}" "${pack_dir}"
+    fi
   fi
 
-  python3 -m venv --system-site-packages "${venv_dir}"
-  "${venv_dir}/bin/pip" install --upgrade pip setuptools wheel
-  if [ -f "${pack_dir}/requirements.txt" ]; then
-    "${venv_dir}/bin/pip" install -r "${pack_dir}/requirements.txt"
+  if dir_has_content "${venv_dir}"; then
+    log "Reusing existing StackStorm virtualenv directory ${venv_dir}"
+  else
+    log "Creating StackStorm virtualenv ${venv_dir}"
+    rm -rf "${venv_dir}"
+    mkdir -p "$(dirname "${venv_dir}")"
+    python3 -m venv --system-site-packages "${venv_dir}"
+    "${venv_dir}/bin/pip" install --upgrade pip setuptools wheel
+    if [ -f "${pack_dir}/requirements.txt" ]; then
+      "${venv_dir}/bin/pip" install -r "${pack_dir}/requirements.txt"
+    fi
   fi
 }
 

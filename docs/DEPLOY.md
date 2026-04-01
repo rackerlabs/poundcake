@@ -147,6 +147,12 @@ enabled StackStorm packs automatically.
 For horizontally scaled StackStorm deployments, use shared RWX storage for third-party pack files
 and virtualenvs so newly created pods can immediately access the same pack content.
 
+If those shared PVC-backed directories already contain third-party pack content from an earlier
+install, the bootstrap job reuses the existing pack and virtualenv directories rather than deleting
+and recreating them. This avoids permission failures on persistent RWX storage during reinstall.
+If you intentionally want to replace the third-party pack content, clear the corresponding PVC
+contents first and then rerun the installer.
+
 Example:
 
 ```yaml
