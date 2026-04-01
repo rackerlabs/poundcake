@@ -130,15 +130,15 @@ else
     fi
 fi
 
-# 4. Install enabled third-party packs after the API is up and authenticated
+# 4. Register built-in content before pack installs so pack-management actions exist.
+echo "Registering content..."
+st2-register-content --register-all --config-file /tmp/st2/st2.conf
+
+# 5. Install enabled third-party packs after the API is up, authenticated, and initial content exists.
 if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" = "true" ] || [ "${ST2_INSTALL_OPENSTACK_PACK:-false}" = "true" ]; then
     echo "Installing enabled third-party packs..."
     /bin/bash /install-third-party-packs.sh
 fi
-
-# 5. Register Content
-echo "Registering content..."
-st2-register-content --register-all --config-file /tmp/st2/st2.conf
 
 echo ""
 echo "========================================="
