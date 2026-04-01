@@ -312,6 +312,38 @@
             "accessMode": { "type": "string" },
             "storageClassName": { "type": "string" }
           }
+        },
+        "stackstormSharedStorage": {
+          "type": "object",
+          "description": "Shared RWX storage for third-party StackStorm packs and virtualenvs",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "accessMode": { "type": "string" },
+            "storageClassName": { "type": "string" },
+            "packVolumeSize": { "type": "string" },
+            "virtualenvVolumeSize": { "type": "string" }
+          }
+        }
+      }
+    },
+    "longhorn": {
+      "type": "object",
+      "properties": {
+        "rwxStorageClass": {
+          "type": "object",
+          "properties": {
+            "create": { "type": "boolean" },
+            "name": { "type": "string" },
+            "isDefaultClass": { "type": "boolean" },
+            "numberOfReplicas": { "type": "string" },
+            "staleReplicaTimeout": { "type": "string" },
+            "fsType": { "type": "string" },
+            "dataLocality": { "type": "string" },
+            "migratable": { "type": "string" },
+            "reclaimPolicy": { "type": "string" },
+            "volumeBindingMode": { "type": "string" },
+            "allowVolumeExpansion": { "type": "boolean" }
+          }
         }
       }
     },

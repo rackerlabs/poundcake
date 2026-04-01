@@ -1,0 +1,25 @@
+suite: longhorn-storageclass
+templates:
+  - templates/longhorn-storageclass.yaml
+tests:
+  - it: does not render longhorn storageclass by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders longhorn rwx storageclass when enabled
+    set:
+      longhorn.rwxStorageClass.create: true
+      longhorn.rwxStorageClass.name: longhorn-rwx
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: longhorn-rwx
+      - equal:
+          path: provisioner
+          value: driver.longhorn.io
+      - equal:
+          path: parameters.migratable
+          value: "false"

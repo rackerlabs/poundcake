@@ -45,11 +45,11 @@ tests:
         documentIndex: 1
       - matchRegex:
           path: data["install-third-party-packs.sh"]
-          pattern: "st2 pack install"
+          pattern: "git clone --depth 1"
         documentIndex: 1
       - matchRegex:
           path: data["install-third-party-packs.sh"]
-          pattern: "register-setup-virtualenvs"
+          pattern: "python3 -m venv --system-site-packages"
         documentIndex: 1
       - matchRegex:
           path: data["automated-setup.sh"]

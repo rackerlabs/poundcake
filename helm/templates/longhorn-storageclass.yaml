@@ -1,0 +1,18 @@
+{{- if .Values.longhorn.rwxStorageClass.create }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.longhorn.rwxStorageClass.name }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: {{ ternary "true" "false" (.Values.longhorn.rwxStorageClass.isDefaultClass | default false) | quote }}
+provisioner: driver.longhorn.io
+allowVolumeExpansion: {{ .Values.longhorn.rwxStorageClass.allowVolumeExpansion | default true }}
+reclaimPolicy: {{ .Values.longhorn.rwxStorageClass.reclaimPolicy | default "Delete" }}
+volumeBindingMode: {{ .Values.longhorn.rwxStorageClass.volumeBindingMode | default "Immediate" }}
+parameters:
+  numberOfReplicas: {{ .Values.longhorn.rwxStorageClass.numberOfReplicas | default "3" | quote }}
+  staleReplicaTimeout: {{ .Values.longhorn.rwxStorageClass.staleReplicaTimeout | default "30" | quote }}
+  fsType: {{ .Values.longhorn.rwxStorageClass.fsType | default "ext4" | quote }}
+  dataLocality: {{ .Values.longhorn.rwxStorageClass.dataLocality | default "disabled" | quote }}
+  migratable: {{ .Values.longhorn.rwxStorageClass.migratable | default "false" | quote }}
+{{- end }}

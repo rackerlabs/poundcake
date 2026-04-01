@@ -138,6 +138,8 @@ st2-register-content --register-all --config-file /tmp/st2/st2.conf
 if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" = "true" ] || [ "${ST2_INSTALL_OPENSTACK_PACK:-false}" = "true" ]; then
     echo "Installing enabled third-party packs..."
     /bin/bash /install-third-party-packs.sh
+    echo "Registering content after third-party pack installation..."
+    st2-register-content --register-all --register-setup-virtualenvs --config-file /tmp/st2/st2.conf
 fi
 
 echo ""
