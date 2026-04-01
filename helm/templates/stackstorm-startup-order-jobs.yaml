@@ -520,6 +520,16 @@ spec:
               value: {{ include "poundcake.stackstormAuthUrl" . | quote }}
             - name: ST2_API_URL
               value: {{ include "poundcake.stackstormApiUrl" . | quote }}
+            - name: ST2_INSTALL_KUBERNETES_PACK
+              value: {{ default false .Values.stackstorm.bootstrap.packs.kubernetes.enabled | quote }}
+            - name: ST2_INSTALL_KUBERNETES_PACK_VERSION
+              value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.version | quote }}
+            - name: ST2_INSTALL_OPENSTACK_PACK
+              value: {{ default false .Values.stackstorm.bootstrap.packs.openstack.enabled | quote }}
+            - name: ST2_INSTALL_OPENSTACK_PACK_VERSION
+              value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.version | quote }}
+            - name: ST2_CONFIG_FILE
+              value: /tmp/st2/st2.conf
           command:
             - /bin/bash
             - -ec
@@ -536,6 +546,12 @@ spec:
             - name: scripts
               mountPath: /automated-setup.sh
               subPath: automated-setup.sh
+            - name: scripts
+              mountPath: /install-third-party-packs.sh
+              subPath: install-third-party-packs.sh
+            - name: stackstorm-pack-configs
+              mountPath: /opt/stackstorm/configs
+              readOnly: true
             - name: app-config
               mountPath: /app/config
             - name: apikey
@@ -574,6 +590,10 @@ spec:
         - name: apikey
           secret:
             secretName: stackstorm-apikeys
+            optional: true
+        - name: stackstorm-pack-configs
+          secret:
+            secretName: {{ include "poundcake.stackstormPackConfigSecretName" . }}
             optional: true
 ---
 apiVersion: batch/v1
