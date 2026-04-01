@@ -130,7 +130,13 @@ else
     fi
 fi
 
-# 4. Register Content (packs will be installed later if needed)
+# 4. Install enabled third-party packs after the API is up and authenticated
+if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" = "true" ] || [ "${ST2_INSTALL_OPENSTACK_PACK:-false}" = "true" ]; then
+    echo "Installing enabled third-party packs..."
+    /bin/bash /install-third-party-packs.sh
+fi
+
+# 5. Register Content
 echo "Registering content..."
 st2-register-content --register-all --config-file /tmp/st2/st2.conf
 
@@ -161,8 +167,8 @@ echo "  Setup Complete!"
 echo "========================================="
 echo ""
 echo "Note: Additional packs can be installed later using StackStorm client tools."
-echo "      The kubernetes and openstack packs can also be enabled during"
-echo "      Helm bootstrap via stackstorm.bootstrap.packs.<pack>.enabled."
+echo "      The kubernetes and openstack packs are installed by"
+echo "      stackstorm-bootstrap when enabled via stackstorm.bootstrap.packs.<pack>.enabled."
 echo "      Manual install examples:"
 echo "      Helm/Kubernetes:"
 echo "      kubectl -n <namespace> exec -it deploy/stackstorm-client -- st2 pack install <pack-name>"

@@ -193,6 +193,53 @@ tests:
             value: "true"
         documentIndex: 8
 
+  - it: wires stackstorm third-party pack install into stackstorm-bootstrap
+    set:
+      stackstorm.bootstrap.packs.kubernetes.enabled: true
+      stackstorm.bootstrap.packs.kubernetes.version: "1.2.3"
+      stackstorm.bootstrap.packs.openstack.enabled: true
+      stackstorm.bootstrap.packs.openstack.version: "2.3.4"
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: ST2_INSTALL_KUBERNETES_PACK
+            value: "true"
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: ST2_INSTALL_KUBERNETES_PACK_VERSION
+            value: "1.2.3"
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: ST2_INSTALL_OPENSTACK_PACK
+            value: "true"
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: ST2_INSTALL_OPENSTACK_PACK_VERSION
+            value: "2.3.4"
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: stackstorm-pack-configs
+            mountPath: /opt/stackstorm/configs
+            readOnly: true
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: stackstorm-pack-configs
+            secret:
+              secretName: stackstorm-pack-configs
+              optional: true
+        documentIndex: 6
+
   - it: wires bootstrap remote sync env for poundcake-bootstrap from helm values
     set:
       bootstrap.ingredientsDir: /custom/bootstrap/ingredients
