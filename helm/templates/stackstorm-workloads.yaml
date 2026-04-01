@@ -1306,6 +1306,8 @@ spec:
                   optional: true
             - name: ST2_API_KEY_FILE
               value: /app/config/st2_api_key
+            - name: ST2_STREAM_URL
+              value: {{ include "poundcake.stackstormStreamUrl" . | quote }}
           command: ["/bin/bash", "/st2-entrypoint.sh"]
           args: ["sh", "-c", "echo 'stackstorm-client ready' && tail -f /dev/null"]
           volumeMounts:

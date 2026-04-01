@@ -72,6 +72,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "poundcake.stackstormStreamUrl" -}}
+{{- if .Values.stackstorm.streamUrl -}}
+{{- .Values.stackstorm.streamUrl -}}
+{{- else if .Values.stackstorm.releaseName -}}
+{{- printf "http://%s-st2stream:9102" (include "poundcake.stackstormSubchartPrefix" .) -}}
+{{- else -}}
+{{- printf "http://stackstorm-stream:%v" .Values.services.stackstormStream.port -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.apiServiceUrl" -}}
 {{- printf "http://poundcake-api:%v" .Values.services.api.port -}}
 {{- end -}}
@@ -174,6 +184,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.version | quote }}
     - name: ST2_CONFIG_FILE
       value: /tmp/st2/st2.conf
+    - name: ST2_STREAM_URL
+      value: {{ include "poundcake.stackstormStreamUrl" . | quote }}
   command: ["/bin/bash", "/st2-entrypoint.sh"]
   args: ["/install-third-party-packs.sh"]
   volumeMounts:

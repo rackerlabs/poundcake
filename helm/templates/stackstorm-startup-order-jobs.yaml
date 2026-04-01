@@ -520,6 +520,8 @@ spec:
               value: {{ include "poundcake.stackstormAuthUrl" . | quote }}
             - name: ST2_API_URL
               value: {{ include "poundcake.stackstormApiUrl" . | quote }}
+            - name: ST2_STREAM_URL
+              value: {{ include "poundcake.stackstormStreamUrl" . | quote }}
             - name: ST2_INSTALL_KUBERNETES_PACK
               value: {{ default false .Values.stackstorm.bootstrap.packs.kubernetes.enabled | quote }}
             - name: ST2_INSTALL_KUBERNETES_PACK_VERSION
