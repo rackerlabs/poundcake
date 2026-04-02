@@ -1317,8 +1317,14 @@ spec:
                   name: stackstorm-apikeys
                   key: st2_api_key
                   optional: true
+            - name: ST2_API_URL
+              value: {{ include "poundcake.stackstormApiUrl" . | quote }}
+            - name: ST2_AUTH_URL
+              value: {{ include "poundcake.stackstormAuthUrl" . | quote }}
             - name: ST2_API_KEY_FILE
               value: /app/config/st2_api_key
+            - name: ST2_CLIENT_AUTO_AUTH
+              value: "true"
             - name: ST2_STREAM_URL
               value: {{ include "poundcake.stackstormStreamUrl" . | quote }}
           command: ["/bin/bash", "/st2-entrypoint.sh"]
