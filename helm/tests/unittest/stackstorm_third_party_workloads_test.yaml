@@ -37,12 +37,12 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
-            name: stackstorm-pack-kubernetes
-            mountPath: /opt/stackstorm/packs/kubernetes
+            name: stackstorm-packs
+            mountPath: /opt/stackstorm/packs
       - contains:
           path: spec.template.spec.volumes
           content:
-            name: stackstorm-virtualenv-openstack
+            name: stackstorm-virtualenvs
             emptyDir: {}
 
   - it: keeps optional stackstorm workloads free of pack installer init container while mounting pack volumes
@@ -66,8 +66,8 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
-            name: stackstorm-pack-openstack
-            mountPath: /opt/stackstorm/packs/openstack
+            name: stackstorm-packs
+            mountPath: /opt/stackstorm/packs
         documentSelector:
           path: metadata.name
           value: stackstorm-register

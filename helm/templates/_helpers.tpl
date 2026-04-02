@@ -225,14 +225,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
     - name: stackstorm-pack-configs
       mountPath: /opt/stackstorm/configs
       readOnly: true
-    - name: stackstorm-pack-kubernetes
-      mountPath: /opt/stackstorm/packs/kubernetes
-    - name: stackstorm-pack-openstack
-      mountPath: /opt/stackstorm/packs/openstack
-    - name: stackstorm-virtualenv-kubernetes
-      mountPath: /opt/stackstorm/virtualenvs/kubernetes
-    - name: stackstorm-virtualenv-openstack
-      mountPath: /opt/stackstorm/virtualenvs/openstack
+    - name: stackstorm-packs
+      mountPath: /opt/stackstorm/packs
+    - name: stackstorm-virtualenvs
+      mountPath: /opt/stackstorm/virtualenvs
     - name: app-config
       mountPath: /app/config
 {{- end -}}
@@ -241,14 +237,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 - name: stackstorm-pack-configs
   mountPath: /opt/stackstorm/configs
   readOnly: true
-- name: stackstorm-pack-kubernetes
-  mountPath: /opt/stackstorm/packs/kubernetes
-- name: stackstorm-pack-openstack
-  mountPath: /opt/stackstorm/packs/openstack
-- name: stackstorm-virtualenv-kubernetes
-  mountPath: /opt/stackstorm/virtualenvs/kubernetes
-- name: stackstorm-virtualenv-openstack
-  mountPath: /opt/stackstorm/virtualenvs/openstack
+- name: stackstorm-packs
+  mountPath: /opt/stackstorm/packs
+- name: stackstorm-virtualenvs
+  mountPath: /opt/stackstorm/virtualenvs
 {{- end -}}
 
 {{- define "poundcake.stackstormThirdPartyPackVolumes" -}}
@@ -257,26 +249,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
     secretName: {{ include "poundcake.stackstormPackConfigSecretName" . }}
     optional: true
 {{- if eq (include "poundcake.stackstormSharedStorageEnabled" .) "true" }}
-- name: stackstorm-pack-kubernetes
+- name: stackstorm-packs
   persistentVolumeClaim:
-    claimName: stackstorm-pack-kubernetes
-- name: stackstorm-pack-openstack
+    claimName: stackstorm-packs
+- name: stackstorm-virtualenvs
   persistentVolumeClaim:
-    claimName: stackstorm-pack-openstack
-- name: stackstorm-virtualenv-kubernetes
-  persistentVolumeClaim:
-    claimName: stackstorm-virtualenv-kubernetes
-- name: stackstorm-virtualenv-openstack
-  persistentVolumeClaim:
-    claimName: stackstorm-virtualenv-openstack
+    claimName: stackstorm-virtualenvs
 {{- else }}
-- name: stackstorm-pack-kubernetes
+- name: stackstorm-packs
   emptyDir: {}
-- name: stackstorm-pack-openstack
-  emptyDir: {}
-- name: stackstorm-virtualenv-kubernetes
-  emptyDir: {}
-- name: stackstorm-virtualenv-openstack
+- name: stackstorm-virtualenvs
   emptyDir: {}
 {{- end }}
 {{- end -}}

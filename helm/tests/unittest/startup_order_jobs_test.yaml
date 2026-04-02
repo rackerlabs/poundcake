@@ -232,12 +232,36 @@ tests:
             readOnly: true
         documentIndex: 6
       - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: stackstorm-packs
+            mountPath: /opt/stackstorm/packs
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: stackstorm-virtualenvs
+            mountPath: /opt/stackstorm/virtualenvs
+        documentIndex: 6
+      - contains:
           path: spec.template.spec.volumes
           content:
             name: stackstorm-pack-configs
             secret:
               secretName: stackstorm-pack-configs
               optional: true
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: stackstorm-packs
+            emptyDir: {}
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: stackstorm-virtualenvs
+            emptyDir: {}
         documentIndex: 6
 
   - it: applies stackstorm-specific pod security context overrides to startup jobs

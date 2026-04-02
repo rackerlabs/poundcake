@@ -9,28 +9,28 @@ tests:
       stackstorm.bootstrap.packs.kubernetes.enabled: true
     asserts:
       - hasDocuments:
-          count: 8
+          count: 6
       - equal:
           path: metadata.name
-          value: stackstorm-pack-kubernetes
+          value: stackstorm-packs
         documentSelector:
           path: metadata.name
-          value: stackstorm-pack-kubernetes
+          value: stackstorm-packs
       - equal:
           path: metadata.name
-          value: stackstorm-virtualenv-kubernetes
+          value: stackstorm-virtualenvs
         documentSelector:
           path: metadata.name
-          value: stackstorm-virtualenv-kubernetes
+          value: stackstorm-virtualenvs
       - equal:
           path: spec.storageClassName
           value: longhorn-rwx
         documentSelector:
           path: metadata.name
-          value: stackstorm-pack-kubernetes
+          value: stackstorm-packs
       - equal:
           path: spec.accessModes[0]
           value: ReadWriteMany
         documentSelector:
           path: metadata.name
-          value: stackstorm-pack-kubernetes
+          value: stackstorm-packs

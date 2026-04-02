@@ -165,7 +165,9 @@ stackstormPodSecurityContext:
 ```
 
 Choose the numeric GID that owns `/opt/stackstorm/packs` and `/opt/stackstorm/virtualenvs` in your
-environment.
+environment. This is especially important when `st2-register-content --register-setup-virtualenvs`
+creates additional pack virtualenvs like `chatops`: the parent `/opt/stackstorm/virtualenvs`
+directory must be writable to the pod's effective group, not only to the preinstalled pack mounts.
 
 Example:
 
