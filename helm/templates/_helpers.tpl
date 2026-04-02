@@ -86,6 +86,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "http://poundcake-api:%v" .Values.services.api.port -}}
 {{- end -}}
 
+{{- define "poundcake.stackstormPodSecurityContext" -}}
+{{- $base := deepCopy (.Values.podSecurityContext | default dict) -}}
+{{- $override := .Values.stackstormPodSecurityContext | default dict -}}
+{{- $merged := mergeOverwrite $base $override -}}
+{{- if gt (len $merged) 0 -}}
+{{- toYaml $merged -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "poundcake.validateUniqueUrlServicePorts" -}}
 {{- $urlServices := list
   (dict "name" "services.api.port" "port" (int .Values.services.api.port))

@@ -690,7 +690,34 @@
       "properties": {
         "runAsNonRoot": { "type": "boolean" },
         "runAsUser": { "type": "integer" },
+        "runAsGroup": { "type": "integer" },
         "fsGroup": { "type": "integer" },
+        "fsGroupChangePolicy": { "type": "string" },
+        "supplementalGroups": {
+          "type": "array",
+          "items": { "type": "integer" }
+        },
+        "seccompProfile": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string" }
+          }
+        }
+      }
+    },
+    "stackstormPodSecurityContext": {
+      "type": "object",
+      "description": "Pod security context override for StackStorm workloads and startup jobs",
+      "properties": {
+        "runAsNonRoot": { "type": "boolean" },
+        "runAsUser": { "type": "integer" },
+        "runAsGroup": { "type": "integer" },
+        "fsGroup": { "type": "integer" },
+        "fsGroupChangePolicy": { "type": "string" },
+        "supplementalGroups": {
+          "type": "array",
+          "items": { "type": "integer" }
+        },
         "seccompProfile": {
           "type": "object",
           "properties": {

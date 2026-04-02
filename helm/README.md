@@ -57,6 +57,20 @@ install, the bootstrap flow now reuses the existing directories instead of delet
 re-runs idempotent on RWX storage. Replacing existing third-party pack content requires a deliberate
 manual cleanup step before rerunning bootstrap.
 
+If the shared `/opt/stackstorm/packs` and `/opt/stackstorm/virtualenvs` parents are owned by a
+group other than the container's default GID, set `stackstormPodSecurityContext` so StackStorm
+workloads and startup hooks join the owning group. Example:
+
+```yaml
+stackstormPodSecurityContext:
+  fsGroup: 1001
+  fsGroupChangePolicy: OnRootMismatch
+  supplementalGroups:
+    - 1001
+```
+
+Use the numeric GID that owns the shared directories inside the StackStorm image or volume mount.
+
 ```yaml
 stackstorm:
   bootstrap:

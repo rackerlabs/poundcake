@@ -42,6 +42,11 @@ podSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
+# StackStorm pods and startup hooks inherit the global podSecurityContext by default.
+# Override here when the StackStorm image or shared RWX pack volumes need a different
+# group mapping, for example the numeric GID that owns /opt/stackstorm/packs.
+stackstormPodSecurityContext: {}
+
 securityContext:
   capabilities:
     drop:

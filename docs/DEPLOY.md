@@ -153,6 +153,20 @@ and recreating them. This avoids permission failures on persistent RWX storage d
 If you intentionally want to replace the third-party pack content, clear the corresponding PVC
 contents first and then rerun the installer.
 
+If the shared pack directories are owned by a group such as `st2packs`, align all StackStorm
+deployments and startup jobs with that numeric GID using `stackstormPodSecurityContext`. Example:
+
+```yaml
+stackstormPodSecurityContext:
+  fsGroup: 1001
+  fsGroupChangePolicy: OnRootMismatch
+  supplementalGroups:
+    - 1001
+```
+
+Choose the numeric GID that owns `/opt/stackstorm/packs` and `/opt/stackstorm/virtualenvs` in your
+environment.
+
 Example:
 
 ```yaml

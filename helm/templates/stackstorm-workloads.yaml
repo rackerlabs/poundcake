@@ -23,9 +23,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-register") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -149,9 +150,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-auth") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -241,9 +243,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-api") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -368,9 +371,10 @@ spec:
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -485,9 +489,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-rulesengine") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -570,9 +575,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-workflowengine") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -687,9 +693,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-scheduler") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -773,9 +780,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-notifier") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -853,9 +861,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-garbagecollector") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -933,9 +942,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-timersengine") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -1014,9 +1024,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-sensorcontainer") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -1101,9 +1112,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-stream") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:
@@ -1185,9 +1197,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-web") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       initContainers:

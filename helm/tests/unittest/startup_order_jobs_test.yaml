@@ -240,6 +240,25 @@ tests:
               optional: true
         documentIndex: 6
 
+  - it: applies stackstorm-specific pod security context overrides to startup jobs
+    set:
+      stackstormPodSecurityContext.fsGroup: 1001
+      stackstormPodSecurityContext.fsGroupChangePolicy: OnRootMismatch
+      stackstormPodSecurityContext.supplementalGroups[0]: 1001
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1001
+        documentIndex: 6
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+        documentIndex: 6
+      - equal:
+          path: spec.template.spec.securityContext.supplementalGroups[0]
+          value: 1001
+        documentIndex: 6
+
   - it: wires bootstrap remote sync env for poundcake-bootstrap from helm values
     set:
       bootstrap.ingredientsDir: /custom/bootstrap/ingredients

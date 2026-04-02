@@ -81,3 +81,22 @@ tests:
         documentSelector:
           path: metadata.name
           value: stackstorm-sensorcontainer
+
+  - it: applies stackstorm-specific pod security context overrides to stackstorm workloads
+    set:
+      stackstormPodSecurityContext.fsGroup: 1001
+      stackstormPodSecurityContext.fsGroupChangePolicy: OnRootMismatch
+      stackstormPodSecurityContext.supplementalGroups[0]: 1001
+    documentSelector:
+      path: metadata.name
+      value: stackstorm-api
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+      - equal:
+          path: spec.template.spec.securityContext.supplementalGroups[0]
+          value: 1001
