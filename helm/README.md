@@ -70,6 +70,9 @@ stackstormPodSecurityContext:
 ```
 
 Use the numeric GID that owns the shared directories inside the StackStorm image or volume mount.
+This is required when StackStorm later creates additional virtualenv directories such as
+`/opt/stackstorm/virtualenvs/chatops`; parent-directory RWX mounts only help if the pod is a
+member of the owning group, typically `st2packs`.
 
 ```yaml
 stackstorm:
