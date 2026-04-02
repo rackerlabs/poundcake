@@ -116,3 +116,38 @@ async def test_upsert_ingredients_creates_canonical_row_when_only_target_collisi
     assert temporary.execution_id is None
     assert temporary.task_key_template == "echo_temp"
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_upsert_ingredients_creates_rows_for_registered_third_party_pack_actions() -> None:
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ExecResult([]))
+    added: list[Ingredient] = []
+    db.add = Mock(side_effect=added.append)
+
+    stats = await dishwasher_service.upsert_ingredients(
+        db,
+        [
+            _stackstorm_action(
+                ref="kubernetes.create_deployment",
+                name="create_deployment",
+                action_id="k8s-action-1",
+            ),
+            _stackstorm_action(
+                ref="openstack.create_server",
+                name="create_server",
+                action_id="os-action-1",
+            ),
+        ],
+    )
+
+    assert stats == {"created": 2, "updated": 0, "pruned": 0}
+    assert [ing.execution_target for ing in added] == [
+        "kubernetes.create_deployment",
+        "openstack.create_server",
+    ]
+    assert [ing.task_key_template for ing in added] == [
+        "create_deployment",
+        "create_server",
+    ]
+    db.commit.assert_awaited_once()

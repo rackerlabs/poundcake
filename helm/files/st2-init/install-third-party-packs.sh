@@ -7,9 +7,19 @@ log() {
 
 STACKSTORM_ROOT="${ST2_PACK_ROOT:-/opt/stackstorm}"
 
-dir_has_content() {
+dir_has_meaningful_content() {
   local dir="$1"
-  [[ -d "${dir}" && -n "$(find "${dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]
+  [[ -d "${dir}" && -n "$(find "${dir}" -mindepth 1 -maxdepth 1 ! -name lost+found -print -quit 2>/dev/null)" ]]
+}
+
+pack_dir_ready() {
+  local dir="$1"
+  [[ -f "${dir}/pack.yaml" ]] || dir_has_meaningful_content "${dir}"
+}
+
+virtualenv_dir_ready() {
+  local dir="$1"
+  [[ -x "${dir}/bin/pip" || -f "${dir}/bin/activate" ]]
 }
 
 require_command() {
@@ -53,7 +63,7 @@ install_pack() {
     exit 1
   fi
 
-  if dir_has_content "${pack_dir}"; then
+  if pack_dir_ready "${pack_dir}"; then
     log "Reusing existing StackStorm pack directory ${pack_dir}"
   else
     log "Installing StackStorm pack ${pack_ref} from ${pack_repo_url}"
@@ -66,7 +76,7 @@ install_pack() {
     fi
   fi
 
-  if dir_has_content "${venv_dir}"; then
+  if virtualenv_dir_ready "${venv_dir}"; then
     log "Reusing existing StackStorm virtualenv directory ${venv_dir}"
   else
     log "Creating StackStorm virtualenv ${venv_dir}"

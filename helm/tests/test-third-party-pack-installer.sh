@@ -89,6 +89,8 @@ run_installer() {
 FRESH_OUT="${TMP_DIR}/fresh.out"
 REUSE_OUT="${TMP_DIR}/reuse.out"
 PARTIAL_OUT="${TMP_DIR}/partial.out"
+LOST_FOUND_PACK_OUT="${TMP_DIR}/lost-found-pack.out"
+LOST_FOUND_VENV_OUT="${TMP_DIR}/lost-found-venv.out"
 
 echo "Checking fresh install path..."
 run_installer "${FRESH_OUT}" bash
@@ -109,5 +111,21 @@ rm -rf "${FAKE_ROOT}/virtualenvs/kubernetes"
 run_installer "${PARTIAL_OUT}" bash
 assert_contains "Reusing existing StackStorm pack directory ${FAKE_ROOT}/packs/kubernetes" "${PARTIAL_OUT}"
 assert_contains "Creating StackStorm virtualenv ${FAKE_ROOT}/virtualenvs/kubernetes" "${PARTIAL_OUT}"
+
+echo "Checking lost+found-only pack directory path..."
+rm -rf "${FAKE_ROOT}/packs/kubernetes" "${FAKE_ROOT}/virtualenvs/kubernetes"
+mkdir -p "${FAKE_ROOT}/packs/kubernetes/lost+found" "${FAKE_ROOT}/virtualenvs/kubernetes"
+run_installer "${LOST_FOUND_PACK_OUT}" bash
+assert_contains "Installing StackStorm pack kubernetes from https://example.invalid/stackstorm-kubernetes.git" "${LOST_FOUND_PACK_OUT}"
+assert_contains "Creating StackStorm virtualenv ${FAKE_ROOT}/virtualenvs/kubernetes" "${LOST_FOUND_PACK_OUT}"
+[[ -f "${FAKE_ROOT}/packs/kubernetes/pack.yaml" ]] || fail "expected pack install to ignore lost+found"
+
+echo "Checking lost+found-only virtualenv directory path..."
+rm -rf "${FAKE_ROOT}/virtualenvs/kubernetes"
+mkdir -p "${FAKE_ROOT}/virtualenvs/kubernetes/lost+found"
+run_installer "${LOST_FOUND_VENV_OUT}" bash
+assert_contains "Reusing existing StackStorm pack directory ${FAKE_ROOT}/packs/kubernetes" "${LOST_FOUND_VENV_OUT}"
+assert_contains "Creating StackStorm virtualenv ${FAKE_ROOT}/virtualenvs/kubernetes" "${LOST_FOUND_VENV_OUT}"
+[[ -x "${FAKE_ROOT}/virtualenvs/kubernetes/bin/pip" ]] || fail "expected virtualenv creation to ignore lost+found"
 
 echo "[PASS] Third-party StackStorm pack installer checks passed"

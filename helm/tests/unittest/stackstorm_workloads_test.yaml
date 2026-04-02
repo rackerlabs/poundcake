@@ -165,6 +165,24 @@ tests:
             name: ST2_API_KEY_FILE
             value: /app/config/st2_api_key
         documentIndex: 13
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ST2_API_URL
+            value: "http://stackstorm-api:9101"
+        documentIndex: 13
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ST2_AUTH_URL
+            value: "http://stackstorm-auth:9100"
+        documentIndex: 13
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ST2_CLIENT_AUTO_AUTH
+            value: "true"
+        documentIndex: 13
 
   - it: applies image values and expected API/web probes and ports
     set:

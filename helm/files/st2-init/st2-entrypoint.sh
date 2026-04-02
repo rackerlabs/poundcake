@@ -5,13 +5,22 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+append_shell_export() {
+  local key="$1"
+  local value="$2"
+  local rc_file="${HOME:-}/.bashrc"
+  [[ -n "${HOME:-}" ]] || return 0
+  [[ -f "${rc_file}" && -w "${rc_file}" ]] || return 0
+  grep -Fq -- "export ${key}=" "${rc_file}" 2>/dev/null || echo "export ${key}=${value}" >> "${rc_file}"
+}
+
 export PYTHONPATH=${PYTHONPATH:-}:/opt/stackstorm/st2/lib/python3.10/site-packages
 export PATH=${PATH}:/opt/stackstorm/st2/bin
+export ST2_API_URL="${ST2_API_URL:-http://stackstorm-api:9101}"
+export ST2_AUTH_URL="${ST2_AUTH_URL:-http://stackstorm-auth:9100}"
 
-if [ -f "/app/config/st2_api_key" ] && [ -w /root/.bashrc ]; then
-  if ! grep -q "export ST2_API_KEY=" /root/.bashrc 2>/dev/null; then
-    echo "export ST2_API_KEY=\$(cat /app/config/st2_api_key)" >> /root/.bashrc
-  fi
+if [ -f "/app/config/st2_api_key" ]; then
+  append_shell_export "ST2_API_KEY" '$(cat /app/config/st2_api_key)'
 fi
 
 ST2_CONF_TEMPLATE="/etc/st2/st2.conf.template"
@@ -53,6 +62,21 @@ fi
 if [ ! -f "${ST2_RUNTIME_CONF}" ]; then
   log "ERROR: Failed to create ${ST2_RUNTIME_CONF}"
   exit 1
+fi
+
+if [ "${ST2_CLIENT_AUTO_AUTH:-false}" = "true" ] \
+  && [ -z "${ST2_AUTH_TOKEN:-}" ] \
+  && [ -n "${ST2_AUTH_USER:-}" ] \
+  && [ -n "${ST2_AUTH_PASSWORD:-}" ] \
+  && command -v st2 >/dev/null 2>&1; then
+  auth_output="$(st2 auth "${ST2_AUTH_USER}" -p "${ST2_AUTH_PASSWORD}" -t 2>&1 || true)"
+  auth_token="$(printf '%s\n' "${auth_output}" | tail -n 1 | tr -d '\r')"
+  if [ -n "${auth_token}" ] && ! printf '%s' "${auth_token}" | grep -qE '^[[:space:]]*\+'; then
+    export ST2_AUTH_TOKEN="${auth_token}"
+    append_shell_export "ST2_AUTH_TOKEN" "${auth_token}"
+  else
+    log "WARN: failed to auto-configure ST2 auth token for interactive client usage"
+  fi
 fi
 
 rewritten_args=()
