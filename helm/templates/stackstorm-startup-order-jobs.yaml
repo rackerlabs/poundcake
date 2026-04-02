@@ -19,9 +19,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-startup-markers-reset") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       restartPolicy: OnFailure
@@ -59,9 +60,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-mongodb-user-sync") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       serviceAccountName: stackstorm-startup
@@ -169,9 +171,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-infra-ready") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       restartPolicy: OnFailure
@@ -246,9 +249,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-controlplane-ready") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       restartPolicy: OnFailure
@@ -325,9 +329,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-workers-ready") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       restartPolicy: OnFailure
@@ -404,9 +409,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-edge-ready") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       restartPolicy: OnFailure
@@ -483,9 +489,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "stackstorm-bootstrap") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       restartPolicy: OnFailure
@@ -617,9 +624,10 @@ spec:
         {{- include "poundcake.logLabelsForComponent" (dict "component" "poundcake-mariadb-ready") | nindent 8 }}
         {{- include "poundcake.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.podSecurityContext }}
+      {{- $stackstormPodSecurityContext := include "poundcake.stackstormPodSecurityContext" . }}
+      {{- if $stackstormPodSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $stackstormPodSecurityContext | nindent 8 }}
       {{- end }}
       {{- include "poundcake.podPlacement" . | nindent 6 }}
       restartPolicy: OnFailure

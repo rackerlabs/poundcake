@@ -5,6 +5,8 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+STACKSTORM_ROOT="${ST2_PACK_ROOT:-/opt/stackstorm}"
+
 dir_has_content() {
   local dir="$1"
   [[ -d "${dir}" && -n "$(find "${dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]
@@ -39,8 +41,8 @@ install_pack() {
   local pack_version="$2"
   local pack_repo_url="$3"
   local pack_ref="${pack_name}"
-  local pack_dir="/opt/stackstorm/packs/${pack_name}"
-  local venv_dir="/opt/stackstorm/virtualenvs/${pack_name}"
+  local pack_dir="${STACKSTORM_ROOT}/packs/${pack_name}"
+  local venv_dir="${STACKSTORM_ROOT}/virtualenvs/${pack_name}"
 
   if [ -n "${pack_version}" ]; then
     pack_ref="${pack_name}=${pack_version}"
