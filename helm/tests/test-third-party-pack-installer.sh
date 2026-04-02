@@ -74,6 +74,21 @@ exit 1
 EOF
 chmod +x "${STUB_BIN}/python3"
 
+cat > "${STUB_BIN}/virtualenv" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+dest="${@: -1}"
+mkdir -p "${dest}/bin"
+cat > "${dest}/bin/pip" <<'PIP'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+PIP
+chmod +x "${dest}/bin/pip"
+exit 0
+EOF
+chmod +x "${STUB_BIN}/virtualenv"
+
 run_installer() {
   local out_file="$1"
   shift

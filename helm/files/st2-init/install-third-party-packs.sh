@@ -30,6 +30,22 @@ require_command() {
   fi
 }
 
+create_virtualenv() {
+  local dir="$1"
+  local st2_python="${STACKSTORM_ROOT}/st2/bin/python"
+
+  if command -v virtualenv >/dev/null 2>&1; then
+    if [ -x "${st2_python}" ]; then
+      virtualenv --python "${st2_python}" --system-site-packages "${dir}"
+    else
+      virtualenv --system-site-packages "${dir}"
+    fi
+    return 0
+  fi
+
+  python3 -m venv --system-site-packages "${dir}"
+}
+
 default_repo_url() {
   local pack_name="$1"
 
@@ -82,7 +98,7 @@ install_pack() {
     log "Creating StackStorm virtualenv ${venv_dir}"
     rm -rf "${venv_dir}"
     mkdir -p "$(dirname "${venv_dir}")"
-    python3 -m venv --system-site-packages "${venv_dir}"
+    create_virtualenv "${venv_dir}"
     "${venv_dir}/bin/pip" install --upgrade pip setuptools wheel
     if [ -f "${pack_dir}/requirements.txt" ]; then
       "${venv_dir}/bin/pip" install -r "${pack_dir}/requirements.txt"
