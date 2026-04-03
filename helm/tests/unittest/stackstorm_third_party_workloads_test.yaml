@@ -26,6 +26,14 @@ tests:
       value: stackstorm-api
     asserts:
       - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: seed-stackstorm-pack-content
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: stackstorm-packs
+            mountPath: /mnt/stackstorm-shared/packs
+      - equal:
           path: spec.template.spec.initContainers[0].name
           value: wait-stage2
       - contains:
@@ -38,12 +46,12 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: stackstorm-packs
-            mountPath: /opt/stackstorm/shared-content/packs
+            mountPath: /opt/stackstorm/packs
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: stackstorm-virtualenvs
-            mountPath: /opt/stackstorm/shared-content/virtualenvs
+            mountPath: /opt/stackstorm/virtualenvs
       - contains:
           path: spec.template.spec.volumes
           content:
@@ -63,6 +71,12 @@ tests:
           path: metadata.name
           value: stackstorm-register
       - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: seed-stackstorm-pack-content
+        documentSelector:
+          path: metadata.name
+          value: stackstorm-register
+      - equal:
           path: spec.template.spec.initContainers[0].name
           value: wait-stage5
         documentSelector:
@@ -72,7 +86,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: stackstorm-packs
-            mountPath: /opt/stackstorm/shared-content/packs
+            mountPath: /opt/stackstorm/packs
         documentSelector:
           path: metadata.name
           value: stackstorm-register

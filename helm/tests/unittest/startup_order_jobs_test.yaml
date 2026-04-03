@@ -200,114 +200,118 @@ tests:
       stackstorm.bootstrap.packs.openstack.enabled: true
       stackstorm.bootstrap.packs.openstack.version: "2.3.4"
     asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: seed-stackstorm-pack-content
+        documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK
             value: "true"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_TYPE
             value: "exchange"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_NAME
             value: "kubernetes"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK_VERSION
             value: "1.2.3"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK_REPO_URL
             value: ""
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_KUBERNETES_RUNTIME_SEED_DATASTORE
             value: "true"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_KUBERNETES_RUNTIME_HOST
             value: "https://cluster.local"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_KUBERNETES_RUNTIME_VERIFY_SSL
             value: "false"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_OPENSTACK_PACK
             value: "true"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_TYPE
             value: "exchange"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_NAME
             value: "openstack"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_OPENSTACK_PACK_VERSION
             value: "2.3.4"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_OPENSTACK_PACK_REPO_URL
             value: ""
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_STREAM_URL
             value: "http://stackstorm-stream:9102"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[1].volumeMounts
           content:
-            name: ST2_PACK_ROOT
-            value: /opt/stackstorm/shared-content
+            name: stackstorm-packs
+            mountPath: /mnt/stackstorm-shared/packs
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].volumeMounts
+          path: spec.template.spec.initContainers[2].volumeMounts
           content:
             name: stackstorm-pack-configs
             mountPath: /opt/stackstorm/configs
             readOnly: true
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].volumeMounts
+          path: spec.template.spec.initContainers[2].volumeMounts
           content:
             name: stackstorm-packs
-            mountPath: /opt/stackstorm/shared-content/packs
+            mountPath: /opt/stackstorm/packs
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].volumeMounts
+          path: spec.template.spec.initContainers[2].volumeMounts
           content:
             name: stackstorm-virtualenvs
-            mountPath: /opt/stackstorm/shared-content/virtualenvs
+            mountPath: /opt/stackstorm/virtualenvs
         documentIndex: 6
       - contains:
           path: spec.template.spec.volumes
@@ -341,37 +345,37 @@ tests:
       stackstorm.bootstrap.packs.kubernetes.runtime.verifySsl: true
     asserts:
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_TYPE
             value: "git"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK_REPO_URL
             value: "https://github.com/example/custom-kubernetes-pack.git"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_INSTALL_KUBERNETES_PACK_VERSION
             value: "main"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_KUBERNETES_RUNTIME_SEED_DATASTORE
             value: "false"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_KUBERNETES_RUNTIME_HOST
             value: "https://custom.cluster.local"
         documentIndex: 6
       - contains:
-          path: spec.template.spec.initContainers[1].env
+          path: spec.template.spec.initContainers[2].env
           content:
             name: ST2_KUBERNETES_RUNTIME_VERIFY_SSL
             value: "true"

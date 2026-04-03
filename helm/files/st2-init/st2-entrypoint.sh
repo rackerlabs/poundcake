@@ -18,30 +18,6 @@ export PYTHONPATH=${PYTHONPATH:-}:/opt/stackstorm/st2/lib/python3.10/site-packag
 export PATH=${PATH}:/opt/stackstorm/st2/bin
 export ST2_API_URL="${ST2_API_URL:-http://stackstorm-api:9101}"
 export ST2_AUTH_URL="${ST2_AUTH_URL:-http://stackstorm-auth:9100}"
-export ST2_SHARED_PACKS_ROOT="${ST2_SHARED_PACKS_ROOT:-/opt/stackstorm/shared-content/packs}"
-export ST2_SHARED_VIRTUALENVS_ROOT="${ST2_SHARED_VIRTUALENVS_ROOT:-/opt/stackstorm/shared-content/virtualenvs}"
-
-link_shared_stackstorm_content() {
-  local pack_name="$1"
-  local shared_pack_path="${ST2_SHARED_PACKS_ROOT}/${pack_name}"
-  local shared_virtualenv_path="${ST2_SHARED_VIRTUALENVS_ROOT}/${pack_name}"
-  local live_pack_path="/opt/stackstorm/packs/${pack_name}"
-  local live_virtualenv_path="/opt/stackstorm/virtualenvs/${pack_name}"
-
-  if [ -d "${ST2_SHARED_PACKS_ROOT}" ]; then
-    mkdir -p /opt/stackstorm/packs
-    if [ ! -e "${live_pack_path}" ]; then
-      ln -s "${shared_pack_path}" "${live_pack_path}"
-    fi
-  fi
-
-  if [ -d "${ST2_SHARED_VIRTUALENVS_ROOT}" ]; then
-    mkdir -p /opt/stackstorm/virtualenvs
-    if [ ! -e "${live_virtualenv_path}" ]; then
-      ln -s "${shared_virtualenv_path}" "${live_virtualenv_path}"
-    fi
-  fi
-}
 
 if [ -f "/app/config/st2_api_key" ]; then
   append_shell_export "ST2_API_KEY" '$(cat /app/config/st2_api_key)'
@@ -87,10 +63,6 @@ if [ ! -f "${ST2_RUNTIME_CONF}" ]; then
   log "ERROR: Failed to create ${ST2_RUNTIME_CONF}"
   exit 1
 fi
-
-for shared_pack in kubernetes openstack; do
-  link_shared_stackstorm_content "${shared_pack}"
-done
 
 if [ "${ST2_CLIENT_AUTO_AUTH:-false}" = "true" ] \
   && [ -z "${ST2_AUTH_TOKEN:-}" ] \
