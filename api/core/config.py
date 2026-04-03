@@ -160,7 +160,8 @@ class Settings(BaseSettings):
 
         Priority:
         1. Environment variable (POUNDCAKE_STACKSTORM_API_KEY)
-        2. Runtime config file (/app/config/st2_api_key)
+        2. Runtime config file from ST2_API_KEY_FILE when set
+        3. Known runtime config file mount paths
         3. Empty string
         """
         # First check environment variable
@@ -168,10 +169,17 @@ class Settings(BaseSettings):
             return self.stackstorm_api_key
 
         # Fall back to runtime config file (written by setup container or mounted secret).
-        config_files = [
-            Path("/app/config/st2_api_key"),
-            Path("/app/config/st2-apikeys/api-key"),
-        ]
+        config_files: list[Path] = []
+        explicit_key_file = os.getenv("ST2_API_KEY_FILE", "").strip()
+        if explicit_key_file:
+            config_files.append(Path(explicit_key_file))
+        config_files.extend(
+            [
+                Path("/run/secrets/st2/st2_api_key"),
+                Path("/app/config/st2_api_key"),
+                Path("/app/config/st2-apikeys/api-key"),
+            ]
+        )
         for config_file in config_files:
             if not config_file.exists():
                 continue

@@ -46,23 +46,34 @@ create_virtualenv() {
   python3 -m venv --system-site-packages "${dir}"
 }
 
-default_repo_url() {
-  local pack_name="$1"
+require_value() {
+  local label="$1"
+  local value="$2"
 
-  case "${pack_name}" in
-    kubernetes)
-      echo "https://github.com/StackStorm-Exchange/stackstorm-kubernetes.git"
-      ;;
-    openstack)
-      echo "https://github.com/StackStorm-Exchange/stackstorm-openstack.git"
-      ;;
-    *)
-      echo ""
-      ;;
-  esac
+  if [ -z "${value}" ]; then
+    log "ERROR: required value '${label}' is empty"
+    exit 1
+  fi
 }
 
-install_pack() {
+install_pack_from_exchange() {
+  local pack_name="$1"
+  local exchange_name="$2"
+  local pack_version="$3"
+  local pack_ref="${exchange_name}"
+
+  require_command st2
+  require_value "exchange pack name for ${pack_name}" "${exchange_name}"
+
+  if [ -n "${pack_version}" ]; then
+    pack_ref="${exchange_name}=${pack_version}"
+  fi
+
+  log "Installing StackStorm pack ${pack_ref} from StackStorm Exchange"
+  st2 pack install "${pack_ref}"
+}
+
+install_pack_from_git() {
   local pack_name="$1"
   local pack_version="$2"
   local pack_repo_url="$3"
@@ -74,10 +85,9 @@ install_pack() {
     pack_ref="${pack_name}=${pack_version}"
   fi
 
-  if [ -z "${pack_repo_url}" ]; then
-    log "ERROR: no repository URL configured for pack ${pack_name}"
-    exit 1
-  fi
+  require_command git
+  require_command python3
+  require_value "git repo url for ${pack_name}" "${pack_repo_url}"
 
   if pack_dir_ready "${pack_dir}"; then
     log "Reusing existing StackStorm pack directory ${pack_dir}"
@@ -106,21 +116,43 @@ install_pack() {
   fi
 }
 
-require_command git
-require_command python3
+install_pack() {
+  local pack_name="$1"
+  local source_type="$2"
+  local source_name="$3"
+  local pack_version="$4"
+  local pack_repo_url="$5"
+
+  case "${source_type}" in
+    exchange)
+      install_pack_from_exchange "${pack_name}" "${source_name}" "${pack_version}"
+      ;;
+    git)
+      install_pack_from_git "${pack_name}" "${pack_version}" "${pack_repo_url}"
+      ;;
+    *)
+      log "ERROR: unsupported source type '${source_type}' for pack ${pack_name}"
+      exit 1
+      ;;
+  esac
+}
 
 if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" = "true" ]; then
   install_pack \
     "kubernetes" \
+    "${ST2_INSTALL_KUBERNETES_PACK_SOURCE_TYPE:-exchange}" \
+    "${ST2_INSTALL_KUBERNETES_PACK_SOURCE_NAME:-kubernetes}" \
     "${ST2_INSTALL_KUBERNETES_PACK_VERSION:-}" \
-    "${ST2_INSTALL_KUBERNETES_PACK_REPO_URL:-$(default_repo_url kubernetes)}"
+    "${ST2_INSTALL_KUBERNETES_PACK_REPO_URL:-}"
 fi
 
 if [ "${ST2_INSTALL_OPENSTACK_PACK:-false}" = "true" ]; then
   install_pack \
     "openstack" \
+    "${ST2_INSTALL_OPENSTACK_PACK_SOURCE_TYPE:-exchange}" \
+    "${ST2_INSTALL_OPENSTACK_PACK_SOURCE_NAME:-openstack}" \
     "${ST2_INSTALL_OPENSTACK_PACK_VERSION:-}" \
-    "${ST2_INSTALL_OPENSTACK_PACK_REPO_URL:-$(default_repo_url openstack)}"
+    "${ST2_INSTALL_OPENSTACK_PACK_REPO_URL:-}"
 fi
 
 log "Third-party StackStorm pack installation complete"

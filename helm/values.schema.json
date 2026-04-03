@@ -440,6 +440,22 @@
                   "properties": {
                     "enabled": { "type": "boolean", "default": false },
                     "version": { "type": "string", "default": "" },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "type": { "type": "string", "enum": ["exchange", "git"], "default": "exchange" },
+                        "name": { "type": "string", "default": "kubernetes" },
+                        "repoUrl": { "type": "string", "default": "" }
+                      }
+                    },
+                    "runtime": {
+                      "type": "object",
+                      "properties": {
+                        "seedDatastore": { "type": "boolean", "default": true },
+                        "host": { "type": "string", "default": "https://cluster.local" },
+                        "verifySsl": { "type": "boolean", "default": false }
+                      }
+                    },
                     "config": {
                       "type": "object",
                       "properties": {
@@ -454,6 +470,14 @@
                   "properties": {
                     "enabled": { "type": "boolean", "default": false },
                     "version": { "type": "string", "default": "" },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "type": { "type": "string", "enum": ["exchange", "git"], "default": "exchange" },
+                        "name": { "type": "string", "default": "openstack" },
+                        "repoUrl": { "type": "string", "default": "" }
+                      }
+                    },
                     "config": {
                       "type": "object",
                       "properties": {

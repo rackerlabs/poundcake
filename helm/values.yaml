@@ -250,12 +250,29 @@ stackstorm:
       kubernetes:
         enabled: false
         version: ""
+        source:
+          type: exchange
+          name: kubernetes
+          repoUrl: ""
+        # Runtime settings for the installed kubernetes pack.
+        # When enabled, stackstorm-bootstrap seeds StackStorm datastore keys
+        # from the bootstrap pod's service account token. Those datastore keys
+        # are then available to StackStorm runtime components including
+        # st2client and st2actionrunner.
+        runtime:
+          seedDatastore: true
+          host: "https://cluster.local"
+          verifySsl: false
         config:
           kubeconfig: ""
           caCert: ""
       openstack:
         enabled: false
         version: ""
+        source:
+          type: exchange
+          name: openstack
+          repoUrl: ""
         config:
           cloudsYaml: ""
           caCert: ""
@@ -1006,7 +1023,7 @@ stackstormComponents:
   register:
     enabled: false
   stream:
-    enabled: false
+    enabled: true
   web:
     enabled: false
   client:
@@ -1042,7 +1059,7 @@ stackstormServices:
   register:
     enabled: false
   stream:
-    enabled: false
+    enabled: true
   web:
     enabled: false
   client:

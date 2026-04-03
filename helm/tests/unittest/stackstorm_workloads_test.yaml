@@ -5,11 +5,21 @@ tests:
   - it: renders reduced default stackstorm workloads
     asserts:
       - hasDocuments:
-          count: 8
+          count: 9
       - equal:
           path: metadata.name
           value: stackstorm-auth
         documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: stackstorm-stream
+        documentIndex: 7
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ST2_STREAM_URL
+            value: "http://stackstorm-stream:9102"
+        documentIndex: 8
       - equal:
           path: metadata.name
           value: stackstorm-garbagecollector
@@ -17,7 +27,7 @@ tests:
       - equal:
           path: metadata.name
           value: stackstorm-client
-        documentIndex: 7
+        documentIndex: 8
 
   - it: applies edge and execution log-streaming labels
     asserts:
@@ -33,6 +43,14 @@ tests:
           path: spec.template.metadata.labels["poundcake.io/log-group"]
           value: stackstorm-exec
         documentIndex: 6
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: stackstorm-edge
+        documentIndex: 7
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: stream
+        documentIndex: 7
 
   - it: gates worker workloads on control-plane readiness marker
     asserts:
@@ -55,11 +73,11 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: "stackstorm_controlplane_ready"
-        documentIndex: 7
+        documentIndex: 8
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: client
-        documentIndex: 7
+        documentIndex: 8
 
   - it: defaults stackstorm workloads to worker nodes
     asserts:
@@ -70,7 +88,7 @@ tests:
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
           value: worker
-        documentIndex: 7
+        documentIndex: 8
 
   - it: attaches the dedicated service account to stackstorm-actionrunner
     documentSelector:
@@ -116,12 +134,24 @@ tests:
         documentIndex: 6
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: garbagecollector
+        documentIndex: 7
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: timersengine
         documentIndex: 8
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-role"]
           value: sensorcontainer
         documentIndex: 9
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-group"]
+          value: stackstorm-edge
+        documentIndex: 10
+      - equal:
+          path: spec.template.metadata.labels["poundcake.io/log-role"]
+          value: stream
+        documentIndex: 10
 
   - it: renders optional stackstorm workloads when enabled
     set:
@@ -129,7 +159,6 @@ tests:
       stackstormServices.notifier.enabled: true
       stackstormServices.timersengine.enabled: true
       stackstormServices.sensorcontainer.enabled: true
-      stackstormServices.stream.enabled: true
       stackstormServices.web.enabled: true
       stackstormServices.client.enabled: true
     asserts:
@@ -143,6 +172,10 @@ tests:
           path: metadata.name
           value: stackstorm-notifier
         documentIndex: 7
+      - equal:
+          path: metadata.name
+          value: stackstorm-stream
+        documentIndex: 11
       - equal:
           path: metadata.name
           value: stackstorm-timersengine
@@ -180,6 +213,12 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: ST2_STREAM_URL
+            value: "http://stackstorm-stream:9102"
+        documentIndex: 13
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: ST2_CLIENT_AUTO_AUTH
             value: "true"
         documentIndex: 13
@@ -193,7 +232,6 @@ tests:
       stackstormServices.notifier.enabled: true
       stackstormServices.timersengine.enabled: true
       stackstormServices.sensorcontainer.enabled: true
-      stackstormServices.stream.enabled: true
       stackstormServices.web.enabled: true
       stackstormServices.client.enabled: true
     asserts:

@@ -519,6 +519,7 @@ spec:
           securityContext:
             {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
           imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
+          {{- $kubernetesRuntime := .Values.stackstorm.bootstrap.packs.kubernetes.runtime | default dict }}
           envFrom:
             - secretRef:
                 name: stackstorm-secrets
@@ -531,12 +532,30 @@ spec:
               value: {{ include "poundcake.stackstormStreamUrl" . | quote }}
             - name: ST2_INSTALL_KUBERNETES_PACK
               value: {{ default false .Values.stackstorm.bootstrap.packs.kubernetes.enabled | quote }}
+            - name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_TYPE
+              value: {{ default "exchange" .Values.stackstorm.bootstrap.packs.kubernetes.source.type | quote }}
+            - name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_NAME
+              value: {{ default "kubernetes" .Values.stackstorm.bootstrap.packs.kubernetes.source.name | quote }}
             - name: ST2_INSTALL_KUBERNETES_PACK_VERSION
               value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.version | quote }}
+            - name: ST2_INSTALL_KUBERNETES_PACK_REPO_URL
+              value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.source.repoUrl | quote }}
+            - name: ST2_KUBERNETES_RUNTIME_SEED_DATASTORE
+              value: {{ ternary $kubernetesRuntime.seedDatastore true (hasKey $kubernetesRuntime "seedDatastore") | quote }}
+            - name: ST2_KUBERNETES_RUNTIME_HOST
+              value: {{ default "https://cluster.local" .Values.stackstorm.bootstrap.packs.kubernetes.runtime.host | quote }}
+            - name: ST2_KUBERNETES_RUNTIME_VERIFY_SSL
+              value: {{ ternary $kubernetesRuntime.verifySsl false (hasKey $kubernetesRuntime "verifySsl") | quote }}
             - name: ST2_INSTALL_OPENSTACK_PACK
               value: {{ default false .Values.stackstorm.bootstrap.packs.openstack.enabled | quote }}
+            - name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_TYPE
+              value: {{ default "exchange" .Values.stackstorm.bootstrap.packs.openstack.source.type | quote }}
+            - name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_NAME
+              value: {{ default "openstack" .Values.stackstorm.bootstrap.packs.openstack.source.name | quote }}
             - name: ST2_INSTALL_OPENSTACK_PACK_VERSION
               value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.version | quote }}
+            - name: ST2_INSTALL_OPENSTACK_PACK_REPO_URL
+              value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.source.repoUrl | quote }}
             - name: ST2_CONFIG_FILE
               value: /tmp/st2/st2.conf
           command:
