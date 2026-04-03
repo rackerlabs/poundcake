@@ -38,7 +38,12 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: stackstorm-packs
-            mountPath: /opt/stackstorm/packs
+            mountPath: /opt/stackstorm/shared-content/packs
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: stackstorm-virtualenvs
+            mountPath: /opt/stackstorm/shared-content/virtualenvs
       - contains:
           path: spec.template.spec.volumes
           content:
@@ -67,7 +72,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: stackstorm-packs
-            mountPath: /opt/stackstorm/packs
+            mountPath: /opt/stackstorm/shared-content/packs
         documentSelector:
           path: metadata.name
           value: stackstorm-register

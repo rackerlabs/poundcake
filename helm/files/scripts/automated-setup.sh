@@ -13,8 +13,32 @@ echo "========================================="
 
 APP_CONFIG_DIR="${APP_CONFIG_DIR:-/app/config}"
 THIRD_PARTY_INSTALLER_SCRIPT="${THIRD_PARTY_INSTALLER_SCRIPT:-/install-third-party-packs.sh}"
+PACK_INSTALL_READY_RETRIES="${ST2_PACK_INSTALL_READY_RETRIES:-30}"
+PACK_INSTALL_READY_DELAY_SECONDS="${ST2_PACK_INSTALL_READY_DELAY_SECONDS:-4}"
 
 mkdir -p "${APP_CONFIG_DIR}"
+
+wait_for_pack_install_action() {
+    local retries="${PACK_INSTALL_READY_RETRIES}"
+    local delay="${PACK_INSTALL_READY_DELAY_SECONDS}"
+    local attempt=1
+
+    echo "Waiting for StackStorm pack-management actions to be registered..."
+    while [ "${attempt}" -le "${retries}" ]; do
+        if st2 action get packs.install > /dev/null 2>&1; then
+            echo "[OK] StackStorm action packs.install is available."
+            return 0
+        fi
+
+        echo "[WARN] packs.install is not registered yet (attempt ${attempt}/${retries}); waiting ${delay}s before installing optional packs."
+        attempt=$((attempt + 1))
+        sleep "${delay}"
+    done
+
+    echo "[ERROR] StackStorm action packs.install did not become available after ${retries} attempts."
+    echo "        stackstorm-register may still be publishing core actions, so bootstrap cannot safely install optional packs."
+    return 1
+}
 
 seed_kubernetes_pack_datastore() {
     if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" != "true" ]; then
@@ -165,6 +189,7 @@ st2-register-content --register-all --config-file /tmp/st2/st2.conf
 
 # 5. Install enabled third-party packs after the API is up, authenticated, and initial content exists.
 if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" = "true" ] || [ "${ST2_INSTALL_OPENSTACK_PACK:-false}" = "true" ]; then
+    wait_for_pack_install_action
     echo "Installing enabled third-party packs..."
     /bin/bash "${THIRD_PARTY_INSTALLER_SCRIPT}"
     echo "Registering content after third-party pack installation..."
