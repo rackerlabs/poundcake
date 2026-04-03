@@ -44,6 +44,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-register
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -264,6 +267,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-api
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -391,6 +397,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-actionrunner
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -509,6 +518,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-rulesengine
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -595,6 +607,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-workflowengine
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -713,6 +728,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-scheduler
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -1044,6 +1062,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-sensorcontainer
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
@@ -1301,6 +1322,9 @@ spec:
           volumeMounts:
             - name: app-config
               mountPath: /app/config
+        {{- if eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" }}
+{{ include "poundcake.stackstormThirdPartyPackInitContainer" . | indent 8 }}
+        {{- end }}
       containers:
         - name: stackstorm-client
           image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}

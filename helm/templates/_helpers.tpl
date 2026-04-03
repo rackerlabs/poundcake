@@ -189,62 +189,26 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "poundcake.stackstormThirdPartyPackInitContainer" -}}
-- name: install-third-party-packs
+- name: seed-stackstorm-pack-content
   image: {{ .Values.stackstormImage.repository }}:{{ .Values.stackstormImage.tag }}
   imagePullPolicy: {{ .Values.stackstormImage.pullPolicy }}
   securityContext:
     {{- toYaml .Values.utilitySecurityContext | nindent 4 }}
-  envFrom:
-    - secretRef:
-        name: stackstorm-secrets
-  env:
-    - name: ST2_INSTALL_KUBERNETES_PACK
-      value: {{ default false .Values.stackstorm.bootstrap.packs.kubernetes.enabled | quote }}
-    - name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_TYPE
-      value: {{ default "exchange" .Values.stackstorm.bootstrap.packs.kubernetes.source.type | quote }}
-    - name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_NAME
-      value: {{ default "kubernetes" .Values.stackstorm.bootstrap.packs.kubernetes.source.name | quote }}
-    - name: ST2_INSTALL_KUBERNETES_PACK_VERSION
-      value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.version | quote }}
-    - name: ST2_INSTALL_KUBERNETES_PACK_REPO_URL
-      value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.source.repoUrl | quote }}
-    - name: ST2_INSTALL_OPENSTACK_PACK
-      value: {{ default false .Values.stackstorm.bootstrap.packs.openstack.enabled | quote }}
-    - name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_TYPE
-      value: {{ default "exchange" .Values.stackstorm.bootstrap.packs.openstack.source.type | quote }}
-    - name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_NAME
-      value: {{ default "openstack" .Values.stackstorm.bootstrap.packs.openstack.source.name | quote }}
-    - name: ST2_INSTALL_OPENSTACK_PACK_VERSION
-      value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.version | quote }}
-    - name: ST2_INSTALL_OPENSTACK_PACK_REPO_URL
-      value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.source.repoUrl | quote }}
-    - name: ST2_CONFIG_FILE
-      value: /tmp/st2/st2.conf
-    - name: ST2_PACK_ROOT
-      value: /opt/stackstorm/shared-content
-    - name: ST2_STREAM_URL
-      value: {{ include "poundcake.stackstormStreamUrl" . | quote }}
-  command: ["/bin/bash", "/st2-entrypoint.sh"]
-  args: ["/install-third-party-packs.sh"]
+  command:
+    - /bin/bash
+    - -ec
+    - |
+      set -euo pipefail
+      mkdir -p /mnt/stackstorm-shared/packs /mnt/stackstorm-shared/virtualenvs
+      cp -an /opt/stackstorm/packs/. /mnt/stackstorm-shared/packs/
+      if [ -d /opt/stackstorm/virtualenvs ]; then
+        cp -an /opt/stackstorm/virtualenvs/. /mnt/stackstorm-shared/virtualenvs/ || true
+      fi
   volumeMounts:
-    - name: stackstorm-config
-      mountPath: /etc/st2/st2.conf.template
-      subPath: st2.conf.template
-    - name: scripts
-      mountPath: /st2-entrypoint.sh
-      subPath: st2-entrypoint.sh
-    - name: scripts
-      mountPath: /install-third-party-packs.sh
-      subPath: install-third-party-packs.sh
-    - name: stackstorm-pack-configs
-      mountPath: /opt/stackstorm/configs
-      readOnly: true
     - name: stackstorm-packs
-      mountPath: /opt/stackstorm/shared-content/packs
+      mountPath: /mnt/stackstorm-shared/packs
     - name: stackstorm-virtualenvs
-      mountPath: /opt/stackstorm/shared-content/virtualenvs
-    - name: app-config
-      mountPath: /app/config
+      mountPath: /mnt/stackstorm-shared/virtualenvs
 {{- end -}}
 
 {{- define "poundcake.stackstormThirdPartyPackVolumeMounts" -}}
@@ -252,9 +216,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   mountPath: /opt/stackstorm/configs
   readOnly: true
 - name: stackstorm-packs
-  mountPath: /opt/stackstorm/shared-content/packs
+  mountPath: /opt/stackstorm/packs
 - name: stackstorm-virtualenvs
-  mountPath: /opt/stackstorm/shared-content/virtualenvs
+  mountPath: /opt/stackstorm/virtualenvs
 {{- end -}}
 
 {{- define "poundcake.stackstormThirdPartyPackVolumes" -}}
