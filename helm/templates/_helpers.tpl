@@ -220,6 +220,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.source.repoUrl | quote }}
     - name: ST2_CONFIG_FILE
       value: /tmp/st2/st2.conf
+    - name: ST2_PACK_ROOT
+      value: /opt/stackstorm/shared-content
     - name: ST2_STREAM_URL
       value: {{ include "poundcake.stackstormStreamUrl" . | quote }}
   command: ["/bin/bash", "/st2-entrypoint.sh"]
@@ -238,9 +240,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       mountPath: /opt/stackstorm/configs
       readOnly: true
     - name: stackstorm-packs
-      mountPath: /opt/stackstorm/packs
+      mountPath: /opt/stackstorm/shared-content/packs
     - name: stackstorm-virtualenvs
-      mountPath: /opt/stackstorm/virtualenvs
+      mountPath: /opt/stackstorm/shared-content/virtualenvs
     - name: app-config
       mountPath: /app/config
 {{- end -}}
@@ -250,9 +252,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   mountPath: /opt/stackstorm/configs
   readOnly: true
 - name: stackstorm-packs
-  mountPath: /opt/stackstorm/packs
+  mountPath: /opt/stackstorm/shared-content/packs
 - name: stackstorm-virtualenvs
-  mountPath: /opt/stackstorm/virtualenvs
+  mountPath: /opt/stackstorm/shared-content/virtualenvs
 {{- end -}}
 
 {{- define "poundcake.stackstormThirdPartyPackVolumes" -}}

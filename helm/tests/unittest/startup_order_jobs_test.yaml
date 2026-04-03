@@ -285,6 +285,12 @@ tests:
             value: "http://stackstorm-stream:9102"
         documentIndex: 6
       - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: ST2_PACK_ROOT
+            value: /opt/stackstorm/shared-content
+        documentIndex: 6
+      - contains:
           path: spec.template.spec.initContainers[1].volumeMounts
           content:
             name: stackstorm-pack-configs
@@ -295,13 +301,13 @@ tests:
           path: spec.template.spec.initContainers[1].volumeMounts
           content:
             name: stackstorm-packs
-            mountPath: /opt/stackstorm/packs
+            mountPath: /opt/stackstorm/shared-content/packs
         documentIndex: 6
       - contains:
           path: spec.template.spec.initContainers[1].volumeMounts
           content:
             name: stackstorm-virtualenvs
-            mountPath: /opt/stackstorm/virtualenvs
+            mountPath: /opt/stackstorm/shared-content/virtualenvs
         documentIndex: 6
       - contains:
           path: spec.template.spec.volumes

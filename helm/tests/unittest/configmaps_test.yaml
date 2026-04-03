@@ -34,6 +34,14 @@ tests:
         documentIndex: 1
       - matchRegex:
           path: data["st2-entrypoint.sh"]
+          pattern: "shared-content/packs"
+        documentIndex: 1
+      - matchRegex:
+          path: data["st2-entrypoint.sh"]
+          pattern: "link_shared_stackstorm_content"
+        documentIndex: 1
+      - matchRegex:
+          path: data["st2-entrypoint.sh"]
           pattern: "neither envsubst nor python3 is available"
         documentIndex: 1
       - matchRegex:

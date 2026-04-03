@@ -558,6 +558,8 @@ spec:
               value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.source.repoUrl | quote }}
             - name: ST2_CONFIG_FILE
               value: /tmp/st2/st2.conf
+            - name: ST2_PACK_ROOT
+              value: /opt/stackstorm/shared-content
           command:
             - /bin/bash
             - -ec
