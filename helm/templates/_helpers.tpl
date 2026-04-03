@@ -200,12 +200,24 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   env:
     - name: ST2_INSTALL_KUBERNETES_PACK
       value: {{ default false .Values.stackstorm.bootstrap.packs.kubernetes.enabled | quote }}
+    - name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_TYPE
+      value: {{ default "exchange" .Values.stackstorm.bootstrap.packs.kubernetes.source.type | quote }}
+    - name: ST2_INSTALL_KUBERNETES_PACK_SOURCE_NAME
+      value: {{ default "kubernetes" .Values.stackstorm.bootstrap.packs.kubernetes.source.name | quote }}
     - name: ST2_INSTALL_KUBERNETES_PACK_VERSION
       value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.version | quote }}
+    - name: ST2_INSTALL_KUBERNETES_PACK_REPO_URL
+      value: {{ default "" .Values.stackstorm.bootstrap.packs.kubernetes.source.repoUrl | quote }}
     - name: ST2_INSTALL_OPENSTACK_PACK
       value: {{ default false .Values.stackstorm.bootstrap.packs.openstack.enabled | quote }}
+    - name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_TYPE
+      value: {{ default "exchange" .Values.stackstorm.bootstrap.packs.openstack.source.type | quote }}
+    - name: ST2_INSTALL_OPENSTACK_PACK_SOURCE_NAME
+      value: {{ default "openstack" .Values.stackstorm.bootstrap.packs.openstack.source.name | quote }}
     - name: ST2_INSTALL_OPENSTACK_PACK_VERSION
       value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.version | quote }}
+    - name: ST2_INSTALL_OPENSTACK_PACK_REPO_URL
+      value: {{ default "" .Values.stackstorm.bootstrap.packs.openstack.source.repoUrl | quote }}
     - name: ST2_CONFIG_FILE
       value: /tmp/st2/st2.conf
     - name: ST2_STREAM_URL
@@ -455,7 +467,7 @@ storageClassName: {{ $root.Values.persistence.storageClassName | quote }}
   "timersengine" false
   "sensorcontainer" false
   "register" false
-  "stream" false
+  "stream" true
   "web" false
   "client" true
 -}}

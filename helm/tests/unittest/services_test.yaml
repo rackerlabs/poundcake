@@ -5,7 +5,7 @@ tests:
   - it: renders required default services only
     asserts:
       - hasDocuments:
-          count: 8
+          count: 9
       - equal:
           path: metadata.name
           value: poundcake-api
@@ -14,6 +14,10 @@ tests:
           path: metadata.name
           value: poundcake-ui
         documentIndex: 5
+      - equal:
+          path: metadata.name
+          value: stackstorm-stream
+        documentIndex: 8
       - equal:
           path: metadata.name
           value: stackstorm-auth
@@ -56,7 +60,6 @@ tests:
 
   - it: renders stackstorm-web service on expected target port
     set:
-      stackstormServices.stream.enabled: true
       stackstormServices.web.enabled: true
     asserts:
       - equal:
@@ -74,7 +77,6 @@ tests:
       services.stackstormApi.port: 19101
       services.stackstormAuth.type: LoadBalancer
       services.stackstormAuth.port: 19100
-      stackstormServices.stream.enabled: true
       stackstormServices.web.enabled: true
       services.stackstormStream.type: NodePort
       services.stackstormStream.port: 19102

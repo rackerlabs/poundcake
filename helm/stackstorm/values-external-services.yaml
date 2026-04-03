@@ -73,7 +73,7 @@ st2notifier:
 
 # Optional services (disabled by default)
 st2stream:
-  enabled: false
+  enabled: true
   podLabels:
     stackstorm.io/log-group: stackstorm
     stackstorm.io/log-role: worker

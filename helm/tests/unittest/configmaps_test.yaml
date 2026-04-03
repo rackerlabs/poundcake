@@ -45,15 +45,23 @@ tests:
         documentIndex: 1
       - matchRegex:
           path: data["install-third-party-packs.sh"]
-          pattern: "git clone --depth 1"
+          pattern: "st2 pack install"
         documentIndex: 1
       - matchRegex:
           path: data["install-third-party-packs.sh"]
-          pattern: "python3 -m venv --system-site-packages"
+          pattern: "git clone --depth 1"
         documentIndex: 1
       - matchRegex:
           path: data["automated-setup.sh"]
           pattern: "stackstorm.bootstrap.packs.<pack>.enabled"
+        documentIndex: 1
+      - matchRegex:
+          path: data["automated-setup.sh"]
+          pattern: "st2 key set kubernetes\\.host"
+        documentIndex: 1
+      - matchRegex:
+          path: data["automated-setup.sh"]
+          pattern: "KUBERNETES_SERVICEACCOUNT_TOKEN_PATH"
         documentIndex: 1
       - matchRegex:
           path: data["automated-setup.sh"]

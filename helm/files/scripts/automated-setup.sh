@@ -11,7 +11,36 @@ echo "========================================="
 echo "  PoundCake StackStorm Setup"
 echo "========================================="
 
-mkdir -p /app/config
+APP_CONFIG_DIR="${APP_CONFIG_DIR:-/app/config}"
+THIRD_PARTY_INSTALLER_SCRIPT="${THIRD_PARTY_INSTALLER_SCRIPT:-/install-third-party-packs.sh}"
+
+mkdir -p "${APP_CONFIG_DIR}"
+
+seed_kubernetes_pack_datastore() {
+    if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" != "true" ]; then
+        return 0
+    fi
+    if [ "${ST2_KUBERNETES_RUNTIME_SEED_DATASTORE:-true}" != "true" ]; then
+        echo "Skipping Kubernetes datastore seeding (disabled)."
+        return 0
+    fi
+
+    SA_TOKEN_PATH="${KUBERNETES_SERVICEACCOUNT_TOKEN_PATH:-/var/run/secrets/kubernetes.io/serviceaccount/token}"
+    if [ ! -s "${SA_TOKEN_PATH}" ]; then
+        echo "[ERROR] Kubernetes service account token not found at ${SA_TOKEN_PATH}"
+        exit 1
+    fi
+
+    KUBERNETES_BEARER_TOKEN="$(cat "${SA_TOKEN_PATH}")"
+    KUBERNETES_RUNTIME_HOST="${ST2_KUBERNETES_RUNTIME_HOST:-https://cluster.local}"
+    KUBERNETES_RUNTIME_VERIFY_SSL="${ST2_KUBERNETES_RUNTIME_VERIFY_SSL:-false}"
+
+    echo "Seeding StackStorm datastore keys for kubernetes pack..."
+    st2 key set kubernetes.host "${KUBERNETES_RUNTIME_HOST}"
+    st2 key set kubernetes.bearer_token "${KUBERNETES_BEARER_TOKEN}"
+    st2 key set kubernetes.verify_ssl "${KUBERNETES_RUNTIME_VERIFY_SSL}"
+    echo "[OK] Kubernetes pack datastore seeding completed."
+}
 
 # 1. Wait for StackStorm API to be ready
 MAX_RETRIES=30
@@ -90,8 +119,8 @@ create_api_key() {
 
 # 3. Idempotent API Key Creation
 # Check if key exists AND is still valid in the DB
-if [ -f "/app/config/st2_api_key" ] && [ -s "/app/config/st2_api_key" ]; then
-    OLD_KEY=$(cat /app/config/st2_api_key)
+if [ -f "${APP_CONFIG_DIR}/st2_api_key" ] && [ -s "${APP_CONFIG_DIR}/st2_api_key" ]; then
+    OLD_KEY=$(cat "${APP_CONFIG_DIR}/st2_api_key")
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -k -H "St2-Api-Key: $OLD_KEY" http://stackstorm-api:9101/v1/actions || echo "000")
     if [ "$HTTP_CODE" = "200" ]; then
         echo "[OK] Existing API Key is valid. Skipping creation."
@@ -101,13 +130,13 @@ if [ -f "/app/config/st2_api_key" ] && [ -s "/app/config/st2_api_key" ]; then
         KEY_COUNT=0
         while [ $KEY_COUNT -lt $KEY_RETRIES ]; do
             if NEW_KEY=$(create_api_key); then
-                echo "$NEW_KEY" > /app/config/st2_api_key
+                echo "$NEW_KEY" > "${APP_CONFIG_DIR}/st2_api_key"
                 break
             fi
             KEY_COUNT=$((KEY_COUNT + 1))
             sleep 4
         done
-        if [ ! -s "/app/config/st2_api_key" ]; then
+        if [ ! -s "${APP_CONFIG_DIR}/st2_api_key" ]; then
             echo "[ERROR] Failed to generate API key."
             exit 1
         fi
@@ -118,13 +147,13 @@ else
     KEY_COUNT=0
     while [ $KEY_COUNT -lt $KEY_RETRIES ]; do
         if NEW_KEY=$(create_api_key); then
-            echo "$NEW_KEY" > /app/config/st2_api_key
+            echo "$NEW_KEY" > "${APP_CONFIG_DIR}/st2_api_key"
             break
         fi
         KEY_COUNT=$((KEY_COUNT + 1))
         sleep 4
     done
-    if [ ! -s "/app/config/st2_api_key" ]; then
+    if [ ! -s "${APP_CONFIG_DIR}/st2_api_key" ]; then
         echo "[ERROR] Failed to generate API key."
         exit 1
     fi
@@ -137,9 +166,10 @@ st2-register-content --register-all --config-file /tmp/st2/st2.conf
 # 5. Install enabled third-party packs after the API is up, authenticated, and initial content exists.
 if [ "${ST2_INSTALL_KUBERNETES_PACK:-false}" = "true" ] || [ "${ST2_INSTALL_OPENSTACK_PACK:-false}" = "true" ]; then
     echo "Installing enabled third-party packs..."
-    /bin/bash /install-third-party-packs.sh
+    /bin/bash "${THIRD_PARTY_INSTALLER_SCRIPT}"
     echo "Registering content after third-party pack installation..."
     st2-register-content --register-all --register-setup-virtualenvs --config-file /tmp/st2/st2.conf
+    seed_kubernetes_pack_datastore
 fi
 
 echo ""
