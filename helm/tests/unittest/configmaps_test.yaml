@@ -65,6 +65,14 @@ tests:
         documentIndex: 1
       - matchRegex:
           path: data["automated-setup.sh"]
+          pattern: "Waiting for StackStorm pack-management actions to be registered"
+        documentIndex: 1
+      - matchRegex:
+          path: data["automated-setup.sh"]
+          pattern: "st2 action get packs\\.install"
+        documentIndex: 1
+      - matchRegex:
+          path: data["automated-setup.sh"]
           pattern: "docker compose -f docker/docker-compose.yml exec st2client st2 pack install <pack-name>"
         documentIndex: 1
       - isNotNull:
