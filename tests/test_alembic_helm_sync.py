@@ -39,9 +39,9 @@ def test_poundcake_repo_no_longer_contains_in_repo_bakery_runtime() -> None:
     assert unexpected_files == []
 
 
-def test_helm_chart_version_reset_to_0_1_0() -> None:
+def test_helm_chart_versions_match_current_release_metadata() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     chart = (repo_root / "helm/Chart.yaml").read_text(encoding="utf-8")
 
-    assert "version: 0.1.0" in chart
-    assert 'appVersion: "0.1.0"' in chart
+    assert "version: 0.2.82" in chart
+    assert 'appVersion: "2.0.183"' in chart
