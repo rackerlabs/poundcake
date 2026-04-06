@@ -200,9 +200,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
     - |
       set -euo pipefail
       mkdir -p /mnt/stackstorm-shared/packs /mnt/stackstorm-shared/virtualenvs
-      cp -an /opt/stackstorm/packs/. /mnt/stackstorm-shared/packs/
+      cp -Rn /opt/stackstorm/packs/. /mnt/stackstorm-shared/packs/
       if [ -d /opt/stackstorm/virtualenvs ]; then
-        cp -an /opt/stackstorm/virtualenvs/. /mnt/stackstorm-shared/virtualenvs/ || true
+        cp -Rn /opt/stackstorm/virtualenvs/. /mnt/stackstorm-shared/virtualenvs/ || true
       fi
   volumeMounts:
     - name: stackstorm-packs
