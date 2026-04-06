@@ -164,6 +164,29 @@
               "default": ""
             }
           }
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "collectionRbac": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean", "default": true },
+                "namespaces": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "default": []
+                }
+              }
+            },
+            "monitor": {
+              "type": "object",
+              "properties": {
+                "namespace": { "type": "string", "default": "" }
+              }
+            }
+          }
         }
       }
     },

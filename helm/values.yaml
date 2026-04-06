@@ -880,6 +880,11 @@ bakery:
     # Remote Bakery is the only supported mode in PoundCake after the repo split.
     enforceRemoteBaseUrl: true
     baseUrl: ""
+    collectionRbac:
+      enabled: true
+      # Extra namespaces the cluster_inventory collector may inspect.
+      # The monitor namespace (or the release namespace when unset) is always included.
+      namespaces: []
     monitor:
       id: ""
       environmentLabel: ""

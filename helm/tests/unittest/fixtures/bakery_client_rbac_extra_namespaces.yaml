@@ -1,0 +1,13 @@
+poundcake:
+  enabled: true
+
+bakery:
+  client:
+    enabled: true
+    baseUrl: https://bakery.example.com
+    monitor:
+      namespace: rackspace
+    collectionRbac:
+      namespaces:
+        - rackspace
+        - observability

@@ -1,0 +1,82 @@
+suite: bakery-client-rbac
+templates:
+  - templates/bakery-client-rbac.yaml
+tests:
+  - it: renders read-only collector rbac in the monitor namespace when bakery client is enabled
+    set:
+      poundcake.enabled: true
+      bakery.client.enabled: true
+      bakery.client.baseUrl: https://bakery.example.com
+      bakery.client.monitor.namespace: rackspace
+      serviceAccount.create: true
+      serviceAccount.name: ""
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: kind
+          value: Role
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-poundcake-bakery-collectors
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: rackspace
+        documentIndex: 0
+      - equal:
+          path: rules[0].resources[0]
+          value: pods
+        documentIndex: 0
+      - equal:
+          path: rules[1].resources[1]
+          value: statefulsets
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: RoleBinding
+        documentIndex: 1
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-poundcake
+        documentIndex: 1
+      - equal:
+          path: subjects[0].namespace
+          value: NAMESPACE
+        documentIndex: 1
+
+  - it: includes extra namespaces once each
+    values:
+      - fixtures/bakery_client_rbac_extra_namespaces.yaml
+    release:
+      namespace: rackspace
+    asserts:
+      - hasDocuments:
+          count: 4
+      - equal:
+          path: metadata.namespace
+          value: rackspace
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: rackspace
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: observability
+        documentIndex: 2
+      - equal:
+          path: metadata.namespace
+          value: observability
+        documentIndex: 3
+
+  - it: does not render collector rbac when disabled
+    set:
+      poundcake.enabled: true
+      bakery.client.enabled: true
+      bakery.client.baseUrl: https://bakery.example.com
+      bakery.client.collectionRbac.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
