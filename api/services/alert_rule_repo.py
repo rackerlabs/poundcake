@@ -295,9 +295,10 @@ def upsert_rule_in_document(
         group = _ensure_group_entry(groups, group_name)
         rules = group.setdefault("rules", [])
         for idx, existing in enumerate(list(rules)):
-            if isinstance(existing, dict) and str(
-                existing.get("alert") or existing.get("record") or ""
-            ).strip() == rule_name:
+            if (
+                isinstance(existing, dict)
+                and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
+            ):
                 rules[idx] = payload
                 break
         else:
@@ -317,9 +318,10 @@ def upsert_rule_in_document(
             rules = []
             document["rules"] = rules
         for idx, existing in enumerate(list(rules)):
-            if isinstance(existing, dict) and str(
-                existing.get("alert") or existing.get("record") or ""
-            ).strip() == rule_name:
+            if (
+                isinstance(existing, dict)
+                and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
+            ):
                 rules[idx] = payload
                 break
         else:
@@ -358,9 +360,10 @@ def upsert_rule_in_document(
     group = _ensure_group_entry(groups, group_name)
     rules = group.setdefault("rules", [])
     for idx, existing in enumerate(list(rules)):
-        if isinstance(existing, dict) and str(
-            existing.get("alert") or existing.get("record") or ""
-        ).strip() == rule_name:
+        if (
+            isinstance(existing, dict)
+            and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
+        ):
             rules[idx] = payload
             break
     else:
@@ -389,9 +392,11 @@ def delete_rule_from_document(
             if not isinstance(rules, list):
                 return document, False
             for idx, existing in enumerate(list(rules)):
-                if isinstance(existing, dict) and str(
-                    existing.get("alert") or existing.get("record") or ""
-                ).strip() == rule_name:
+                if (
+                    isinstance(existing, dict)
+                    and str(existing.get("alert") or existing.get("record") or "").strip()
+                    == rule_name
+                ):
                     del rules[idx]
                     deleted = True
                     break
@@ -410,9 +415,10 @@ def delete_rule_from_document(
         if not isinstance(rules, list):
             return document, False
         for idx, existing in enumerate(list(rules)):
-            if isinstance(existing, dict) and str(
-                existing.get("alert") or existing.get("record") or ""
-            ).strip() == rule_name:
+            if (
+                isinstance(existing, dict)
+                and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
+            ):
                 del rules[idx]
                 deleted = True
                 break
@@ -448,9 +454,10 @@ def delete_rule_from_document(
         if not isinstance(rules, list):
             return document, False
         for idx, existing in enumerate(list(rules)):
-            if isinstance(existing, dict) and str(
-                existing.get("alert") or existing.get("record") or ""
-            ).strip() == rule_name:
+            if (
+                isinstance(existing, dict)
+                and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
+            ):
                 del rules[idx]
                 deleted = True
                 break
@@ -493,7 +500,9 @@ def render_alert_rule_document(
     if source_format == ALERT_RULE_SOURCE_FORMAT_RULES:
         group_names = {group_name for group_name, _, _ in records}
         if len(group_names) != 1:
-            raise ValueError(f"top-level rules documents require a single group for '{relative_path}'")
+            raise ValueError(
+                f"top-level rules documents require a single group for '{relative_path}'"
+            )
         group_name = next(iter(group_names))
         return {
             "name": group_name,

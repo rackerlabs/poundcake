@@ -60,7 +60,9 @@ def _manager(tmp_path: Path) -> PrometheusRuleManager:
     return manager
 
 
-def _write_wrapped_rule_file(path: Path, *, wrapper_key: str, group_name: str, rules: list[dict]) -> None:
+def _write_wrapped_rule_file(
+    path: Path, *, wrapper_key: str, group_name: str, rules: list[dict]
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         yaml.safe_dump(
@@ -102,7 +104,9 @@ async def test_update_rule_updates_existing_wrapped_repo_file_in_place(tmp_path:
     assert result["status"] == "success"
     assert manager.git_manager.last_changes is not None
     assert list(manager.git_manager.last_changes) == ["alerts/kubernetes/kube-api-down.yaml"]
-    payload = yaml.safe_load(manager.git_manager.last_changes["alerts/kubernetes/kube-api-down.yaml"])
+    payload = yaml.safe_load(
+        manager.git_manager.last_changes["alerts/kubernetes/kube-api-down.yaml"]
+    )
     assert list(payload["additionalPrometheusRulesMap"]) == ["kube-api-down"]
     assert (
         payload["additionalPrometheusRulesMap"]["kube-api-down"]["groups"][0]["rules"][0]["expr"]
@@ -130,7 +134,9 @@ async def test_create_rule_appends_to_existing_wrapped_repo_file(tmp_path: Path)
     assert result["status"] == "success"
     assert manager.git_manager.last_changes is not None
     assert list(manager.git_manager.last_changes) == ["alerts/kubernetes/kube-api-down.yaml"]
-    payload = yaml.safe_load(manager.git_manager.last_changes["alerts/kubernetes/kube-api-down.yaml"])
+    payload = yaml.safe_load(
+        manager.git_manager.last_changes["alerts/kubernetes/kube-api-down.yaml"]
+    )
     alerts = payload["additionalPrometheusRulesMap"]["kube-api-down"]["groups"][0]["rules"]
     assert [rule["alert"] for rule in alerts] == [
         "kube-api-down-warning",

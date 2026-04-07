@@ -13,7 +13,7 @@ def test_alert_rule_editor_uses_repo_relative_path_language() -> None:
 
 def test_alert_rule_editor_treats_identity_changes_as_create_new() -> None:
     content = APP_TSX.read_text(encoding="utf-8")
-    assert "const editingRuleSource = editingRule?.file || editingRule?.crd || \"\";" in content
+    assert 'const editingRuleSource = editingRule?.file || editingRule?.crd || "";' in content
     assert "const createInsteadOfUpdate =" in content
     assert "values.name !== editingRule.name" in content
     assert "values.group !== editingRule.group" in content
