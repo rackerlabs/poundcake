@@ -65,7 +65,12 @@ def _node(
 
 class _FakeCoreV1:
     def list_node(self):
-        return SimpleNamespace(items=[_node("worker-1", ready=True, zone="ord-a"), _node("worker-2", ready=False, zone="ord-b", unschedulable=True)])
+        return SimpleNamespace(
+            items=[
+                _node("worker-1", ready=True, zone="ord-a"),
+                _node("worker-2", ready=False, zone="ord-b", unschedulable=True),
+            ]
+        )
 
     def list_persistent_volume(self):
         return SimpleNamespace(
@@ -92,7 +97,9 @@ class _FakeCoreV1:
         return SimpleNamespace(
             items=[
                 SimpleNamespace(
-                    metadata=SimpleNamespace(name="data-api-0", namespace=namespace, labels={}, annotations={}),
+                    metadata=SimpleNamespace(
+                        name="data-api-0", namespace=namespace, labels={}, annotations={}
+                    ),
                     spec=SimpleNamespace(
                         storage_class_name="fast",
                         resources=SimpleNamespace(requests={"storage": "100Gi"}),
