@@ -12,39 +12,63 @@ tests:
       serviceAccount.name: ""
     asserts:
       - hasDocuments:
-          count: 2
+          count: 4
       - equal:
           path: kind
-          value: Role
+          value: ClusterRole
         documentIndex: 0
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-poundcake-bakery-collectors
-        documentIndex: 0
-      - equal:
-          path: metadata.namespace
-          value: rackspace
+          value: RELEASE-NAME-poundcake-bakery-collectors-cluster
         documentIndex: 0
       - equal:
           path: rules[0].resources[0]
-          value: pods
-        documentIndex: 0
-      - equal:
-          path: rules[1].resources[1]
-          value: statefulsets
+          value: nodes
         documentIndex: 0
       - equal:
           path: kind
-          value: RoleBinding
-        documentIndex: 1
-      - equal:
-          path: subjects[0].name
-          value: RELEASE-NAME-poundcake
+          value: ClusterRoleBinding
         documentIndex: 1
       - equal:
           path: subjects[0].namespace
           value: NAMESPACE
         documentIndex: 1
+      - equal:
+          path: kind
+          value: Role
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-poundcake-bakery-collectors
+        documentIndex: 2
+      - equal:
+          path: metadata.namespace
+          value: rackspace
+        documentIndex: 2
+      - equal:
+          path: rules[0].resources[0]
+          value: pods
+        documentIndex: 2
+      - equal:
+          path: rules[0].resources[2]
+          value: persistentvolumeclaims
+        documentIndex: 2
+      - equal:
+          path: rules[1].resources[1]
+          value: statefulsets
+        documentIndex: 2
+      - equal:
+          path: kind
+          value: RoleBinding
+        documentIndex: 3
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-poundcake
+        documentIndex: 3
+      - equal:
+          path: subjects[0].namespace
+          value: NAMESPACE
+        documentIndex: 3
 
   - it: includes extra namespaces once each
     values:
@@ -53,23 +77,31 @@ tests:
       namespace: rackspace
     asserts:
       - hasDocuments:
-          count: 4
+          count: 6
       - equal:
-          path: metadata.namespace
-          value: rackspace
+          path: kind
+          value: ClusterRole
         documentIndex: 0
       - equal:
-          path: metadata.namespace
-          value: rackspace
+          path: kind
+          value: ClusterRoleBinding
         documentIndex: 1
       - equal:
           path: metadata.namespace
-          value: observability
+          value: rackspace
         documentIndex: 2
       - equal:
           path: metadata.namespace
-          value: observability
+          value: rackspace
         documentIndex: 3
+      - equal:
+          path: metadata.namespace
+          value: observability
+        documentIndex: 4
+      - equal:
+          path: metadata.namespace
+          value: observability
+        documentIndex: 5
 
   - it: does not render collector rbac when disabled
     set:
