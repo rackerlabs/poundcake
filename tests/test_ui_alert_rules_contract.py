@@ -62,13 +62,10 @@ def test_alert_rule_page_recovers_from_gateway_timeout_imports() -> None:
 def test_alert_rule_page_hides_unreliable_runtime_state_in_crd_mode() -> None:
     content = APP_TSX.read_text(encoding="utf-8")
     assert "const showRuntimeStatus = !settings.prometheus_use_crds;" in content
-    assert (
-        'className={`status-grid ${showRuntimeStatus ? "" : "status-grid-single"}`.trim()}'
-        in content
-    )
-    assert 'title="Rules loaded"' in content
-    assert "{showRuntimeStatus ? <th>Status</th> : null}" in content
     assert "{showRuntimeStatus ? (" in content
+    assert 'className="status-grid"' in content
+    assert 'title="Rules loaded"' not in content
+    assert "{showRuntimeStatus ? <th>Status</th> : null}" in content
     assert "CRD-backed rules do not expose live runtime state on this page." not in content
 
 

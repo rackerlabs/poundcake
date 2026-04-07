@@ -1820,24 +1820,19 @@ function AlertRulesPage() {
           <p>The import request timed out at the gateway, but PoundCake is polling the alert inventory and will update this page automatically.</p>
         </div>
       ) : null}
-      <div className={`status-grid ${showRuntimeStatus ? "" : "status-grid-single"}`.trim()}>
-        <MetricCard title="Rules loaded" value={String(totalRuleCount)} tone="active">
-          Alert-rule definitions currently visible in PoundCake.
-        </MetricCard>
-        {showRuntimeStatus ? (
-          <>
-            <MetricCard title="Firing now" value={String(firingRuleCount)} tone={firingRuleCount ? "failed" : "healthy"}>
-              Runtime state reported by Prometheus when available.
-            </MetricCard>
-            <MetricCard title="Pending" value={String(pendingRuleCount)} tone={pendingRuleCount ? "warning" : "healthy"}>
-              Rules waiting for their configured `for` duration.
-            </MetricCard>
-            <MetricCard title="Unknown state" value={String(unknownRuleCount)} tone={unknownRuleCount ? "warning" : "healthy"}>
-              Rules without live state are counted here.
-            </MetricCard>
-          </>
-        ) : null}
-      </div>
+      {showRuntimeStatus ? (
+        <div className="status-grid">
+          <MetricCard title="Firing now" value={String(firingRuleCount)} tone={firingRuleCount ? "failed" : "healthy"}>
+            Runtime state reported by Prometheus when available.
+          </MetricCard>
+          <MetricCard title="Pending" value={String(pendingRuleCount)} tone={pendingRuleCount ? "warning" : "healthy"}>
+            Rules waiting for their configured `for` duration.
+          </MetricCard>
+          <MetricCard title="Unknown state" value={String(unknownRuleCount)} tone={unknownRuleCount ? "warning" : "healthy"}>
+            Rules without live state are counted here.
+          </MetricCard>
+        </div>
+      ) : null}
       <Panel
         title="Alert inventory"
         subtitle={`Source: ${rulesQuery.data.source}. ${totalRuleCount} rules loaded. Select a rule to edit or remove it.`}

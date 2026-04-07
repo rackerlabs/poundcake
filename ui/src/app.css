@@ -394,10 +394,6 @@ pre {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.status-grid.status-grid-single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .metric-card {
   padding: 18px;
 }
