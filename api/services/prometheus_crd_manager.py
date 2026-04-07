@@ -6,6 +6,7 @@
 #
 """Prometheus Operator CRD manager for PrometheusRule resources."""
 
+import json
 import importlib
 from typing import Any
 
@@ -18,6 +19,35 @@ from api.services.alert_rule_repo import (
 )
 
 logger = get_logger(__name__)
+
+
+def _extract_kubernetes_error_details(error: Exception) -> dict[str, Any]:
+    """Extract structured fields from Kubernetes client exceptions when available."""
+    details: dict[str, Any] = {}
+
+    status = getattr(error, "status", None)
+    if isinstance(status, int):
+        details["code"] = status
+
+    reason = getattr(error, "reason", None)
+    if isinstance(reason, str) and reason.strip():
+        details["reason"] = reason.strip()
+
+    body = getattr(error, "body", None)
+    if isinstance(body, str) and body.strip():
+        try:
+            parsed = json.loads(body)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            body_message = parsed.get("message")
+            if isinstance(body_message, str) and body_message.strip():
+                details["body_message"] = body_message.strip()
+            body_reason = parsed.get("reason")
+            if isinstance(body_reason, str) and body_reason.strip():
+                details["body_reason"] = body_reason.strip()
+
+    return details
 
 
 class PrometheusCRDManager:
@@ -322,10 +352,15 @@ class PrometheusCRDManager:
                 "action": "updated",
             }
         except Exception as e:
-            logger.error("Failed to patch PrometheusRule CRD", extra={"error": str(e)})
+            details = _extract_kubernetes_error_details(e)
+            logger.error(
+                "Failed to patch PrometheusRule CRD",
+                extra={"error": str(e), **details},
+            )
             return {
                 "status": "error",
                 "message": f"Failed to patch CRD: {e}",
+                **details,
             }
 
     async def _create_rule_crd(
@@ -397,10 +432,15 @@ class PrometheusCRDManager:
                 "action": "created",
             }
         except Exception as e:
-            logger.error("Failed to create PrometheusRule CRD", extra={"error": str(e)})
+            details = _extract_kubernetes_error_details(e)
+            logger.error(
+                "Failed to create PrometheusRule CRD",
+                extra={"error": str(e), **details},
+            )
             return {
                 "status": "error",
                 "message": f"Failed to create CRD: {e}",
+                **details,
             }
 
     async def delete_rule(

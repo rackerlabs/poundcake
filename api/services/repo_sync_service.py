@@ -145,6 +145,48 @@ def _yaml_text(payload: dict[str, Any]) -> str:
     return yaml.safe_dump(payload, sort_keys=False)
 
 
+def _is_skippable_invalid_alert_rule_result(result: dict[str, Any]) -> bool:
+    """Return True when a CRD write failure is an invalid-rule validation error."""
+    code = result.get("code")
+    if isinstance(code, int) and code == 422:
+        return True
+
+    reason = str(result.get("reason") or result.get("body_reason") or "").strip().lower()
+    if reason == "invalid":
+        return True
+
+    message = " ".join(
+        str(part or "").strip()
+        for part in (
+            result.get("message"),
+            result.get("body_message"),
+        )
+    ).lower()
+    return (
+        "prometheusrulevalidate.monitoring.coreos.com" in message
+        or "rules are not valid" in message
+    )
+
+
+def _format_invalid_alert_rule_summary(
+    *,
+    rule_name: str,
+    relative_path: str,
+    result: dict[str, Any],
+) -> str:
+    """Build a short user-facing summary for a skipped invalid rule."""
+    raw_reason = str(
+        result.get("body_message")
+        or result.get("message")
+        or result.get("reason")
+        or "PrometheusRule validation failed"
+    ).strip()
+    compact_reason = re.sub(r"\s+", " ", raw_reason)
+    if len(compact_reason) > 220:
+        compact_reason = f"{compact_reason[:217].rstrip()}..."
+    return f"{rule_name} in {relative_path}: {compact_reason}"
+
+
 def _action_identity(
     *,
     task_key_template: str,
@@ -882,6 +924,9 @@ class RepoSyncService:
         imported = 0
         files_with_groups = 0
         files_skipped = 0
+        invalid_rules = 0
+        invalid_rule_files: set[str] = set()
+        invalid_rule_examples: list[str] = []
 
         for path in files:
             relative_path = path.relative_to(base_dir).as_posix()
@@ -940,22 +985,47 @@ class RepoSyncService:
                         source_metadata=source,
                     )
                     if result.get("status") == "error":
+                        if _is_skippable_invalid_alert_rule_result(result):
+                            invalid_rules += 1
+                            invalid_rule_files.add(relative_path)
+                            if len(invalid_rule_examples) < 3:
+                                invalid_rule_examples.append(
+                                    _format_invalid_alert_rule_summary(
+                                        rule_name=rule_name,
+                                        relative_path=relative_path,
+                                        result=result,
+                                    )
+                                )
+                            continue
                         raise RepoSyncError(
                             str(result.get("message") or "Alert-rule import failed")
                         )
                     imported += 1
 
-        if files and imported == 0:
+        if files and imported == 0 and invalid_rules == 0:
             raise RepoSyncError(
                 "Scanned alert-rule files in Git but found no importable rules. "
                 "Supported formats are groups, rules, spec.groups, and additionalPrometheusRulesMap."
             )
 
-        message = f"Imported {imported} alert rules from Git."
-        if files_skipped:
-            message = (
-                f"{message} Skipped {files_skipped} files without supported alert-rule groups."
+        message_parts = [f"Imported {imported} alert rules from Git."]
+        if invalid_rules:
+            message_parts.append(
+                "Skipped "
+                f"{invalid_rules} invalid rule{'s' if invalid_rules != 1 else ''} "
+                f"across {len(invalid_rule_files)} file{'s' if len(invalid_rule_files) != 1 else ''}."
             )
+            if invalid_rule_examples:
+                remaining = invalid_rules - len(invalid_rule_examples)
+                examples = "; ".join(invalid_rule_examples)
+                if remaining > 0:
+                    examples = f"{examples}; and {remaining} more."
+                message_parts.append(f"Examples: {examples}")
+        if files_skipped:
+            message_parts.append(
+                f"Skipped {files_skipped} files without supported alert-rule groups."
+            )
+        message = " ".join(message_parts)
 
         return {
             "status": "success",
@@ -965,6 +1035,8 @@ class RepoSyncService:
                 "files_scanned": len(files),
                 "files_with_groups": files_with_groups,
                 "files_skipped": files_skipped,
+                "invalid_rules": invalid_rules,
+                "files_with_invalid_rules": len(invalid_rule_files),
             },
         }
 

@@ -500,6 +500,146 @@ async def test_import_alert_rules_rejects_unsupported_files(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_import_alert_rules_skips_invalid_crd_rules_and_reports_summary(
+    tmp_path: Path,
+) -> None:
+    alerts_dir = tmp_path / "alerts" / "kubernetes"
+    alerts_dir.mkdir(parents=True)
+    (alerts_dir / "kube-container-waiting.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "additionalPrometheusRulesMap": {
+                    "kube-container-waiting": {
+                        "groups": [
+                            {
+                                "name": "kube-container-waiting",
+                                "rules": [
+                                    {
+                                        "alert": "kube-container-waiting-warning",
+                                        "expr": 'k8s.container.status.reason{job="otel"} > 0',
+                                    },
+                                    {
+                                        "alert": "kube-container-waiting-critical",
+                                        "expr": "up == 0",
+                                    },
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    async def create_or_update_rule(
+        rule_name: str,
+        _group_name: str,
+        _crd_name: str,
+        _rule_data: dict[str, object],
+        *,
+        source_metadata: object | None = None,
+    ) -> dict[str, object]:
+        assert source_metadata is not None
+        if rule_name == "kube-container-waiting-warning":
+            return {
+                "status": "error",
+                "message": "Failed to create CRD: validation rejected the rule",
+                "code": 422,
+                "body_message": (
+                    'admission webhook "prometheusrulevalidate.monitoring.coreos.com" '
+                    "denied the request: Rules are not valid"
+                ),
+                "body_reason": "Invalid",
+            }
+        return {"status": "success"}
+
+    service = RepoSyncService()
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_rules_path="alerts",
+        prometheus_use_crds=True,
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+    service.crd_manager = SimpleNamespace(
+        create_or_update_rule=AsyncMock(side_effect=create_or_update_rule)
+    )
+
+    result = await service.import_alert_rules()
+
+    assert result["status"] == "success"
+    assert result["imported"]["alert_rules"] == 1
+    assert result["imported"]["invalid_rules"] == 1
+    assert result["imported"]["files_with_invalid_rules"] == 1
+    assert "Skipped 1 invalid rule across 1 file." in result["message"]
+    assert (
+        "kube-container-waiting-warning in kubernetes/kube-container-waiting.yaml"
+        in result["message"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_import_alert_rules_succeeds_when_all_supported_rules_are_invalid(
+    tmp_path: Path,
+) -> None:
+    alerts_dir = tmp_path / "alerts"
+    alerts_dir.mkdir(parents=True)
+    (alerts_dir / "kube-container-waiting.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "additionalPrometheusRulesMap": {
+                    "kube-container-waiting": {
+                        "groups": [
+                            {
+                                "name": "kube-container-waiting",
+                                "rules": [
+                                    {
+                                        "alert": "kube-container-waiting-warning",
+                                        "expr": 'k8s.container.status.reason{job="otel"} > 0',
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    service = RepoSyncService()
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_rules_path="alerts",
+        prometheus_use_crds=True,
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+    service.crd_manager = SimpleNamespace(
+        create_or_update_rule=AsyncMock(
+            return_value={
+                "status": "error",
+                "message": "Failed to create CRD: invalid rule",
+                "code": 422,
+                "body_message": "Rules are not valid",
+                "body_reason": "Invalid",
+            }
+        )
+    )
+
+    result = await service.import_alert_rules()
+
+    assert result["status"] == "success"
+    assert result["imported"]["alert_rules"] == 0
+    assert result["imported"]["invalid_rules"] == 1
+    assert result["imported"]["files_with_invalid_rules"] == 1
+    assert result["message"].startswith("Imported 0 alert rules from Git.")
+
+
+@pytest.mark.asyncio
 async def test_export_alert_rules_preserves_wrapped_repo_paths_and_deletes_obsolete_files(
     tmp_path: Path,
 ) -> None:

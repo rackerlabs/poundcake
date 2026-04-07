@@ -1595,6 +1595,11 @@ function AlertRulesPage() {
     queryFn: () => apiGet("/api/v1/prometheus/rules", prometheusRuleListResponseSchema),
   });
 
+  const refreshRules = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+    await queryClient.refetchQueries({ queryKey: ["prometheus-rules"], exact: true, type: "active" });
+  };
+
   const form = useForm<z.infer<typeof ruleSchema>>({
     resolver: zodResolver(ruleSchema),
     defaultValues: {
@@ -1662,7 +1667,7 @@ function AlertRulesPage() {
       notify("success", created ? "Alert rule created." : "Alert rule updated.");
       setEditingRule(null);
       form.reset();
-      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+      await refreshRules();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -1677,7 +1682,7 @@ function AlertRulesPage() {
       notify("success", "Alert rule deleted.");
       setEditingRule(null);
       form.reset();
-      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+      await refreshRules();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -1694,7 +1699,7 @@ function AlertRulesPage() {
       notify("success", formatRepoSyncMessage(result));
       setEditingRule(null);
       form.reset();
-      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+      await refreshRules();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -1705,7 +1710,7 @@ function AlertRulesPage() {
       notify("success", formatRepoSyncMessage(result));
       setEditingRule(null);
       form.reset();
-      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
+      await refreshRules();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
