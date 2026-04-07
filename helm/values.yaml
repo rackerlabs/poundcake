@@ -143,6 +143,9 @@ gateway:
       hostname: api.poundcake.local
       port: 80
       protocol: HTTP
+      # Increase request timeout for long-running repo sync operations such as bulk imports.
+      requestTimeout: "300s"
+      backendRequestTimeout: "300s"
       tls:
         mode: Terminate
         secretName: ""

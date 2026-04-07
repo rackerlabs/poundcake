@@ -30,3 +30,30 @@ def test_alert_rule_page_forces_refetch_after_repo_sync_mutations() -> None:
         in content
     )
     assert "await refreshRules();" in content
+
+
+def test_alert_rule_page_recovers_from_gateway_timeout_imports() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert "function isGatewayTimeoutError(error: unknown): boolean {" in content
+    assert (
+        "Import request timed out at the gateway. Refreshing alert inventory in the background."
+        in content
+    )
+    assert (
+        "const recoverRulesAfterGatewayTimeout = async (baselineRuleCount: number) => {" in content
+    )
+    assert (
+        'notify("success", `Alert inventory refreshed. ${refreshedRules} rules loaded.`);'
+        in content
+    )
+
+
+def test_alert_rule_page_shows_rule_inventory_counts() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert 'title="Rules loaded"' in content
+    assert 'title="Firing now"' in content
+    assert 'title="Pending"' in content
+    assert 'title="Unknown state"' in content
+    assert (
+        "subtitle={`Source: ${rulesQuery.data.source}. ${totalRuleCount} rules loaded." in content
+    )

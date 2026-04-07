@@ -38,6 +38,14 @@ tests:
           value: 8000
         documentIndex: 0
       - equal:
+          path: spec.rules[0].timeouts.request
+          value: 300s
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].timeouts.backendRequest
+          value: 300s
+        documentIndex: 0
+      - equal:
           path: kind
           value: HTTPRoute
         documentIndex: 1
@@ -69,6 +77,8 @@ tests:
       gateway.listeners.api.hostname: api.example.com
       gateway.listeners.api.port: 8088
       gateway.listeners.api.pathPrefix: /api
+      gateway.listeners.api.requestTimeout: 480s
+      gateway.listeners.api.backendRequestTimeout: 450s
       gateway.listeners.ui.hostname: ui.example.com
       gateway.listeners.ui.pathPrefix: /
       services.api.port: 9000
@@ -101,6 +111,14 @@ tests:
       - equal:
           path: spec.rules[0].backendRefs[0].port
           value: 9000
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].timeouts.request
+          value: 480s
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].timeouts.backendRequest
+          value: 450s
         documentIndex: 0
       - equal:
           path: spec.parentRefs[0].name

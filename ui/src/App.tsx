@@ -6,6 +6,7 @@ import {
   useDeferredValue,
   useEffect,
   useId,
+  useRef,
   useState,
   startTransition,
 } from "react";
@@ -65,6 +66,7 @@ import type {
   ObservabilityOverviewResponse,
   OrderResponse,
   PrometheusRule,
+  PrometheusRuleListResponse,
   RepoSyncResponse,
   RecipeRecord,
   StatsResponse,
@@ -1587,6 +1589,8 @@ function AlertRulesPage() {
   const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingRule, setEditingRule] = useState<PrometheusRule | null>(null);
+  const [importRecoveryPending, setImportRecoveryPending] = useState(false);
+  const importRecoveryTokenRef = useRef(0);
   const canEdit = canManageAlertRules(principal);
   const canClear = canManageRepoSyncClear(principal);
 
@@ -1598,6 +1602,36 @@ function AlertRulesPage() {
   const refreshRules = async () => {
     await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
     await queryClient.refetchQueries({ queryKey: ["prometheus-rules"], exact: true, type: "active" });
+  };
+
+  const recoverRulesAfterGatewayTimeout = async (baselineRuleCount: number) => {
+    const token = importRecoveryTokenRef.current + 1;
+    importRecoveryTokenRef.current = token;
+    setImportRecoveryPending(true);
+    try {
+      const retryDelays = [3000, 8000, 15000];
+      for (const [attemptIndex, delayMs] of retryDelays.entries()) {
+        await wait(delayMs);
+        if (importRecoveryTokenRef.current !== token) {
+          return;
+        }
+        try {
+          await refreshRules();
+          const refreshedRules =
+            queryClient.getQueryData<PrometheusRuleListResponse>(["prometheus-rules"])?.rules.length ?? 0;
+          if (refreshedRules !== baselineRuleCount || attemptIndex === retryDelays.length - 1) {
+            notify("success", `Alert inventory refreshed. ${refreshedRules} rules loaded.`);
+            return;
+          }
+        } catch {
+          continue;
+        }
+      }
+    } finally {
+      if (importRecoveryTokenRef.current === token) {
+        setImportRecoveryPending(false);
+      }
+    }
   };
 
   const form = useForm<z.infer<typeof ruleSchema>>({
@@ -1699,9 +1733,23 @@ function AlertRulesPage() {
       notify("success", formatRepoSyncMessage(result));
       setEditingRule(null);
       form.reset();
+      importRecoveryTokenRef.current += 1;
+      setImportRecoveryPending(false);
       await refreshRules();
     },
-    onError: (error) => notify("error", getErrorMessage(error)),
+    onError: (error) => {
+      if (isGatewayTimeoutError(error)) {
+        notify(
+          "error",
+          "Import request timed out at the gateway. Refreshing alert inventory in the background.",
+        );
+        setEditingRule(null);
+        form.reset();
+        void recoverRulesAfterGatewayTimeout(rulesQuery.data?.rules.length ?? 0);
+        return;
+      }
+      notify("error", getErrorMessage(error));
+    },
   });
 
   const clearMutation = useMutation({
@@ -1723,6 +1771,16 @@ function AlertRulesPage() {
     return <PageError message={getErrorMessage(rulesQuery.error)} />;
   }
 
+  const ruleStateCounts = rulesQuery.data.rules.reduce<Record<string, number>>((counts, rule) => {
+    const state = (rule.state || "unknown").toLowerCase();
+    counts[state] = (counts[state] || 0) + 1;
+    return counts;
+  }, {});
+  const totalRuleCount = rulesQuery.data.rules.length;
+  const firingRuleCount = ruleStateCounts.firing || 0;
+  const pendingRuleCount = ruleStateCounts.pending || 0;
+  const unknownRuleCount = ruleStateCounts.unknown || 0;
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -1733,12 +1791,34 @@ function AlertRulesPage() {
         canClear={canClear}
         canEdit={canEdit}
         canImport={settings.prometheus_use_crds}
-        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
+        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending || importRecoveryPending}
         onClear={() => clearMutation.mutate()}
         onExport={() => exportMutation.mutate()}
         onImport={() => importMutation.mutate()}
         settings={settings}
       />
+      {importRecoveryPending ? (
+        <div className="helper-card">
+          <strong>Background refresh in progress</strong>
+          <p>The import request timed out at the gateway, but PoundCake is polling the alert inventory and will update this page automatically.</p>
+        </div>
+      ) : null}
+      <div className="status-grid">
+        <MetricCard title="Rules loaded" value={String(totalRuleCount)} tone="active">
+          Alert-rule definitions currently visible in PoundCake.
+        </MetricCard>
+        <MetricCard title="Firing now" value={String(firingRuleCount)} tone={firingRuleCount ? "failed" : "healthy"}>
+          Runtime state reported by Prometheus when available.
+        </MetricCard>
+        <MetricCard title="Pending" value={String(pendingRuleCount)} tone={pendingRuleCount ? "warning" : "healthy"}>
+          Rules waiting for their configured `for` duration.
+        </MetricCard>
+        <MetricCard title="Unknown state" value={String(unknownRuleCount)} tone={unknownRuleCount ? "warning" : "healthy"}>
+          {settings.prometheus_use_crds
+            ? "CRD-backed rules do not expose live runtime state on this page."
+            : "Rules without live state are counted here."}
+        </MetricCard>
+      </div>
       <div className="editor-grid">
         <Panel title={editingRule ? `Edit ${editingRule.name}` : "Create alert rule"} subtitle="Prometheus details stay available, but the workflow is written for operators.">
           {!canEdit ? (
@@ -1832,7 +1912,10 @@ function AlertRulesPage() {
         />
       </div>
 
-      <Panel title="Alert inventory" subtitle={`Source: ${rulesQuery.data.source}. Select a rule to edit or remove it.`}>
+      <Panel
+        title="Alert inventory"
+        subtitle={`Source: ${rulesQuery.data.source}. ${totalRuleCount} rules loaded. Select a rule to edit or remove it.`}
+      >
         <div className="table-wrap">
           <table>
             <thead>
@@ -3999,6 +4082,14 @@ function getErrorMessage(error: unknown): string {
     return String((error as { message: unknown }).message);
   }
   return "Something went wrong.";
+}
+
+function isGatewayTimeoutError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 504;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function formatRepoLocation(repoUrl: string | null, branch: string | null): string {

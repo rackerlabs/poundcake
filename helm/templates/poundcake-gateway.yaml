@@ -12,6 +12,8 @@
 {{- $routeHostnames := .Values.gateway.hostnames | default list }}
 {{- $listenerHostname := default "" .Values.gateway.listener.hostname }}
 {{- $gatewaySectionName := default "" .Values.gateway.listener.name }}
+{{- $apiRequestTimeout := default "" .Values.gateway.listeners.api.requestTimeout }}
+{{- $apiBackendRequestTimeout := default "" .Values.gateway.listeners.api.backendRequestTimeout }}
 {{- if $apiEnabled }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -47,6 +49,15 @@ spec:
         - path:
             type: PathPrefix
             value: {{ default "/api" .Values.gateway.listeners.api.pathPrefix | quote }}
+      {{- if or $apiRequestTimeout $apiBackendRequestTimeout }}
+      timeouts:
+        {{- if $apiRequestTimeout }}
+        request: {{ $apiRequestTimeout | quote }}
+        {{- end }}
+        {{- if $apiBackendRequestTimeout }}
+        backendRequest: {{ $apiBackendRequestTimeout | quote }}
+        {{- end }}
+      {{- end }}
       backendRefs:
         - name: poundcake-api
           port: {{ .Values.services.api.port }}
