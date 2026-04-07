@@ -1589,10 +1589,20 @@ function AlertRulesPage() {
   const settings = useSettings();
   const queryClient = useQueryClient();
   const [editingRule, setEditingRule] = useState<PrometheusRule | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [importRecoveryPending, setImportRecoveryPending] = useState(false);
   const importRecoveryTokenRef = useRef(0);
   const canEdit = canManageAlertRules(principal);
   const canClear = canManageRepoSyncClear(principal);
+  const emptyRuleFormValues: z.infer<typeof ruleSchema> = {
+    name: "",
+    group: "",
+    file: "",
+    expr: "",
+    duration: "",
+    labels: "",
+    annotations: "",
+  };
 
   const rulesQuery = useQuery({
     queryKey: ["prometheus-rules"],
@@ -1636,16 +1646,27 @@ function AlertRulesPage() {
 
   const form = useForm<z.infer<typeof ruleSchema>>({
     resolver: zodResolver(ruleSchema),
-    defaultValues: {
-      name: "",
-      group: "",
-      file: "",
-      expr: "",
-      duration: "",
-      labels: "",
-      annotations: "",
-    },
+    defaultValues: emptyRuleFormValues,
   });
+
+  const resetRuleForm = () => form.reset(emptyRuleFormValues);
+
+  const openCreateRuleDialog = () => {
+    setEditingRule(null);
+    resetRuleForm();
+    setEditorOpen(true);
+  };
+
+  const openEditRuleDialog = (rule: PrometheusRule) => {
+    setEditingRule(rule);
+    setEditorOpen(true);
+  };
+
+  const closeRuleDialog = () => {
+    setEditorOpen(false);
+    setEditingRule(null);
+    resetRuleForm();
+  };
 
   useEffect(() => {
     if (!editingRule) {
@@ -1699,8 +1720,7 @@ function AlertRulesPage() {
     },
     onSuccess: async ({ created }) => {
       notify("success", created ? "Alert rule created." : "Alert rule updated.");
-      setEditingRule(null);
-      form.reset();
+      closeRuleDialog();
       await refreshRules();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
@@ -1714,8 +1734,7 @@ function AlertRulesPage() {
       ),
     onSuccess: async () => {
       notify("success", "Alert rule deleted.");
-      setEditingRule(null);
-      form.reset();
+      closeRuleDialog();
       await refreshRules();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
@@ -1731,8 +1750,7 @@ function AlertRulesPage() {
     mutationFn: () => apiPost("/api/v1/repo-sync/alert-rules/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
-      setEditingRule(null);
-      form.reset();
+      closeRuleDialog();
       importRecoveryTokenRef.current += 1;
       setImportRecoveryPending(false);
       await refreshRules();
@@ -1743,8 +1761,7 @@ function AlertRulesPage() {
           "error",
           "Import request timed out at the gateway. Refreshing alert inventory in the background.",
         );
-        setEditingRule(null);
-        form.reset();
+        closeRuleDialog();
         void recoverRulesAfterGatewayTimeout(rulesQuery.data?.rules.length ?? 0);
         return;
       }
@@ -1756,8 +1773,7 @@ function AlertRulesPage() {
     mutationFn: () => apiDelete("/api/v1/repo-sync/alert-rules", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
-      setEditingRule(null);
-      form.reset();
+      closeRuleDialog();
       await refreshRules();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
@@ -1780,6 +1796,7 @@ function AlertRulesPage() {
   const firingRuleCount = ruleStateCounts.firing || 0;
   const pendingRuleCount = ruleStateCounts.pending || 0;
   const unknownRuleCount = ruleStateCounts.unknown || 0;
+  const showRuntimeStatus = !settings.prometheus_use_crds;
 
   return (
     <div className="page-stack">
@@ -1803,119 +1820,39 @@ function AlertRulesPage() {
           <p>The import request timed out at the gateway, but PoundCake is polling the alert inventory and will update this page automatically.</p>
         </div>
       ) : null}
-      <div className="status-grid">
+      <div className={`status-grid ${showRuntimeStatus ? "" : "status-grid-single"}`.trim()}>
         <MetricCard title="Rules loaded" value={String(totalRuleCount)} tone="active">
           Alert-rule definitions currently visible in PoundCake.
         </MetricCard>
-        <MetricCard title="Firing now" value={String(firingRuleCount)} tone={firingRuleCount ? "failed" : "healthy"}>
-          Runtime state reported by Prometheus when available.
-        </MetricCard>
-        <MetricCard title="Pending" value={String(pendingRuleCount)} tone={pendingRuleCount ? "warning" : "healthy"}>
-          Rules waiting for their configured `for` duration.
-        </MetricCard>
-        <MetricCard title="Unknown state" value={String(unknownRuleCount)} tone={unknownRuleCount ? "warning" : "healthy"}>
-          {settings.prometheus_use_crds
-            ? "CRD-backed rules do not expose live runtime state on this page."
-            : "Rules without live state are counted here."}
-        </MetricCard>
+        {showRuntimeStatus ? (
+          <>
+            <MetricCard title="Firing now" value={String(firingRuleCount)} tone={firingRuleCount ? "failed" : "healthy"}>
+              Runtime state reported by Prometheus when available.
+            </MetricCard>
+            <MetricCard title="Pending" value={String(pendingRuleCount)} tone={pendingRuleCount ? "warning" : "healthy"}>
+              Rules waiting for their configured `for` duration.
+            </MetricCard>
+            <MetricCard title="Unknown state" value={String(unknownRuleCount)} tone={unknownRuleCount ? "warning" : "healthy"}>
+              Rules without live state are counted here.
+            </MetricCard>
+          </>
+        ) : null}
       </div>
-      <div className="editor-grid">
-        <Panel title={editingRule ? `Edit ${editingRule.name}` : "Create alert rule"} subtitle="Prometheus details stay available, but the workflow is written for operators.">
-          {!canEdit ? (
-            <div className="helper-card">
-              <strong>Read-only access</strong>
-              <p>Your role can inspect alert rules but cannot create, update, or delete them.</p>
-            </div>
-          ) : null}
-          <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
-            <fieldset disabled={!canEdit}>
-            <div className="grid-two">
-              <FormField label="Rule name" help="Human-readable alert identifier shown to operators.">
-                <input {...form.register("name")} placeholder="NodeFilesystemAlmostOutOfSpace" />
-                <FieldError message={form.formState.errors.name?.message} />
-              </FormField>
-              <FormField label="Rule group" help="Prometheus group name used for storage and organization.">
-                <input {...form.register("group")} placeholder="node-filesystem" />
-                <FieldError message={form.formState.errors.group?.message} />
-              </FormField>
-            </div>
-            <div className="grid-two">
-              <FormField
-                label={settings.git_enabled ? "Repo path / CRD" : "Rule file / CRD"}
-                help={
-                  settings.git_enabled
-                    ? "Use a repo-relative alert-rule path such as kubernetes/kube-api-down.yaml. Existing rules keep updating their current repo file."
-                    : "Backing PrometheusRule CRD or file name."
-                }
-              >
-                <input
-                  {...form.register("file")}
-                  placeholder={settings.git_enabled ? "kubernetes/kube-api-down.yaml" : "kubernetes-resources"}
-                />
-                <FieldError message={form.formState.errors.file?.message} />
-              </FormField>
-              <FormField label="For duration" help="How long the expression must be true before the alert fires.">
-                <input {...form.register("duration")} placeholder="5m" />
-              </FormField>
-            </div>
-            <FormField label="Expression" help="PromQL expression that drives the alert condition.">
-              <textarea {...form.register("expr")} rows={5} placeholder='node_filesystem_avail_bytes{fstype!="tmpfs"} < 10737418240' />
-              <FieldError message={form.formState.errors.expr?.message} />
-            </FormField>
-            <FormField label="Labels (JSON)" help="Use labels for routing, grouping, and severity.">
-              <textarea {...form.register("labels")} rows={4} placeholder='{"severity":"critical","team":"platform"}' />
-            </FormField>
-            <FormField label="Annotations (JSON)" help="Annotations become the operator-facing description and runbook context.">
-              <textarea {...form.register("annotations")} rows={4} placeholder='{"summary":"Disk is filling up","runbook":"https://..."}' />
-            </FormField>
-            <div className="form-actions">
-              <button className="primary-button" disabled={saveMutation.isPending} type="submit">
-                {saveMutation.isPending ? "Saving..." : editingRule ? "Save rule" : "Create rule"}
-              </button>
-              {editingRule ? (
-                <button className="ghost-button" type="button" onClick={() => {
-                  setEditingRule(null);
-                  form.reset();
-                }}>
-                  Clear
-                </button>
-              ) : null}
-            </div>
-            {editingRule ? (
-              <div className="helper-card">
-                <strong>Update behavior</strong>
-                <p>
-                  Changing the rule name, group, or source path creates a new rule. Saving with the same identity updates the existing repo-backed rule in place.
-                </p>
-              </div>
-            ) : null}
-            </fieldset>
-          </form>
-        </Panel>
-
-        <HelpRail
-          title="Alert-rule help"
-          items={[
-            {
-              label: "What operators should understand",
-              description: "Keep rule names readable, make severity explicit in labels, and put the human explanation in annotations.",
-            },
-            {
-              label: "Expression guidance",
-              description: "Use the expression field for PromQL only. Keep labels and annotations out of the query itself.",
-            },
-            {
-              label: "Common mistake",
-              description: "For durations, use Prometheus formats such as 30s, 5m, or 1h instead of plain integers.",
-            },
-          ]}
-        />
-      </div>
-
       <Panel
         title="Alert inventory"
         subtitle={`Source: ${rulesQuery.data.source}. ${totalRuleCount} rules loaded. Select a rule to edit or remove it.`}
+        actions={
+          <button className="primary-button" disabled={!canEdit} type="button" onClick={openCreateRuleDialog}>
+            Create rule
+          </button>
+        }
       >
+        {!canEdit ? (
+          <div className="helper-card">
+            <strong>Read-only access</strong>
+            <p>Your role can inspect alert rules but cannot create, update, or delete them.</p>
+          </div>
+        ) : null}
         <div className="table-wrap">
           <table>
             <thead>
@@ -1924,7 +1861,7 @@ function AlertRulesPage() {
                 <th>Group</th>
                 <th>For</th>
                 <th>Source</th>
-                <th>Status</th>
+                {showRuntimeStatus ? <th>Status</th> : null}
                 <th>Query</th>
                 <th />
               </tr>
@@ -1936,12 +1873,14 @@ function AlertRulesPage() {
                   <td>{rule.group}</td>
                   <td>{rule.duration || "-"}</td>
                   <td>{rule.file || rule.crd || "-"}</td>
-                  <td>
-                    <StatusBadge status={rule.state || "unknown"}>{rule.state || "unknown"}</StatusBadge>
-                  </td>
+                  {showRuntimeStatus ? (
+                    <td>
+                      <StatusBadge status={rule.state || "unknown"}>{rule.state || "unknown"}</StatusBadge>
+                    </td>
+                  ) : null}
                   <td className="query-cell">{rule.query}</td>
                   <td className="action-cell">
-                    <button className="ghost-button" disabled={!canEdit} type="button" onClick={() => setEditingRule(rule)}>
+                    <button className="ghost-button" disabled={!canEdit} type="button" onClick={() => openEditRuleDialog(rule)}>
                       Edit
                     </button>
                     <button
@@ -1963,6 +1902,87 @@ function AlertRulesPage() {
           </table>
         </div>
       </Panel>
+      {editorOpen ? (
+        <div aria-modal="true" className="dialog-backdrop" role="dialog">
+          <div className="dialog-card dialog-card-wide">
+            <div className="panel-head">
+              <div>
+                <h4>{editingRule ? `Edit ${editingRule.name}` : "Create alert rule"}</h4>
+                <p>Prometheus details stay available, but the workflow is written for operators.</p>
+              </div>
+            </div>
+            {!canEdit ? (
+              <div className="helper-card">
+                <strong>Read-only access</strong>
+                <p>Your role can inspect alert rules but cannot create, update, or delete them.</p>
+              </div>
+            ) : null}
+            <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+              <fieldset disabled={!canEdit}>
+                <div className="grid-two">
+                  <FormField label="Rule name" help="Human-readable alert identifier shown to operators.">
+                    <input
+                      {...form.register("name")}
+                      autoFocus
+                      placeholder="NodeFilesystemAlmostOutOfSpace"
+                    />
+                    <FieldError message={form.formState.errors.name?.message} />
+                  </FormField>
+                  <FormField label="Rule group" help="Prometheus group name used for storage and organization.">
+                    <input {...form.register("group")} placeholder="node-filesystem" />
+                    <FieldError message={form.formState.errors.group?.message} />
+                  </FormField>
+                </div>
+                <div className="grid-two">
+                  <FormField
+                    label={settings.git_enabled ? "Repo path / CRD" : "Rule file / CRD"}
+                    help={
+                      settings.git_enabled
+                        ? "Use a repo-relative alert-rule path such as kubernetes/kube-api-down.yaml. Existing rules keep updating their current repo file."
+                        : "Backing PrometheusRule CRD or file name."
+                    }
+                  >
+                    <input
+                      {...form.register("file")}
+                      placeholder={settings.git_enabled ? "kubernetes/kube-api-down.yaml" : "kubernetes-resources"}
+                    />
+                    <FieldError message={form.formState.errors.file?.message} />
+                  </FormField>
+                  <FormField label="For duration" help="How long the expression must be true before the alert fires.">
+                    <input {...form.register("duration")} placeholder="5m" />
+                  </FormField>
+                </div>
+                <FormField label="Expression" help="PromQL expression that drives the alert condition.">
+                  <textarea {...form.register("expr")} rows={5} placeholder='node_filesystem_avail_bytes{fstype!="tmpfs"} < 10737418240' />
+                  <FieldError message={form.formState.errors.expr?.message} />
+                </FormField>
+                <FormField label="Labels (JSON)" help="Use labels for routing, grouping, and severity.">
+                  <textarea {...form.register("labels")} rows={4} placeholder='{"severity":"critical","team":"platform"}' />
+                </FormField>
+                <FormField label="Annotations (JSON)" help="Annotations become the operator-facing description and runbook context.">
+                  <textarea {...form.register("annotations")} rows={4} placeholder='{"summary":"Disk is filling up","runbook":"https://..."}' />
+                </FormField>
+                {editingRule ? (
+                  <div className="helper-card">
+                    <strong>Update behavior</strong>
+                    <p>
+                      Changing the rule name, group, or source path creates a new rule. Saving with the same identity updates the existing repo-backed rule in place.
+                    </p>
+                  </div>
+                ) : null}
+                <div className="form-actions">
+                  <button className="ghost-button" type="button" onClick={closeRuleDialog}>
+                    Cancel
+                  </button>
+                  <button className="primary-button" disabled={saveMutation.isPending} type="submit">
+                    {saveMutation.isPending ? "Saving..." : editingRule ? "Save rule" : "Create rule"}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3806,10 +3826,12 @@ function HelpRail({
 function Panel({
   title,
   subtitle,
+  actions,
   children,
 }: {
   title: string;
   subtitle?: string;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -3819,6 +3841,7 @@ function Panel({
           <h4>{title}</h4>
           {subtitle ? <p>{subtitle}</p> : null}
         </div>
+        {actions ? <div>{actions}</div> : null}
       </div>
       {children}
     </section>

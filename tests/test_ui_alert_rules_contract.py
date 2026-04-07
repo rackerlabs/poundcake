@@ -21,6 +21,17 @@ def test_alert_rule_editor_treats_identity_changes_as_create_new() -> None:
     assert "Changing the rule name, group, or source path creates a new rule." in content
 
 
+def test_alert_rule_page_uses_modal_create_and_edit_flow() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert "const [editorOpen, setEditorOpen] = useState(false);" in content
+    assert "const openCreateRuleDialog = () => {" in content
+    assert "const openEditRuleDialog = (rule: PrometheusRule) => {" in content
+    assert "const closeRuleDialog = () => {" in content
+    assert "onClick={openCreateRuleDialog}" in content
+    assert "onClick={() => openEditRuleDialog(rule)}" in content
+    assert 'className="dialog-card dialog-card-wide"' in content
+
+
 def test_alert_rule_page_forces_refetch_after_repo_sync_mutations() -> None:
     content = APP_TSX.read_text(encoding="utf-8")
     assert "const refreshRules = async () => {" in content
@@ -48,12 +59,22 @@ def test_alert_rule_page_recovers_from_gateway_timeout_imports() -> None:
     )
 
 
-def test_alert_rule_page_shows_rule_inventory_counts() -> None:
+def test_alert_rule_page_hides_unreliable_runtime_state_in_crd_mode() -> None:
     content = APP_TSX.read_text(encoding="utf-8")
+    assert "const showRuntimeStatus = !settings.prometheus_use_crds;" in content
+    assert (
+        'className={`status-grid ${showRuntimeStatus ? "" : "status-grid-single"}`.trim()}'
+        in content
+    )
     assert 'title="Rules loaded"' in content
-    assert 'title="Firing now"' in content
-    assert 'title="Pending"' in content
-    assert 'title="Unknown state"' in content
+    assert "{showRuntimeStatus ? <th>Status</th> : null}" in content
+    assert "{showRuntimeStatus ? (" in content
+    assert "CRD-backed rules do not expose live runtime state on this page." not in content
+
+
+def test_alert_rule_page_removes_help_rail_and_keeps_inventory_count() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert "Alert-rule help" not in content
     assert (
         "subtitle={`Source: ${rulesQuery.data.source}. ${totalRuleCount} rules loaded." in content
     )

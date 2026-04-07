@@ -394,6 +394,10 @@ pre {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.status-grid.status-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .metric-card {
   padding: 18px;
 }
@@ -737,6 +741,12 @@ pre {
   border: 1px solid rgba(230, 103, 103, 0.26);
   background: linear-gradient(180deg, rgba(20, 26, 33, 0.98), rgba(10, 16, 22, 0.98));
   box-shadow: var(--shadow-lg);
+}
+
+.dialog-card-wide {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 .dialog-input {
