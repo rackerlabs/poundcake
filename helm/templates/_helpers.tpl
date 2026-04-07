@@ -180,12 +180,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "poundcake.stackstormThirdPartyPackConfigSecretEnabled" -}}
 {{- $bootstrap := .Values.stackstorm.bootstrap | default dict -}}
 {{- $packs := $bootstrap.packs | default dict -}}
-{{- $kubernetes := $packs.kubernetes | default dict -}}
 {{- $openstack := $packs.openstack | default dict -}}
-{{- $kubernetesConfig := $kubernetes.config | default dict -}}
 {{- $openstackConfig := $openstack.config | default dict -}}
-{{- $enabled := eq (include "poundcake.stackstormThirdPartyPacksEnabled" .) "true" -}}
-{{- ternary "true" "false" (or $enabled (ne ($kubernetesConfig.kubeconfig | default "") "") (ne ($kubernetesConfig.caCert | default "") "") (ne ($openstackConfig.cloudsYaml | default "") "") (ne ($openstackConfig.caCert | default "") "")) -}}
+{{- ternary "true" "false" (or (ne ($openstackConfig.cloudsYaml | default "") "") (ne ($openstackConfig.caCert | default "") "")) -}}
 {{- end -}}
 
 {{- define "poundcake.stackstormThirdPartyPackInitContainer" -}}
