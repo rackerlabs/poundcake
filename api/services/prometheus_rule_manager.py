@@ -7,12 +7,26 @@
 """Prometheus rule manager for editing and applying rule changes."""
 
 import re
+from pathlib import Path
 from typing import Any
 
 import yaml
 
 from api.core.config import get_settings
 from api.core.logging import get_logger
+from api.services.alert_rule_repo import (
+    ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+    AlertRuleSource,
+    build_alert_rule_repo_index,
+    delete_rule_from_document,
+    document_has_rules,
+    dump_alert_rule_document,
+    infer_document_source,
+    load_repo_documents,
+    looks_like_repo_relative_rule_path,
+    normalize_repo_relative_path,
+    upsert_rule_in_document,
+)
 from api.services.git_manager import get_git_manager
 from api.services.prometheus_service import get_prometheus_client
 from api.services.prometheus_crd_manager import get_prometheus_crd_manager
@@ -139,6 +153,171 @@ class PrometheusRuleManager:
         else:
             return crd_name if crd_name.endswith((".yaml", ".yml")) else f"{crd_name}.yaml"
 
+    def _source_from_file_name(self, file_name: str) -> AlertRuleSource | None:
+        raw = str(file_name or "").strip()
+        if not raw or not looks_like_repo_relative_rule_path(raw):
+            return None
+        try:
+            return AlertRuleSource(relative_path=normalize_repo_relative_path(raw))
+        except ValueError:
+            return None
+
+    async def _load_git_rule_context(
+        self,
+    ) -> tuple[str, Path, Any]:
+        if not await self.git_manager.clone_or_pull():
+            raise RuntimeError("Failed to clone/pull Git repository")
+
+        assert self.git_manager.repo_path is not None
+        try:
+            rules_dir = normalize_repo_relative_path(str(self.settings.git_rules_path or ""))
+        except ValueError as exc:
+            raise RuntimeError(f"Git rules directory {exc}") from exc
+
+        base_dir = self.git_manager.repo_path / rules_dir
+        try:
+            repo_index = build_alert_rule_repo_index(base_dir)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
+
+        return rules_dir, base_dir, repo_index
+
+    def _load_single_git_rule_document(self, path: Path) -> Any:
+        documents = load_repo_documents(path)
+        if len(documents) != 1:
+            raise RuntimeError(
+                f"Alert-rule file '{path.name}' must contain exactly one document for direct edits"
+            )
+        return documents[0]
+
+    async def _resolve_git_update_source(
+        self,
+        rule_name: str,
+        group_name: str,
+        file_name: str,
+    ) -> tuple[str, Path, AlertRuleSource]:
+        rules_dir, base_dir, repo_index = await self._load_git_rule_context()
+        repo_entry = repo_index.by_alert_name.get(rule_name)
+        explicit_source = self._source_from_file_name(file_name)
+
+        if repo_entry is not None:
+            if group_name.strip() != repo_entry.group_name:
+                raise RuntimeError(
+                    "Changing a rule group via update creates a new rule; use create instead"
+                )
+            if (
+                explicit_source is not None
+                and explicit_source.relative_path != repo_entry.source.relative_path
+            ):
+                raise RuntimeError(
+                    "Changing a rule source path via update creates a new rule; use create instead"
+                )
+            return rules_dir, base_dir, repo_entry.source
+
+        if explicit_source is None:
+            legacy_source = AlertRuleSource(
+                relative_path=self._get_file_path(
+                    rule_name,
+                    group_name,
+                    sanitize_crd_name(file_name or rule_name),
+                )
+            )
+            full_path = base_dir / legacy_source.relative_path
+            if full_path.exists():
+                document = self._load_single_git_rule_document(full_path)
+                document_source = infer_document_source(document, legacy_source.relative_path)
+                if document_source is None:
+                    raise RuntimeError(
+                        f"Rule file '{rules_dir}/{legacy_source.relative_path}' does not contain supported alert-rule groups"
+                    )
+                return rules_dir, base_dir, document_source
+            raise RuntimeError(f"Rule '{rule_name}' not found in Git repository")
+
+        full_path = base_dir / explicit_source.relative_path
+        if not full_path.exists():
+            raise RuntimeError(f"Rule file not found: {rules_dir}/{explicit_source.relative_path}")
+
+        document = self._load_single_git_rule_document(full_path)
+        document_source = infer_document_source(document, explicit_source.relative_path)
+        if document_source is None:
+            raise RuntimeError(
+                f"Rule file '{rules_dir}/{explicit_source.relative_path}' does not contain supported alert-rule groups"
+            )
+        return rules_dir, base_dir, document_source
+
+    async def _resolve_git_create_source(
+        self,
+        rule_name: str,
+        group_name: str,
+        file_name: str,
+    ) -> tuple[str, Path, AlertRuleSource]:
+        rules_dir, base_dir, repo_index = await self._load_git_rule_context()
+        if rule_name in repo_index.by_alert_name:
+            raise RuntimeError(f"Rule '{rule_name}' already exists in Git repository")
+
+        source = self._source_from_file_name(file_name)
+        if source is None:
+            file_hint = sanitize_crd_name(file_name or rule_name)
+            source = AlertRuleSource(
+                relative_path=self._get_file_path(rule_name, group_name, file_hint),
+                source_format=ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+            )
+
+        full_path = base_dir / source.relative_path
+        if full_path.exists():
+            document = self._load_single_git_rule_document(full_path)
+            inferred = infer_document_source(document, source.relative_path)
+            if inferred is None:
+                raise RuntimeError(
+                    f"Rule file '{rules_dir}/{source.relative_path}' does not contain supported alert-rule groups"
+                )
+            source = inferred
+
+        return rules_dir, base_dir, source
+
+    async def _resolve_git_delete_source(
+        self,
+        rule_name: str,
+        group_name: str,
+        file_name: str,
+    ) -> tuple[str, Path, AlertRuleSource]:
+        rules_dir, base_dir, repo_index = await self._load_git_rule_context()
+        repo_entry = repo_index.by_alert_name.get(rule_name)
+        if repo_entry is not None:
+            return rules_dir, base_dir, repo_entry.source
+
+        explicit_source = self._source_from_file_name(file_name)
+        if explicit_source is None:
+            legacy_source = AlertRuleSource(
+                relative_path=self._get_file_path(
+                    rule_name,
+                    group_name=group_name,
+                    crd_name=sanitize_crd_name(file_name or rule_name),
+                )
+            )
+            full_path = base_dir / legacy_source.relative_path
+            if full_path.exists():
+                document = self._load_single_git_rule_document(full_path)
+                document_source = infer_document_source(document, legacy_source.relative_path)
+                if document_source is None:
+                    raise RuntimeError(
+                        f"Rule file '{rules_dir}/{legacy_source.relative_path}' does not contain supported alert-rule groups"
+                    )
+                return rules_dir, base_dir, document_source
+            raise RuntimeError(f"Rule '{rule_name}' not found in Git repository")
+
+        full_path = base_dir / explicit_source.relative_path
+        if not full_path.exists():
+            raise RuntimeError(f"Rule file not found: {rules_dir}/{explicit_source.relative_path}")
+
+        document = self._load_single_git_rule_document(full_path)
+        document_source = infer_document_source(document, explicit_source.relative_path)
+        if document_source is None:
+            raise RuntimeError(
+                f"Rule file '{rules_dir}/{explicit_source.relative_path}' does not contain supported alert-rule groups"
+            )
+        return rules_dir, base_dir, document_source
+
     async def update_rule(
         self,
         rule_name: str,
@@ -167,12 +346,32 @@ class PrometheusRuleManager:
             "message": "Rule updated",
         }
         normalized_rule_data = normalize_rule_data(rule_name, rule_data)
+        git_source: AlertRuleSource | None = None
+
+        if self.settings.git_enabled:
+            try:
+                _rules_dir, _base_dir, git_source = await self._resolve_git_update_source(
+                    rule_name,
+                    group_name,
+                    file_name,
+                )
+            except RuntimeError as exc:
+                return {
+                    "status": "error",
+                    "message": str(exc),
+                }
 
         # Mode 1: CRD Mode (immediate effect via Prometheus Operator)
         if self.settings.prometheus_use_crds:
-            crd_name = sanitize_crd_name(file_name)
+            crd_name = sanitize_crd_name(
+                git_source.relative_path if git_source is not None else file_name
+            )
             crd_result = await self.crd_manager.create_or_update_rule(
-                rule_name, group_name, crd_name, normalized_rule_data
+                rule_name,
+                group_name,
+                crd_name,
+                normalized_rule_data,
+                source_metadata=git_source,
             )
 
             if crd_result.get("status") == "error":
@@ -222,67 +421,28 @@ class PrometheusRuleManager:
         """Update a rule in Git repository."""
 
         try:
-            if not await self.git_manager.clone_or_pull():
-                return {
-                    "status": "error",
-                    "message": "Failed to clone/pull Git repository",
-                }
-
-            assert self.git_manager.repo_path is not None
-            crd_name = sanitize_crd_name(file_name)
-            actual_file_name = self._get_file_path(rule_name, group_name, crd_name)
-            file_path = f"{self.settings.git_rules_path}/{actual_file_name}"
-            full_path = self.git_manager.repo_path / file_path
-
-            if self.settings.git_file_per_alert:
-                rules_yaml = {
-                    "groups": [
-                        {
-                            "name": group_name,
-                            "rules": [rule_data],
-                        }
-                    ]
-                }
-                updated_yaml = yaml.dump(rules_yaml, default_flow_style=False, sort_keys=False)
-            else:
-                if not full_path.exists():
-                    return {
-                        "status": "error",
-                        "message": f"Rule file not found: {file_path}",
-                    }
-
-                with open(full_path) as f:
-                    rules_yaml = yaml.safe_load(f)
-
-                if "groups" not in rules_yaml:
-                    return {
-                        "status": "error",
-                        "message": "Invalid rule file: no groups found",
-                    }
-
-                found = False
-                for group in rules_yaml["groups"]:
-                    if group.get("name") == group_name:
-                        for idx, rule in enumerate(group.get("rules", [])):
-                            if rule.get("alert") == rule_name:
-                                group["rules"][idx] = rule_data
-                                found = True
-                                break
-                        break
-
-                if not found:
-                    return {
-                        "status": "error",
-                        "message": f"Rule {rule_name} not found in group {group_name}",
-                    }
-
-                updated_yaml = yaml.dump(rules_yaml, default_flow_style=False, sort_keys=False)
+            rules_dir, base_dir, source = await self._resolve_git_update_source(
+                rule_name,
+                group_name,
+                file_name,
+            )
+            full_path = base_dir / source.relative_path
+            document = self._load_single_git_rule_document(full_path)
+            updated_document = upsert_rule_in_document(
+                document,
+                source=source,
+                group_name=group_name,
+                rule_name=rule_name,
+                rule_data=rule_data,
+            )
+            updated_yaml = dump_alert_rule_document(updated_document, source.relative_path)
+            file_path = f"{rules_dir}/{source.relative_path}"
 
             commit_message = (
                 f"Update Prometheus alert rule: {rule_name}\n\n"
                 f"Updated by PoundCake auto-remediation system\n"
                 f"Group: {group_name}\n"
-                f"File: {actual_file_name}"
+                f"File: {source.relative_path}"
             )
 
             success, branch_name = await self.git_manager.commit_and_push_changes(
@@ -306,7 +466,7 @@ class PrometheusRuleManager:
                 f"## Alert Rule Update\n\n"
                 f"**Alert**: `{rule_name}`\n"
                 f"**Group**: `{group_name}`\n"
-                f"**File**: `{actual_file_name}`\n\n"
+                f"**File**: `{source.relative_path}`\n\n"
                 f"Updated via PoundCake UI.\n\n"
                 f"### Changes\n"
                 f"```yaml\n{yaml.dump(rule_data, default_flow_style=False)}\n```"
@@ -363,12 +523,32 @@ class PrometheusRuleManager:
             "message": "Rule created",
         }
         normalized_rule_data = normalize_rule_data(rule_name, rule_data)
+        git_source: AlertRuleSource | None = None
+
+        if self.settings.git_enabled:
+            try:
+                _rules_dir, _base_dir, git_source = await self._resolve_git_create_source(
+                    rule_name,
+                    group_name,
+                    file_name,
+                )
+            except RuntimeError as exc:
+                return {
+                    "status": "error",
+                    "message": str(exc),
+                }
 
         # Mode 1: CRD Mode (immediate effect via Prometheus Operator)
         if self.settings.prometheus_use_crds:
-            crd_name = sanitize_crd_name(file_name)
+            crd_name = sanitize_crd_name(
+                git_source.relative_path if git_source is not None else file_name
+            )
             crd_result = await self.crd_manager.create_or_update_rule(
-                rule_name, group_name, crd_name, normalized_rule_data
+                rule_name,
+                group_name,
+                crd_name,
+                normalized_rule_data,
+                source_metadata=git_source,
             )
 
             if crd_result.get("status") == "error":
@@ -418,61 +598,32 @@ class PrometheusRuleManager:
         """Create a rule in Git repository."""
 
         try:
-            if not await self.git_manager.clone_or_pull():
-                return {
-                    "status": "error",
-                    "message": "Failed to clone/pull Git repository",
-                }
-
-            assert self.git_manager.repo_path is not None
-            crd_name = sanitize_crd_name(file_name)
-            actual_file_name = self._get_file_path(rule_name, group_name, crd_name)
-            file_path = f"{self.settings.git_rules_path}/{actual_file_name}"
-            full_path = self.git_manager.repo_path / file_path
-
-            if self.settings.git_file_per_alert:
-                rules_yaml = {
-                    "groups": [
-                        {
-                            "name": group_name,
-                            "rules": [rule_data],
-                        }
-                    ]
-                }
+            rules_dir, base_dir, source = await self._resolve_git_create_source(
+                rule_name,
+                group_name,
+                file_name,
+            )
+            full_path = base_dir / source.relative_path
+            document: Any
+            if full_path.exists():
+                document = self._load_single_git_rule_document(full_path)
             else:
-                if full_path.exists():
-                    with open(full_path) as f:
-                        rules_yaml = yaml.safe_load(f) or {}
-                else:
-                    rules_yaml = {"groups": []}
-
-                if "groups" not in rules_yaml:
-                    rules_yaml["groups"] = []
-
-                group_found = False
-                for group in rules_yaml["groups"]:
-                    if group.get("name") == group_name:
-                        if "rules" not in group:
-                            group["rules"] = []
-                        group["rules"].append(rule_data)
-                        group_found = True
-                        break
-
-                if not group_found:
-                    rules_yaml["groups"].append(
-                        {
-                            "name": group_name,
-                            "rules": [rule_data],
-                        }
-                    )
-
-            updated_yaml = yaml.dump(rules_yaml, default_flow_style=False, sort_keys=False)
+                document = {}
+            updated_document = upsert_rule_in_document(
+                document,
+                source=source,
+                group_name=group_name,
+                rule_name=rule_name,
+                rule_data=rule_data,
+            )
+            updated_yaml = dump_alert_rule_document(updated_document, source.relative_path)
+            file_path = f"{rules_dir}/{source.relative_path}"
 
             commit_message = (
                 f"Add Prometheus alert rule: {rule_name}\n\n"
                 f"Created by PoundCake auto-remediation system\n"
                 f"Group: {group_name}\n"
-                f"File: {actual_file_name}"
+                f"File: {source.relative_path}"
             )
 
             success, branch_name = await self.git_manager.commit_and_push_changes(
@@ -496,7 +647,7 @@ class PrometheusRuleManager:
                 f"## New Alert Rule\n\n"
                 f"**Alert**: `{rule_name}`\n"
                 f"**Group**: `{group_name}`\n"
-                f"**File**: `{actual_file_name}`\n\n"
+                f"**File**: `{source.relative_path}`\n\n"
                 f"Created via PoundCake UI.\n\n"
                 f"### Rule Definition\n"
                 f"```yaml\n{yaml.dump(rule_data, default_flow_style=False)}\n```"
@@ -550,10 +701,26 @@ class PrometheusRuleManager:
             "status": "success",
             "message": "Rule deleted",
         }
+        git_source: AlertRuleSource | None = None
+
+        if self.settings.git_enabled:
+            try:
+                _rules_dir, _base_dir, git_source = await self._resolve_git_delete_source(
+                    rule_name,
+                    group_name,
+                    file_name,
+                )
+            except RuntimeError as exc:
+                return {
+                    "status": "error",
+                    "message": str(exc),
+                }
 
         # Mode 1: CRD Mode (immediate effect via Prometheus Operator)
         if self.settings.prometheus_use_crds:
-            crd_name = sanitize_crd_name(file_name)
+            crd_name = sanitize_crd_name(
+                git_source.relative_path if git_source is not None else file_name
+            )
             crd_result = await self.crd_manager.delete_rule(rule_name, group_name, crd_name)
 
             if crd_result.get("status") == "error":
@@ -600,66 +767,44 @@ class PrometheusRuleManager:
         """Delete a rule from Git repository."""
 
         try:
-            if not await self.git_manager.clone_or_pull():
+            rules_dir, base_dir, source = await self._resolve_git_delete_source(
+                rule_name,
+                group_name,
+                file_name,
+            )
+            file_path = f"{rules_dir}/{source.relative_path}"
+            full_path = base_dir / source.relative_path
+            document = self._load_single_git_rule_document(full_path)
+            updated_document, deleted = delete_rule_from_document(
+                document,
+                source=source,
+                group_name=group_name,
+                rule_name=rule_name,
+            )
+            if not deleted:
                 return {
                     "status": "error",
-                    "message": "Failed to clone/pull Git repository",
-                }
-
-            assert self.git_manager.repo_path is not None
-            crd_name = sanitize_crd_name(file_name)
-            actual_file_name = self._get_file_path(rule_name, group_name, crd_name)
-            file_path = f"{self.settings.git_rules_path}/{actual_file_name}"
-            full_path = self.git_manager.repo_path / file_path
-
-            if not full_path.exists():
-                return {
-                    "status": "error",
-                    "message": f"Rule file not found: {file_path}",
+                    "message": f"Rule {rule_name} not found in group {group_name}",
                 }
 
             commit_message = (
                 f"Delete Prometheus alert rule: {rule_name}\n\n"
                 f"Deleted by PoundCake auto-remediation system\n"
                 f"Group: {group_name}\n"
-                f"File: {actual_file_name}"
+                f"File: {source.relative_path}"
             )
 
-            if self.settings.git_file_per_alert:
+            if not document_has_rules(updated_document):
                 success, branch_name = await self.git_manager.commit_and_push_deletion(
-                    file_path, commit_message
+                    file_path,
+                    commit_message,
                 )
             else:
-                with open(full_path) as f:
-                    rules_yaml = yaml.safe_load(f)
-
-                if "groups" not in rules_yaml:
-                    return {
-                        "status": "error",
-                        "message": "Invalid rule file: no groups found",
-                    }
-
-                found = False
-                for group in rules_yaml["groups"]:
-                    if group.get("name") == group_name:
-                        rules = group.get("rules", [])
-                        for idx, rule in enumerate(rules):
-                            if rule.get("alert") == rule_name:
-                                del rules[idx]
-                                found = True
-                                break
-                        break
-
-                if not found:
-                    return {
-                        "status": "error",
-                        "message": f"Rule {rule_name} not found in group {group_name}",
-                    }
-
-                updated_yaml = yaml.dump(rules_yaml, default_flow_style=False, sort_keys=False)
-
+                updated_yaml = dump_alert_rule_document(updated_document, source.relative_path)
                 success, branch_name = await self.git_manager.commit_and_push_changes(
-                    file_path, updated_yaml, commit_message
+                    file_path,
+                    updated_yaml,
+                    commit_message,
                 )
 
             if not success:
@@ -679,7 +824,7 @@ class PrometheusRuleManager:
                 f"## Delete Alert Rule\n\n"
                 f"**Alert**: `{rule_name}`\n"
                 f"**Group**: `{group_name}`\n"
-                f"**File**: `{actual_file_name}`\n\n"
+                f"**File**: `{source.relative_path}`\n\n"
                 f"Deleted via PoundCake UI."
             )
 

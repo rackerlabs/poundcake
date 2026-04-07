@@ -5,7 +5,11 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from api.api.prometheus import create_rule, delete_rule, update_rule
+from api.api.prometheus import create_rule, delete_rule, list_rules, update_rule
+from api.services.alert_rule_repo import (
+    AlertRuleSource,
+    dump_alert_rule_sources_to_annotations,
+)
 from api.schemas.schemas import PrometheusRuleWriteRequest
 
 
@@ -97,3 +101,61 @@ async def test_delete_rule_preserves_http_400_from_rule_manager(
 
     assert excinfo.value.status_code == 400
     assert excinfo.value.detail == "rule not found"
+
+
+@pytest.mark.asyncio
+async def test_list_rules_surfaces_repo_relative_file_from_crd_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    annotations = dump_alert_rule_sources_to_annotations(
+        {},
+        {
+            "kube-api-down-warning": AlertRuleSource(
+                relative_path="kubernetes/kube-api-down.yaml",
+                source_format="additionalPrometheusRulesMap",
+                wrapper_key="kube-api-down",
+            )
+        },
+    )
+
+    async def _get_rules():
+        return [
+            {
+                "metadata": {
+                    "name": "kube-api-down",
+                    "namespace": "rackspace",
+                    "annotations": annotations,
+                },
+                "spec": {
+                    "groups": [
+                        {
+                            "name": "kube-api-down",
+                            "rules": [
+                                {
+                                    "alert": "kube-api-down-warning",
+                                    "expr": "up == 0",
+                                    "for": "5m",
+                                    "labels": {"severity": "warning"},
+                                    "annotations": {"summary": "Kube API is down"},
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        ]
+
+    monkeypatch.setattr(
+        "api.api.prometheus.get_settings",
+        lambda: SimpleNamespace(prometheus_use_crds=True),
+    )
+    monkeypatch.setattr(
+        "api.api.prometheus.PrometheusCRDManager",
+        lambda: SimpleNamespace(get_prometheus_rules=_get_rules),
+    )
+
+    response = await list_rules(request=_request("GET"), _user=None)
+
+    assert response.source == "crds"
+    assert response.rules[0].crd == "kube-api-down"
+    assert response.rules[0].file == "kubernetes/kube-api-down.yaml"

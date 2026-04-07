@@ -1623,6 +1623,8 @@ function AlertRulesPage() {
     });
   }, [editingRule, form]);
 
+  const editingRuleSource = editingRule?.file || editingRule?.crd || "";
+
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof ruleSchema>) => {
       const body = prometheusRuleWriteRequestSchema.parse({
@@ -1632,21 +1634,32 @@ function AlertRulesPage() {
         labels: parseJsonObject(values.labels, "Labels"),
         annotations: parseJsonObject(values.annotations, "Annotations"),
       });
-      if (editingRule) {
-        return apiPut(
-          `/api/v1/prometheus/rules/${encodeURIComponent(values.name)}?group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+      const createInsteadOfUpdate =
+        !editingRule ||
+        values.name !== editingRule.name ||
+        values.group !== editingRule.group ||
+        values.file !== editingRuleSource;
+      if (!createInsteadOfUpdate) {
+        return {
+          created: false,
+          result: await apiPut(
+            `/api/v1/prometheus/rules/${encodeURIComponent(values.name)}?group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
+            prometheusRuleMutationResponseSchema,
+            body,
+          ),
+        };
+      }
+      return {
+        created: true,
+        result: await apiPost(
+          `/api/v1/prometheus/rules?rule_name=${encodeURIComponent(values.name)}&group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
           prometheusRuleMutationResponseSchema,
           body,
-        );
-      }
-      return apiPost(
-        `/api/v1/prometheus/rules?rule_name=${encodeURIComponent(values.name)}&group_name=${encodeURIComponent(values.group)}&file_name=${encodeURIComponent(values.file)}`,
-        prometheusRuleMutationResponseSchema,
-        body,
-      );
+        ),
+      };
     },
-    onSuccess: async () => {
-      notify("success", editingRule ? "Alert rule updated." : "Alert rule created.");
+    onSuccess: async ({ created }) => {
+      notify("success", created ? "Alert rule created." : "Alert rule updated.");
       setEditingRule(null);
       form.reset();
       await queryClient.invalidateQueries({ queryKey: ["prometheus-rules"] });
@@ -1742,8 +1755,18 @@ function AlertRulesPage() {
               </FormField>
             </div>
             <div className="grid-two">
-              <FormField label="Rule file / CRD" help="Backing PrometheusRule CRD or file name.">
-                <input {...form.register("file")} placeholder="kubernetes-resources" />
+              <FormField
+                label={settings.git_enabled ? "Repo path / CRD" : "Rule file / CRD"}
+                help={
+                  settings.git_enabled
+                    ? "Use a repo-relative alert-rule path such as kubernetes/kube-api-down.yaml. Existing rules keep updating their current repo file."
+                    : "Backing PrometheusRule CRD or file name."
+                }
+              >
+                <input
+                  {...form.register("file")}
+                  placeholder={settings.git_enabled ? "kubernetes/kube-api-down.yaml" : "kubernetes-resources"}
+                />
                 <FieldError message={form.formState.errors.file?.message} />
               </FormField>
               <FormField label="For duration" help="How long the expression must be true before the alert fires.">
@@ -1773,6 +1796,14 @@ function AlertRulesPage() {
                 </button>
               ) : null}
             </div>
+            {editingRule ? (
+              <div className="helper-card">
+                <strong>Update behavior</strong>
+                <p>
+                  Changing the rule name, group, or source path creates a new rule. Saving with the same identity updates the existing repo-backed rule in place.
+                </p>
+              </div>
+            ) : null}
             </fieldset>
           </form>
         </Panel>
@@ -1816,7 +1847,7 @@ function AlertRulesPage() {
                   <td>{rule.name}</td>
                   <td>{rule.group}</td>
                   <td>{rule.duration || "-"}</td>
-                  <td>{rule.crd || rule.file || "-"}</td>
+                  <td>{rule.file || rule.crd || "-"}</td>
                   <td>
                     <StatusBadge status={rule.state || "unknown"}>{rule.state || "unknown"}</StatusBadge>
                   </td>

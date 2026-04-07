@@ -8,8 +8,9 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from api.services.repo_sync_service import RepoSyncService
+from api.services.alert_rule_repo import ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP
 from api.services.git_manager import GitManager
+from api.services.repo_sync_service import RepoSyncError, RepoSyncService
 
 
 class _ScalarResult:
@@ -402,8 +403,188 @@ async def test_export_alert_rules_writes_files_into_rules_directory(tmp_path: Pa
     ]
     assert len(paths) == 1
     payload = yaml.safe_load(service.git_manager.last_changes[paths[0]])
-    assert payload["groups"][0]["name"] == "node-filesystem"
-    assert payload["groups"][0]["rules"][0]["alert"] == "NodeFilesystemAlmostOutOfSpace"
+    assert list(payload["additionalPrometheusRulesMap"]) == ["NodeFilesystemAlmostOutOfSpace"]
+    assert (
+        payload["additionalPrometheusRulesMap"]["NodeFilesystemAlmostOutOfSpace"]["groups"][0][
+            "name"
+        ]
+        == "node-filesystem"
+    )
+    assert (
+        payload["additionalPrometheusRulesMap"]["NodeFilesystemAlmostOutOfSpace"]["groups"][0][
+            "rules"
+        ][0]["alert"]
+        == "NodeFilesystemAlmostOutOfSpace"
+    )
+
+
+@pytest.mark.asyncio
+async def test_import_alert_rules_supports_wrapped_nested_files(tmp_path: Path) -> None:
+    alerts_dir = tmp_path / "alerts" / "kubernetes"
+    alerts_dir.mkdir(parents=True)
+    (alerts_dir / "kube-api-down.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "additionalPrometheusRulesMap": {
+                    "kube-api-down": {
+                        "groups": [
+                            {
+                                "name": "kube-api-down",
+                                "rules": [
+                                    {"alert": "kube-api-down-warning", "expr": "up == 0"},
+                                    {"alert": "kube-api-down-critical", "expr": "up == 0"},
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    service = RepoSyncService()
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_rules_path="alerts",
+        prometheus_use_crds=True,
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+    create_or_update_rule = AsyncMock(return_value={"status": "success"})
+    service.crd_manager = SimpleNamespace(create_or_update_rule=create_or_update_rule)
+
+    result = await service.import_alert_rules()
+
+    assert result["status"] == "success"
+    assert result["imported"]["alert_rules"] == 2
+    assert result["imported"]["files_scanned"] == 1
+    assert result["imported"]["files_with_groups"] == 1
+    assert result["imported"]["files_skipped"] == 0
+    first_call = create_or_update_rule.await_args_list[0]
+    assert first_call.args[:4] == (
+        "kube-api-down-warning",
+        "kube-api-down",
+        "kube-api-down",
+        {"alert": "kube-api-down-warning", "expr": "up == 0"},
+    )
+    assert first_call.kwargs["source_metadata"].relative_path == "kubernetes/kube-api-down.yaml"
+    assert first_call.kwargs["source_metadata"].source_format == (
+        ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP
+    )
+    assert first_call.kwargs["source_metadata"].wrapper_key == "kube-api-down"
+
+
+@pytest.mark.asyncio
+async def test_import_alert_rules_rejects_unsupported_files(tmp_path: Path) -> None:
+    alerts_dir = tmp_path / "alerts"
+    alerts_dir.mkdir(parents=True)
+    (alerts_dir / "unsupported.yaml").write_text(
+        yaml.safe_dump({"apiVersion": "v1", "kind": "ConfigMap"}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    service = RepoSyncService()
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_rules_path="alerts",
+        prometheus_use_crds=True,
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+    service.crd_manager = SimpleNamespace(create_or_update_rule=AsyncMock())
+
+    with pytest.raises(RepoSyncError):
+        await service.import_alert_rules()
+
+
+@pytest.mark.asyncio
+async def test_export_alert_rules_preserves_wrapped_repo_paths_and_deletes_obsolete_files(
+    tmp_path: Path,
+) -> None:
+    alerts_dir = tmp_path / "alerts" / "kubernetes"
+    alerts_dir.mkdir(parents=True)
+    (alerts_dir / "kube-api-down.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "additionalPrometheusRulesMap": {
+                    "kube-api-down": {
+                        "groups": [
+                            {
+                                "name": "kube-api-down",
+                                "rules": [{"alert": "kube-api-down-warning", "expr": "up == 0"}],
+                            }
+                        ]
+                    }
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    obsolete_path = tmp_path / "alerts" / "obsolete.yaml"
+    obsolete_path.write_text("groups: []\n", encoding="utf-8")
+
+    service = RepoSyncService()
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_rules_path="alerts",
+        git_file_per_alert=True,
+        prometheus_use_crds=True,
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+    service._current_alert_rules = AsyncMock(
+        return_value=[
+            {
+                "group": "kube-api-down",
+                "crd": "kube-api-down",
+                "file": "kubernetes/kube-api-down.yaml",
+                "source_format": ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+                "wrapper_key": "kube-api-down",
+                "rule": {"alert": "kube-api-down-warning", "expr": "up == 1"},
+            },
+            {
+                "group": "fresh-alert",
+                "crd": "fresh-alert",
+                "file": "kubernetes/fresh-alert.yaml",
+                "rule": {"alert": "fresh-alert-warning", "expr": "up == 2"},
+            },
+        ]
+    )
+
+    result = await service.export_alert_rules()
+
+    assert result["status"] == "success"
+    assert result["exported"]["alert_rules"] == 2
+    assert result["exported"]["files_written"] == 2
+    assert service.git_manager.last_changes is not None
+    assert "alerts/kubernetes/kube-api-down.yaml" in service.git_manager.last_changes
+    assert "alerts/kubernetes/fresh-alert.yaml" in service.git_manager.last_changes
+    assert "alerts/obsolete.yaml" in service.git_manager.last_changes
+    assert service.git_manager.last_changes["alerts/obsolete.yaml"] is None
+    assert "alerts/kube-api-down.yaml" not in service.git_manager.last_changes
+
+    existing_payload = yaml.safe_load(
+        service.git_manager.last_changes["alerts/kubernetes/kube-api-down.yaml"]
+    )
+    assert list(existing_payload["additionalPrometheusRulesMap"]) == ["kube-api-down"]
+    assert (
+        existing_payload["additionalPrometheusRulesMap"]["kube-api-down"]["groups"][0]["rules"][0][
+            "expr"
+        ]
+        == "up == 1"
+    )
+
+    new_payload = yaml.safe_load(
+        service.git_manager.last_changes["alerts/kubernetes/fresh-alert.yaml"]
+    )
+    assert list(new_payload["additionalPrometheusRulesMap"]) == ["fresh-alert"]
+    assert (
+        new_payload["additionalPrometheusRulesMap"]["fresh-alert"]["groups"][0]["rules"][0]["alert"]
+        == "fresh-alert-warning"
+    )
 
 
 @pytest.mark.asyncio

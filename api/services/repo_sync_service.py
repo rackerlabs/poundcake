@@ -39,6 +39,17 @@ from api.services.communications_policy import (
     get_visible_recipe_steps,
     is_hidden_workflow_recipe,
 )
+from api.services.alert_rule_repo import (
+    ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+    AlertRuleSource,
+    build_alert_rule_repo_index,
+    dump_alert_rule_document,
+    iter_rule_groups as iter_alert_rule_groups,
+    load_alert_rule_sources_from_annotations,
+    looks_like_repo_relative_rule_path,
+    normalize_repo_relative_path,
+    render_alert_rule_document,
+)
 from api.services.git_manager import get_git_manager
 from api.services.prometheus_crd_manager import get_prometheus_crd_manager
 from api.services.prometheus_rule_manager import (
@@ -308,17 +319,10 @@ def _iter_workflow_payloads(document: Any) -> list[dict[str, Any]]:
 
 
 def _iter_rule_groups(document: Any) -> list[dict[str, Any]]:
-    if not document:
-        return []
-    if isinstance(document, list):
-        return [item for item in document if isinstance(item, dict)]
-    if not isinstance(document, dict):
-        raise RepoSyncError("Alert rule document must be an object or list")
-    if isinstance(document.get("groups"), list):
-        return [item for item in document["groups"] if isinstance(item, dict)]
-    if isinstance(document.get("rules"), list):
-        return [document]
-    return []
+    try:
+        return [group for group, _source_format, _wrapper_key in iter_alert_rule_groups(document)]
+    except ValueError as exc:
+        raise RepoSyncError(str(exc)) from exc
 
 
 def _document_declares_kind(document: dict[str, Any], expected_family: str) -> bool:
@@ -715,16 +719,24 @@ class RepoSyncService:
             rules: list[dict[str, Any]] = []
             for crd in await self.crd_manager.get_prometheus_rules():
                 crd_name = crd.get("metadata", {}).get("name", "")
+                source_map = load_alert_rule_sources_from_annotations(
+                    crd.get("metadata", {}).get("annotations")
+                )
                 for group in crd.get("spec", {}).get("groups", []) or []:
                     group_name = group.get("name", "")
                     for rule in group.get("rules", []) or []:
-                        if not rule.get("alert"):
+                        rule_name = str(rule.get("alert") or "").strip()
+                        if not rule_name:
                             continue
+                        source = source_map.get(rule_name)
                         rules.append(
                             {
                                 "group": group_name,
-                                "file": crd_name,
-                                "rule": normalize_rule_data(str(rule.get("alert") or ""), rule),
+                                "crd": crd_name,
+                                "file": source.relative_path if source else None,
+                                "source_format": source.source_format if source else None,
+                                "wrapper_key": source.wrapper_key if source else None,
+                                "rule": normalize_rule_data(rule_name, rule),
                             }
                         )
             return rules
@@ -749,47 +761,78 @@ class RepoSyncService:
             if rule.get("name")
         ]
 
+    def _rule_source_from_item(
+        self,
+        *,
+        item: dict[str, Any],
+        rule_name: str,
+        group_name: str,
+        repo_index: dict[str, Any],
+    ) -> AlertRuleSource:
+        raw_file = str(item.get("file") or "").strip()
+        raw_format = str(item.get("source_format") or "").strip()
+        raw_wrapper = str(item.get("wrapper_key") or "").strip() or None
+
+        if raw_file and raw_format and looks_like_repo_relative_rule_path(raw_file):
+            try:
+                return AlertRuleSource(
+                    relative_path=normalize_repo_relative_path(raw_file),
+                    source_format=raw_format,
+                    wrapper_key=raw_wrapper,
+                )
+            except ValueError:
+                pass
+
+        repo_entry = repo_index.get(rule_name)
+        if repo_entry is not None:
+            return repo_entry.source
+
+        if raw_file and looks_like_repo_relative_rule_path(raw_file):
+            try:
+                return AlertRuleSource(relative_path=normalize_repo_relative_path(raw_file))
+            except ValueError:
+                pass
+
+        file_hint = sanitize_crd_name(str(item.get("crd") or raw_file or rule_name))
+        return AlertRuleSource(
+            relative_path=self.rule_manager._get_file_path(rule_name, group_name, file_hint),
+            source_format=ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+        )
+
     async def export_alert_rules(self) -> dict[str, Any]:
         rules = await self._current_alert_rules()
+        repo_path = await self._ensure_git_repo()
         rules_dir = _normalize_repo_directory(self.settings.git_rules_path, label="Alert rules")
-        files: dict[str, str] = {}
+        try:
+            repo_index = build_alert_rule_repo_index(repo_path / rules_dir)
+        except ValueError as exc:
+            raise RepoSyncError(str(exc)) from exc
 
-        if self.settings.git_file_per_alert:
-            for item in rules:
-                rule_name = str(item["rule"].get("alert") or item["rule"].get("record") or "rule")
-                group_name = str(item["group"] or "default")
-                file_hint = sanitize_crd_name(str(item["file"] or rule_name))
-                file_name = self.rule_manager._get_file_path(rule_name, group_name, file_hint)
-                files[f"{rules_dir}/{file_name}"] = _yaml_text(
-                    {
-                        "groups": [
-                            {
-                                "name": group_name,
-                                "rules": [item["rule"]],
-                            }
-                        ]
-                    }
-                )
-        else:
-            grouped: dict[str, dict[str, Any]] = {}
-            for item in rules:
-                group_name = str(item["group"] or "default")
-                file_hint = sanitize_crd_name(str(item["file"] or group_name))
-                file_name = self.rule_manager._get_file_path(
-                    str(item["rule"].get("alert") or item["rule"].get("record") or group_name),
-                    group_name,
-                    file_hint,
-                )
-                document = grouped.setdefault(file_name, {"groups": []})
-                groups = document.setdefault("groups", [])
-                group = next((entry for entry in groups if entry.get("name") == group_name), None)
-                if group is None:
-                    group = {"name": group_name, "rules": []}
-                    groups.append(group)
-                group["rules"].append(item["rule"])
-            files = {
-                f"{rules_dir}/{name}": _yaml_text(payload) for name, payload in grouped.items()
-            }
+        files_by_relative_path: dict[str, list[tuple[str, dict[str, Any], AlertRuleSource]]] = {}
+        for item in rules:
+            rule_name = str(
+                item["rule"].get("alert") or item["rule"].get("record") or "rule"
+            ).strip()
+            group_name = str(item["group"] or "default").strip() or "default"
+            source = self._rule_source_from_item(
+                item=item,
+                rule_name=rule_name,
+                group_name=group_name,
+                repo_index=repo_index.by_alert_name,
+            )
+            files_by_relative_path.setdefault(source.relative_path, []).append(
+                (group_name, item["rule"], source)
+            )
+
+        files: dict[str, str] = {}
+        for relative_path, records in sorted(files_by_relative_path.items()):
+            try:
+                document = render_alert_rule_document(records, relative_path=relative_path)
+            except ValueError as exc:
+                raise RepoSyncError(str(exc)) from exc
+            files[f"{rules_dir}/{relative_path}"] = dump_alert_rule_document(
+                document, relative_path
+            )
 
         changes = await self._build_export_changes(relative_dir=rules_dir, new_files=files)
         return await self._finalize_git_export(
@@ -806,6 +849,7 @@ class RepoSyncService:
             extra={
                 "exported": {
                     "alert_rules": len(rules),
+                    "files_written": len(files),
                     "rules_path": rules_dir,
                 }
             },
@@ -815,10 +859,70 @@ class RepoSyncService:
         if not self.settings.prometheus_use_crds:
             raise RepoSyncError("Alert-rule import requires prometheus.useCrds=true")
 
+        repo_path = await self._ensure_git_repo()
+        rules_dir = _normalize_repo_directory(self.settings.git_rules_path, label="Alert rules")
+        base_dir = repo_path / rules_dir
+        if not base_dir.exists():
+            return {
+                "status": "success",
+                "message": "No alert-rule directory found in Git.",
+                "imported": {
+                    "alert_rules": 0,
+                    "files_scanned": 0,
+                    "files_with_groups": 0,
+                    "files_skipped": 0,
+                },
+            }
+
+        files = sorted(
+            path
+            for path in base_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() in REPO_FILE_SUFFIXES
+        )
         imported = 0
-        for path, document in await self._read_repo_documents(self.settings.git_rules_path):
-            relative_name = path.name
-            for group in _iter_rule_groups(document):
+        files_with_groups = 0
+        files_skipped = 0
+
+        for path in files:
+            relative_path = path.relative_to(base_dir).as_posix()
+            try:
+                documents = (
+                    [
+                        document
+                        for document in yaml.safe_load_all(path.read_text(encoding="utf-8"))
+                        if document is not None
+                    ]
+                    if path.suffix.lower() != ".json"
+                    else [json.loads(path.read_text(encoding="utf-8"))]
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise RepoSyncError(
+                    f"Failed to parse alert rule file '{relative_path}': {exc}"
+                ) from exc
+
+            grouped_payloads: list[tuple[dict[str, Any], AlertRuleSource]] = []
+            for document in documents:
+                try:
+                    grouped_payloads.extend(
+                        (
+                            group,
+                            AlertRuleSource(
+                                relative_path=relative_path,
+                                source_format=source_format,
+                                wrapper_key=wrapper_key,
+                            ),
+                        )
+                        for group, source_format, wrapper_key in iter_alert_rule_groups(document)
+                    )
+                except ValueError as exc:
+                    raise RepoSyncError(str(exc)) from exc
+
+            if not grouped_payloads:
+                files_skipped += 1
+                continue
+
+            files_with_groups += 1
+            for group, source in grouped_payloads:
                 group_name = str(group.get("name") or "").strip()
                 if not group_name:
                     raise RepoSyncError(f"Alert rule file '{path.name}' is missing a group name")
@@ -831,8 +935,9 @@ class RepoSyncService:
                     result = await self.crd_manager.create_or_update_rule(
                         rule_name,
                         group_name,
-                        sanitize_crd_name(relative_name),
+                        sanitize_crd_name(relative_path),
                         normalize_rule_data(rule_name, raw_rule),
+                        source_metadata=source,
                     )
                     if result.get("status") == "error":
                         raise RepoSyncError(
@@ -840,11 +945,26 @@ class RepoSyncService:
                         )
                     imported += 1
 
+        if files and imported == 0:
+            raise RepoSyncError(
+                "Scanned alert-rule files in Git but found no importable rules. "
+                "Supported formats are groups, rules, spec.groups, and additionalPrometheusRulesMap."
+            )
+
+        message = f"Imported {imported} alert rules from Git."
+        if files_skipped:
+            message = (
+                f"{message} Skipped {files_skipped} files without supported alert-rule groups."
+            )
+
         return {
             "status": "success",
-            "message": "Imported alert rules from Git.",
+            "message": message,
             "imported": {
                 "alert_rules": imported,
+                "files_scanned": len(files),
+                "files_with_groups": files_with_groups,
+                "files_skipped": files_skipped,
             },
         }
 
@@ -862,7 +982,7 @@ class RepoSyncService:
             result = await self.crd_manager.delete_rule(
                 rule_name,
                 str(item["group"] or ""),
-                str(item["file"] or rule_name),
+                str(item.get("crd") or item.get("file") or rule_name),
             )
             if result.get("status") == "error":
                 raise RepoSyncError(str(result.get("message") or "Alert-rule clear failed"))

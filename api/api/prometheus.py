@@ -11,6 +11,7 @@ from api.core.logging import get_logger
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.api.auth import require_auth_if_enabled
+from api.services.alert_rule_repo import load_alert_rule_sources_from_annotations
 from api.services.prometheus_service import get_prometheus_client
 from api.services.prometheus_rule_manager import get_prometheus_rule_manager
 from api.services.prometheus_crd_manager import PrometheusCRDManager
@@ -60,6 +61,9 @@ async def list_rules(
             for crd in crd_list:
                 crd_name = crd.get("metadata", {}).get("name", "")
                 crd_namespace = crd.get("metadata", {}).get("namespace", "")
+                source_map = load_alert_rule_sources_from_annotations(
+                    crd.get("metadata", {}).get("annotations")
+                )
                 spec = crd.get("spec", {})
                 groups = spec.get("groups", [])
 
@@ -68,14 +72,17 @@ async def list_rules(
                     group_interval = group.get("interval", "")
 
                     for rule in group.get("rules", []):
-                        if rule.get("alert"):  # Only include alerting rules
+                        rule_name = str(rule.get("alert") or "").strip()
+                        if rule_name:  # Only include alerting rules
+                            source = source_map.get(rule_name)
                             rules.append(
                                 {
                                     "group": group_name,
                                     "crd": crd_name,
+                                    "file": source.relative_path if source else None,
                                     "namespace": crd_namespace,
                                     "interval": group_interval,
-                                    "name": rule.get("alert", ""),
+                                    "name": rule_name,
                                     "query": rule.get("expr", ""),
                                     "duration": rule.get("for", ""),
                                     "labels": rule.get("labels", {}),

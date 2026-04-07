@@ -11,6 +11,11 @@ from typing import Any
 
 from api.core.config import get_settings
 from api.core.logging import get_logger
+from api.services.alert_rule_repo import (
+    AlertRuleSource,
+    dump_alert_rule_sources_to_annotations,
+    load_alert_rule_sources_from_annotations,
+)
 
 logger = get_logger(__name__)
 
@@ -164,6 +169,7 @@ class PrometheusCRDManager:
         group_name: str,
         crd_name: str,
         rule_data: dict[str, Any],
+        source_metadata: AlertRuleSource | None = None,
     ) -> dict[str, Any]:
         """
         Create or update a PrometheusRule CRD.
@@ -201,7 +207,13 @@ class PrometheusCRDManager:
                     "Updating rule in existing CRD",
                     extra={"rule": rule_name, "crd": existing["metadata"]["name"]},
                 )
-                return await self._update_rule_in_crd(existing, rule_name, group_name, rule_data)
+                return await self._update_rule_in_crd(
+                    existing,
+                    rule_name,
+                    group_name,
+                    rule_data,
+                    source_metadata=source_metadata,
+                )
             else:
                 # Try to get the CRD by name in case it's a new rule in an existing CRD
                 logger.info("Rule not found, trying CRD by name", extra={"crd_name": crd_name})
@@ -209,12 +221,22 @@ class PrometheusCRDManager:
                 if crd_by_name:
                     logger.info("Found CRD by name, updating", extra={"crd_name": crd_name})
                     return await self._update_rule_in_crd(
-                        crd_by_name, rule_name, group_name, rule_data
+                        crd_by_name,
+                        rule_name,
+                        group_name,
+                        rule_data,
+                        source_metadata=source_metadata,
                     )
                 else:
                     # Create a new CRD
                     logger.info("Creating new CRD", extra={"crd_name": crd_name, "rule": rule_name})
-                    return await self._create_rule_crd(crd_name, group_name, rule_name, rule_data)
+                    return await self._create_rule_crd(
+                        crd_name,
+                        group_name,
+                        rule_name,
+                        rule_data,
+                        source_metadata=source_metadata,
+                    )
         except Exception as e:
             logger.error("Failed to create/update PrometheusRule", extra={"error": str(e)})
             return {
@@ -228,6 +250,7 @@ class PrometheusCRDManager:
         rule_name: str,
         group_name: str,
         rule_data: dict[str, Any],
+        source_metadata: AlertRuleSource | None = None,
     ) -> dict[str, Any]:
         """Update a rule within an existing CRD."""
         if not self.custom_api:
@@ -268,6 +291,14 @@ class PrometheusCRDManager:
 
         spec["groups"] = groups
         existing_crd["spec"] = spec
+        metadata = existing_crd.setdefault("metadata", {})
+        sources = load_alert_rule_sources_from_annotations(metadata.get("annotations"))
+        if source_metadata is not None:
+            sources[rule_name] = source_metadata
+        metadata["annotations"] = dump_alert_rule_sources_to_annotations(
+            metadata.get("annotations"),
+            sources,
+        )
 
         try:
             self.custom_api.patch_namespaced_custom_object(
@@ -303,6 +334,7 @@ class PrometheusCRDManager:
         group_name: str,
         rule_name: str,
         rule_data: dict[str, Any],
+        source_metadata: AlertRuleSource | None = None,
     ) -> dict[str, Any]:
         """Create a new PrometheusRule CRD."""
         if not self.custom_api:
@@ -320,6 +352,10 @@ class PrometheusCRDManager:
             **self.settings.prometheus_crd_labels,
             "managed-by": "poundcake",
         }
+        annotations = dump_alert_rule_sources_to_annotations(
+            {},
+            {rule_name: source_metadata} if source_metadata is not None else {},
+        )
 
         crd_body = {
             "apiVersion": "monitoring.coreos.com/v1",
@@ -328,6 +364,7 @@ class PrometheusCRDManager:
                 "name": crd_name,
                 "namespace": self.settings.prometheus_crd_namespace,
                 "labels": labels,
+                "annotations": annotations,
             },
             "spec": {
                 "groups": [
@@ -440,6 +477,13 @@ class PrometheusCRDManager:
             else:
                 spec["groups"] = groups
                 existing["spec"] = spec
+                metadata = existing.setdefault("metadata", {})
+                sources = load_alert_rule_sources_from_annotations(metadata.get("annotations"))
+                sources.pop(rule_name, None)
+                metadata["annotations"] = dump_alert_rule_sources_to_annotations(
+                    metadata.get("annotations"),
+                    sources,
+                )
 
                 self.custom_api.patch_namespaced_custom_object(
                     group="monitoring.coreos.com",
