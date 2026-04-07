@@ -682,6 +682,19 @@ pre {
   border: 1px solid rgba(143, 163, 168, 0.12);
 }
 
+.workflow-row-disabled td {
+  background: rgba(230, 103, 103, 0.06);
+}
+
+.workflow-row-disabled td:first-child {
+  box-shadow: inset 4px 0 0 rgba(230, 103, 103, 0.5);
+  color: #ffd0d0;
+}
+
+.workflow-row-disabled td:nth-child(2) {
+  color: #ffb8b8;
+}
+
 .action-cell {
   white-space: nowrap;
 }

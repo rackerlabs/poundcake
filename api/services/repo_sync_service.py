@@ -220,6 +220,16 @@ def _action_identity_from_payload(payload: dict[str, Any]) -> tuple[str, str, st
     )
 
 
+def _format_action_reference(payload: dict[str, Any]) -> str:
+    task_key = str(payload.get("task_key_template") or "").strip() or "unknown"
+    execution_target = str(payload.get("execution_target") or "").strip() or "unknown-target"
+    execution_engine = str(payload.get("execution_engine") or "").strip() or "unknown-engine"
+    destination_target = str(payload.get("destination_target") or "").strip()
+    if destination_target:
+        return f"{task_key} ({execution_engine}/{execution_target}:{destination_target})"
+    return f"{task_key} ({execution_engine}/{execution_target})"
+
+
 def _action_file_name(action: Any) -> str:
     destination = str(getattr(action, "destination_target", "") or "") or "default"
     return (
@@ -398,6 +408,21 @@ def _looks_like_workflow_payload(document: Any) -> bool:
     )
 
 
+def _document_entity_flags(document: Any) -> tuple[bool, bool]:
+    if isinstance(document, dict):
+        has_actions = isinstance(document.get("action"), dict) or isinstance(
+            document.get("actions"),
+            list,
+        )
+        has_workflows = isinstance(document.get("workflow"), dict) or isinstance(
+            document.get("workflows"),
+            list,
+        )
+        if has_actions or has_workflows:
+            return has_actions, has_workflows
+    return bool(_iter_action_payloads(document)), bool(_iter_workflow_payloads(document))
+
+
 class RepoSyncService:
     """Handles Git-backed import/export flows for UI configuration objects."""
 
@@ -457,6 +482,201 @@ class RepoSyncService:
                 if rel_path not in new_files:
                     changes[rel_path] = None
         return changes
+
+    async def _build_entity_export_changes(
+        self,
+        *,
+        relative_dir: str,
+        new_files: dict[str, str],
+        entity_family: str,
+    ) -> dict[str, str | None]:
+        repo_path = await self._ensure_git_repo()
+        normalized_dir = _normalize_repo_directory(relative_dir, label="Git")
+        base_dir = repo_path / normalized_dir
+        changes: dict[str, str | None] = dict(new_files)
+
+        if not base_dir.exists():
+            return changes
+
+        for path in base_dir.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in REPO_FILE_SUFFIXES:
+                continue
+            rel_path = path.relative_to(repo_path).as_posix()
+            document = _load_repo_document(path)
+            has_actions, has_workflows = _document_entity_flags(document)
+            if has_actions and has_workflows:
+                raise RepoSyncError(
+                    "Split export cannot manage mixed action/workflow file "
+                    f"'{path.relative_to(base_dir).as_posix()}'."
+                )
+
+            if entity_family == "action" and has_actions and rel_path not in new_files:
+                changes[rel_path] = None
+            if entity_family == "workflow" and has_workflows and rel_path not in new_files:
+                changes[rel_path] = None
+
+        return changes
+
+    def _build_action_catalog(
+        self,
+        actions: list[Any],
+    ) -> tuple[dict[tuple[str, str, str, str], Any], dict[str, list[Any]]]:
+        actions_by_identity = {_action_identity_from_record(action): action for action in actions}
+        actions_by_task_key: dict[str, list[Any]] = {}
+        for action in actions:
+            actions_by_task_key.setdefault(str(action.task_key_template), []).append(action)
+        return actions_by_identity, actions_by_task_key
+
+    async def _import_actions_from_documents(
+        self,
+        action_docs: list[tuple[Path, Any]],
+    ) -> tuple[dict[str, int], dict[tuple[str, str, str, str], Any], dict[str, list[Any]]]:
+        db = self._require_db()
+        existing_actions = await self._load_actions()
+        actions_by_identity, actions_by_task_key = self._build_action_catalog(existing_actions)
+
+        action_created = 0
+        action_updated = 0
+
+        for _, document in action_docs:
+            for raw_payload in _iter_action_payloads(document):
+                payload = IngredientCreate.model_validate(raw_payload).model_dump(exclude_none=True)
+                identity = _action_identity_from_payload(payload)
+                existing = actions_by_identity.get(identity)
+                if existing is None:
+                    same_name = actions_by_task_key.get(str(payload["task_key_template"]), [])
+                    if len(same_name) == 1:
+                        existing = same_name[0]
+
+                if existing is None:
+                    created = await create_ingredient(
+                        _fake_request(),
+                        IngredientCreate.model_validate(payload),
+                        db,
+                    )
+                    action_created += 1
+                    record = created
+                else:
+                    record = await update_ingredient(
+                        int(existing.id),
+                        IngredientUpdate.model_validate(payload),
+                        db,
+                    )
+                    action_updated += 1
+
+                actions_by_identity[_action_identity_from_record(record)] = record
+                actions_by_task_key[str(record.task_key_template)] = [record]
+
+        return (
+            {
+                "actions_created": action_created,
+                "actions_updated": action_updated,
+            },
+            actions_by_identity,
+            actions_by_task_key,
+        )
+
+    async def _import_workflows_from_documents(
+        self,
+        workflow_docs: list[tuple[Path, Any]],
+        *,
+        actions_by_identity: dict[tuple[str, str, str, str], Any] | None = None,
+        actions_by_task_key: dict[str, list[Any]] | None = None,
+    ) -> dict[str, Any]:
+        db = self._require_db()
+        if actions_by_identity is None or actions_by_task_key is None:
+            current_actions = await self._load_actions()
+            actions_by_identity, actions_by_task_key = self._build_action_catalog(current_actions)
+
+        workflow_created = 0
+        workflow_updated = 0
+        workflow_skipped = 0
+        warnings: list[str] = []
+        existing_workflows = {workflow.name: workflow for workflow in await self._load_workflows()}
+
+        for path, document in workflow_docs:
+            for raw_payload in _iter_workflow_payloads(document):
+                workflow_payload = RepoWorkflowDocument.model_validate(raw_payload).model_dump(
+                    exclude_none=True
+                )
+                resolved_steps: list[dict[str, Any]] = []
+                missing_refs: list[str] = []
+
+                for raw_step in workflow_payload["recipe_ingredients"]:
+                    step = RepoWorkflowStep.model_validate(raw_step)
+                    action_ref = step.action.model_dump()
+                    action = actions_by_identity.get(_action_identity_from_payload(action_ref))
+                    if action is None:
+                        same_name = actions_by_task_key.get(
+                            str(action_ref["task_key_template"]), []
+                        )
+                        if len(same_name) == 1:
+                            action = same_name[0]
+
+                    if action is None:
+                        missing_refs.append(_format_action_reference(action_ref))
+                        continue
+
+                    resolved_steps.append(
+                        {
+                            "ingredient_id": int(action.id),
+                            "step_order": step.step_order,
+                            "on_success": step.on_success,
+                            "parallel_group": step.parallel_group,
+                            "depth": step.depth,
+                            "execution_payload_override": step.execution_payload_override,
+                            "execution_parameters_override": step.execution_parameters_override,
+                            "expected_duration_sec_override": step.expected_duration_sec_override,
+                            "timeout_duration_sec_override": step.timeout_duration_sec_override,
+                            "run_phase": step.run_phase,
+                            "run_condition": step.run_condition,
+                        }
+                    )
+
+                if missing_refs:
+                    workflow_skipped += 1
+                    warnings.append(
+                        f"Skipped workflow '{workflow_payload['name']}' from "
+                        f"{path.name}: missing actions {', '.join(sorted(set(missing_refs)))}."
+                    )
+                    continue
+
+                payload = {
+                    "name": workflow_payload["name"],
+                    "description": workflow_payload.get("description"),
+                    "enabled": workflow_payload.get("enabled", True),
+                    "clear_timeout_sec": workflow_payload.get("clear_timeout_sec"),
+                    "communications": workflow_payload.get(
+                        "communications", {"mode": "inherit", "routes": []}
+                    ),
+                    "recipe_ingredients": resolved_steps,
+                }
+                existing = existing_workflows.get(str(payload["name"]))
+                if existing is None:
+                    created = await create_recipe(
+                        _fake_request(),
+                        RecipeCreate.model_validate(payload),
+                        db,
+                    )
+                    workflow_created += 1
+                    existing_workflows[str(created.name)] = created
+                else:
+                    updated = await update_recipe(
+                        int(existing.id),
+                        RecipeUpdate.model_validate(payload),
+                        db,
+                    )
+                    workflow_updated += 1
+                    existing_workflows[str(updated.name)] = updated
+
+        return {
+            "imported": {
+                "workflows_created": workflow_created,
+                "workflows_updated": workflow_updated,
+            },
+            "skipped": {"workflows": workflow_skipped},
+            "warnings": warnings,
+        }
 
     async def _finalize_git_export(
         self,
@@ -519,6 +739,78 @@ class RepoSyncService:
             for recipe in result.unique().scalars().all()
             if not is_hidden_workflow_recipe(recipe)
         ]
+
+    async def export_actions(self) -> dict[str, Any]:
+        actions = await self._load_actions()
+        actions_dir = _normalize_repo_directory(
+            self.settings.git_actions_path,
+            label="Actions",
+        )
+        action_files = {
+            f"{actions_dir}/{_action_file_name(action)}": _yaml_text(_action_export_payload(action))
+            for action in actions
+        }
+        changes = await self._build_entity_export_changes(
+            relative_dir=actions_dir,
+            new_files=action_files,
+            entity_family="action",
+        )
+
+        return await self._finalize_git_export(
+            changes=changes,
+            commit_message=f"Export PoundCake actions\n\nActions: {len(actions)}",
+            pr_title="Export PoundCake actions",
+            pr_description=(
+                "## PoundCake action export\n\n"
+                f"- Actions: `{len(actions)}`\n"
+                f"- Action directory: `{actions_dir}`"
+            ),
+            success_message="Exported actions to Git.",
+            no_change_message="Actions are already in sync with Git.",
+            extra={
+                "exported": {
+                    "actions": len(actions),
+                    "actions_path": actions_dir,
+                }
+            },
+        )
+
+    async def export_workflows(self) -> dict[str, Any]:
+        workflows = await self._load_workflows()
+        workflows_dir = _normalize_repo_directory(
+            self.settings.git_workflows_path,
+            label="Workflows",
+        )
+        workflow_files = {
+            f"{workflows_dir}/{_workflow_file_name(workflow)}": _yaml_text(
+                _workflow_export_payload(workflow)
+            )
+            for workflow in workflows
+        }
+        changes = await self._build_entity_export_changes(
+            relative_dir=workflows_dir,
+            new_files=workflow_files,
+            entity_family="workflow",
+        )
+
+        return await self._finalize_git_export(
+            changes=changes,
+            commit_message=f"Export PoundCake workflows\n\nWorkflows: {len(workflows)}",
+            pr_title="Export PoundCake workflows",
+            pr_description=(
+                "## PoundCake workflow export\n\n"
+                f"- Workflows: `{len(workflows)}`\n"
+                f"- Workflow directory: `{workflows_dir}`"
+            ),
+            success_message="Exported workflows to Git.",
+            no_change_message="Workflows are already in sync with Git.",
+            extra={
+                "exported": {
+                    "workflows": len(workflows),
+                    "workflows_path": workflows_dir,
+                }
+            },
+        )
 
     async def export_workflow_actions(self) -> dict[str, Any]:
         actions = await self._load_actions()
@@ -593,8 +885,65 @@ class RepoSyncService:
             },
         )
 
+    async def import_actions(self) -> dict[str, Any]:
+        actions_dir = _normalize_repo_directory(self.settings.git_actions_path, label="Actions")
+        action_docs = await self._read_repo_documents(actions_dir)
+        imported, _actions_by_identity, _actions_by_task_key = (
+            await self._import_actions_from_documents(action_docs)
+        )
+
+        logger.info(
+            "Imported actions from Git",
+            extra={
+                "req_id": REPO_SYNC_REQ_ID,
+                **imported,
+            },
+        )
+        total_actions = imported["actions_created"] + imported["actions_updated"]
+        return {
+            "status": "success",
+            "message": (
+                f"Imported {total_actions} actions from Git "
+                f"({imported['actions_created']} created, {imported['actions_updated']} updated)."
+            ),
+            "imported": imported,
+        }
+
+    async def import_workflows(self) -> dict[str, Any]:
+        workflows_dir = _normalize_repo_directory(
+            self.settings.git_workflows_path,
+            label="Workflows",
+        )
+        workflow_docs = await self._read_repo_documents(workflows_dir)
+        workflow_result = await self._import_workflows_from_documents(workflow_docs)
+        imported = workflow_result["imported"]
+        skipped = workflow_result["skipped"]
+        warnings = workflow_result["warnings"]
+
+        logger.info(
+            "Imported workflows from Git",
+            extra={
+                "req_id": REPO_SYNC_REQ_ID,
+                **imported,
+                **skipped,
+            },
+        )
+        total_workflows = imported["workflows_created"] + imported["workflows_updated"]
+        message = (
+            f"Imported {total_workflows} workflows from Git "
+            f"({imported['workflows_created']} created, {imported['workflows_updated']} updated)."
+        )
+        if skipped["workflows"]:
+            message += f" Skipped {skipped['workflows']} workflow(s) with missing actions."
+        return {
+            "status": "success",
+            "message": message,
+            "imported": imported,
+            "skipped": skipped,
+            "warnings": warnings,
+        }
+
     async def import_workflow_actions(self) -> dict[str, Any]:
-        db = self._require_db()
         actions_dir = _normalize_repo_directory(self.settings.git_actions_path, label="Actions")
         workflows_dir = _normalize_repo_directory(
             self.settings.git_workflows_path,
@@ -608,133 +957,37 @@ class RepoSyncService:
             action_docs = await self._read_repo_documents(actions_dir)
             workflow_docs = await self._read_repo_documents(workflows_dir)
 
-        existing_actions = await self._load_actions()
-        actions_by_identity = {
-            _action_identity_from_record(action): action for action in existing_actions
-        }
-        actions_by_task_key: dict[str, list[Any]] = {}
-        for action in existing_actions:
-            actions_by_task_key.setdefault(str(action.task_key_template), []).append(action)
-
-        action_created = 0
-        action_updated = 0
-
-        for _, document in action_docs:
-            for raw_payload in _iter_action_payloads(document):
-                payload = IngredientCreate.model_validate(raw_payload).model_dump(exclude_none=True)
-                identity = _action_identity_from_payload(payload)
-                existing = actions_by_identity.get(identity)
-                if existing is None:
-                    same_name = actions_by_task_key.get(str(payload["task_key_template"]), [])
-                    if len(same_name) == 1:
-                        existing = same_name[0]
-
-                if existing is None:
-                    created = await create_ingredient(
-                        _fake_request(),
-                        IngredientCreate.model_validate(payload),
-                        db,
-                    )
-                    action_created += 1
-                    record = created
-                else:
-                    record = await update_ingredient(
-                        int(existing.id),
-                        IngredientUpdate.model_validate(payload),
-                        db,
-                    )
-                    action_updated += 1
-
-                actions_by_identity[_action_identity_from_record(record)] = record
-                actions_by_task_key.setdefault(str(record.task_key_template), [])
-                actions_by_task_key[str(record.task_key_template)] = [record]
-
-        workflow_created = 0
-        workflow_updated = 0
-        existing_workflows = {workflow.name: workflow for workflow in await self._load_workflows()}
-
-        for _, document in workflow_docs:
-            for raw_payload in _iter_workflow_payloads(document):
-                workflow_payload = RepoWorkflowDocument.model_validate(raw_payload).model_dump(
-                    exclude_none=True
-                )
-                resolved_steps: list[dict[str, Any]] = []
-                for raw_step in workflow_payload["recipe_ingredients"]:
-                    step = RepoWorkflowStep.model_validate(raw_step)
-                    action_ref = step.action.model_dump()
-                    action = actions_by_identity.get(_action_identity_from_payload(action_ref))
-                    if action is None:
-                        same_name = actions_by_task_key.get(
-                            str(action_ref["task_key_template"]), []
-                        )
-                        if len(same_name) == 1:
-                            action = same_name[0]
-                    if action is None:
-                        raise RepoSyncError(
-                            "Workflow import could not resolve action "
-                            f"'{action_ref['task_key_template']}'"
-                        )
-                    resolved_steps.append(
-                        {
-                            "ingredient_id": int(action.id),
-                            "step_order": step.step_order,
-                            "on_success": step.on_success,
-                            "parallel_group": step.parallel_group,
-                            "depth": step.depth,
-                            "execution_payload_override": step.execution_payload_override,
-                            "execution_parameters_override": step.execution_parameters_override,
-                            "expected_duration_sec_override": step.expected_duration_sec_override,
-                            "timeout_duration_sec_override": step.timeout_duration_sec_override,
-                            "run_phase": step.run_phase,
-                            "run_condition": step.run_condition,
-                        }
-                    )
-
-                payload = {
-                    "name": workflow_payload["name"],
-                    "description": workflow_payload.get("description"),
-                    "enabled": workflow_payload.get("enabled", True),
-                    "clear_timeout_sec": workflow_payload.get("clear_timeout_sec"),
-                    "communications": workflow_payload.get(
-                        "communications", {"mode": "inherit", "routes": []}
-                    ),
-                    "recipe_ingredients": resolved_steps,
-                }
-                existing = existing_workflows.get(str(payload["name"]))
-                if existing is None:
-                    await create_recipe(
-                        _fake_request(),
-                        RecipeCreate.model_validate(payload),
-                        db,
-                    )
-                    workflow_created += 1
-                else:
-                    await update_recipe(
-                        int(existing.id),
-                        RecipeUpdate.model_validate(payload),
-                        db,
-                    )
-                    workflow_updated += 1
+        imported_actions, actions_by_identity, actions_by_task_key = (
+            await self._import_actions_from_documents(action_docs)
+        )
+        workflow_result = await self._import_workflows_from_documents(
+            workflow_docs,
+            actions_by_identity=actions_by_identity,
+            actions_by_task_key=actions_by_task_key,
+        )
+        imported = {**workflow_result["imported"], **imported_actions}
+        skipped = workflow_result["skipped"]
+        warnings = workflow_result["warnings"]
 
         logger.info(
             "Imported workflows and actions from Git",
             extra={
                 "req_id": REPO_SYNC_REQ_ID,
-                "workflows_created": workflow_created,
-                "workflows_updated": workflow_updated,
-                "actions_created": action_created,
-                "actions_updated": action_updated,
+                **imported,
+                **skipped,
             },
         )
+        total_workflows = imported["workflows_created"] + imported["workflows_updated"]
+        total_actions = imported["actions_created"] + imported["actions_updated"]
+        message = f"Imported {total_workflows} workflows and {total_actions} actions from Git."
+        if skipped["workflows"]:
+            message += f" Skipped {skipped['workflows']} workflow(s) with missing actions."
         return {
             "status": "success",
-            "message": "Imported workflows and actions from Git.",
-            "imported": {
-                "workflows_created": workflow_created,
-                "workflows_updated": workflow_updated,
-                "actions_created": action_created,
-                "actions_updated": action_updated,
-            },
+            "message": message,
+            "imported": imported,
+            "skipped": skipped,
+            "warnings": warnings,
         }
 
     async def clear_workflow_actions(self) -> dict[str, Any]:

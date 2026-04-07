@@ -101,6 +101,8 @@ export const repoSyncResponseSchema = strictObject({
   pull_request: repoSyncPullRequestSchema.nullable().optional(),
   exported: z.record(repoSyncExportValueSchema).nullable().optional(),
   imported: z.record(z.number()).nullable().optional(),
+  skipped: z.record(z.number()).nullable().optional(),
+  warnings: z.array(z.string()).nullable().optional(),
   cleared: z.record(z.number()).nullable().optional(),
 });
 export type RepoSyncResponse = z.infer<typeof repoSyncResponseSchema>;

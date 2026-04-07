@@ -30,6 +30,10 @@ def test_request_role_requirement_maps_expected_routes() -> None:
     assert request_role_requirement("/api/v1/orders", "POST") == "service"
     assert request_role_requirement("/api/v1/suppressions/12/cancel", "POST") == "operator"
     assert request_role_requirement("/api/v1/prometheus/reload", "POST") == "operator"
+    assert request_role_requirement("/api/v1/repo-sync/actions/import", "POST") == "operator"
+    assert request_role_requirement("/api/v1/repo-sync/actions/export", "POST") == "operator"
+    assert request_role_requirement("/api/v1/repo-sync/workflows/import", "POST") == "operator"
+    assert request_role_requirement("/api/v1/repo-sync/workflows/export", "POST") == "operator"
     assert (
         request_role_requirement("/api/v1/repo-sync/workflow-actions/import", "POST") == "operator"
     )
@@ -74,6 +78,8 @@ def test_operator_and_admin_role_checks() -> None:
 def test_request_authorization_uses_role_matrix() -> None:
     operator = _human_context("operator")
     ensure_request_authorized(operator, "/api/v1/recipes/1", "PUT")
+    ensure_request_authorized(operator, "/api/v1/repo-sync/actions/import", "POST")
+    ensure_request_authorized(operator, "/api/v1/repo-sync/workflows/export", "POST")
     with pytest.raises(AccessDeniedError):
         ensure_request_authorized(operator, "/api/v1/repo-sync/workflow-actions", "DELETE")
 

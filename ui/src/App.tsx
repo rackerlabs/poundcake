@@ -181,6 +181,24 @@ const actionSchema = z.object({
   execution_parameters_text: z.string().optional(),
 });
 
+const emptyActionFormValues: z.infer<typeof actionSchema> = {
+  template: "remediation",
+  task_key_template: "",
+  execution_target: "",
+  destination_target: "",
+  execution_engine: "stackstorm",
+  execution_purpose: "remediation",
+  execution_id: "",
+  is_blocking: true,
+  on_failure: "stop",
+  expected_duration_sec: 60,
+  timeout_duration_sec: 300,
+  retry_count: 0,
+  retry_delay: 5,
+  execution_payload_text: "",
+  execution_parameters_text: "",
+};
+
 const suppressionSchema = z.object({
   name: z.string().min(1, "Suppression name is required"),
   reason: z.string().optional(),
@@ -2206,6 +2224,7 @@ function WorkflowsPage() {
   const principal = usePrincipal();
   const settings = useSettings();
   const queryClient = useQueryClient();
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<RecipeRecord | null>(null);
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const canEdit = canManageWorkflows(principal);
@@ -2256,6 +2275,47 @@ function WorkflowsPage() {
     control: form.control,
     name: "communications_routes",
   });
+
+  const refreshWorkflows = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["workflows"] });
+    await queryClient.refetchQueries({
+      queryKey: ["workflows"],
+      exact: true,
+      type: "active",
+    });
+  };
+
+  const refreshActions = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["actions"] });
+    await queryClient.refetchQueries({
+      queryKey: ["actions"],
+      exact: true,
+      type: "active",
+    });
+  };
+
+  const refreshWorkflowAndActionInventories = async () => {
+    await Promise.all([refreshWorkflows(), refreshActions()]);
+  };
+
+  const openCreateWorkflowDialog = () => {
+    setEditingWorkflow(null);
+    resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+    setMode("simple");
+    setEditorOpen(true);
+  };
+
+  const openEditWorkflowDialog = (workflow: RecipeRecord) => {
+    setEditingWorkflow(workflow);
+    setEditorOpen(true);
+  };
+
+  const closeWorkflowDialog = () => {
+    setEditorOpen(false);
+    setEditingWorkflow(null);
+    resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+    setMode("simple");
+  };
 
   useEffect(() => {
     if (!editingWorkflow) {
@@ -2356,10 +2416,9 @@ function WorkflowsPage() {
     },
     onSuccess: async () => {
       notify("success", editingWorkflow ? "Workflow updated." : "Workflow created.");
-      setEditingWorkflow(null);
-      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
+      closeWorkflowDialog();
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
+        refreshWorkflows(),
         queryClient.invalidateQueries({ queryKey: ["communications-policy"] }),
       ]);
     },
@@ -2370,29 +2429,27 @@ function WorkflowsPage() {
     mutationFn: (workflowId: number) => apiDelete(`/api/v1/recipes/${workflowId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Workflow deleted.");
-      setEditingWorkflow(null);
-      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
-      await queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      closeWorkflowDialog();
+      await refreshWorkflows();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const exportMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/export", repoSyncResponseSchema),
-    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflows/export", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      await refreshWorkflows();
+    },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const importMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/import", repoSyncResponseSchema),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflows/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
-      setEditingWorkflow(null);
-      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
-        queryClient.invalidateQueries({ queryKey: ["actions"] }),
-      ]);
+      closeWorkflowDialog();
+      await refreshWorkflows();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -2401,12 +2458,8 @@ function WorkflowsPage() {
     mutationFn: () => apiDelete("/api/v1/repo-sync/workflow-actions", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
-      setEditingWorkflow(null);
-      resetWorkflowForm(form, steps, communicationRoutes, settings.global_communications_configured);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
-        queryClient.invalidateQueries({ queryKey: ["actions"] }),
-      ]);
+      closeWorkflowDialog();
+      await refreshWorkflowAndActionInventories();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -2437,7 +2490,7 @@ function WorkflowsPage() {
         title="Workflows"
         description="Build remediation and utility workflows, then choose whether they inherit global communications or define a workflow-specific override."
       />
-      <WorkflowActionRepoSyncPanel
+      <WorkflowRepoSyncPanel
         canClear={canClear}
         canEdit={canEdit}
         isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
@@ -2446,334 +2499,26 @@ function WorkflowsPage() {
         onImport={() => importMutation.mutate()}
         settings={settings}
       />
-      <div className="editor-grid">
-        <Panel title={editingWorkflow ? `Edit ${editingWorkflow.name}` : "Create workflow"} subtitle="Simple mode keeps the common path short. Advanced mode exposes execution plumbing when you need it.">
-          {!canEdit ? (
-            <div className="helper-card">
-              <strong>Read-only access</strong>
-              <p>Your role can inspect workflows, but only operators and admins can change them.</p>
-            </div>
-          ) : null}
-          <div className="mode-toggle">
-            <button className={mode === "simple" ? "primary-button" : "ghost-button"} disabled={!canEdit} onClick={() => setMode("simple")} type="button">
-              Simple
-            </button>
-            <button className={mode === "advanced" ? "primary-button" : "ghost-button"} disabled={!canEdit} onClick={() => setMode("advanced")} type="button">
-              Advanced
-            </button>
+      <Panel
+        title="Workflow inventory"
+        subtitle={`${recipesQuery.data.length} workflows loaded. Select a workflow to edit it or remove it when it is no longer used.`}
+        actions={
+          <button
+            className="primary-button"
+            disabled={!canEdit}
+            type="button"
+            onClick={openCreateWorkflowDialog}
+          >
+            Create workflow
+          </button>
+        }
+      >
+        {!canEdit ? (
+          <div className="helper-card">
+            <strong>Read-only access</strong>
+            <p>Your role can inspect workflows, but only operators and admins can change them.</p>
           </div>
-
-          <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
-            <fieldset disabled={!canEdit}>
-            <div className="grid-two">
-              <FormField label="Workflow name" help="Use the alert or handling pattern name operators will recognize.">
-                <input {...form.register("name")} placeholder="Node filesystem response" />
-                <FieldError message={form.formState.errors.name?.message} />
-              </FormField>
-              <FormField label="Resolve wait (sec)" help="How long PoundCake should wait before resolve-side handling applies.">
-                <input {...form.register("clear_timeout_sec")} placeholder="300" />
-              </FormField>
-            </div>
-            <FormField label="Description" help="Explain the intent so responders can understand why this workflow exists.">
-              <textarea {...form.register("description")} rows={3} />
-            </FormField>
-            <FormField label="Enabled" help="Disable a workflow without deleting it when you want to keep its history and structure.">
-              <label className="toggle-row">
-                <input type="checkbox" {...form.register("enabled")} />
-                <span>Workflow is enabled</span>
-              </label>
-            </FormField>
-
-            <div className="builder-header">
-              <div>
-                <h4>Communications</h4>
-                <p>Communications are policy-driven. Use the global default or replace it with workflow-specific routes.</p>
-              </div>
-            </div>
-
-            <div className="builder-stack">
-              <div className="builder-card">
-                <div className="grid-two">
-                  <FormField label="Communications source" help="Use the global route set when possible, or replace it entirely for this workflow with workflow-specific communications.">
-                    <select {...form.register("communications_mode")}>
-                      <option value="inherit">Use global default</option>
-                      <option value="local">Use workflow-specific communications</option>
-                    </select>
-                  </FormField>
-                  <div className="helper-card">
-                    <strong>Current effective policy</strong>
-                    <p>
-                      {watchedCommunicationMode === "inherit"
-                        ? policyQuery.data.configured
-                          ? `${policyQuery.data.routes.filter((route) => route.enabled).length} global route(s) are available to this workflow.`
-                          : "No global routes are configured yet. Switch this workflow to workflow-specific communications before enabling it."
-                        : `${watchedCommunicationRoutes.filter((route) => route.enabled).length} workflow-specific route(s) are currently enabled.`}
-                    </p>
-                  </div>
-                </div>
-
-                {watchedCommunicationMode === "inherit" ? (
-                  policyQuery.data.routes.length ? (
-                    <div className="route-grid">
-                      {policyQuery.data.routes.map((route) => (
-                        <div className="route-card" key={route.id}>
-                          <div className="route-card-head">
-                            <strong>{route.label}</strong>
-                            <StatusBadge status={route.enabled ? "active" : "canceled"}>
-                              {route.enabled ? "enabled" : "disabled"}
-                            </StatusBadge>
-                          </div>
-                          <KeyValue label="Provider" value={route.execution_target} />
-                          <KeyValue label="Destination" value={route.destination_target || "-"} />
-                          <KeyValue label="Route config" value={providerConfigSummary(route.execution_target, route.provider_config)} />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState message="No global communications are configured. Use workflow-specific communications or configure the global policy first." />
-                  )
-                ) : (
-                  <>
-                    <div className="builder-header">
-                      <div>
-                        <h4>Workflow-specific routes</h4>
-                        <p>These routes replace the global default entirely for this workflow.</p>
-                      </div>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() =>
-                          communicationRoutes.append({
-                            ...emptyCommunicationRoute(),
-                            position: communicationRoutes.fields.length + 1,
-                          })
-                        }
-                      >
-                        Add route
-                      </button>
-                    </div>
-
-                    <div className="builder-stack">
-                      {communicationRoutes.fields.length ? (
-                        communicationRoutes.fields.map((field, index) => (
-                          <div className="builder-card" key={field.id}>
-                            <div className="builder-card-head">
-                              <strong>Route {index + 1}</strong>
-                              <div className="inline-actions">
-                                <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(communicationRoutes, index, -1)}>
-                                  Up
-                                </button>
-                                <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(communicationRoutes, index, 1)}>
-                                  Down
-                                </button>
-                                <button className="danger-button" type="button" onClick={() => communicationRoutes.remove(index)}>
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                            <div className="grid-two">
-                              <FormField label="Route label" help="Name this route the way operators will recognize it later in incidents and communications history.">
-                                <input {...form.register(`communications_routes.${index}.label` as const)} placeholder="Primary escalation route" />
-                                <FieldError message={form.formState.errors.communications_routes?.[index]?.label?.message} />
-                              </FormField>
-                              <FormField label="Provider" help="Provider or destination type such as rackspace_core, teams, or discord.">
-                                <select
-                                  {...form.register(`communications_routes.${index}.execution_target` as const, {
-                                    onChange: () =>
-                                      form.setValue(`communications_routes.${index}.provider_config` as any, {}),
-                                  })}
-                                >
-                                  {communicationTargetOptions.map((target) => (
-                                    <option key={target} value={target}>
-                                      {target}
-                                    </option>
-                                  ))}
-                                </select>
-                              </FormField>
-                            </div>
-                            <div className="grid-two">
-                              <FormField label="Destination" help="Optional queue, channel, project, or room for this route.">
-                                <input {...form.register(`communications_routes.${index}.destination_target` as const)} placeholder="ops-alerts" />
-                              </FormField>
-                              <FormField label="Enabled" help="Disabled routes stay in the workflow definition but do not run.">
-                                <label className="toggle-row">
-                                  <input type="checkbox" {...form.register(`communications_routes.${index}.enabled` as const)} />
-                                  <span>Route is enabled</span>
-                                </label>
-                              </FormField>
-                            </div>
-                            <CommunicationRouteProviderConfigFields
-                              form={form as ReturnType<typeof useForm<any>>}
-                              basePath={`communications_routes.${index}`}
-                              executionTarget={watchedCommunicationRoutes[index]?.execution_target || field.execution_target}
-                            />
-                          </div>
-                        ))
-                      ) : (
-                        <EmptyState message="Add at least one route if this workflow should override the global default." />
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="builder-header">
-              <div>
-                <h4>Workflow steps</h4>
-                <p>Workflow steps should focus on remediation and utility logic. Communications are managed separately above.</p>
-              </div>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() =>
-                  steps.append({
-                    ingredient_id: 0,
-                    step_order: steps.fields.length + 1,
-                    on_success: "continue",
-                    run_phase: "both",
-                    run_condition: "always",
-                    parallel_group: 0,
-                    depth: 0,
-                    execution_parameters_override_text: "",
-                  })
-                }
-              >
-                Add step
-              </button>
-            </div>
-
-            <div className="builder-stack">
-              {steps.fields.map((field, index) => (
-                <div className="builder-card" key={field.id}>
-                  <div className="builder-card-head">
-                    <strong>Step {index + 1}</strong>
-                    <div className="inline-actions">
-                      <button className="ghost-button" type="button" onClick={() => moveField(steps, index, -1)}>
-                        Up
-                      </button>
-                      <button className="ghost-button" type="button" onClick={() => moveField(steps, index, 1)}>
-                        Down
-                      </button>
-                      <button className="danger-button" type="button" onClick={() => steps.remove(index)}>
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid-three">
-                    <FormField label="Action" help="The reusable action this step will run.">
-                      <select {...form.register(`recipe_ingredients.${index}.ingredient_id` as const)}>
-                        <option value={0}>Choose an action</option>
-                        {availableActions.map((action) => (
-                          <option key={action.id} value={action.id}>
-                            {action.task_key_template} ({titleize(action.execution_target)})
-                          </option>
-                        ))}
-                      </select>
-                    </FormField>
-                    <FormField label="Run phase" help="Choose whether this runs when the alert fires, resolves, escalates, or both.">
-                      <select {...form.register(`recipe_ingredients.${index}.run_phase` as const)}>
-                        <option value="firing">firing</option>
-                        <option value="escalation">escalation</option>
-                        <option value="resolving">resolving</option>
-                        <option value="both">both</option>
-                      </select>
-                    </FormField>
-                    <FormField label="Run condition" help="Fine-grained control over whether this step runs after success, failure, timeout, or always.">
-                      <select {...form.register(`recipe_ingredients.${index}.run_condition` as const)}>
-                        <option value="always">always</option>
-                        <option value="remediation_failed">remediation_failed</option>
-                        <option value="clear_timeout_expired">clear_timeout_expired</option>
-                        <option value="resolved_after_success">resolved_after_success</option>
-                        <option value="resolved_after_failure">resolved_after_failure</option>
-                        <option value="resolved_after_no_remediation">resolved_after_no_remediation</option>
-                        <option value="resolved_after_timeout">resolved_after_timeout</option>
-                      </select>
-                    </FormField>
-                  </div>
-                  <div className="grid-two">
-                    <FormField label="On success" help="Continue keeps the workflow moving; stop ends the workflow after this step succeeds.">
-                      <select {...form.register(`recipe_ingredients.${index}.on_success` as const)}>
-                        <option value="continue">continue</option>
-                        <option value="stop">stop</option>
-                      </select>
-                    </FormField>
-                    {mode === "advanced" ? (
-                      <FormField label="Override JSON" help="Optional execution-parameter override for this specific step invocation.">
-                        <textarea {...form.register(`recipe_ingredients.${index}.execution_parameters_override_text` as const)} rows={3} />
-                      </FormField>
-                    ) : (
-                      <div className="helper-card">
-                        <strong>Plain-English step</strong>
-                        <p>{describeWorkflowStep(watchedSteps[index], availableActions)}</p>
-                      </div>
-                    )}
-                  </div>
-                  {mode === "advanced" ? (
-                    <div className="grid-two">
-                      <FormField label="Parallel group" help="Steps with the same group can be planned together. Use 0 for default sequential handling.">
-                        <input type="number" min={0} {...form.register(`recipe_ingredients.${index}.parallel_group` as const)} />
-                      </FormField>
-                      <FormField label="Depth" help="Execution depth for more advanced branching patterns. Leave at 0 for standard ordered workflows.">
-                        <input type="number" min={0} {...form.register(`recipe_ingredients.${index}.depth` as const)} />
-                      </FormField>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-
-            <div className="preview-card">
-              <div className="eyebrow">Workflow preview</div>
-              <p>{workflowPreview}</p>
-            </div>
-
-            <div className="form-actions">
-              <button className="primary-button" disabled={saveMutation.isPending} type="submit">
-                {saveMutation.isPending ? "Saving..." : editingWorkflow ? "Save workflow" : "Create workflow"}
-              </button>
-              {editingWorkflow ? (
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => {
-                    setEditingWorkflow(null);
-                    resetWorkflowForm(
-                      form,
-                      steps,
-                      communicationRoutes,
-                      settings.global_communications_configured,
-                    );
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-            </fieldset>
-          </form>
-        </Panel>
-
-        <HelpRail
-          title="Workflow help"
-          items={[
-            {
-              label: "Global vs local",
-              description: "Use the global default when the workflow should follow the platform-wide route set. Switch to workflow-specific communications only when this workflow needs its own route list.",
-            },
-            {
-              label: "Lifecycle",
-              description: "Communications do not fire when the workflow starts. PoundCake opens routes on escalation, opens then closes after successful resolve, and posts clear notifications after escalation clears.",
-            },
-            {
-              label: "Step scope",
-              description: "Keep workflow steps focused on remediation and utility actions. Configure ticketing, Teams, Discord, and similar destinations in the communications section instead of as ordinary steps.",
-            },
-          ]}
-        />
-      </div>
-
-      <Panel title="Workflow inventory" subtitle="Select a workflow to edit it or remove it when it is no longer used.">
+        ) : null}
         <div className="table-wrap">
           <table>
             <thead>
@@ -2789,7 +2534,7 @@ function WorkflowsPage() {
             </thead>
             <tbody>
               {recipesQuery.data.map((workflow) => (
-                <tr key={workflow.id}>
+                <tr className={workflow.enabled ? undefined : "workflow-row-disabled"} key={workflow.id}>
                   <td>{workflow.name}</td>
                   <td>{workflow.description || "-"}</td>
                   <td>
@@ -2807,7 +2552,12 @@ function WorkflowsPage() {
                   <td>{workflow.recipe_ingredients.length}</td>
                   <td>{formatDate(workflow.updated_at)}</td>
                   <td className="action-cell">
-                    <button className="ghost-button" disabled={!canEdit} type="button" onClick={() => setEditingWorkflow(workflow)}>
+                    <button
+                      className="ghost-button"
+                      disabled={!canEdit}
+                      type="button"
+                      onClick={() => openEditWorkflowDialog(workflow)}
+                    >
                       Edit
                     </button>
                     <button
@@ -2829,6 +2579,318 @@ function WorkflowsPage() {
           </table>
         </div>
       </Panel>
+      {editorOpen ? (
+        <div aria-modal="true" className="dialog-backdrop" role="dialog">
+          <div className="dialog-card dialog-card-wide">
+            <div className="panel-head">
+              <div>
+                <h4>{editingWorkflow ? `Edit ${editingWorkflow.name}` : "Create workflow"}</h4>
+                <p>Simple mode keeps the common path short. Advanced mode exposes execution plumbing when you need it.</p>
+              </div>
+            </div>
+            {!canEdit ? (
+              <div className="helper-card">
+                <strong>Read-only access</strong>
+                <p>Your role can inspect workflows, but only operators and admins can change them.</p>
+              </div>
+            ) : null}
+            <div className="mode-toggle">
+              <button
+                className={mode === "simple" ? "primary-button" : "ghost-button"}
+                disabled={!canEdit}
+                onClick={() => setMode("simple")}
+                type="button"
+              >
+                Simple
+              </button>
+              <button
+                className={mode === "advanced" ? "primary-button" : "ghost-button"}
+                disabled={!canEdit}
+                onClick={() => setMode("advanced")}
+                type="button"
+              >
+                Advanced
+              </button>
+            </div>
+
+            <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+              <fieldset disabled={!canEdit}>
+                <div className="grid-two">
+                  <FormField label="Workflow name" help="Use the alert or handling pattern name operators will recognize.">
+                    <input {...form.register("name")} placeholder="Node filesystem response" />
+                    <FieldError message={form.formState.errors.name?.message} />
+                  </FormField>
+                  <FormField label="Resolve wait (sec)" help="How long PoundCake should wait before resolve-side handling applies.">
+                    <input {...form.register("clear_timeout_sec")} placeholder="300" />
+                  </FormField>
+                </div>
+                <FormField label="Description" help="Explain the intent so responders can understand why this workflow exists.">
+                  <textarea {...form.register("description")} rows={3} />
+                </FormField>
+                <FormField label="Enabled" help="Disable a workflow without deleting it when you want to keep its history and structure.">
+                  <label className="toggle-row">
+                    <input type="checkbox" {...form.register("enabled")} />
+                    <span>Workflow is enabled</span>
+                  </label>
+                </FormField>
+
+                <div className="builder-header">
+                  <div>
+                    <h4>Communications</h4>
+                    <p>Communications are policy-driven. Use the global default or replace it with workflow-specific routes.</p>
+                  </div>
+                </div>
+
+                <div className="builder-stack">
+                  <div className="builder-card">
+                    <div className="grid-two">
+                      <FormField label="Communications source" help="Use the global route set when possible, or replace it entirely for this workflow with workflow-specific communications.">
+                        <select {...form.register("communications_mode")}>
+                          <option value="inherit">Use global default</option>
+                          <option value="local">Use workflow-specific communications</option>
+                        </select>
+                      </FormField>
+                      <div className="helper-card">
+                        <strong>Current effective policy</strong>
+                        <p>
+                          {watchedCommunicationMode === "inherit"
+                            ? policyQuery.data.configured
+                              ? `${policyQuery.data.routes.filter((route) => route.enabled).length} global route(s) are available to this workflow.`
+                              : "No global routes are configured yet. Switch this workflow to workflow-specific communications before enabling it."
+                            : `${watchedCommunicationRoutes.filter((route) => route.enabled).length} workflow-specific route(s) are currently enabled.`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {watchedCommunicationMode === "inherit" ? (
+                      policyQuery.data.routes.length ? (
+                        <div className="route-grid">
+                          {policyQuery.data.routes.map((route) => (
+                            <div className="route-card" key={route.id}>
+                              <div className="route-card-head">
+                                <strong>{route.label}</strong>
+                                <StatusBadge status={route.enabled ? "active" : "canceled"}>
+                                  {route.enabled ? "enabled" : "disabled"}
+                                </StatusBadge>
+                              </div>
+                              <KeyValue label="Provider" value={route.execution_target} />
+                              <KeyValue label="Destination" value={route.destination_target || "-"} />
+                              <KeyValue label="Route config" value={providerConfigSummary(route.execution_target, route.provider_config)} />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState message="No global communications are configured. Use workflow-specific communications or configure the global policy first." />
+                      )
+                    ) : (
+                      <>
+                        <div className="builder-header">
+                          <div>
+                            <h4>Workflow-specific routes</h4>
+                            <p>These routes replace the global default entirely for this workflow.</p>
+                          </div>
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() =>
+                              communicationRoutes.append({
+                                ...emptyCommunicationRoute(),
+                                position: communicationRoutes.fields.length + 1,
+                              })
+                            }
+                          >
+                            Add route
+                          </button>
+                        </div>
+
+                        <div className="builder-stack">
+                          {communicationRoutes.fields.length ? (
+                            communicationRoutes.fields.map((field, index) => (
+                              <div className="builder-card" key={field.id}>
+                                <div className="builder-card-head">
+                                  <strong>Route {index + 1}</strong>
+                                  <div className="inline-actions">
+                                    <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(communicationRoutes, index, -1)}>
+                                      Up
+                                    </button>
+                                    <button className="ghost-button" type="button" onClick={() => moveCommunicationRoute(communicationRoutes, index, 1)}>
+                                      Down
+                                    </button>
+                                    <button className="danger-button" type="button" onClick={() => communicationRoutes.remove(index)}>
+                                      Remove
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="grid-two">
+                                  <FormField label="Route label" help="Name this route the way operators will recognize it later in incidents and communications history.">
+                                    <input {...form.register(`communications_routes.${index}.label` as const)} placeholder="Primary escalation route" />
+                                    <FieldError message={form.formState.errors.communications_routes?.[index]?.label?.message} />
+                                  </FormField>
+                                  <FormField label="Provider" help="Provider or destination type such as rackspace_core, teams, or discord.">
+                                    <select
+                                      {...form.register(`communications_routes.${index}.execution_target` as const, {
+                                        onChange: () =>
+                                          form.setValue(`communications_routes.${index}.provider_config` as any, {}),
+                                      })}
+                                    >
+                                      {communicationTargetOptions.map((target) => (
+                                        <option key={target} value={target}>
+                                          {target}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </FormField>
+                                </div>
+                                <div className="grid-two">
+                                  <FormField label="Destination" help="Optional queue, channel, project, or room for this route.">
+                                    <input {...form.register(`communications_routes.${index}.destination_target` as const)} placeholder="ops-alerts" />
+                                  </FormField>
+                                  <FormField label="Enabled" help="Disabled routes stay in the workflow definition but do not run.">
+                                    <label className="toggle-row">
+                                      <input type="checkbox" {...form.register(`communications_routes.${index}.enabled` as const)} />
+                                      <span>Route is enabled</span>
+                                    </label>
+                                  </FormField>
+                                </div>
+                                <CommunicationRouteProviderConfigFields
+                                  form={form as ReturnType<typeof useForm<any>>}
+                                  basePath={`communications_routes.${index}`}
+                                  executionTarget={watchedCommunicationRoutes[index]?.execution_target || field.execution_target}
+                                />
+                              </div>
+                            ))
+                          ) : (
+                            <EmptyState message="Add at least one route if this workflow should override the global default." />
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="builder-header">
+                  <div>
+                    <h4>Workflow steps</h4>
+                    <p>Workflow steps should focus on remediation and utility logic. Communications are managed separately above.</p>
+                  </div>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() =>
+                      steps.append({
+                        ingredient_id: 0,
+                        step_order: steps.fields.length + 1,
+                        on_success: "continue",
+                        run_phase: "both",
+                        run_condition: "always",
+                        parallel_group: 0,
+                        depth: 0,
+                        execution_parameters_override_text: "",
+                      })
+                    }
+                  >
+                    Add step
+                  </button>
+                </div>
+
+                <div className="builder-stack">
+                  {steps.fields.map((field, index) => (
+                    <div className="builder-card" key={field.id}>
+                      <div className="builder-card-head">
+                        <strong>Step {index + 1}</strong>
+                        <div className="inline-actions">
+                          <button className="ghost-button" type="button" onClick={() => moveField(steps, index, -1)}>
+                            Up
+                          </button>
+                          <button className="ghost-button" type="button" onClick={() => moveField(steps, index, 1)}>
+                            Down
+                          </button>
+                          <button className="danger-button" type="button" onClick={() => steps.remove(index)}>
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid-three">
+                        <FormField label="Action" help="The reusable action this step will run.">
+                          <select {...form.register(`recipe_ingredients.${index}.ingredient_id` as const)}>
+                            <option value={0}>Choose an action</option>
+                            {availableActions.map((action) => (
+                              <option key={action.id} value={action.id}>
+                                {action.task_key_template} ({titleize(action.execution_target)})
+                              </option>
+                            ))}
+                          </select>
+                        </FormField>
+                        <FormField label="Run phase" help="Choose whether this runs when the alert fires, resolves, escalates, or both.">
+                          <select {...form.register(`recipe_ingredients.${index}.run_phase` as const)}>
+                            <option value="firing">firing</option>
+                            <option value="escalation">escalation</option>
+                            <option value="resolving">resolving</option>
+                            <option value="both">both</option>
+                          </select>
+                        </FormField>
+                        <FormField label="Run condition" help="Fine-grained control over whether this step runs after success, failure, timeout, or always.">
+                          <select {...form.register(`recipe_ingredients.${index}.run_condition` as const)}>
+                            <option value="always">always</option>
+                            <option value="remediation_failed">remediation_failed</option>
+                            <option value="clear_timeout_expired">clear_timeout_expired</option>
+                            <option value="resolved_after_success">resolved_after_success</option>
+                            <option value="resolved_after_failure">resolved_after_failure</option>
+                            <option value="resolved_after_no_remediation">resolved_after_no_remediation</option>
+                            <option value="resolved_after_timeout">resolved_after_timeout</option>
+                          </select>
+                        </FormField>
+                      </div>
+                      <div className="grid-two">
+                        <FormField label="On success" help="Continue keeps the workflow moving; stop ends the workflow after this step succeeds.">
+                          <select {...form.register(`recipe_ingredients.${index}.on_success` as const)}>
+                            <option value="continue">continue</option>
+                            <option value="stop">stop</option>
+                          </select>
+                        </FormField>
+                        {mode === "advanced" ? (
+                          <FormField label="Override JSON" help="Optional execution-parameter override for this specific step invocation.">
+                            <textarea {...form.register(`recipe_ingredients.${index}.execution_parameters_override_text` as const)} rows={3} />
+                          </FormField>
+                        ) : (
+                          <div className="helper-card">
+                            <strong>Plain-English step</strong>
+                            <p>{describeWorkflowStep(watchedSteps[index], availableActions)}</p>
+                          </div>
+                        )}
+                      </div>
+                      {mode === "advanced" ? (
+                        <div className="grid-two">
+                          <FormField label="Parallel group" help="Steps with the same group can be planned together. Use 0 for default sequential handling.">
+                            <input type="number" min={0} {...form.register(`recipe_ingredients.${index}.parallel_group` as const)} />
+                          </FormField>
+                          <FormField label="Depth" help="Execution depth for more advanced branching patterns. Leave at 0 for standard ordered workflows.">
+                            <input type="number" min={0} {...form.register(`recipe_ingredients.${index}.depth` as const)} />
+                          </FormField>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="preview-card">
+                  <div className="eyebrow">Workflow preview</div>
+                  <p>{workflowPreview}</p>
+                </div>
+
+                <div className="form-actions">
+                  <button className="ghost-button" type="button" onClick={closeWorkflowDialog}>
+                    Cancel
+                  </button>
+                  <button className="primary-button" disabled={saveMutation.isPending} type="submit">
+                    {saveMutation.isPending ? "Saving..." : editingWorkflow ? "Save workflow" : "Create workflow"}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2838,9 +2900,9 @@ function ActionsPage() {
   const principal = usePrincipal();
   const settings = useSettings();
   const queryClient = useQueryClient();
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editingAction, setEditingAction] = useState<IngredientRecord | null>(null);
   const canEdit = canManageActions(principal);
-  const canClear = canManageRepoSyncClear(principal);
 
   const actionsQuery = useQuery({
     queryKey: ["actions"],
@@ -2849,27 +2911,37 @@ function ActionsPage() {
 
   const form = useForm<z.infer<typeof actionSchema>>({
     resolver: zodResolver(actionSchema),
-    defaultValues: {
-      template: "remediation",
-      task_key_template: "",
-      execution_target: "",
-      destination_target: "",
-      execution_engine: "stackstorm",
-      execution_purpose: "remediation",
-      execution_id: "",
-      is_blocking: true,
-      on_failure: "stop",
-      expected_duration_sec: 60,
-      timeout_duration_sec: 300,
-      retry_count: 0,
-      retry_delay: 5,
-      execution_payload_text: "",
-      execution_parameters_text: "",
-    },
+    defaultValues: emptyActionFormValues,
   });
 
   const template = form.watch("template");
   const actionPreview = buildActionPreview(form.watch());
+
+  const refreshActions = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["actions"] });
+    await queryClient.refetchQueries({
+      queryKey: ["actions"],
+      exact: true,
+      type: "active",
+    });
+  };
+
+  const openCreateActionDialog = () => {
+    setEditingAction(null);
+    resetActionForm(form);
+    setEditorOpen(true);
+  };
+
+  const openEditActionDialog = (action: IngredientRecord) => {
+    setEditingAction(action);
+    setEditorOpen(true);
+  };
+
+  const closeActionDialog = () => {
+    setEditorOpen(false);
+    setEditingAction(null);
+    resetActionForm(form);
+  };
 
   useEffect(() => {
     if (template === "ticket" && !editingAction) {
@@ -2951,9 +3023,8 @@ function ActionsPage() {
     },
     onSuccess: async () => {
       notify("success", editingAction ? "Action updated." : "Action created.");
-      setEditingAction(null);
-      form.reset();
-      await queryClient.invalidateQueries({ queryKey: ["actions"] });
+      closeActionDialog();
+      await refreshActions();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -2962,43 +3033,27 @@ function ActionsPage() {
     mutationFn: (actionId: number) => apiDelete(`/api/v1/ingredients/${actionId}`, deleteResponseSchema),
     onSuccess: async () => {
       notify("success", "Action deleted.");
-      setEditingAction(null);
-      form.reset();
-      await queryClient.invalidateQueries({ queryKey: ["actions"] });
+      closeActionDialog();
+      await refreshActions();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const exportMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/export", repoSyncResponseSchema),
-    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
-    onError: (error) => notify("error", getErrorMessage(error)),
-  });
-
-  const importMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/import", repoSyncResponseSchema),
+    mutationFn: () => apiPost("/api/v1/repo-sync/actions/export", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
-      setEditingAction(null);
-      form.reset();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
-        queryClient.invalidateQueries({ queryKey: ["actions"] }),
-      ]);
+      await refreshActions();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
-  const clearMutation = useMutation({
-    mutationFn: () => apiDelete("/api/v1/repo-sync/workflow-actions", repoSyncResponseSchema),
+  const importMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/actions/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
-      setEditingAction(null);
-      form.reset();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workflows"] }),
-        queryClient.invalidateQueries({ queryKey: ["actions"] }),
-      ]);
+      closeActionDialog();
+      await refreshActions();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -3017,139 +3072,33 @@ function ActionsPage() {
         title="Actions"
         description="Reusable remediation and utility actions for workflows. Communication routes now live in Global Communications and the workflow communications section."
       />
-      <WorkflowActionRepoSyncPanel
-        canClear={canClear}
+      <ActionRepoSyncPanel
         canEdit={canEdit}
-        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending}
-        onClear={() => clearMutation.mutate()}
+        isPending={exportMutation.isPending || importMutation.isPending}
         onExport={() => exportMutation.mutate()}
         onImport={() => importMutation.mutate()}
         settings={settings}
       />
-      <div className="editor-grid">
-        <Panel title={editingAction ? `Edit ${editingAction.task_key_template}` : "Create action"} subtitle="Start with remediation or custom automation templates. Ticket and chat actions remain available only for legacy compatibility.">
-          {!canEdit ? (
-            <div className="helper-card">
-              <strong>Read-only access</strong>
-              <p>Your role can inspect actions, but only operators and admins can change them.</p>
-            </div>
-          ) : null}
-          <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
-            <fieldset disabled={!canEdit}>
-            <FormField label="Action type" help="Use remediation or custom for new workflow actions. Communications are configured in communications policy screens instead of ordinary workflow steps.">
-              <select {...form.register("template")}>
-                <option value="remediation">Remediation</option>
-                <option value="custom">Custom</option>
-                <option value="ticket">Ticket</option>
-                <option value="chat">Chat notification</option>
-              </select>
-            </FormField>
-            <div className="grid-two">
-              <FormField label="Action name" help="The operator-facing name for this reusable action.">
-                <input {...form.register("task_key_template")} placeholder="core.create-ticket" />
-                <FieldError message={form.formState.errors.task_key_template?.message} />
-              </FormField>
-              <FormField label="Target" help="Provider or target identifier such as rackspace_core, teams, discord, or an action ref.">
-                <input {...form.register("execution_target")} placeholder="rackspace_core" />
-                <FieldError message={form.formState.errors.execution_target?.message} />
-              </FormField>
-            </div>
-            <div className="grid-three">
-              <FormField label="Destination" help="Optional route target such as a team channel, queue, project, or thread.">
-                <input {...form.register("destination_target")} placeholder="ops-alerts" />
-              </FormField>
-              <FormField label="Execution engine" help="Choose bakery for communications and stackstorm for remediation actions.">
-                <input {...form.register("execution_engine")} />
-              </FormField>
-              <FormField label="Purpose" help="Purpose helps explain how the action should be used in workflows.">
-                <select {...form.register("execution_purpose")}>
-                  <option value="comms">comms</option>
-                  <option value="remediation">remediation</option>
-                  <option value="utility">utility</option>
-                </select>
-              </FormField>
-            </div>
-            <div className="grid-two">
-              <FormField label="Execution ID" help="Optional provider-specific action or workflow identifier.">
-                <input {...form.register("execution_id")} placeholder="optional" />
-              </FormField>
-              <FormField label="Blocking" help="Blocking actions must complete before the next workflow step moves on.">
-                <label className="toggle-row">
-                  <input type="checkbox" {...form.register("is_blocking")} />
-                  <span>Action is blocking</span>
-                </label>
-              </FormField>
-            </div>
-            <div className="grid-four">
-              <FormField label="Expected sec" help="Normal runtime used for operator expectations and workflow planning.">
-                <input type="number" min={1} {...form.register("expected_duration_sec")} />
-              </FormField>
-              <FormField label="Timeout sec" help="Maximum runtime before the action is treated as timed out.">
-                <input type="number" min={1} {...form.register("timeout_duration_sec")} />
-              </FormField>
-              <FormField label="Retries" help="How many retry attempts PoundCake should allow.">
-                <input type="number" min={0} {...form.register("retry_count")} />
-              </FormField>
-              <FormField label="Retry delay" help="Delay in seconds between retries.">
-                <input type="number" min={0} {...form.register("retry_delay")} />
-              </FormField>
-            </div>
-            <FormField label="On failure" help="Choose whether the workflow stops, continues, or retries when this action fails.">
-              <select {...form.register("on_failure")}>
-                <option value="stop">stop</option>
-                <option value="continue">continue</option>
-                <option value="retry">retry</option>
-              </select>
-            </FormField>
-            <FormField label="Execution payload (JSON)" help="Structured provider payload body. Leave blank when the action only needs parameters.">
-              <textarea {...form.register("execution_payload_text")} rows={4} />
-            </FormField>
-            <FormField label="Execution parameters (JSON)" help="Provider-specific execution parameters such as operation=open or notify.">
-              <textarea {...form.register("execution_parameters_text")} rows={4} />
-            </FormField>
-
-            <div className="preview-card">
-              <div className="eyebrow">Action preview</div>
-              <p>{actionPreview}</p>
-            </div>
-
-            <div className="form-actions">
-              <button className="primary-button" disabled={saveMutation.isPending} type="submit">
-                {saveMutation.isPending ? "Saving..." : editingAction ? "Save action" : "Create action"}
-              </button>
-              {editingAction ? (
-                <button className="ghost-button" type="button" onClick={() => {
-                  setEditingAction(null);
-                  form.reset();
-                }}>
-                  Clear
-                </button>
-              ) : null}
-            </div>
-            </fieldset>
-          </form>
-        </Panel>
-
-        <HelpRail
-          title="Action help"
-          items={[
-            {
-              label: "Workflow comms",
-              description: "For new workflows, configure Core, Teams, Discord, and other communication routes in Global Communications or the workflow communications override instead of ordinary actions.",
-            },
-            {
-              label: "Primary use",
-              description: "This page is now best suited for remediation and utility actions that do real workflow work.",
-            },
-            {
-              label: "Legacy compatibility",
-              description: "Ticket and chat action templates remain here only so older actions can still be inspected or updated during the transition.",
-            },
-          ]}
-        />
-      </div>
-
-      <Panel title="Action inventory" subtitle="Reusable actions available to workflows.">
+      <Panel
+        title="Action inventory"
+        subtitle={`${actionsQuery.data.length} actions loaded. Reusable actions available to workflows.`}
+        actions={
+          <button
+            className="primary-button"
+            disabled={!canEdit}
+            type="button"
+            onClick={openCreateActionDialog}
+          >
+            Create action
+          </button>
+        }
+      >
+        {!canEdit ? (
+          <div className="helper-card">
+            <strong>Read-only access</strong>
+            <p>Your role can inspect actions, but only operators and admins can change them.</p>
+          </div>
+        ) : null}
         <div className="table-wrap">
           <table>
             <thead>
@@ -3173,7 +3122,12 @@ function ActionsPage() {
                   <td>{String(action.is_blocking)}</td>
                   <td>{formatDate(action.updated_at)}</td>
                   <td className="action-cell">
-                    <button className="ghost-button" disabled={!canEdit} type="button" onClick={() => setEditingAction(action)}>
+                    <button
+                      className="ghost-button"
+                      disabled={!canEdit}
+                      type="button"
+                      onClick={() => openEditActionDialog(action)}
+                    >
                       Edit
                     </button>
                     <button
@@ -3195,6 +3149,113 @@ function ActionsPage() {
           </table>
         </div>
       </Panel>
+      {editorOpen ? (
+        <div aria-modal="true" className="dialog-backdrop" role="dialog">
+          <div className="dialog-card dialog-card-wide">
+            <div className="panel-head">
+              <div>
+                <h4>{editingAction ? `Edit ${editingAction.task_key_template}` : "Create action"}</h4>
+                <p>Start with remediation or custom automation templates. Ticket and chat actions remain available only for legacy compatibility.</p>
+              </div>
+            </div>
+            {!canEdit ? (
+              <div className="helper-card">
+                <strong>Read-only access</strong>
+                <p>Your role can inspect actions, but only operators and admins can change them.</p>
+              </div>
+            ) : null}
+            <form className="form-stack" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
+              <fieldset disabled={!canEdit}>
+                <FormField label="Action type" help="Use remediation or custom for new workflow actions. Communications are configured in communications policy screens instead of ordinary workflow steps.">
+                  <select {...form.register("template")}>
+                    <option value="remediation">Remediation</option>
+                    <option value="custom">Custom</option>
+                    <option value="ticket">Ticket</option>
+                    <option value="chat">Chat notification</option>
+                  </select>
+                </FormField>
+                <div className="grid-two">
+                  <FormField label="Action name" help="The operator-facing name for this reusable action.">
+                    <input {...form.register("task_key_template")} placeholder="core.create-ticket" />
+                    <FieldError message={form.formState.errors.task_key_template?.message} />
+                  </FormField>
+                  <FormField label="Target" help="Provider or target identifier such as rackspace_core, teams, discord, or an action ref.">
+                    <input {...form.register("execution_target")} placeholder="rackspace_core" />
+                    <FieldError message={form.formState.errors.execution_target?.message} />
+                  </FormField>
+                </div>
+                <div className="grid-three">
+                  <FormField label="Destination" help="Optional route target such as a team channel, queue, project, or thread.">
+                    <input {...form.register("destination_target")} placeholder="ops-alerts" />
+                  </FormField>
+                  <FormField label="Execution engine" help="Choose bakery for communications and stackstorm for remediation actions.">
+                    <input {...form.register("execution_engine")} />
+                  </FormField>
+                  <FormField label="Purpose" help="Purpose helps explain how the action should be used in workflows.">
+                    <select {...form.register("execution_purpose")}>
+                      <option value="comms">comms</option>
+                      <option value="remediation">remediation</option>
+                      <option value="utility">utility</option>
+                    </select>
+                  </FormField>
+                </div>
+                <div className="grid-two">
+                  <FormField label="Execution ID" help="Optional provider-specific action or workflow identifier.">
+                    <input {...form.register("execution_id")} placeholder="optional" />
+                  </FormField>
+                  <FormField label="Blocking" help="Blocking actions must complete before the next workflow step moves on.">
+                    <label className="toggle-row">
+                      <input type="checkbox" {...form.register("is_blocking")} />
+                      <span>Action is blocking</span>
+                    </label>
+                  </FormField>
+                </div>
+                <div className="grid-four">
+                  <FormField label="Expected sec" help="Normal runtime used for operator expectations and workflow planning.">
+                    <input type="number" min={1} {...form.register("expected_duration_sec")} />
+                  </FormField>
+                  <FormField label="Timeout sec" help="Maximum runtime before the action is treated as timed out.">
+                    <input type="number" min={1} {...form.register("timeout_duration_sec")} />
+                  </FormField>
+                  <FormField label="Retries" help="How many retry attempts PoundCake should allow.">
+                    <input type="number" min={0} {...form.register("retry_count")} />
+                  </FormField>
+                  <FormField label="Retry delay" help="Delay in seconds between retries.">
+                    <input type="number" min={0} {...form.register("retry_delay")} />
+                  </FormField>
+                </div>
+                <FormField label="On failure" help="Choose whether the workflow stops, continues, or retries when this action fails.">
+                  <select {...form.register("on_failure")}>
+                    <option value="stop">stop</option>
+                    <option value="continue">continue</option>
+                    <option value="retry">retry</option>
+                  </select>
+                </FormField>
+                <FormField label="Execution payload (JSON)" help="Structured provider payload body. Leave blank when the action only needs parameters.">
+                  <textarea {...form.register("execution_payload_text")} rows={4} />
+                </FormField>
+                <FormField label="Execution parameters (JSON)" help="Provider-specific execution parameters such as operation=open or notify.">
+                  <textarea {...form.register("execution_parameters_text")} rows={4} />
+                </FormField>
+
+                <div className="preview-card">
+                  <div className="eyebrow">Action preview</div>
+                  <p>{actionPreview}</p>
+                </div>
+
+                <div className="form-actions">
+                  <button className="ghost-button" type="button" onClick={closeActionDialog}>
+                    Cancel
+                  </button>
+                  <button className="primary-button" disabled={saveMutation.isPending} type="submit">
+                    {saveMutation.isPending ? "Saving..." : editingAction ? "Save action" : "Create action"}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3657,7 +3718,7 @@ function AlertRuleRepoSyncPanel({
   );
 }
 
-function WorkflowActionRepoSyncPanel({
+function WorkflowRepoSyncPanel({
   canClear,
   settings,
   canEdit,
@@ -3677,7 +3738,7 @@ function WorkflowActionRepoSyncPanel({
   return (
     <Panel
       title="Repo sync"
-      subtitle="Version workflows and actions together in Git so the same action catalog and workflow graph can be promoted into other environments."
+      subtitle="Import and export workflows independently. Workflow import skips any workflow whose referenced actions do not exist in PoundCake yet."
     >
       {!settings.git_enabled ? (
         <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, git.workflowsPath, and git.actionsPath in Helm before using repo import/export." />
@@ -3687,7 +3748,7 @@ function WorkflowActionRepoSyncPanel({
             <strong>Configured repository</strong>
             <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
             <p>Workflows directory: {settings.git_workflows_path || "-"}</p>
-            <p>Actions directory: {settings.git_actions_path || "-"}</p>
+            <p>Actions must already exist in PoundCake before dependent workflows can import.</p>
           </div>
           {!canClear ? (
             <div className="helper-card">
@@ -3712,7 +3773,51 @@ function WorkflowActionRepoSyncPanel({
             />
           </div>
           <div className="login-note">
-            Import upserts repo-backed actions first, then resolves workflow steps against those actions. Use clear first for a full replace.
+            Workflow import only upserts workflows. Use clear first when you want the repo to become the full visible workflow and action set.
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ActionRepoSyncPanel({
+  settings,
+  canEdit,
+  isPending,
+  onExport,
+  onImport,
+}: {
+  settings: AppSettings;
+  canEdit: boolean;
+  isPending: boolean;
+  onExport: () => void;
+  onImport: () => void;
+}) {
+  return (
+    <Panel
+      title="Repo sync"
+      subtitle="Import and export reusable actions independently from workflows so the action catalog can be promoted without pulling workflow changes along with it."
+    >
+      {!settings.git_enabled ? (
+        <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, and git.actionsPath in Helm before using repo import/export." />
+      ) : (
+        <div className="form-stack">
+          <div className="helper-card">
+            <strong>Configured repository</strong>
+            <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
+            <p>Actions directory: {settings.git_actions_path || "-"}</p>
+          </div>
+          <div className="form-actions">
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
+              {isPending ? "Working..." : "Export to repo"}
+            </button>
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onImport}>
+              {isPending ? "Working..." : "Import from repo"}
+            </button>
+          </div>
+          <div className="login-note">
+            Action import only upserts repo-backed actions. Clear remains on the Workflows page because workflows depend on actions.
           </div>
         </div>
       )}
@@ -4118,13 +4223,17 @@ function formatRepoLocation(repoUrl: string | null, branch: string | null): stri
 }
 
 function formatRepoSyncMessage(result: RepoSyncResponse): string {
+  let message = result.message;
+  if (result.warnings?.length) {
+    message = `${message} ${result.warnings.join(" ")}`;
+  }
   if (result.pull_request?.url) {
-    return `${result.message} Pull request created.`;
+    return `${message} Pull request created.`;
   }
   if (result.branch) {
-    return `${result.message} Branch ${result.branch} created.`;
+    return `${message} Branch ${result.branch} created.`;
   }
-  return result.message;
+  return message;
 }
 
 function describeAuthProviderModes(provider: AuthProviderRecord): string {
@@ -4371,6 +4480,10 @@ function resetWorkflowForm(
     },
   ]);
   communicationRoutes.replace([]);
+}
+
+function resetActionForm(form: ReturnType<typeof useForm<z.infer<typeof actionSchema>>>) {
+  form.reset(emptyActionFormValues);
 }
 
 function describeWorkflowStep(

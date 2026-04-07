@@ -88,6 +88,44 @@ async def export_workflow_actions(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.post("/repo-sync/actions/export", response_model=RepoSyncResponse)
+async def export_actions(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _user: str | None = Depends(require_auth_if_enabled),
+) -> RepoSyncResponse:
+    """Export current actions into the configured Git repository."""
+    try:
+        return RepoSyncResponse.model_validate(await RepoSyncService(db).export_actions())
+    except RepoSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(
+            "Failed to export actions",
+            extra={"req_id": request.state.req_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/repo-sync/workflows/export", response_model=RepoSyncResponse)
+async def export_workflows(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _user: str | None = Depends(require_auth_if_enabled),
+) -> RepoSyncResponse:
+    """Export current workflows into the configured Git repository."""
+    try:
+        return RepoSyncResponse.model_validate(await RepoSyncService(db).export_workflows())
+    except RepoSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(
+            "Failed to export workflows",
+            extra={"req_id": request.state.req_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.post("/repo-sync/workflow-actions/import", response_model=RepoSyncResponse)
 async def import_workflow_actions(
     request: Request,
@@ -102,6 +140,44 @@ async def import_workflow_actions(
     except Exception as exc:
         logger.error(
             "Failed to import workflows and actions",
+            extra={"req_id": request.state.req_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/repo-sync/actions/import", response_model=RepoSyncResponse)
+async def import_actions(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _user: str | None = Depends(require_auth_if_enabled),
+) -> RepoSyncResponse:
+    """Import actions from the configured Git repository."""
+    try:
+        return RepoSyncResponse.model_validate(await RepoSyncService(db).import_actions())
+    except RepoSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(
+            "Failed to import actions",
+            extra={"req_id": request.state.req_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/repo-sync/workflows/import", response_model=RepoSyncResponse)
+async def import_workflows(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _user: str | None = Depends(require_auth_if_enabled),
+) -> RepoSyncResponse:
+    """Import workflows from the configured Git repository."""
+    try:
+        return RepoSyncResponse.model_validate(await RepoSyncService(db).import_workflows())
+    except RepoSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(
+            "Failed to import workflows",
             extra={"req_id": request.state.req_id, "error": str(exc)},
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc

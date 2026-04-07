@@ -1234,6 +1234,8 @@ class RepoSyncResponse(BaseModel):
     pull_request: Optional[RepoSyncPullRequestResponse] = None
     exported: Optional[Dict[str, str | int | None]] = None
     imported: Optional[Dict[str, int]] = None
+    skipped: Optional[Dict[str, int]] = None
+    warnings: Optional[List[str]] = None
     cleared: Optional[Dict[str, int]] = None
 
 
