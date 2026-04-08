@@ -225,7 +225,7 @@ class Settings(BaseSettings):
     # Prometheus Settings
     # ==========================================================================
     prometheus_url: str = (
-        "http://kube-prometheus-stack-prometheus.prometheus.svc.cluster.local:9090"
+        "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
     )
     prometheus_verify_ssl: bool = True
     prometheus_reload_enabled: bool = True

@@ -120,7 +120,7 @@ spec:
             - name: POUNDCAKE_PROMETHEUS_USE_CRDS
               value: {{ .Values.prometheus.useCrds | quote }}
             - name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
-              value: {{ .Values.prometheus.crdNamespace | quote }}
+              value: {{ default .Release.Namespace .Values.prometheus.crdNamespace | quote }}
             - name: POUNDCAKE_PROMETHEUS_CRD_LABELS
               value: {{ .Values.prometheus.crdLabels | toJson | quote }}
             - name: POUNDCAKE_GIT_ENABLED

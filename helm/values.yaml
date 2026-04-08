@@ -486,13 +486,14 @@ longhorn:
 prometheus:
   # Prometheus API URL for querying metrics
   # Default for kube-prometheus-stack installation
-  url: "http://kube-prometheus-stack-prometheus.prometheus.svc.cluster.local:9090"
+  url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
   verifySsl: false
 
   # Prometheus Operator CRD settings (Kubernetes)
   # When enabled, PoundCake can manage PrometheusRule CRDs directly
   useCrds: true
-  crdNamespace: prometheus
+  # Namespace for PrometheusRule CRDs. Empty defaults to the Helm release namespace.
+  crdNamespace: ""
 
   # Allow creating/updating/deleting PrometheusRule CRDs
   # Set to false for read-only access (can only view rules)
@@ -501,7 +502,7 @@ prometheus:
   # IMPORTANT: Labels to apply to PrometheusRule CRDs created by PoundCake
   # These MUST match your Prometheus Operator's ruleSelector, otherwise
   # Prometheus will not load the rules. Check your Prometheus CR with:
-  #   kubectl get prometheus -n prometheus -o jsonpath='{.items[0].spec.ruleSelector}'
+  #   kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.ruleSelector}'
   #
   # Default is for kube-prometheus-stack. Adjust if using a different release name.
   crdLabels:

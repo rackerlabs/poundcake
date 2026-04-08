@@ -132,7 +132,7 @@ tests:
       prometheus.url: http://prometheus.example:9090
       prometheus.verifySsl: false
       prometheus.useCrds: true
-      prometheus.crdNamespace: prometheus
+      prometheus.crdNamespace: monitoring
       prometheus.crdLabels:
         release: kube-prometheus-stack
     asserts:
@@ -158,13 +158,38 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
-            value: "prometheus"
+            value: "monitoring"
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PROMETHEUS_USE_CRDS
             value: "true"
+        documentIndex: 0
+
+  - it: defaults Prometheus CRD namespace to the release namespace when unset
+    set:
+      serviceAccount.create: true
+      serviceAccount.name: ""
+      prometheus.useCrds: true
+      prometheus.crdNamespace: ""
+    release:
+      namespace: rackspace
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
+            value: "rackspace"
+        documentIndex: 0
+
+  - it: defaults the Prometheus API URL to the monitoring namespace service
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_PROMETHEUS_URL
+            value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
         documentIndex: 0
 
   - it: wires git repo sync env and mounts credentials when configured
