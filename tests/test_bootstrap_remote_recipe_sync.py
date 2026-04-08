@@ -73,8 +73,7 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml(
     assert payload["recipe"]["name"] == "HighCPUUsage"
     assert payload["recipe"]["recipe_ingredients"][0]["execution_target"] == "rackspace_core"
     assert (
-        payload["recipe"]["recipe_ingredients"][0]["task_key_template"]
-        == "rackspace_core.update"
+        payload["recipe"]["recipe_ingredients"][0]["task_key_template"] == "rackspace_core.update"
     )
 
 
