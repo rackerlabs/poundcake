@@ -40,7 +40,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: core
+      execution_target: rackspace_core
       task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
@@ -69,7 +69,7 @@ recipe:
   description: missing name
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: core
+      execution_target: rackspace_core
       run_phase: invalid
 """.strip(),
         encoding="utf-8",
@@ -95,7 +95,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: core
+      execution_target: rackspace_core
       task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
@@ -116,7 +116,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: core
+      execution_target: rackspace_core
       task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
@@ -205,7 +205,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: core
+      execution_target: rackspace_core
       task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving
@@ -243,7 +243,7 @@ recipe:
   enabled: true
   recipe_ingredients:
     - execution_engine: bakery
-      execution_target: core
+      execution_target: rackspace_core
       task_key_template: rackspace_core.update
       step_order: 1
       run_phase: resolving

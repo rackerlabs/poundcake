@@ -62,8 +62,8 @@ def render_managed_recipe_payload(
             "recipe_ingredients": [
                 {
                     "execution_engine": "bakery",
-                    "execution_target": "core",
-                    "task_key_template": "core",
+                    "execution_target": "rackspace_core",
+                    "task_key_template": "rackspace_core.update",
                     "step_order": 1,
                     "run_phase": "resolving",
                     "on_success": "continue",
