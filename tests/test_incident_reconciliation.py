@@ -94,7 +94,11 @@ async def test_reconcile_refire_waiting_ticket_close_resets_order_to_new(
                 return_value=[
                     {
                         "state": "firing",
-                        "labels": {"alertname": "DiskFull", "group_name": "group", "instance": "host1"},
+                        "labels": {
+                            "alertname": "DiskFull",
+                            "group_name": "group",
+                            "instance": "host1",
+                        },
                     }
                 ]
             )
@@ -135,7 +139,9 @@ async def test_reconcile_waiting_ticket_close_notifies_once_and_then_completes(
         communication.reopenable = reopenable
         return state, writable, reopenable
 
-    notify = AsyncMock(return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1"))
+    notify = AsyncMock(
+        return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1")
+    )
     poll = AsyncMock(return_value=SimpleNamespace(status="succeeded", last_error=None))
 
     monkeypatch.setattr(
@@ -201,11 +207,17 @@ async def test_reconcile_firing_alert_reopens_closed_ticket(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     order = _make_order(status="waiting_clear")
-    communication = _make_communication(order=order, remote_state="confirmed_solved", reopenable=True)
+    communication = _make_communication(
+        order=order, remote_state="confirmed_solved", reopenable=True
+    )
     db = SimpleNamespace(flush=AsyncMock())
 
-    update = AsyncMock(return_value=SimpleNamespace(operation_id="op-reopen", communication_id="comm-1"))
-    notify = AsyncMock(return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1"))
+    update = AsyncMock(
+        return_value=SimpleNamespace(operation_id="op-reopen", communication_id="comm-1")
+    )
+    notify = AsyncMock(
+        return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1")
+    )
     poll = AsyncMock(return_value=SimpleNamespace(status="succeeded", last_error=None))
 
     monkeypatch.setattr(
@@ -221,7 +233,11 @@ async def test_reconcile_firing_alert_reopens_closed_ticket(
                 return_value=[
                     {
                         "state": "firing",
-                        "labels": {"alertname": "DiskFull", "group_name": "group", "instance": "host1"},
+                        "labels": {
+                            "alertname": "DiskFull",
+                            "group_name": "group",
+                            "instance": "host1",
+                        },
                     }
                 ]
             )

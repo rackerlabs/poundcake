@@ -222,7 +222,9 @@ def _reconcile_context(order: Order, communication: OrderCommunication) -> dict[
             "owner_key": str(route.get("owner_key") or "").strip(),
             "route_id": str(route.get("route_id") or "").strip(),
             "label": str(route.get("route_label") or route.get("label") or "").strip(),
-            "execution_target": str(route.get("execution_target") or communication.execution_target),
+            "execution_target": str(
+                route.get("execution_target") or communication.execution_target
+            ),
             "destination_target": str(
                 route.get("destination_target") or communication.destination_target
             ),
@@ -268,7 +270,9 @@ async def _await_operation(operation_id: str) -> tuple[bool, str | None]:
     status = str(payload.status or "").strip().lower()
     if status in {"succeeded", "success", "completed"}:
         return True, None
-    return False, str(payload.last_error or f"Bakery operation ended in status={status or 'unknown'}")
+    return False, str(
+        payload.last_error or f"Bakery operation ended in status={status or 'unknown'}"
+    )
 
 
 async def _reopen_or_recreate_ticket(
@@ -321,7 +325,9 @@ async def _reopen_or_recreate_ticket(
         metadata["last_reopen_ticket_id"] = old_ticket_id
         metadata.pop("last_clear_note_ticket_id", None)
         communication.reconcile_metadata = metadata
-        actions.append(f"reopened:{communication.execution_target}:{communication.destination_target}")
+        actions.append(
+            f"reopened:{communication.execution_target}:{communication.destination_target}"
+        )
         return
 
     if metadata.get("last_successor_from_ticket_id") == old_ticket_id:
@@ -381,7 +387,9 @@ async def _notify_clear_ticket(
     metadata["last_clear_note_ticket_id"] = ticket_id
     communication.reconcile_metadata = metadata
     await refresh_remote_state(communication)
-    actions.append(f"notified_clear:{communication.execution_target}:{communication.destination_target}")
+    actions.append(
+        f"notified_clear:{communication.execution_target}:{communication.destination_target}"
+    )
 
 
 async def reconcile_order(
@@ -419,7 +427,10 @@ async def reconcile_order(
         order.alert_status = "firing"
         order.ends_at = None
         order.is_active = True
-        if str(order.processing_status or "").strip().lower() in {"resolving", "waiting_ticket_close"}:
+        if str(order.processing_status or "").strip().lower() in {
+            "resolving",
+            "waiting_ticket_close",
+        }:
             order.processing_status = "new"
             result["actions"].append("redispatch_firing")
     else:
@@ -432,7 +443,9 @@ async def reconcile_order(
                 result["actions"].append("dispatch_resolving")
 
     ticket_routes = [
-        communication for communication in (order.communications or []) if is_ticket_communication(communication)
+        communication
+        for communication in (order.communications or [])
+        if is_ticket_communication(communication)
     ]
     try:
         for communication in ticket_routes:
@@ -485,7 +498,10 @@ async def reconcile_order(
                     actions=result["actions"],
                 )
 
-    if not alert_firing and str(order.processing_status or "").strip().lower() == "waiting_ticket_close":
+    if (
+        not alert_firing
+        and str(order.processing_status or "").strip().lower() == "waiting_ticket_close"
+    ):
         if not _has_open_ticket_routes(order):
             order.processing_status = "complete"
             order.is_active = False
