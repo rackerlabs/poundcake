@@ -21,6 +21,14 @@ def test_ui_app_uses_runtime_contract_schemas_for_key_flows() -> None:
     assert "authRoleBindingCreateRequestSchema.parse(payload)" in content
 
 
+def test_overview_page_polls_for_fresh_dashboard_data() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert 'queryKey: ["overview-dashboard"]' in content
+    assert "refetchInterval: 15_000" in content
+    assert "refetchIntervalInBackground: false" in content
+    assert "refetchOnWindowFocus: true" in content
+
+
 def test_ui_contract_objects_are_strict() -> None:
     content = CONTRACTS_TS.read_text(encoding="utf-8")
     assert (

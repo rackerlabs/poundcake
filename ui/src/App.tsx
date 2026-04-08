@@ -665,6 +665,9 @@ function ShellLayout() {
 function OverviewPage() {
   const dataQuery = useQuery({
     queryKey: ["overview-dashboard"],
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const [health, stats, overview, activity, incidents, communications, suppressions] =
         await Promise.all([
@@ -2436,20 +2439,20 @@ function WorkflowsPage() {
   });
 
   const exportMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/workflows/export", repoSyncResponseSchema),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/export", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
-      await refreshWorkflows();
+      await refreshWorkflowAndActionInventories();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const importMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/workflows/import", repoSyncResponseSchema),
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflow-actions/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
       notify("success", formatRepoSyncMessage(result));
       closeWorkflowDialog();
-      await refreshWorkflows();
+      await refreshWorkflowAndActionInventories();
     },
     onError: (error) => notify("error", getErrorMessage(error)),
   });
@@ -2898,7 +2901,6 @@ function WorkflowsPage() {
 function ActionsPage() {
   const notify = useToast();
   const principal = usePrincipal();
-  const settings = useSettings();
   const queryClient = useQueryClient();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingAction, setEditingAction] = useState<IngredientRecord | null>(null);
@@ -3039,25 +3041,6 @@ function ActionsPage() {
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
-  const exportMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/actions/export", repoSyncResponseSchema),
-    onSuccess: async (result) => {
-      notify("success", formatRepoSyncMessage(result));
-      await refreshActions();
-    },
-    onError: (error) => notify("error", getErrorMessage(error)),
-  });
-
-  const importMutation = useMutation({
-    mutationFn: () => apiPost("/api/v1/repo-sync/actions/import", repoSyncResponseSchema),
-    onSuccess: async (result) => {
-      notify("success", formatRepoSyncMessage(result));
-      closeActionDialog();
-      await refreshActions();
-    },
-    onError: (error) => notify("error", getErrorMessage(error)),
-  });
-
   if (actionsQuery.isLoading) {
     return <PageLoading message="Loading reusable actions and templates." />;
   }
@@ -3071,13 +3054,6 @@ function ActionsPage() {
       <PageHeader
         title="Actions"
         description="Reusable remediation and utility actions for workflows. Communication routes now live in Global Communications and the workflow communications section."
-      />
-      <ActionRepoSyncPanel
-        canEdit={canEdit}
-        isPending={exportMutation.isPending || importMutation.isPending}
-        onExport={() => exportMutation.mutate()}
-        onImport={() => importMutation.mutate()}
-        settings={settings}
       />
       <Panel
         title="Action inventory"
@@ -3738,7 +3714,7 @@ function WorkflowRepoSyncPanel({
   return (
     <Panel
       title="Repo sync"
-      subtitle="Import and export workflows independently. Workflow import skips any workflow whose referenced actions do not exist in PoundCake yet."
+      subtitle="Import and export workflows and actions together from one place so action dependencies are loaded before workflows."
     >
       {!settings.git_enabled ? (
         <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, git.workflowsPath, and git.actionsPath in Helm before using repo import/export." />
@@ -3748,7 +3724,8 @@ function WorkflowRepoSyncPanel({
             <strong>Configured repository</strong>
             <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
             <p>Workflows directory: {settings.git_workflows_path || "-"}</p>
-            <p>Actions must already exist in PoundCake before dependent workflows can import.</p>
+            <p>Actions directory: {settings.git_actions_path || "-"}</p>
+            <p>Import loads actions first and then workflows so step references can resolve in the same run.</p>
           </div>
           {!canClear ? (
             <div className="helper-card">
@@ -3773,51 +3750,7 @@ function WorkflowRepoSyncPanel({
             />
           </div>
           <div className="login-note">
-            Workflow import only upserts workflows. Use clear first when you want the repo to become the full visible workflow and action set.
-          </div>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-function ActionRepoSyncPanel({
-  settings,
-  canEdit,
-  isPending,
-  onExport,
-  onImport,
-}: {
-  settings: AppSettings;
-  canEdit: boolean;
-  isPending: boolean;
-  onExport: () => void;
-  onImport: () => void;
-}) {
-  return (
-    <Panel
-      title="Repo sync"
-      subtitle="Import and export reusable actions independently from workflows so the action catalog can be promoted without pulling workflow changes along with it."
-    >
-      {!settings.git_enabled ? (
-        <EmptyState message="Git integration is disabled. Set git.enabled, git.repoUrl, and git.actionsPath in Helm before using repo import/export." />
-      ) : (
-        <div className="form-stack">
-          <div className="helper-card">
-            <strong>Configured repository</strong>
-            <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
-            <p>Actions directory: {settings.git_actions_path || "-"}</p>
-          </div>
-          <div className="form-actions">
-            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
-              {isPending ? "Working..." : "Export to repo"}
-            </button>
-            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onImport}>
-              {isPending ? "Working..." : "Import from repo"}
-            </button>
-          </div>
-          <div className="login-note">
-            Action import only upserts repo-backed actions. Clear remains on the Workflows page because workflows depend on actions.
+            Repo sync for workflows and actions lives here. Use clear first when you want the repo to become the full visible workflow and action set.
           </div>
         </div>
       )}
