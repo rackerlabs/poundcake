@@ -644,4 +644,6 @@ async def reconcile_order_route(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Reconcile one active order against live alert and ticket state."""
-    return await reconcile_order(db, order_id=order_id, req_id=request.state.req_id)
+    result = await reconcile_order(db, order_id=order_id, req_id=request.state.req_id)
+    await db.commit()
+    return result

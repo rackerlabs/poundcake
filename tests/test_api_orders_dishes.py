@@ -71,6 +71,7 @@ def mock_db_session():
         mock_db.execute = AsyncMock(return_value=ScalarResult(first=None, all_=[]))
         mock_db.refresh = AsyncMock(return_value=None)
         mock_db.flush = AsyncMock(return_value=None)
+        mock_db.commit = AsyncMock(return_value=None)
         mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
         yield mock_db
@@ -279,6 +280,7 @@ def test_order_reconcile_route_calls_service_reconciler(client, mock_db_session)
     assert response.status_code == 200
     assert response.json()["status"] == "reconciled"
     reconcile.assert_awaited_once()
+    mock_db_session.commit.assert_awaited_once()
 
 
 def test_order_update__ignores_fingerprint_when_active__updates_bakery_comms(
