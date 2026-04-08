@@ -138,11 +138,18 @@ def setup_logging() -> None:
     logger.addHandler(handler)
 
     # Set third-party loggers to WARNING (suppresses INFO and DEBUG)
-    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error", "sqlalchemy"]:
+    for logger_name in [
+        "uvicorn",
+        "uvicorn.access",
+        "uvicorn.error",
+        "sqlalchemy",
+        "kubernetes",
+        "kubernetes.client.rest",
+    ]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     # Set httpx/httpcore to ERROR (suppress WARNING/INFO/DEBUG by default)
-    for logger_name in ["httpx", "httpcore"]:
+    for logger_name in ["httpx", "httpcore", "urllib3"]:
         logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 

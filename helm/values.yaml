@@ -983,6 +983,14 @@ stackstormApi:
 poundcakeApi:
   readiness:
     initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 6
+  liveness:
+    initialDelaySeconds: 40
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
   ticketing:
     catchAllRecipeName: "fallback-recipe"
     rackspaceConfirmedSolvedStatus: "confirmed solved"

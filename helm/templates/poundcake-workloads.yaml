@@ -108,7 +108,7 @@ spec:
                   name: stackstorm-secrets
                   key: RABBITMQ_PASSWORD
             - name: POUNDCAKE_LOG_LEVEL
-              value: DEBUG
+              value: {{ .Values.config.logLevel | quote }}
             - name: POUNDCAKE_LOG_FORMAT
               value: {{ .Values.logFormat | quote }}
             - name: POUNDCAKE_APP_VERSION
@@ -396,15 +396,17 @@ spec:
               path: /api/v1/ready
               port: 8000
             initialDelaySeconds: {{ .Values.poundcakeApi.readiness.initialDelaySeconds }}
-            periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 6
+            periodSeconds: {{ .Values.poundcakeApi.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.poundcakeApi.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.poundcakeApi.readiness.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /api/v1/live
               port: 8000
-            initialDelaySeconds: 40
-            periodSeconds: 10
+            initialDelaySeconds: {{ .Values.poundcakeApi.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.poundcakeApi.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.poundcakeApi.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.poundcakeApi.liveness.failureThreshold }}
           volumeMounts:
             - name: app-config
               mountPath: /app/config

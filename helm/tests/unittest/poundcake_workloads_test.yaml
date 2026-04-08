@@ -54,6 +54,7 @@ tests:
       poundcakeImage.repository: custom/poundcake
       poundcakeImage.tag: "2.0.0"
       poundcakeImage.pullPolicy: Always
+      config.logLevel: WARNING
       uiImage.repository: custom/poundcake-ui
       uiImage.tag: "2.0.0"
       uiImage.pullPolicy: Always
@@ -77,7 +78,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
-          value: 2
+          value: 5
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
@@ -86,6 +87,20 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
           value: /api/v1/live
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 6
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_LOG_LEVEL
+            value: "WARNING"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].env[7].value
@@ -123,6 +138,45 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
           value: 9
+        documentIndex: 0
+
+  - it: applies configured poundcake API probe settings
+    set:
+      poundcakeApi.readiness.periodSeconds: 7
+      poundcakeApi.readiness.timeoutSeconds: 8
+      poundcakeApi.readiness.failureThreshold: 9
+      poundcakeApi.liveness.initialDelaySeconds: 41
+      poundcakeApi.liveness.periodSeconds: 11
+      poundcakeApi.liveness.timeoutSeconds: 12
+      poundcakeApi.liveness.failureThreshold: 13
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 7
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 8
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 9
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 41
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 11
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 12
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 13
         documentIndex: 0
 
   - it: binds workloads to the poundcake service account and wires Prometheus CRD env
