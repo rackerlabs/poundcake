@@ -636,7 +636,7 @@ async def get_order_timeline(
     return IncidentTimelineResponse(order=OrderResponse.model_validate(order), events=events)
 
 
-@router.post("/orders/{order_id}/reconcile")
+@router.post("/orders/{order_id}/reconcile", response_model=dict[str, Any])
 async def reconcile_order_route(
     request: Request,
     order_id: int,
