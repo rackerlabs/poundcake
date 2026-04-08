@@ -85,7 +85,7 @@ async def test_apply_execution_result_refreshes_remote_state_after_successful_cl
         "load_order_with_communications",
         AsyncMock(return_value=order),
     )
-    get_communication = AsyncMock(
+    sync_communication = AsyncMock(
         return_value=CommunicationResponse(
             communication_id="comm-1",
             provider_type="rackspace_core",
@@ -95,7 +95,7 @@ async def test_apply_execution_result_refreshes_remote_state_after_successful_cl
             updated_at=datetime.now(timezone.utc),
         )
     )
-    monkeypatch.setattr(order_communications, "get_communication", get_communication)
+    monkeypatch.setattr(order_communications, "sync_communication", sync_communication)
 
     await order_communications.apply_execution_result(
         db,
@@ -108,7 +108,7 @@ async def test_apply_execution_result_refreshes_remote_state_after_successful_cl
         result_payload={"status": "succeeded", "provider_response": {"success": True}},
     )
 
-    get_communication.assert_awaited_once_with("comm-1")
+    sync_communication.assert_awaited_once_with("comm-1")
     assert communication.lifecycle_state == "succeeded"
     assert communication.bakery_operation_id == "op-close-1"
     assert communication.remote_state == "confirmed_solved"
@@ -137,7 +137,7 @@ async def test_apply_execution_result_refreshes_remote_state_for_new_successful_
         "load_order_with_communications",
         AsyncMock(return_value=order),
     )
-    get_communication = AsyncMock(
+    sync_communication = AsyncMock(
         return_value=CommunicationResponse(
             communication_id="comm-2",
             provider_type="discord",
@@ -146,7 +146,7 @@ async def test_apply_execution_result_refreshes_remote_state_for_new_successful_
             updated_at=datetime.now(timezone.utc),
         )
     )
-    monkeypatch.setattr(order_communications, "get_communication", get_communication)
+    monkeypatch.setattr(order_communications, "sync_communication", sync_communication)
 
     await order_communications.apply_execution_result(
         db,
@@ -160,7 +160,7 @@ async def test_apply_execution_result_refreshes_remote_state_for_new_successful_
         context_updates={"bakery_ticket_id": "comm-2"},
     )
 
-    get_communication.assert_awaited_once_with("comm-2")
+    sync_communication.assert_awaited_once_with("comm-2")
     assert communication.bakery_ticket_id == "comm-2"
     assert communication.bakery_operation_id == "op-open-1"
     assert communication.remote_state == "open"

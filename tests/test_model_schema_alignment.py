@@ -1,4 +1,4 @@
-from api.models.models import Ingredient, Recipe, RecipeIngredient
+from api.models.models import Ingredient, OrderCommunication, Recipe, RecipeIngredient
 from api.schemas.schemas import IngredientCreate, RecipeCreate, RecipeIngredientCreate
 from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON
 
@@ -11,6 +11,7 @@ def test_model_defaults_and_constraints_align_with_alembic_contract():
     assert Ingredient.__table__.c.execution_target.unique is None
     assert isinstance(Ingredient.__table__.c.execution_payload.type, MYSQL_JSON)
     assert isinstance(RecipeIngredient.__table__.c.execution_payload_override.type, MYSQL_JSON)
+    assert isinstance(OrderCommunication.__table__.c.reconcile_metadata.type, MYSQL_JSON)
     assert any(
         getattr(constraint, "name", "") == "ux_ingredients_engine_target"
         for constraint in Ingredient.__table__.constraints

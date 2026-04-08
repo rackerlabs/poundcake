@@ -11,7 +11,8 @@ from sqlalchemy.orm import selectinload
 
 from api.core.logging import get_logger
 from api.models.models import Dish, DishIngredient, Order, OrderCommunication, RecipeIngredient
-from api.services.bakery_client import get_communication
+from api.services.communications_policy import POLICY_METADATA_KEY
+from api.services.bakery_client import sync_communication
 from api.services.communications import (
     is_ticket_capable_destination,
     normalize_destination_target,
@@ -20,7 +21,15 @@ from api.services.communications import (
 
 logger = get_logger(__name__)
 
-TERMINAL_REMOTE_STATES = {"closed", "terminal", "solved"}
+TERMINAL_REMOTE_STATES = {
+    "closed",
+    "confirmed_solved",
+    "terminal",
+    "solved",
+    "resolved",
+    "done",
+    "completed",
+}
 
 
 def _now() -> datetime:
@@ -29,6 +38,16 @@ def _now() -> datetime:
 
 def normalize_remote_state(state: Any) -> str:
     return str(state or "").strip().lower().replace(" ", "_")
+
+
+def is_remote_state_terminal(remote_state: str | None) -> bool:
+    return normalize_remote_state(remote_state) in TERMINAL_REMOTE_STATES
+
+
+def is_ticket_communication(communication: OrderCommunication) -> bool:
+    return bool(communication.bakery_ticket_id) and is_ticket_capable_destination(
+        communication.execution_target
+    )
 
 
 def determine_writeability(*, execution_target: str, remote_state: str | None) -> tuple[bool, bool]:
@@ -41,6 +60,48 @@ def determine_writeability(*, execution_target: str, remote_state: str | None) -
     if not normalized_state:
         return True, False
     return True, False
+
+
+def _remember_route_metadata(
+    communication: OrderCommunication,
+    *,
+    execution_target: str,
+    execution_payload: dict[str, Any] | None,
+) -> None:
+    payload = execution_payload if isinstance(execution_payload, dict) else {}
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    metadata = dict(communication.reconcile_metadata or {})
+    metadata["execution_target"] = normalize_destination_type(execution_target)
+    metadata["destination_target"] = normalize_destination_target(
+        context.get("destination_target") or communication.destination_target
+    )
+    policy_metadata = context.get(POLICY_METADATA_KEY)
+    if isinstance(policy_metadata, dict) and policy_metadata:
+        for key in (
+            "scope",
+            "owner_key",
+            "route_id",
+            "label",
+            "execution_target",
+            "destination_target",
+        ):
+            value = policy_metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                metadata[key] = value.strip()
+        policy_provider_config = policy_metadata.get("provider_config")
+        if isinstance(policy_provider_config, dict) and policy_provider_config:
+            metadata["provider_config"] = dict(policy_provider_config)
+    provider_config = context.get("provider_config")
+    if isinstance(provider_config, dict) and provider_config:
+        metadata["provider_config"] = dict(provider_config)
+    route_label = context.get("route_label")
+    if isinstance(route_label, str) and route_label.strip():
+        metadata["route_label"] = route_label.strip()
+    if not metadata.get("route_label"):
+        policy_label = metadata.get("label")
+        if isinstance(policy_label, str) and policy_label.strip():
+            metadata["route_label"] = policy_label.strip()
+    communication.reconcile_metadata = metadata
 
 
 def _sync_legacy_order_fields(order: Order) -> None:
@@ -140,11 +201,13 @@ async def ensure_order_communication(
 
 async def refresh_remote_state(
     communication: OrderCommunication,
+    *,
+    raise_on_error: bool = False,
 ) -> tuple[str | None, bool, bool]:
     if not communication.bakery_ticket_id:
         return communication.remote_state, communication.writable, communication.reopenable
     try:
-        remote = await get_communication(communication.bakery_ticket_id)
+        remote = await sync_communication(communication.bakery_ticket_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Failed to refresh remote communication state",
@@ -155,6 +218,8 @@ async def refresh_remote_state(
                 "error": str(exc),
             },
         )
+        if raise_on_error:
+            raise
         remote_state = communication.remote_state
     else:
         remote_state = str(
@@ -211,6 +276,7 @@ async def prepare_communication_context(
     execution_target: str,
     destination_target: str | None,
     operation: str,
+    execution_payload: dict[str, Any] | None = None,
 ) -> tuple[Order, OrderCommunication]:
     order = await load_order_with_communications(db, order_id=order_id, for_update=True)
     if order is None:
@@ -220,6 +286,11 @@ async def prepare_communication_context(
         order=order,
         execution_target=execution_target,
         destination_target=destination_target,
+    )
+    _remember_route_metadata(
+        communication,
+        execution_target=execution_target,
+        execution_payload=execution_payload,
     )
     await refresh_remote_state(communication)
     if (

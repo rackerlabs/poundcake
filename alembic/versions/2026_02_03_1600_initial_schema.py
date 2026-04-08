@@ -328,6 +328,7 @@ def upgrade() -> None:
         sa.Column("remote_state", sa.String(length=64), nullable=True),
         sa.Column("writable", sa.Boolean(), nullable=False, server_default=sa.text("1")),
         sa.Column("reopenable", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("reconcile_metadata", mysql.JSON(), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),

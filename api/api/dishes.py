@@ -31,6 +31,7 @@ from api.schemas.schemas import (
     DishIngredientResponse,
 )
 from api.schemas.query_params import DishQueryParams, validate_query_params
+from api.services.order_communications import is_remote_state_terminal, is_ticket_communication
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -454,17 +455,30 @@ async def update_dish(
 
         if dish.processing_status in DISH_TERMINAL_PROCESSING_STATUSES and dish.order_id:
             result = await db.execute(
-                select(Order).where(Order.id == dish.order_id).with_for_update()
+                select(Order)
+                .options(joinedload(Order.communications))
+                .where(Order.id == dish.order_id)
+                .with_for_update()
             )
             order = result.scalars().first()
             if order and order.processing_status not in ORDER_TERMINAL_PROCESSING_STATUSES:
                 current_phase = (dish.run_phase or "").lower()
                 now = datetime.now(timezone.utc)
                 if current_phase == "resolving":
-                    order.processing_status = (
-                        "complete" if dish.processing_status == "complete" else "failed"
-                    )
-                    order.is_active = False
+                    open_ticket_routes = [
+                        item
+                        for item in (order.communications or [])
+                        if is_ticket_communication(item)
+                        and not is_remote_state_terminal(item.remote_state)
+                    ]
+                    if open_ticket_routes:
+                        order.processing_status = "waiting_ticket_close"
+                        order.is_active = True
+                    else:
+                        order.processing_status = (
+                            "complete" if dish.processing_status == "complete" else "failed"
+                        )
+                        order.is_active = False
                 elif current_phase == "escalation":
                     order.processing_status = "waiting_clear"
                     order.is_active = True

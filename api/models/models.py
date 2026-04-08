@@ -363,6 +363,7 @@ class OrderCommunication(Base):
     remote_state: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     writable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     reopenable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reconcile_metadata: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

@@ -33,9 +33,12 @@ logger = get_logger("timer")
 POLLER_RETRIES = get_settings().poller_http_retries
 SYSTEM_REQ_ID = "SYSTEM-TIMER"
 MISSING_EXECUTION_TIMEOUT_SECONDS = get_settings().chef_missing_execution_timeout_seconds
+INCIDENT_RECONCILE_INTERVAL = get_settings().incident_reconcile_interval_seconds
+INCIDENT_RECONCILE_LIMIT = get_settings().incident_reconcile_limit
 MISSING_WORKFLOW_PATH_FRAGMENT = "/opt/stackstorm/packs/poundcake/actions/workflows/"
 API_UNAVAILABLE_SINCE: float | None = None
 LAST_SUPPRESSION_LIFECYCLE_RUN = 0.0
+LAST_INCIDENT_RECONCILE_RUN = 0.0
 
 
 def _coerce_int(value: Any) -> int | None:
@@ -1087,6 +1090,85 @@ def run_suppression_lifecycle() -> None:
         )
 
 
+def run_incident_reconciliation() -> None:
+    """Reconcile active orders against live Prometheus and Bakery state."""
+    global LAST_INCIDENT_RECONCILE_RUN
+    now = time.time()
+    if now - LAST_INCIDENT_RECONCILE_RUN < INCIDENT_RECONCILE_INTERVAL:
+        return
+    LAST_INCIDENT_RECONCILE_RUN = now
+
+    order_ids: list[int] = []
+    seen: set[int] = set()
+    for status in ("waiting_clear", "resolving", "waiting_ticket_close"):
+        try:
+            resp = request_with_retry_sync(
+                "GET",
+                f"{API_BASE_URL}/orders",
+                params={"processing_status": status, "limit": INCIDENT_RECONCILE_LIMIT},
+                headers=get_service_headers(SYSTEM_REQ_ID),
+                timeout=10,
+                retries=POLLER_RETRIES,
+            )
+            if resp.status_code != 200:
+                logger.warning(
+                    "Incident reconciliation fetch returned non-200",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "status_code": resp.status_code,
+                        "processing_status": status,
+                    },
+                )
+                continue
+            payload = resp.json()
+            if not isinstance(payload, list):
+                continue
+            for item in payload:
+                order_id = item.get("id")
+                if not isinstance(order_id, int) or order_id in seen:
+                    continue
+                seen.add(order_id)
+                order_ids.append(order_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Incident reconciliation fetch failed",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "processing_status": status,
+                    "error": str(exc),
+                },
+            )
+
+    for order_id in order_ids[:INCIDENT_RECONCILE_LIMIT]:
+        try:
+            resp = request_with_retry_sync(
+                "POST",
+                f"{API_BASE_URL}/orders/{order_id}/reconcile",
+                headers=get_service_headers(SYSTEM_REQ_ID),
+                timeout=30,
+                retries=POLLER_RETRIES,
+            )
+            if resp.status_code != 200:
+                logger.warning(
+                    "Incident reconciliation returned non-200",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "order_id": order_id,
+                        "status_code": resp.status_code,
+                    },
+                )
+                continue
+            logger.debug(
+                "Incident reconciliation completed",
+                extra={"req_id": SYSTEM_REQ_ID, "order_id": order_id},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Incident reconciliation failed",
+                extra={"req_id": SYSTEM_REQ_ID, "order_id": order_id, "error": str(exc)},
+            )
+
+
 if __name__ == "__main__":
     wait_for_api(API_BASE_URL, SYSTEM_REQ_ID, logger)
     logger.info(
@@ -1101,4 +1183,5 @@ if __name__ == "__main__":
     while True:
         monitor_dishes()
         run_suppression_lifecycle()
+        run_incident_reconciliation()
         time.sleep(TIMER_INTERVAL)

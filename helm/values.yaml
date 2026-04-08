@@ -823,6 +823,8 @@ timer:
   replicaCount: 1
   interval: 10
   slaBufferPercent: 0.2
+  incidentReconcileIntervalSeconds: 30
+  incidentReconcileLimit: 25
   resources:
     limits:
       cpu: 200m

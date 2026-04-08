@@ -170,6 +170,47 @@ class PrometheusClient:
             )
             return []
 
+    async def get_alerts(self) -> list[dict[str, Any]] | None:
+        """Fetch currently active alerts from Prometheus."""
+        try:
+            start_time = time.time()
+            response = await self._request("GET", "/api/v1/alerts", timeout=30)
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    alerts = data.get("data", {}).get("alerts", [])
+                    return alerts if isinstance(alerts, list) else []
+                logger.error(
+                    "Prometheus alerts API returned error",
+                    extra={
+                        "req_id": SYSTEM_REQ_ID,
+                        "method": "GET",
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                        "error": data.get("error"),
+                    },
+                )
+                return None
+
+            logger.error(
+                "Failed to fetch Prometheus alerts",
+                extra={
+                    "req_id": SYSTEM_REQ_ID,
+                    "method": "GET",
+                    "status_code": response.status_code,
+                    "latency_ms": latency_ms,
+                },
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Error fetching Prometheus alerts",
+                extra={"req_id": SYSTEM_REQ_ID, "method": "GET", "error": str(e)},
+            )
+            return None
+
     async def health_check(self) -> dict[str, Any]:
         """Check if Prometheus is reachable."""
         try:

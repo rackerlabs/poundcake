@@ -113,6 +113,7 @@ async def execute_ingredient(
                     execution_target=payload.execution_target,
                     destination_target=destination_target,
                     operation=operation,
+                    execution_payload=execution_payload,
                 )
                 if communication.bakery_ticket_id:
                     context["bakery_ticket_id"] = communication.bakery_ticket_id

@@ -82,7 +82,10 @@ def get_order_processing_status_param() -> Optional[OrderProcessingStatus]:
     """
     return Query(
         default=None,
-        description="Filter by processing status. Valid values: new, processing, resolving, complete, failed, canceled",
+        description=(
+            "Filter by processing status. Valid values: new, processing, waiting_clear, "
+            "escalation, resolving, waiting_ticket_close, complete, failed, canceled"
+        ),
     )
 
 

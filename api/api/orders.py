@@ -6,15 +6,17 @@
 #
 """API routes for Order management."""
 
+from typing import Any, List, Literal
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-from typing import List, Literal
-from datetime import datetime, timezone
 
-from api.core.database import get_db
+from api.api.auth import require_auth_if_enabled
 from api.core.config import get_settings
+from api.core.database import get_db
 from api.core.logging import get_logger
 from api.core.statuses import ORDER_TERMINAL_PROCESSING_STATUSES
 from api.models.models import Dish, DishIngredient, Order, Recipe, RecipeIngredient
@@ -35,11 +37,22 @@ from api.services.communications_policy import (
     policy_has_enabled_routes,
 )
 from api.services.fallback_recipe import ensure_fallback_recipe
+from api.services.incident_reconciliation import reconcile_order
 from api.services.dish_planner import expected_duration_for_phase, seed_dish_ingredients_for_phase
 
 router = APIRouter()
 logger = get_logger(__name__)
 GLOBAL_COMMS_INHERIT_PHASES = {"firing", "escalation", "resolving"}
+
+
+async def require_service_if_auth_enabled(
+    context=Depends(require_auth_if_enabled),
+):
+    if context is None:
+        return context
+    if context is None or getattr(context, "role", None) != "service":
+        raise HTTPException(status_code=403, detail="Service access required")
+    return context
 
 
 def _recipe_has_phase_remediation(recipe: Recipe, *, phase: str) -> bool:
@@ -85,7 +98,7 @@ async def fetch_orders(
     Get orders with optional filtering.
 
     Query Parameters:
-    - processing_status: Filter by processing status (new/pending/processing/resolving/complete/failed/canceled)
+    - processing_status: Filter by processing status (new/pending/processing/waiting_clear/escalation/resolving/waiting_ticket_close/complete/failed/canceled)
     - alert_status: Filter by alert status (firing/resolved)
     - req_id: Filter by request ID
     - alert_group_name: Filter by alert group name
@@ -621,3 +634,14 @@ async def get_order_timeline(
         extra={"req_id": req_id, "order_id": order_id, "event_count": len(events)},
     )
     return IncidentTimelineResponse(order=OrderResponse.model_validate(order), events=events)
+
+
+@router.post("/orders/{order_id}/reconcile")
+async def reconcile_order_route(
+    request: Request,
+    order_id: int,
+    _service=Depends(require_service_if_auth_enabled),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Reconcile one active order against live alert and ticket state."""
+    return await reconcile_order(db, order_id=order_id, req_id=request.state.req_id)

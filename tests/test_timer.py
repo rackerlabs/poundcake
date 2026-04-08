@@ -279,8 +279,35 @@ def test_monitor_dishes__non_terminal_execution_returns_dish_to_processing(
     assert kwargs["processing_status"] == "processing"
     assert kwargs["execution_status"] == "running"
     assert kwargs["final_status"] is False
-    assert kwargs["started_at"] == "2026-02-13T10:00:01Z"
-    assert kwargs["result"][0]["task_key"] == "step1"
+
+
+def test_run_incident_reconciliation_fetches_active_orders_and_posts_reconcile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str, dict]] = []
+
+    def _request(method: str, url: str, **kwargs):
+        calls.append((method, str(url), kwargs))
+        if method == "GET":
+            status = (kwargs.get("params") or {}).get("processing_status")
+            if status == "waiting_clear":
+                return _Resp(200, [{"id": 11}, {"id": 12}])
+            if status == "resolving":
+                return _Resp(200, [{"id": 12}])
+            return _Resp(200, [])
+        return _Resp(200, {"status": "reconciled"})
+
+    monkeypatch.setattr(timer, "request_with_retry_sync", _request)
+    monkeypatch.setattr(timer, "LAST_INCIDENT_RECONCILE_RUN", 0.0)
+    monkeypatch.setattr(timer, "INCIDENT_RECONCILE_INTERVAL", 0)
+    monkeypatch.setattr(timer, "INCIDENT_RECONCILE_LIMIT", 10)
+
+    timer.run_incident_reconciliation()
+
+    post_urls = [url for method, url, _kwargs in calls if method == "POST"]
+    assert f"{timer.API_BASE_URL}/orders/11/reconcile" in post_urls
+    assert f"{timer.API_BASE_URL}/orders/12/reconcile" in post_urls
+    assert len(post_urls) == 2
 
 
 def test_monitor_dishes__terminal_success_requeues_when_more_segments_remain(

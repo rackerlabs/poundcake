@@ -281,6 +281,8 @@ class Settings(BaseSettings):
     chef_execute_missing_workflow_retries: int = 5
     chef_execute_missing_workflow_retry_backoff_seconds: float = 2.0
     chef_missing_execution_timeout_seconds: int = 60
+    incident_reconcile_interval_seconds: int = 30
+    incident_reconcile_limit: int = 25
 
     log_level: str = "INFO"
     log_format: str = "console"  # Change to 'json' for production/Helm

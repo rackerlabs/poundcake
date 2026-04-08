@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.models.models import Dish, DishIngredient, Order, Recipe
+from api.models.models import Dish, DishIngredient, Order, OrderCommunication, Recipe
 from api.services.bakery_client import BakeryTicketOperation
 
 
@@ -270,6 +270,17 @@ def test_order_update__when_terminal_status__sets_inactive(client, mock_db_sessi
     assert body["is_active"] is False
 
 
+def test_order_reconcile_route_calls_service_reconciler(client, mock_db_session):
+    reconcile = AsyncMock(return_value={"status": "reconciled", "order_id": 1})
+
+    with patch("api.api.orders.reconcile_order", reconcile):
+        response = client.post("/api/v1/orders/1/reconcile")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "reconciled"
+    reconcile.assert_awaited_once()
+
+
 def test_order_update__ignores_fingerprint_when_active__updates_bakery_comms(
     client, mock_db_session
 ):
@@ -437,6 +448,35 @@ def test_dish_update__resolving_terminal__sets_order_terminal(
     assert response.status_code == 200
     assert order.processing_status == expected_order_status
     assert order.is_active is False
+
+
+def test_dish_update__resolving_complete_with_open_ticket_routes_moves_to_waiting_ticket_close(
+    client, mock_db_session
+):
+    dish = _make_dish(status="processing", run_phase="resolving")
+    order = _make_order(status="resolving")
+    order.communications = [
+        OrderCommunication(
+            id=1,
+            order_id=order.id,
+            bakery_ticket_id="comm-1",
+            execution_target="rackspace_core",
+            destination_target="primary",
+            lifecycle_state="succeeded",
+            remote_state="open",
+            writable=True,
+            reopenable=False,
+        )
+    ]
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
+
+    assert response.status_code == 200
+    assert order.processing_status == "waiting_ticket_close"
+    assert order.is_active is True
 
 
 def test_dish_update__catch_all_recipe_terminal__keeps_order_active(client, mock_db_session):

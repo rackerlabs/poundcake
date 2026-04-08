@@ -433,8 +433,9 @@ async def test_pre_heat_firing_does_not_copy_previous_ticket_state():
 
 
 @pytest.mark.asyncio
-async def test_pre_heat_firing_reopens_resolving_order_for_redispatch():
-    existing = _make_order(status="resolving")
+@pytest.mark.parametrize("status", ["resolving", "waiting_ticket_close"])
+async def test_pre_heat_firing_reopens_active_order_for_redispatch(status: str):
+    existing = _make_order(status=status)
     existing.alert_status = "resolved"
     existing.ends_at = datetime.now(timezone.utc)
 

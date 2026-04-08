@@ -800,6 +800,10 @@ spec:
               value: timer
             - name: PREP_INTERVAL
               value: {{ .Values.intervals.prepInterval | quote }}
+            - name: POUNDCAKE_INCIDENT_RECONCILE_INTERVAL_SECONDS
+              value: {{ .Values.timer.incidentReconcileIntervalSeconds | quote }}
+            - name: POUNDCAKE_INCIDENT_RECONCILE_LIMIT
+              value: {{ .Values.timer.incidentReconcileLimit | quote }}
             {{- if .Values.auth.enabled }}
             - name: POUNDCAKE_AUTH_SERVICE_TOKEN
               valueFrom:

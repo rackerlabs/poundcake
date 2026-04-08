@@ -113,7 +113,7 @@ class OrderQueryParams(BaseModel):
         None,
         description=(
             "Filter by processing status "
-            "(new/processing/waiting_clear/escalation/resolving/complete/failed/canceled)"
+            "(new/processing/waiting_clear/escalation/resolving/waiting_ticket_close/complete/failed/canceled)"
         ),
     )
     alert_status: Optional[AlertStatus] = Field(

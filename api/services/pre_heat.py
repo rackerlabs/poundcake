@@ -205,7 +205,8 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                             alert_status="firing",
                             processing_status=(
                                 "new"
-                                if (existing.processing_status or "").lower() == "resolving"
+                                if (existing.processing_status or "").lower()
+                                in {"resolving", "waiting_ticket_close"}
                                 else Order.processing_status
                             ),
                             ends_at=None,
@@ -215,7 +216,7 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                     )
                     reopened_from_resolving = (
                         existing.processing_status or ""
-                    ).lower() == "resolving"
+                    ).lower() in {"resolving", "waiting_ticket_close"}
 
                     logger.info(
                         "Order counter incremented",

@@ -37,6 +37,7 @@ OrderProcessingStatus = Literal[
     "waiting_clear",
     "escalation",
     "resolving",
+    "waiting_ticket_close",
     "complete",
     "failed",
     "canceled",
