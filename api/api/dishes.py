@@ -31,7 +31,11 @@ from api.schemas.schemas import (
     DishIngredientResponse,
 )
 from api.schemas.query_params import DishQueryParams, validate_query_params
-from api.services.dish_planner import build_step_parameters, build_step_payload
+from api.services.dish_planner import (
+    build_step_parameters,
+    build_step_payload,
+    build_step_task_key,
+)
 from api.services.order_communications import is_remote_state_terminal, is_ticket_communication
 
 router = APIRouter()
@@ -48,13 +52,112 @@ def _rowcount(result: object) -> int:
     return int(getattr(cast(Any, result), "rowcount", 0) or 0)
 
 
-def _serialize_dish_ingredient(record: DishIngredient) -> DishIngredientResponse:
-    """Backfill runtime Bakery payloads from the linked recipe step when the row stores JSON null."""
-    payload = DishIngredientResponse.model_validate(record).model_dump(mode="python")
+def _build_recipe_step_lookup(recipe: Recipe | None) -> dict[str, RecipeIngredient]:
+    """Resolve current recipe steps by both raw and workflow task keys."""
+    lookup: dict[str, RecipeIngredient] = {}
+    if recipe is None:
+        return lookup
+    for recipe_ingredient in list(getattr(recipe, "recipe_ingredients", []) or []):
+        ingredient = getattr(recipe_ingredient, "ingredient", None)
+        if ingredient is None:
+            continue
+        raw_task_key = str(getattr(ingredient, "task_key_template", "") or "").strip()
+        if raw_task_key:
+            lookup.setdefault(raw_task_key, recipe_ingredient)
+            lookup.setdefault(raw_task_key.replace(".", "_"), recipe_ingredient)
+        lookup.setdefault(build_step_task_key(recipe_ingredient), recipe_ingredient)
+    return lookup
+
+
+def _resolve_recipe_ingredient(
+    record: DishIngredient,
+    recipe_step_lookup: dict[str, RecipeIngredient] | None = None,
+) -> RecipeIngredient | None:
     recipe_ingredient = getattr(record, "recipe_ingredient", None)
+    if recipe_ingredient is not None:
+        return recipe_ingredient
+    if not recipe_step_lookup:
+        return None
+    task_key = str(getattr(record, "task_key", "") or "").strip()
+    if not task_key:
+        return None
+    return recipe_step_lookup.get(task_key)
+
+
+def _dish_ingredient_identity(
+    record: DishIngredient,
+    recipe_ingredient: RecipeIngredient | None,
+) -> tuple[str, str]:
+    resolved_recipe_ingredient_id = getattr(recipe_ingredient, "id", None)
+    if resolved_recipe_ingredient_id is not None:
+        return ("recipe", str(resolved_recipe_ingredient_id))
+    task_key = str(getattr(record, "task_key", "") or "").strip()
+    if task_key:
+        return ("task", task_key)
+    return ("row", str(getattr(record, "id", 0) or 0))
+
+
+def _dish_ingredient_rank(
+    record: DishIngredient,
+    recipe_ingredient: RecipeIngredient | None,
+) -> tuple[int, int, int, int, datetime, datetime, int]:
+    payload = getattr(record, "execution_payload", None)
+    parameters = getattr(record, "execution_parameters", None)
+    result_payload = getattr(record, "result", None)
+    updated_at = getattr(record, "updated_at", None) or datetime.min.replace(tzinfo=timezone.utc)
+    created_at = getattr(record, "created_at", None) or datetime.min.replace(tzinfo=timezone.utc)
+    return (
+        1 if recipe_ingredient is not None else 0,
+        1 if isinstance(payload, dict) and payload else 0,
+        1 if isinstance(parameters, dict) and parameters else 0,
+        1 if isinstance(result_payload, dict) and result_payload else 0,
+        updated_at,
+        created_at,
+        int(getattr(record, "id", 0) or 0),
+    )
+
+
+def _collapse_dish_ingredient_records(
+    records: list[DishIngredient],
+    *,
+    recipe_step_lookup: dict[str, RecipeIngredient] | None = None,
+) -> list[tuple[DishIngredient, RecipeIngredient | None]]:
+    """Collapse duplicate logical steps and keep the richest/latest runtime row."""
+    selected: dict[tuple[str, str], tuple[DishIngredient, RecipeIngredient | None]] = {}
+    for record in records:
+        recipe_ingredient = _resolve_recipe_ingredient(record, recipe_step_lookup)
+        identity = _dish_ingredient_identity(record, recipe_ingredient)
+        current = selected.get(identity)
+        if current is None or _dish_ingredient_rank(
+            record, recipe_ingredient
+        ) > _dish_ingredient_rank(current[0], current[1]):
+            selected[identity] = (record, recipe_ingredient)
+    collapsed = list(selected.values())
+    collapsed.sort(
+        key=lambda item: (
+            item[0].started_at is None,
+            item[0].started_at or datetime.max.replace(tzinfo=timezone.utc),
+            item[0].completed_at or datetime.max.replace(tzinfo=timezone.utc),
+            item[0].created_at or datetime.max.replace(tzinfo=timezone.utc),
+            item[0].id or 0,
+        )
+    )
+    return collapsed
+
+
+def _serialize_dish_ingredient(
+    record: DishIngredient,
+    *,
+    recipe_step_lookup: dict[str, RecipeIngredient] | None = None,
+) -> DishIngredientResponse:
+    """Backfill runtime Bakery payloads from the current recipe step when the row stores JSON null."""
+    payload = DishIngredientResponse.model_validate(record).model_dump(mode="python")
+    recipe_ingredient = _resolve_recipe_ingredient(record, recipe_step_lookup)
     ingredient = getattr(recipe_ingredient, "ingredient", None)
 
     if recipe_ingredient is not None:
+        if payload.get("recipe_ingredient_id") is None:
+            payload["recipe_ingredient_id"] = getattr(recipe_ingredient, "id", None)
         if payload.get("execution_payload") is None:
             resolved_payload = build_step_payload(recipe_ingredient)
             if resolved_payload is not None:
@@ -412,10 +515,19 @@ async def list_dish_ingredients(
     """List dish ingredient executions for a dish."""
     req_id = request.state.req_id
 
-    result = await db.execute(select(Dish).where(Dish.id == dish_id))
+    result = await db.execute(
+        select(Dish)
+        .options(
+            joinedload(Dish.recipe)
+            .joinedload(Recipe.recipe_ingredients)
+            .joinedload(RecipeIngredient.ingredient)
+        )
+        .where(Dish.id == dish_id)
+    )
     dish = result.scalars().first()
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
+    recipe_step_lookup = _build_recipe_step_lookup(getattr(dish, "recipe", None))
 
     result = await db.execute(
         select(DishIngredient)
@@ -436,7 +548,17 @@ async def list_dish_ingredients(
         "Dish ingredients fetched",
         extra={"req_id": req_id, "dish_id": dish_id, "count": len(records)},
     )
-    return [_serialize_dish_ingredient(record) for record in records]
+    collapsed = _collapse_dish_ingredient_records(
+        list(records),
+        recipe_step_lookup=recipe_step_lookup,
+    )
+    return [
+        _serialize_dish_ingredient(
+            record,
+            recipe_step_lookup=recipe_step_lookup,
+        )
+        for record, _recipe_ingredient in collapsed
+    ]
 
 
 @router.put("/dishes/{dish_id}", response_model=DishResponse)

@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.logging import get_logger
-from api.core.statuses import can_transition_to_resolving
+from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES, can_transition_to_resolving
 from api.models.models import DishIngredient, Order, OrderCommunication
 from api.services.bakery_client import (
     notify_communication,
@@ -106,11 +106,12 @@ def _alert_is_firing(order: Order, alerts: list[dict[str, Any]]) -> bool:
 
 def _route_metadata(order: Order, communication: OrderCommunication) -> dict[str, Any]:
     metadata = dict(communication.reconcile_metadata or {})
-    if metadata.get("provider_config") and metadata.get("route_label"):
-        return metadata
-    if metadata.get("route_label") and all(
-        str(metadata.get(key) or "").strip() for key in ("scope", "owner_key", "route_id")
-    ):
+    if not metadata.get("route_label"):
+        policy_label = metadata.get("label")
+        if isinstance(policy_label, str) and policy_label.strip():
+            metadata["route_label"] = policy_label.strip()
+    if all(str(metadata.get(key) or "").strip() for key in ("scope", "owner_key", "route_id")):
+        communication.reconcile_metadata = metadata
         return metadata
 
     def _matching_item(item: DishIngredient) -> bool:
@@ -163,7 +164,9 @@ def _route_metadata(order: Order, communication: OrderCommunication) -> dict[str
                 policy_label = metadata.get("label")
                 if isinstance(policy_label, str) and policy_label.strip():
                     metadata.setdefault("route_label", policy_label.strip())
-            if metadata.get("provider_config") and metadata.get("route_label"):
+            if all(
+                str(metadata.get(key) or "").strip() for key in ("scope", "owner_key", "route_id")
+            ):
                 communication.reconcile_metadata = metadata
                 return metadata
     communication.reconcile_metadata = metadata
@@ -256,6 +259,32 @@ def _reopen_payload(order: Order, communication: OrderCommunication) -> dict[str
             },
         }
     return {"state": "open", "context": _reconcile_context(order, communication)}
+
+
+def _has_active_resolving_route_step(order: Order, communication: OrderCommunication) -> bool:
+    for dish in list(order.dishes or []):
+        if str(getattr(dish, "run_phase", "") or "").strip().lower() != "resolving":
+            continue
+        if (
+            str(getattr(dish, "processing_status", "") or "").strip().lower()
+            in DISH_TERMINAL_PROCESSING_STATUSES
+        ):
+            continue
+        for step in list(getattr(dish, "dish_ingredients", []) or []):
+            if getattr(step, "deleted", False):
+                continue
+            if str(getattr(step, "execution_engine", "") or "").strip().lower() != "bakery":
+                continue
+            if normalize_destination_type(getattr(step, "execution_target", "")) != (
+                communication.execution_target
+            ):
+                continue
+            if normalize_destination_target(getattr(step, "destination_target", "")) != (
+                communication.destination_target
+            ):
+                continue
+            return True
+    return False
 
 
 def _has_open_ticket_routes(order: Order) -> bool:
@@ -490,6 +519,8 @@ async def reconcile_order(
                 )
     else:
         for communication in ticket_routes:
+            if _has_active_resolving_route_step(order, communication):
+                continue
             if not is_remote_state_terminal(communication.remote_state):
                 await _notify_clear_ticket(
                     order=order,

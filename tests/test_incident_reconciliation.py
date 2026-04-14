@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from api.models.models import Order, OrderCommunication
+from api.models.models import Dish, DishIngredient, Order, OrderCommunication
 from api.services import incident_reconciliation
 
 
@@ -71,6 +71,68 @@ def _make_communication(
     )
     order.communications = [communication]
     return communication
+
+
+def _make_resolving_dish_step(
+    *,
+    execution_target: str = "rackspace_core",
+    destination_target: str = "primary",
+    payload: dict | None = None,
+) -> DishIngredient:
+    now = datetime.now(timezone.utc)
+    return DishIngredient(
+        id=10,
+        dish_id=5,
+        recipe_ingredient_id=None,
+        task_key="step_1_fallback_close",
+        deleted=False,
+        deleted_at=None,
+        execution_engine="bakery",
+        execution_target=execution_target,
+        destination_target=destination_target,
+        execution_payload=payload or {},
+        execution_parameters={"operation": "close"},
+        execution_ref=None,
+        expected_duration_sec=15,
+        timeout_duration_sec=120,
+        retry_count=1,
+        retry_delay=5,
+        on_failure="continue",
+        attempt=0,
+        execution_status="running",
+        started_at=now,
+        completed_at=None,
+        canceled_at=None,
+        result=None,
+        error_message=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _make_resolving_dish(*steps: DishIngredient) -> Dish:
+    now = datetime.now(timezone.utc)
+    dish = Dish(
+        id=5,
+        req_id="REQ-1",
+        order_id=1,
+        recipe_id=1,
+        run_phase="resolving",
+        processing_status="processing",
+        expected_duration_sec=15,
+        actual_duration_sec=None,
+        execution_status=None,
+        execution_ref=None,
+        started_at=now,
+        completed_at=None,
+        result=None,
+        error_message=None,
+        retry_attempt=0,
+        created_at=now,
+        updated_at=now,
+    )
+    dish.dish_ingredients = list(steps)
+    return dish
 
 
 @pytest.mark.asyncio
@@ -199,6 +261,81 @@ async def test_reconcile_waiting_clear_without_live_alert_moves_to_resolving(
     assert order.processing_status == "resolving"
     assert order.alert_status == "resolved"
     assert "dispatch_resolving" in result["actions"]
+    db.flush.assert_awaited_once()
+
+
+def test_route_metadata_backfills_policy_keys_from_resolving_step() -> None:
+    order = _make_order(status="resolving")
+    communication = _make_communication(order=order, destination_target="primary")
+    communication.reconcile_metadata = {
+        "route_label": "Primary Core",
+        "provider_config": {"account_number": "1234567"},
+    }
+    order.dishes = [
+        _make_resolving_dish(
+            _make_resolving_dish_step(
+                payload={
+                    "context": {
+                        "route_label": "Primary Core",
+                        "provider_config": {"account_number": "1234567"},
+                        "poundcake_policy": {
+                            "scope": "fallback",
+                            "owner_key": "fallback",
+                            "route_id": "core-primary",
+                            "label": "Primary Core",
+                            "execution_target": "rackspace_core",
+                            "destination_target": "primary",
+                            "provider_config": {"account_number": "1234567"},
+                        },
+                    }
+                }
+            )
+        )
+    ]
+
+    metadata = incident_reconciliation._route_metadata(order, communication)
+
+    assert metadata["scope"] == "fallback"
+    assert metadata["owner_key"] == "fallback"
+    assert metadata["route_id"] == "core-primary"
+    assert metadata["route_label"] == "Primary Core"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_resolved_order_skips_clear_note_while_resolving_step_is_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order = _make_order(status="resolving")
+    order.alert_status = "resolved"
+    order.ends_at = datetime.now(timezone.utc)
+    _make_communication(order=order, remote_state="open")
+    order.dishes = [_make_resolving_dish(_make_resolving_dish_step())]
+    db = SimpleNamespace(flush=AsyncMock())
+
+    notify = AsyncMock()
+
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "load_order_with_communications",
+        AsyncMock(return_value=order),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "get_prometheus_client",
+        lambda: SimpleNamespace(get_alerts=AsyncMock(return_value=[])),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "refresh_remote_state",
+        AsyncMock(return_value=("open", True, False)),
+    )
+    monkeypatch.setattr(incident_reconciliation, "notify_communication", notify)
+
+    result = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+
+    assert result["status"] == "reconciled"
+    assert result["actions"] == []
+    notify.assert_not_awaited()
     db.flush.assert_awaited_once()
 
 

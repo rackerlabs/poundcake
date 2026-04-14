@@ -36,7 +36,7 @@ MATCHED_ROUTE_EVENTS = (
 
 FALLBACK_ROUTE_EVENTS = (
     ("fallback_open", "open", "firing", "always", 1000),
-    ("fallback_notify", "notify", "resolving", "resolved_after_no_remediation", 2000),
+    ("fallback_close", "close", "resolving", "resolved_after_no_remediation", 2000),
 )
 
 
@@ -265,11 +265,11 @@ def _managed_payload(
             "detail": "No matching workflow is configured for this alert.",
             "resolution": "",
         },
-        "fallback_notify": {
+        "fallback_close": {
             "headline": "Alert cleared",
-            "summary": "The unmatched alert has cleared after a fallback communication was already opened.",
-            "detail": "Leaving the existing communication open for the responder.",
-            "resolution": "",
+            "summary": "The unmatched alert has cleared and PoundCake is closing the fallback communication.",
+            "detail": "Closing the existing communication because the alert has cleared.",
+            "resolution": "Closing communication.",
         },
     }[event_name]
     metadata = {
@@ -790,7 +790,7 @@ def lifecycle_summary() -> dict[str, str]:
         "success": "When an alert clears after successful auto-remediation, PoundCake opens and then closes each configured route.",
         "failure_or_escalation": "When remediation fails or escalation is needed, PoundCake opens each configured route and leaves it open.",
         "unmatched_alert": "When no matching workflow exists, PoundCake opens each configured fallback route immediately.",
-        "clear_after_escalation": "When an escalated alert later clears, PoundCake notifies the existing route and leaves it open.",
+        "clear_after_escalation": "When an escalated alert later clears, PoundCake closes fallback routes automatically and leaves escalation routes open for the responder.",
     }
 
 
@@ -822,7 +822,7 @@ def should_seed_route_step(
     params = getattr(ingredient, "execution_parameters", None) or {}
     operation = str(params.get("operation") or "").strip().lower()
     run_condition = str(getattr(recipe_ingredient, "run_condition", "") or "").strip().lower()
-    if operation != "notify":
+    if operation not in {"notify", "close"}:
         return True
     if run_condition not in {
         "resolved_after_failure",

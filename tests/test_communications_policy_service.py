@@ -158,6 +158,34 @@ def test_build_recipe_local_policy_step_specs_accepts_pre_normalized_routes() ->
     assert step_specs[0]["execution_parameters"]["operation"] == "open"
 
 
+def test_build_fallback_policy_step_specs_closes_on_clear() -> None:
+    normalized = communications_policy.normalize_routes(
+        [
+            {
+                "label": "Primary Core",
+                "execution_target": "rackspace_core",
+                "destination_target": "",
+                "provider_config": {
+                    "account_number": "1234567",
+                    "queue": "Example Support",
+                },
+                "enabled": True,
+                "position": 1,
+            }
+        ]
+    )
+
+    step_specs = communications_policy._build_route_step_specs(
+        routes=normalized,
+        scope="fallback",
+        owner_key="fallback",
+        fallback=True,
+    )
+
+    assert [item["execution_parameters"]["operation"] for item in step_specs] == ["open", "close"]
+    assert step_specs[1]["run_condition"] == "resolved_after_no_remediation"
+
+
 def test_get_recipe_local_routes_hydrates_legacy_provider_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

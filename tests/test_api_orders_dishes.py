@@ -23,6 +23,7 @@ from api.models.models import (
     Recipe,
     RecipeIngredient,
 )
+from api.services.dish_planner import build_step_task_key
 from api.services.bakery_client import BakeryTicketOperation
 
 
@@ -533,6 +534,89 @@ def test_list_dish_ingredients__backfills_missing_runtime_bakery_payload_from_re
         "state": "resolved_success_open",
         "delivery": "managed",
     }
+
+
+def test_list_dish_ingredients__collapses_duplicate_runtime_rows_by_task_key(
+    client, mock_db_session
+):
+    recipe = _make_recipe(recipe_id=9, name="fallback-recipe")
+    dish = _make_dish(dish_id=8)
+    dish.recipe = recipe
+    dish.recipe_id = recipe.id
+    ingredient = _make_ingredient(
+        ingredient_id=42,
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        destination_target="",
+        execution_purpose="comms",
+        task_key_template="pcmcomms.fallback.route.fallback_close",
+        execution_payload={
+            "title": "Alert cleared",
+            "context": {
+                "route_label": "Rackspace",
+                "poundcake_policy": {
+                    "scope": "fallback",
+                    "owner_key": "fallback",
+                    "route_id": "route-1",
+                    "execution_target": "rackspace_core",
+                    "destination_target": "",
+                },
+            },
+        },
+        execution_parameters={"operation": "close"},
+    )
+    recipe_step = _make_recipe_ingredient(
+        ri_id=23,
+        recipe_id=recipe.id,
+        ingredient=ingredient,
+        step_order=2000,
+        run_phase="resolving",
+        run_condition="resolved_after_no_remediation",
+    )
+    recipe.recipe_ingredients = [recipe_step]
+
+    stale_row = _make_dish_ingredient(ingredient_id=32)
+    stale_row.dish_id = dish.id
+    stale_row.recipe_ingredient_id = None
+    stale_row.task_key = build_step_task_key(recipe_step)
+    stale_row.execution_engine = "bakery"
+    stale_row.execution_target = "rackspace_core"
+    stale_row.destination_target = ""
+    stale_row.execution_payload = None
+    stale_row.execution_parameters = None
+    stale_row.started_at = datetime.now(timezone.utc) - timedelta(minutes=2)
+    stale_row.completed_at = None
+    stale_row.updated_at = stale_row.started_at
+
+    linked_row = _make_dish_ingredient(ingredient_id=33)
+    linked_row.dish_id = dish.id
+    linked_row.recipe_ingredient_id = recipe_step.id
+    linked_row.task_key = build_step_task_key(recipe_step)
+    linked_row.execution_engine = "bakery"
+    linked_row.execution_target = "rackspace_core"
+    linked_row.destination_target = ""
+    linked_row.execution_payload = None
+    linked_row.execution_parameters = None
+    linked_row.execution_status = "failed"
+    linked_row.error_message = "close failed"
+    linked_row.recipe_ingredient = recipe_step
+    linked_row.started_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    linked_row.completed_at = datetime.now(timezone.utc)
+    linked_row.updated_at = linked_row.completed_at
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(all_=[stale_row, linked_row])]
+    )
+
+    response = client.get(f"/api/v1/dishes/{dish.id}/ingredients")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["id"] == linked_row.id
+    assert body[0]["recipe_ingredient_id"] == recipe_step.id
+    assert body[0]["execution_payload"] == ingredient.execution_payload
+    assert body[0]["execution_parameters"] == {"operation": "close"}
 
 
 def test_dish_update__when_firing_complete__moves_order_to_waiting_clear(client, mock_db_session):
