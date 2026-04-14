@@ -24,13 +24,22 @@ class _ScalarResult:
 async def test_sync_recipe_ingredients_from_yaml_detaches_historical_dish_refs():
     recipe = SimpleNamespace(id=12)
     ingredient = SimpleNamespace(id=41, execution_target="core.test")
+    dish_row = SimpleNamespace(
+        id=91,
+        dish_id=3,
+        recipe_ingredient_id=81,
+        task_key="notify",
+        updated_at=None,
+    )
     added: list[object] = []
 
     db = AsyncMock()
     db.execute = AsyncMock(
         side_effect=[
             _ScalarResult(all_=[ingredient]),  # existing ingredients
-            _ScalarResult(),  # detach dish_ingredients
+            _ScalarResult(all_=[81]),  # existing recipe_ingredient ids
+            _ScalarResult(all_=[dish_row]),  # impacted dish_ingredients
+            _ScalarResult(all_=[(91, 3, 81, "notify")]),  # occupancy query
             _ScalarResult(),  # delete recipe_ingredients
         ]
     )
@@ -45,11 +54,13 @@ async def test_sync_recipe_ingredients_from_yaml_detaches_historical_dish_refs()
     )
 
     assert ok is True
-    statements = [call.args[0] for call in db.execute.call_args_list]
-    assert [stmt.table.name for stmt in statements[-2:]] == [
-        "dish_ingredients",
-        "recipe_ingredients",
+    assert dish_row.recipe_ingredient_id is None
+    assert dish_row.task_key == "notify"
+    db.flush.assert_awaited_once()
+    statements = [
+        call.args[0] for call in db.execute.call_args_list if hasattr(call.args[0], "table")
     ]
+    assert [stmt.table.name for stmt in statements] == ["recipe_ingredients"]
     steps = [row for row in added if isinstance(row, RecipeIngredient)]
     assert len(steps) == 1
     assert steps[0].ingredient_id == 41

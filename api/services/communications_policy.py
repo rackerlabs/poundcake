@@ -8,17 +8,18 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from api.core.config import get_settings
-from api.models.models import DishIngredient, Ingredient, Recipe, RecipeIngredient
+from api.models.models import Ingredient, Recipe, RecipeIngredient
 from api.services.communications import (
     normalize_destination_target,
     normalize_destination_type,
     normalize_route_provider_config,
 )
+from api.services.recipe_ingredient_cleanup import detach_recipe_ingredient_ids_safely
 
 MANAGED_TASK_PREFIX = "pcmcomms."
 MANAGED_RECIPE_NAME_GLOBAL = "pcm-policy-global"
@@ -369,11 +370,7 @@ async def _delete_recipe_ingredient_ids_safely(
 ) -> None:
     if not recipe_ingredient_ids:
         return
-    await db.execute(
-        update(DishIngredient)
-        .where(DishIngredient.recipe_ingredient_id.in_(recipe_ingredient_ids))
-        .values(recipe_ingredient_id=None, updated_at=_now())
-    )
+    await detach_recipe_ingredient_ids_safely(db, recipe_ingredient_ids=recipe_ingredient_ids)
     await db.execute(delete(RecipeIngredient).where(RecipeIngredient.id.in_(recipe_ingredient_ids)))
 
 

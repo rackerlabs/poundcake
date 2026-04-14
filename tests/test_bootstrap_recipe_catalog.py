@@ -152,10 +152,10 @@ recipe:
         side_effect=[
             _ScalarResult(all_=[ingredient]),  # ingredient map
             _ScalarResult(first=existing_recipe),  # node-a
-            _ScalarResult(),  # detach node-a dish_ingredients
+            _ScalarResult(all_=[]),  # node-a recipe_ingredient ids
             _ScalarResult(),  # delete node-a recipe_ingredients
             _ScalarResult(first=None),  # node-b
-            _ScalarResult(),  # detach node-b dish_ingredients
+            _ScalarResult(all_=[]),  # node-b recipe_ingredient ids
             _ScalarResult(),  # delete node-b recipe_ingredients
         ]
     )
@@ -181,9 +181,7 @@ recipe:
         if hasattr(stmt, "table")
     ]
     assert dml_tables == [
-        "dish_ingredients",
         "recipe_ingredients",
-        "dish_ingredients",
         "recipe_ingredients",
     ]
 
