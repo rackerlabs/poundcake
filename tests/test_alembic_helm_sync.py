@@ -43,5 +43,5 @@ def test_helm_chart_versions_match_current_release_metadata() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     chart = (repo_root / "helm/Chart.yaml").read_text(encoding="utf-8")
 
-    assert "version: 0.2.94" in chart
-    assert 'appVersion: "2.0.195"' in chart
+    assert "version: 0.2.95" in chart
+    assert 'appVersion: "2.0.196"' in chart
