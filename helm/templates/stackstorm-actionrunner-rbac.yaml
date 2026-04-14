@@ -10,6 +10,13 @@
 {{- if hasKey $pvcPatchRbac "enabled" }}
 {{- $enablePvcPatchRbac = $pvcPatchRbac.enabled }}
 {{- end }}
+{{- $workloadRecycleRbac := $cfg.workloadRecycleRbac | default dict }}
+{{- $enableWorkloadRecycleRbac := true }}
+{{- if hasKey $workloadRecycleRbac "enabled" }}
+{{- $enableWorkloadRecycleRbac = $workloadRecycleRbac.enabled }}
+{{- end }}
+{{- $renderRole := or $enablePvcPatchRbac $enableWorkloadRecycleRbac }}
+{{- $rbacName := printf "%s-cluster" (include "poundcake.stackstormActionrunnerServiceAccountName" .) | trunc 63 | trimSuffix "-" }}
 {{- if $createServiceAccount }}
 apiVersion: v1
 kind: ServiceAccount
@@ -22,31 +29,48 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 {{- end }}
-{{- if $enablePvcPatchRbac }}
+{{- if $renderRole }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
-  name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+  name: {{ $rbacName }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
 rules:
+{{- if $enablePvcPatchRbac }}
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list", "patch"]
+{{- end }}
+{{- if $enableWorkloadRecycleRbac }}
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
-  name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+  name: {{ $rbacName }}
   labels:
     {{- include "poundcake.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "poundcake.stackstormActionrunnerServiceAccountName" . }}
+  kind: ClusterRole
+  name: {{ $rbacName }}
 {{- end }}
 {{- end }}

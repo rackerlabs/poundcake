@@ -875,6 +875,8 @@ stackstormActionrunner:
     name: ""
   pvcPatchRbac:
     enabled: true
+  workloadRecycleRbac:
+    enabled: true
 
 # Remote Bakery client configuration.
 # Bakery is now deployed from the standalone bakery repo and PoundCake talks to it over HTTP.

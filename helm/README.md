@@ -42,6 +42,12 @@ Use the repo wrapper for PoundCake:
 
 Use the standalone Bakery repo for Bakery installs.
 
+By default, the StackStorm actionrunner service account gets cluster-scoped RBAC to patch PVCs,
+delete pods, create pod evictions, and patch Deployments, StatefulSets, and DaemonSets for
+workload recycling. Operators can disable either permission set with
+`stackstormActionrunner.pvcPatchRbac.enabled=false` or
+`stackstormActionrunner.workloadRecycleRbac.enabled=false`.
+
 ## Optional StackStorm Packs
 
 The chart can install the StackStorm `kubernetes` and `openstack` packs into

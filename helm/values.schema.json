@@ -651,6 +651,12 @@
           "properties": {
             "enabled": { "type": "boolean", "default": true }
           }
+        },
+        "workloadRecycleRbac": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true }
+          }
         }
       }
     },
