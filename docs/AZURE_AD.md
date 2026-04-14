@@ -1,6 +1,6 @@
 # Azure AD Configuration
 
-This guide covers the Genestack deployment path for enabling Azure AD / Microsoft Entra authentication in PoundCake.
+This guide covers the override-file deployment path for enabling Azure AD / Microsoft Entra authentication in PoundCake.
 
 Use this when you want:
 
@@ -10,10 +10,10 @@ Use this when you want:
 
 ## Assumptions
 
-- PoundCake is deployed into a Genestack environment.
-- The active auth override file is `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`.
+- PoundCake is deployed into a Kubernetes environment.
+- The active auth override file is `/etc/poundcake/helm-configs/poundcake/20-auth-overrides.yaml`.
 - PoundCake is published at `https://<poundcake-public-url-host>`.
-- The PoundCake namespace is `rackspace`.
+- The PoundCake namespace is `<namespace>`.
 
 ## Important Azure AD Model
 
@@ -51,7 +51,7 @@ If you want group-based RBAC, configure the app registration to emit `groups` cl
 
 ## 2. Write The Auth Override File
 
-Create or update `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`:
+Create or update `/etc/poundcake/helm-configs/poundcake/20-auth-overrides.yaml`:
 
 ```yaml
 auth:
@@ -89,7 +89,7 @@ Notes:
 For the recommended confidential web app path:
 
 ```bash
-kubectl -n rackspace create secret generic poundcake-azure-ui \
+kubectl -n <namespace> create secret generic poundcake-azure-ui \
   --from-literal=client-secret='<azure-ui-client-secret>'
 ```
 
@@ -106,7 +106,7 @@ If your Azure AD browser app does not use a client secret, leave `auth.azureAd.u
 Check the rendered values:
 
 ```bash
-helm get values poundcake -n rackspace -o yaml
+helm get values <release-name> -n <namespace> -o yaml
 ```
 
 Things to confirm:

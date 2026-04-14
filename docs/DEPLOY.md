@@ -4,7 +4,7 @@ PoundCake deploys as a standalone monitoring control plane. Bakery is no longer 
 this repo; deploy it separately from [rackerlabs/bakery](https://github.com/rackerlabs/bakery) and
 point PoundCake at it with `bakery.client.*` values.
 
-Auth provider and RBAC setup live in [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+Auth provider and RBAC setup live in [AUTH.md](AUTH.md).
 
 ## Supported Model
 
@@ -17,11 +17,11 @@ Auth provider and RBAC setup live in [AUTH.md](/Users/aedan/Documents/GitHub/pou
 
 ## Canonical Paths
 
-- PoundCake override directory: `/etc/genestack/helm-configs/poundcake/`
-- Bakery override directory: `/etc/genestack/helm-configs/bakery/`
-- Global overrides: `/etc/genestack/helm-configs/global_overrides/`
-- Shared chart version file: `/etc/genestack/helm-chart-versions.yaml`
-- PoundCake installer wrapper: [install/install-poundcake-helm.sh](/Users/aedan/Documents/GitHub/poundcake/install/install-poundcake-helm.sh)
+- PoundCake override directory: `/etc/poundcake/helm-configs/poundcake/`
+- Bakery override directory: `/etc/bakery/helm-configs/bakery/`
+- Global overrides: `/etc/poundcake/helm-configs/global_overrides/`
+- Shared chart version file: `/etc/poundcake/helm-chart-versions.yaml`
+- PoundCake installer wrapper: [install/install-poundcake-helm.sh](../install/install-poundcake-helm.sh)
 - Standalone Bakery repo: [rackerlabs/bakery](https://github.com/rackerlabs/bakery)
 
 Recommended override layout:
@@ -31,7 +31,7 @@ Recommended override layout:
 - `20-auth-overrides.yaml`
 - `30-git-sync-overrides.yaml`
 
-Before deploying, update the `poundcake` chart entry in `/etc/genestack/helm-chart-versions.yaml`.
+Before deploying, update the `poundcake` chart entry in `/etc/poundcake/helm-chart-versions.yaml`.
 If Bakery is being rolled out or upgraded in the same environment, update the `bakery` entry there
 as well.
 
@@ -138,7 +138,7 @@ Important notes:
 - `stackstorm.bootstrap.packs.openstack.config.caCert` is optional and only needed when the target
   cloud uses a private CA that should be mounted separately.
 - These values are secrets. Keep them only in secured operator-managed override files such as
-  `/etc/genestack/helm-configs/poundcake/10-main-overrides.yaml`, and do not commit real
+  `/etc/poundcake/helm-configs/poundcake/10-main-overrides.yaml`, and do not commit real
   credentials or certificate material to the repo.
 
 Once these values are present, the PoundCake Helm bootstrap flow will install and configure the
@@ -188,7 +188,7 @@ persistence:
 
 This chart can create the Longhorn RWX `StorageClass` during Helm install when
 `longhorn.rwxStorageClass.create=true`. A repo-local example manifest also lives at
-[config/storage/longhorn-rwx-storageclass.yaml](/Users/chris.breu/code/poundcake/config/storage/longhorn-rwx-storageclass.yaml).
+[config/storage/longhorn-rwx-storageclass.yaml](../config/storage/longhorn-rwx-storageclass.yaml).
 
 Longhorn RWX notes:
 
@@ -222,7 +222,7 @@ export POUNDCAKE_BAKERY_BOOTSTRAP_KEY_ID="bootstrap"
 export POUNDCAKE_BAKERY_BOOTSTRAP_KEY="<value returned by Bakery admin bootstrap endpoint>"
 export POUNDCAKE_BAKERY_MONITOR_ENCRYPTION_KEY="$(openssl rand -base64 32)"
 
-kubectl -n rackspace create secret generic bakery-monitor-bootstrap \
+kubectl -n <namespace> create secret generic bakery-monitor-bootstrap \
   --from-literal=bootstrap-key-id="${POUNDCAKE_BAKERY_BOOTSTRAP_KEY_ID}" \
   --from-literal=bootstrap-key="${POUNDCAKE_BAKERY_BOOTSTRAP_KEY}" \
   --from-literal=monitor-encryption-key="${POUNDCAKE_BAKERY_MONITOR_ENCRYPTION_KEY}" \
@@ -248,16 +248,16 @@ Install PoundCake from this repo only:
 Wait for the PoundCake rollout:
 
 ```bash
-kubectl -n rackspace rollout status deploy/poundcake-api --timeout=300s
-kubectl -n rackspace rollout status deploy/poundcake-ui --timeout=300s
+kubectl -n <namespace> rollout status deploy/poundcake-api --timeout=300s
+kubectl -n <namespace> rollout status deploy/poundcake-ui --timeout=300s
 ```
 
 Confirm PoundCake is wired for remote Bakery:
 
 ```bash
-helm get values poundcake -n rackspace -o yaml
-kubectl -n rackspace get secret bakery-monitor-bootstrap
-kubectl -n rackspace exec deploy/poundcake-api -- printenv | grep '^POUNDCAKE_BAKERY_'
+helm get values <release-name> -n <namespace> -o yaml
+kubectl -n <namespace> get secret bakery-monitor-bootstrap
+kubectl -n <namespace> exec deploy/poundcake-api -- printenv | grep '^POUNDCAKE_BAKERY_'
 curl -fsS https://<poundcake-public-url-host>/api/v1/health
 ```
 
@@ -274,10 +274,10 @@ Things to confirm:
 Confirm PoundCake persisted monitor state locally:
 
 ```bash
-kubectl -n rackspace exec deploy/poundcake-mariadb -- \
-  mariadb -u"$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_USER}' | base64 -d)" \
-  -p"$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
-  "$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_NAME}' | base64 -d)" \
+kubectl -n <namespace> exec deploy/poundcake-mariadb -- \
+  mariadb -u"$(kubectl -n <namespace> get secret poundcake-secrets -o jsonpath='{.data.DB_USER}' | base64 -d)" \
+  -p"$(kubectl -n <namespace> get secret poundcake-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
+  "$(kubectl -n <namespace> get secret poundcake-secrets -o jsonpath='{.data.DB_NAME}' | base64 -d)" \
   -N -e "SELECT monitor_id, monitor_uuid, last_heartbeat_status, last_heartbeat_at FROM bakery_monitor_state;"
 ```
 
@@ -293,9 +293,9 @@ After PoundCake is healthy:
 Example secret reads:
 
 ```bash
-kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.username}' | base64 -d; echo
-kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.password}' | base64 -d; echo
-kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.internal-api-key}' | base64 -d; echo
+kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.username}' | base64 -d; echo
+kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d; echo
 ```
 
 ## Live Validation

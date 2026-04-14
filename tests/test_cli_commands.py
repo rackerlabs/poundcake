@@ -934,7 +934,7 @@ def test_workflows_create_builds_local_comms_payload(
             "--step-json",
             '{"ingredient_id":42,"run_phase":"firing"}',
             "--route-json",
-            '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"1781738"}}',
+            '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"1234567"}}',
         ],
     )
     assert result.exit_code == 0, result.output
@@ -1017,7 +1017,7 @@ def test_global_communications_set_uses_existing_policy_endpoint(
             "global-communications",
             "set",
             "--route-json",
-            '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"1781738"}}',
+            '{"label":"Core","execution_target":"rackspace_core","provider_config":{"account_number":"1234567"}}',
             "--route-json",
             '{"label":"Discord","execution_target":"discord","destination_target":"ops-alerts"}',
         ],
@@ -1458,7 +1458,7 @@ def test_alert_rule_policy_and_read_commands_cover_remaining_supported_groups(
                     "label": "Core",
                     "execution_target": "rackspace_core",
                     "destination_target": "",
-                    "provider_config": {"account_number": "1781738"},
+                    "provider_config": {"account_number": "1234567"},
                     "enabled": True,
                     "position": 1,
                 }

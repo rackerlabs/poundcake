@@ -116,8 +116,8 @@ def test_normalize_routes_preserves_provider_config_for_required_targets() -> No
                 "execution_target": "rackspace_core",
                 "destination_target": "primary",
                 "provider_config": {
-                    "account_number": "1781738",
-                    "queue": "CloudBuilders Support",
+                    "account_number": "1234567",
+                    "queue": "Example Support",
                     "subcategory": "Monitoring",
                 },
                 "enabled": True,
@@ -126,7 +126,7 @@ def test_normalize_routes_preserves_provider_config_for_required_targets() -> No
         ]
     )
 
-    assert routes[0].provider_config["account_number"] == "1781738"
+    assert routes[0].provider_config["account_number"] == "1234567"
 
 
 def test_build_recipe_local_policy_step_specs_accepts_pre_normalized_routes() -> None:
@@ -137,8 +137,8 @@ def test_build_recipe_local_policy_step_specs_accepts_pre_normalized_routes() ->
                 "execution_target": "rackspace_core",
                 "destination_target": "",
                 "provider_config": {
-                    "account_number": "1781738",
-                    "queue": "CloudBuilders Support",
+                    "account_number": "1234567",
+                    "queue": "Example Support",
                     "subcategory": "Monitoring",
                 },
                 "enabled": True,
@@ -166,7 +166,7 @@ def test_get_recipe_local_routes_hydrates_legacy_provider_config(
         "get_settings",
         lambda: SimpleNamespace(
             catch_all_recipe_name="fallback-recipe",
-            rackspace_core_default_queue="CloudBuilders Support",
+            rackspace_core_default_queue="Example Support",
             rackspace_core_default_subcategory="Monitoring",
         ),
     )
@@ -177,12 +177,12 @@ def test_get_recipe_local_routes_hydrates_legacy_provider_config(
         execution_target="rackspace_core",
         destination_target="primary",
         task_key_template="legacy.core",
-        execution_payload={"context": {"coreAccountID": "1781738"}},
+        execution_payload={"context": {"coreAccountID": "1234567"}},
     )
     recipe_step = SimpleNamespace(ingredient=ingredient)
     recipe = SimpleNamespace(recipe_ingredients=[recipe_step], name="filesystem-response")
 
     routes = communications_policy.get_recipe_local_routes(recipe)
 
-    assert routes[0].provider_config["account_number"] == "1781738"
-    assert routes[0].provider_config["queue"] == "CloudBuilders Support"
+    assert routes[0].provider_config["account_number"] == "1234567"
+    assert routes[0].provider_config["queue"] == "Example Support"

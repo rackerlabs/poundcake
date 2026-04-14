@@ -32,7 +32,7 @@ Runtime-generated bootstrap recipe catalog entries loaded by `/api/v1/cook/sync`
 - Runtime default directory: `/app/bootstrap/recipes`
 - Override with env var: `POUNDCAKE_BOOTSTRAP_RECIPES_DIR`
 - Remote source defaults:
-  - `POUNDCAKE_BOOTSTRAP_RULES_REPO_URL=https://github.com/rackerlabs/genestack-monitoring.git`
+  - `POUNDCAKE_BOOTSTRAP_RULES_REPO_URL=` (set this to enable remote sync)
   - `POUNDCAKE_BOOTSTRAP_RULES_BRANCH=main`
   - `POUNDCAKE_BOOTSTRAP_RULES_PATH=alerts`
 - Schema (per file):

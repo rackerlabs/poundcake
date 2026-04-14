@@ -124,10 +124,10 @@ assert_contains "${output}" "Resolved poundcake_api URL: http://localhost:8000/a
 output="$(run_expect_failure "k8s requires explicit service" env DEBUG=1 TEST_TARGET=k8s "${RUN_E2E}" --list)"
 assert_contains "${output}" "--target k8s requires --service unless --api-url is provided" "k8s requires explicit service"
 
-output="$(run_expect_success "k8s explicit service FQDN URL" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --namespace rackspace --remote-port 8000 --list)"
-assert_contains "${output}" "Resolved poundcake_api URL: http://poundcake-api.rackspace.svc.cluster.local:8000/api/v1" "k8s explicit service FQDN URL"
+output="$(run_expect_success "k8s explicit service FQDN URL" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --namespace example-namespace --remote-port 8000 --list)"
+assert_contains "${output}" "Resolved poundcake_api URL: http://poundcake-api.example-namespace.svc.cluster.local:8000/api/v1" "k8s explicit service FQDN URL"
 
-output="$(run_expect_success "k8s port-forward uses localhost URL" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --namespace rackspace --enable-port-forward --local-port 18000 --list)"
+output="$(run_expect_success "k8s port-forward uses localhost URL" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --namespace example-namespace --enable-port-forward --local-port 18000 --list)"
 assert_contains "${output}" "Resolved poundcake_api URL: http://localhost:18000/api/v1" "k8s port-forward uses localhost URL"
 
 output="$(run_expect_success "api-url override wins" env DEBUG=1 "${RUN_E2E}" --target k8s --service poundcake-api --api-url http://example:9999/api/v1 --list)"

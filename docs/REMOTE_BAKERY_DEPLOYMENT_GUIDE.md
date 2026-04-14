@@ -17,9 +17,9 @@ Use this sequence:
 
 - PoundCake repo root: `/opt/poundcake`
 - Bakery repo root: `/opt/bakery`
-- PoundCake overrides: `/etc/genestack/helm-configs/poundcake/`
-- Bakery overrides: `/etc/genestack/helm-configs/bakery/`
-- Shared chart versions file: `/etc/genestack/helm-chart-versions.yaml`
+- PoundCake overrides: `/etc/poundcake/helm-configs/poundcake/`
+- Bakery overrides: `/etc/bakery/helm-configs/bakery/`
+- Shared chart versions file: `/etc/poundcake/helm-chart-versions.yaml`
 
 ## Bakery Deployment Source
 
@@ -38,7 +38,7 @@ export BAKERY_URL="https://bakery.example.com"
 ## PoundCake Override Example
 
 Put the PoundCake-side remote Bakery settings in the active override file, typically
-`/etc/genestack/helm-configs/poundcake/10-main-overrides.yaml`:
+`/etc/poundcake/helm-configs/poundcake/10-main-overrides.yaml`:
 
 ```yaml
 gateway:
@@ -85,12 +85,12 @@ the PoundCake override file for each environment, for example:
 bakery:
   client:
     monitor:
-      id: kronos/rackspace/poundcake
-      environmentLabel: kronos
-      clusterName: kronos-logging
+      id: example/poundcake
+      environmentLabel: example
+      clusterName: example-cluster
       tags:
         - shared-bakery
-        - kronos
+        - example
 ```
 
 Create the PoundCake-side secret after the Bakery admin endpoint returns the bootstrap key:
@@ -100,7 +100,7 @@ export POUNDCAKE_BAKERY_BOOTSTRAP_KEY_ID="bootstrap"
 export POUNDCAKE_BAKERY_BOOTSTRAP_KEY="<value returned by Bakery admin bootstrap endpoint>"
 export POUNDCAKE_BAKERY_MONITOR_ENCRYPTION_KEY="$(openssl rand -base64 32)"
 
-kubectl -n rackspace create secret generic bakery-monitor-bootstrap \
+kubectl -n <namespace> create secret generic bakery-monitor-bootstrap \
   --from-literal=bootstrap-key-id="${POUNDCAKE_BAKERY_BOOTSTRAP_KEY_ID}" \
   --from-literal=bootstrap-key="${POUNDCAKE_BAKERY_BOOTSTRAP_KEY}" \
   --from-literal=monitor-encryption-key="${POUNDCAKE_BAKERY_MONITOR_ENCRYPTION_KEY}" \
@@ -109,7 +109,7 @@ kubectl -n rackspace create secret generic bakery-monitor-bootstrap \
 
 ## Install PoundCake
 
-Update `/etc/genestack/helm-chart-versions.yaml` so the `poundcake` entry matches the chart you
+Update `/etc/poundcake/helm-chart-versions.yaml` so the `poundcake` entry matches the chart you
 intend to deploy, then install PoundCake from this repo:
 
 ```bash
@@ -120,8 +120,8 @@ cd /opt/poundcake
 Wait for rollout:
 
 ```bash
-kubectl -n rackspace rollout status deploy/poundcake-api --timeout=300s
-kubectl -n rackspace rollout status deploy/poundcake-ui --timeout=300s
+kubectl -n <namespace> rollout status deploy/poundcake-api --timeout=300s
+kubectl -n <namespace> rollout status deploy/poundcake-ui --timeout=300s
 ```
 
 ## Verify Remote Bakery Wiring
@@ -129,13 +129,13 @@ kubectl -n rackspace rollout status deploy/poundcake-ui --timeout=300s
 Confirm release values:
 
 ```bash
-helm get values poundcake -n rackspace -o yaml
+helm get values <release-name> -n <namespace> -o yaml
 ```
 
 Confirm runtime env:
 
 ```bash
-kubectl -n rackspace exec deploy/poundcake-api -- printenv | grep '^POUNDCAKE_BAKERY_'
+kubectl -n <namespace> exec deploy/poundcake-api -- printenv | grep '^POUNDCAKE_BAKERY_'
 ```
 
 Expected shape:
@@ -156,10 +156,10 @@ curl -fsS https://<poundcake-public-hostname>/api/v1/health
 Confirm local monitor persistence:
 
 ```bash
-kubectl -n rackspace exec deploy/poundcake-mariadb -- \
-  mariadb -u"$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_USER}' | base64 -d)" \
-  -p"$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
-  "$(kubectl -n rackspace get secret poundcake-secrets -o jsonpath='{.data.DB_NAME}' | base64 -d)" \
+kubectl -n <namespace> exec deploy/poundcake-mariadb -- \
+  mariadb -u"$(kubectl -n <namespace> get secret poundcake-secrets -o jsonpath='{.data.DB_USER}' | base64 -d)" \
+  -p"$(kubectl -n <namespace> get secret poundcake-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
+  "$(kubectl -n <namespace> get secret poundcake-secrets -o jsonpath='{.data.DB_NAME}' | base64 -d)" \
   -N -e "SELECT monitor_id, monitor_uuid, last_heartbeat_status, last_heartbeat_at FROM bakery_monitor_state;"
 ```
 
@@ -181,7 +181,7 @@ Suggested validation flow:
 1. Retrieve the PoundCake service token:
 
 ```bash
-kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.internal-api-key}' | base64 -d; echo
+kubectl get secret poundcake-admin -n <namespace> -o jsonpath='{.data.internal-api-key}' | base64 -d; echo
 ```
 
 2. Run the PVC-expand validation webhook through PoundCake.
@@ -196,13 +196,13 @@ kubectl get secret poundcake-admin -n rackspace -o jsonpath='{.data.internal-api
 5. Scale the PoundCake API deployment to zero:
 
 ```bash
-kubectl -n rackspace scale deploy/poundcake-api --replicas=0
+kubectl -n <namespace> scale deploy/poundcake-api --replicas=0
 ```
 
 6. Wait longer than 5 missed 30-second heartbeats and verify the Bakery outage alert fired.
 7. Scale the PoundCake API deployment back to one replica and confirm heartbeats resume:
 
 ```bash
-kubectl -n rackspace scale deploy/poundcake-api --replicas=1
-kubectl -n rackspace rollout status deploy/poundcake-api --timeout=300s
+kubectl -n <namespace> scale deploy/poundcake-api --replicas=1
+kubectl -n <namespace> rollout status deploy/poundcake-api --timeout=300s
 ```

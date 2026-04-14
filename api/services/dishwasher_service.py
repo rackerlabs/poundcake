@@ -62,6 +62,9 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
     actions = await manager.list_non_orquesta_actions(limit=1000)
     workflows = await manager.list_orquesta_actions(limit=1000)
     settings = get_settings()
+    remote_recipes_enabled = bool(
+        settings.bootstrap_remote_sync_enabled and str(settings.bootstrap_rules_repo_url).strip()
+    )
     ingredients_dir = settings.bootstrap_ingredients_dir
     if not Path(ingredients_dir).exists() and settings.bootstrap_ingredients_file:
         legacy_file = Path(settings.bootstrap_ingredients_file)
@@ -75,7 +78,7 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
             "ingredients": _empty_sync_stats(files_scanned=0),
             "recipes": _empty_sync_stats(files_scanned=0, rules_discovered=0, generated=0),
             "remote_recipes": {
-                "enabled": bool(settings.bootstrap_remote_sync_enabled),
+                "enabled": remote_recipes_enabled,
                 "refreshed": False,
                 "files_scanned": 0,
                 "rules_discovered": 0,
@@ -97,7 +100,7 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
                 + "; ".join(bootstrap_catalog_stats["ingredients"]["error_messages"])
             )
 
-        if settings.bootstrap_remote_sync_enabled:
+        if remote_recipes_enabled:
             try:
                 bootstrap_catalog_stats["remote_recipes"] = (
                     refresh_bootstrap_recipe_catalog_from_remote(
@@ -123,7 +126,7 @@ async def sync_stackstorm(mark_bootstrap: bool = False) -> dict[str, Any]:
                 if mark_bootstrap:
                     raise
 
-        if mark_bootstrap or settings.bootstrap_remote_sync_enabled:
+        if mark_bootstrap or remote_recipes_enabled:
             bootstrap_catalog_stats["recipes"] = await upsert_bootstrap_recipe_catalog(
                 db, recipes_dir=settings.bootstrap_recipes_dir
             )

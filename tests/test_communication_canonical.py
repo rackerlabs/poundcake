@@ -49,7 +49,7 @@ def test_build_canonical_communication_context_includes_alert_links_and_route_co
         "message": "Automated remediation failed.",
         "context": {
             "route_label": "Primary Core",
-            "provider_config": {"account_number": "1781738", "queue": "CloudBuilders Support"},
+            "provider_config": {"account_number": "1234567", "queue": "Example Support"},
             "semantic_text": {
                 "headline": "Alert requires attention",
                 "summary": "PoundCake escalated this alert.",
@@ -73,7 +73,7 @@ def test_build_canonical_communication_context_includes_alert_links_and_route_co
         execution_payload=payload,
     )
 
-    assert canonical["route"]["provider_config"]["account_number"] == "1781738"
+    assert canonical["route"]["provider_config"]["account_number"] == "1234567"
     assert canonical["alert"]["annotations"]["summary"] == "Filesystem almost full"
     assert canonical["text"]["detail"] == "Automated remediation failed."
     assert canonical["links"][0]["label"] == "Source"

@@ -41,7 +41,7 @@ def test_settings_response_rejects_unknown_fields() -> None:
                 "rbac_enabled": True,
                 "auth_providers": [],
                 "prometheus_use_crds": True,
-                "prometheus_crd_namespace": "rackspace",
+                "prometheus_crd_namespace": "poundcake",
                 "prometheus_url": "https://prom.example",
                 "git_enabled": False,
                 "git_provider": None,

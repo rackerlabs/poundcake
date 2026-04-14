@@ -93,7 +93,7 @@ def test_monitor_route_catalog_entry_requires_normalized_identity_fields() -> No
             "label": "Primary Core",
             "execution_target": "rackspace_core",
             "destination_target": "primary-core",
-            "provider_config": {"account_number": "1781738"},
+            "provider_config": {"account_number": "1234567"},
             "enabled": True,
             "outage_enabled": True,
             "position": 1,
@@ -109,7 +109,7 @@ def test_monitor_heartbeat_response_rejects_unknown_fields() -> None:
         MonitorHeartbeatResponse.model_validate(
             {
                 "monitor_uuid": "uuid-1",
-                "monitor_id": "rackspace/poundcake",
+                "monitor_id": "example/poundcake",
                 "status": "healthy",
                 "route_sync_required": False,
                 "heartbeat_interval_sec": 30,
@@ -123,31 +123,31 @@ def test_monitor_heartbeat_response_rejects_unknown_fields() -> None:
 def test_monitor_registration_and_heartbeat_accept_metadata_fields() -> None:
     registration = MonitorRegistrationRequest.model_validate(
         {
-            "monitor_id": "rackspace/poundcake",
-            "environment_label": "rackspace/poundcake",
-            "region": "ord",
-            "cluster_name": "ord-cluster",
-            "namespace": "rackspace",
+            "monitor_id": "example/poundcake",
+            "environment_label": "example/poundcake",
+            "region": "test-region",
+            "cluster_name": "example-cluster",
+            "namespace": "example-namespace",
             "release_name": "poundcake",
-            "tags": ["prod", "rackspace"],
+            "tags": ["shared-bakery", "example"],
         }
     )
     heartbeat = MonitorHeartbeatRequest.model_validate(
         {
             "catalog_hash": "abc123",
-            "environment_label": "rackspace/poundcake",
-            "region": "ord",
-            "cluster_name": "ord-cluster",
-            "namespace": "rackspace",
+            "environment_label": "example/poundcake",
+            "region": "test-region",
+            "cluster_name": "example-cluster",
+            "namespace": "example-namespace",
             "release_name": "poundcake",
-            "tags": ["prod", "rackspace"],
+            "tags": ["shared-bakery", "example"],
             "details": {"instance_id": "pod-1"},
         }
     )
 
-    assert registration.environment_label == "rackspace/poundcake"
-    assert registration.tags == ["prod", "rackspace"]
-    assert heartbeat.cluster_name == "ord-cluster"
+    assert registration.environment_label == "example/poundcake"
+    assert registration.tags == ["shared-bakery", "example"]
+    assert heartbeat.cluster_name == "example-cluster"
     assert heartbeat.details["instance_id"] == "pod-1"
 
 
@@ -166,7 +166,7 @@ def test_collection_job_contracts_validate_expected_shapes() -> None:
             "job": {
                 "job_id": "job-1",
                 "monitor_uuid": "monitor-1",
-                "monitor_id": "rackspace/poundcake",
+                "monitor_id": "example/poundcake",
                 "collector_type": "monitor_diagnostics",
                 "status": "leased",
                 "parameters": {"include_health": True},

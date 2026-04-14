@@ -15,7 +15,7 @@ class _ExplodingCustomAPI:
 @pytest.mark.asyncio
 async def test_get_prometheus_rule_handles_lookup_error_without_reserved_logging_crash() -> None:
     manager = PrometheusCRDManager()
-    manager.settings = SimpleNamespace(prometheus_crd_namespace="rackspace")
+    manager.settings = SimpleNamespace(prometheus_crd_namespace="poundcake")
     manager.custom_api = _ExplodingCustomAPI()
 
     result = await manager.get_prometheus_rule("rules-file")

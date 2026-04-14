@@ -1,6 +1,6 @@
 # Auth0 Configuration
 
-This guide covers the Genestack deployment path for enabling Auth0 in PoundCake.
+This guide covers the override-file deployment path for enabling Auth0 in PoundCake.
 
 Use this when you want:
 
@@ -10,10 +10,10 @@ Use this when you want:
 
 ## Assumptions
 
-- PoundCake is deployed into a Genestack environment.
-- The active auth override file is `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`.
+- PoundCake is deployed into a Kubernetes environment.
+- The active auth override file is `/etc/poundcake/helm-configs/poundcake/20-auth-overrides.yaml`.
 - PoundCake is published at `https://<poundcake-public-url-host>`.
-- The PoundCake namespace is `rackspace`.
+- The PoundCake namespace is `<namespace>`.
 
 ## What Auth0 Objects You Need
 
@@ -53,7 +53,7 @@ Collect these values:
 
 ## 2. Write The Auth Override File
 
-Create or update `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`:
+Create or update `/etc/poundcake/helm-configs/poundcake/20-auth-overrides.yaml`:
 
 ```yaml
 auth:
@@ -85,7 +85,7 @@ auth:
 
 Notes:
 
-- If `ui.callbackUrl` is left blank, PoundCake can derive it from the request host, but using the explicit public URL is clearer in Genestack.
+- If `ui.callbackUrl` is left blank, PoundCake can derive it from the request host, but using the explicit public URL is clearer in multi-host deployments.
 - Leave `organization` and `connection` empty unless your tenant requires them.
 - If you do not need CLI device login, set `auth.auth0.cli.enabled: false`.
 - If you do not need UI login, set `auth.auth0.ui.enabled: false`.
@@ -95,14 +95,14 @@ Notes:
 Create the UI client-secret secret:
 
 ```bash
-kubectl -n rackspace create secret generic poundcake-auth0-ui \
+kubectl -n <namespace> create secret generic poundcake-auth0-ui \
   --from-literal=client-secret='<auth0-ui-client-secret>'
 ```
 
 If your Auth0 native application also needs a client secret for device login, create:
 
 ```bash
-kubectl -n rackspace create secret generic poundcake-auth0-cli \
+kubectl -n <namespace> create secret generic poundcake-auth0-cli \
   --from-literal=client-secret='<auth0-cli-client-secret>'
 ```
 
@@ -126,7 +126,7 @@ auth:
 Check the rendered values:
 
 ```bash
-helm get values poundcake -n rackspace -o yaml
+helm get values <release-name> -n <namespace> -o yaml
 ```
 
 Things to confirm:

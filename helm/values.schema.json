@@ -662,7 +662,7 @@
         "remoteSyncEnabled": { "type": "boolean", "default": true },
         "rulesRepoUrl": {
           "type": "string",
-          "default": "https://github.com/rackerlabs/genestack-monitoring.git"
+          "default": ""
         },
         "rulesBranch": { "type": "string", "default": "main" },
         "rulesPath": { "type": "string", "default": "alerts" },

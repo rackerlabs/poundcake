@@ -260,7 +260,7 @@ class Settings(BaseSettings):
     bootstrap_ingredients_file: str = "/app/bootstrap/ingredients/bakery.yaml"
     bootstrap_recipes_dir: str = "/app/bootstrap/recipes"
     bootstrap_remote_sync_enabled: bool = True
-    bootstrap_rules_repo_url: str = "https://github.com/rackerlabs/genestack-monitoring.git"
+    bootstrap_rules_repo_url: str = ""
     bootstrap_rules_branch: str = "main"
     bootstrap_rules_path: str = "alerts"
     default_timeout: int = 300

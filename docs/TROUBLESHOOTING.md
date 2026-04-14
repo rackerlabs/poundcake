@@ -1,6 +1,6 @@
 # Troubleshooting
 
-For auth provider setup and access-binding workflows, see [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+For auth provider setup and access-binding workflows, see [AUTH.md](AUTH.md).
 
 ## API not ready
 
@@ -19,13 +19,13 @@ Use this runbook to identify exactly which startup gate delayed API startup and 
 Run the deterministic collector:
 
 ```bash
-./helm/scripts/startup-gate-runbook.sh rackspace
+./helm/scripts/startup-gate-runbook.sh <namespace>
 ```
 
 Optional pod override:
 
 ```bash
-./helm/scripts/startup-gate-runbook.sh rackspace poundcake-api-<pod-id>
+./helm/scripts/startup-gate-runbook.sh <namespace> poundcake-api-<pod-id>
 ```
 
 The script prints a timeline summary and writes full artifacts under `/tmp/poundcake-startup-gate-*`.
@@ -35,7 +35,7 @@ The script prints a timeline summary and writes full artifacts under `/tmp/pound
 1. Capture init-gate waits with timestamps:
 
 ```bash
-kubectl -n rackspace logs <poundcake-api-pod> -c wait-stage-ready --tail=300 --timestamps
+kubectl -n <namespace> logs <poundcake-api-pod> -c wait-stage-ready --tail=300 --timestamps
 ```
 
 Record first/last timestamps for:
@@ -46,23 +46,23 @@ Record first/last timestamps for:
 2. Snapshot marker truth values and API key material:
 
 ```bash
-kubectl -n rackspace get secret stackstorm-startup-markers -o jsonpath='{.data.poundcake_mariadb_ready}' | base64 -d; echo
-kubectl -n rackspace get secret stackstorm-startup-markers -o jsonpath='{.data.stackstorm_bootstrap_ready}' | base64 -d; echo
-kubectl -n rackspace get secret stackstorm-apikeys -o jsonpath='{.data.st2_api_key}' | base64 -d | wc -c
+kubectl -n <namespace> get secret stackstorm-startup-markers -o jsonpath='{.data.poundcake_mariadb_ready}' | base64 -d; echo
+kubectl -n <namespace> get secret stackstorm-startup-markers -o jsonpath='{.data.stackstorm_bootstrap_ready}' | base64 -d; echo
+kubectl -n <namespace> get secret stackstorm-apikeys -o jsonpath='{.data.st2_api_key}' | base64 -d | wc -c
 ```
 
 3. Correlate with startup hook job timing:
 
 ```bash
-kubectl -n rackspace get jobs -o wide | egrep 'stackstorm-|poundcake-(mariadb-ready|bootstrap)'
-kubectl -n rackspace describe job poundcake-mariadb-ready
-kubectl -n rackspace logs job/poundcake-mariadb-ready --all-containers=true
+kubectl -n <namespace> get jobs -o wide | egrep 'stackstorm-|poundcake-(mariadb-ready|bootstrap)'
+kubectl -n <namespace> describe job poundcake-mariadb-ready
+kubectl -n <namespace> logs job/poundcake-mariadb-ready --all-containers=true
 ```
 
 4. Verify endpoint readiness used by `poundcake-mariadb-ready`:
 
 ```bash
-kubectl -n rackspace get endpoints poundcake-mariadb -o yaml
+kubectl -n <namespace> get endpoints poundcake-mariadb -o yaml
 ```
 
 Confirm `subsets[].addresses[]` is non-empty.

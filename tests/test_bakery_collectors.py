@@ -67,8 +67,8 @@ class _FakeCoreV1:
     def list_node(self):
         return SimpleNamespace(
             items=[
-                _node("worker-1", ready=True, zone="ord-a"),
-                _node("worker-2", ready=False, zone="ord-b", unschedulable=True),
+                _node("worker-1", ready=True, zone="test-region-a"),
+                _node("worker-2", ready=False, zone="test-region-b", unschedulable=True),
             ]
         )
 
@@ -82,7 +82,7 @@ class _FakeCoreV1:
                         capacity={"storage": "100Gi"},
                         access_modes=["ReadWriteOnce"],
                         persistent_volume_reclaim_policy="Delete",
-                        claim_ref=SimpleNamespace(namespace="rackspace", name="data-api-0"),
+                        claim_ref=SimpleNamespace(namespace="example-namespace", name="data-api-0"),
                         volume_mode="Filesystem",
                         csi=SimpleNamespace(driver="csi.example"),
                     ),
@@ -92,7 +92,7 @@ class _FakeCoreV1:
         )
 
     def list_namespaced_persistent_volume_claim(self, namespace: str, limit: int):
-        assert namespace == "rackspace"
+        assert namespace == "example-namespace"
         assert limit == 25
         return SimpleNamespace(
             items=[
@@ -113,7 +113,7 @@ class _FakeCoreV1:
         )
 
     def list_namespaced_pod(self, namespace: str, limit: int):
-        assert namespace == "rackspace"
+        assert namespace == "example-namespace"
         assert limit == 25
         return SimpleNamespace(
             items=[
@@ -132,7 +132,7 @@ class _FakeCoreV1:
         )
 
     def list_namespaced_service(self, namespace: str, limit: int):
-        assert namespace == "rackspace"
+        assert namespace == "example-namespace"
         assert limit == 25
         return SimpleNamespace(
             items=[
@@ -150,7 +150,7 @@ class _FakeCoreV1:
 
 class _FakeAppsV1:
     def list_namespaced_deployment(self, namespace: str, limit: int):
-        assert namespace == "rackspace"
+        assert namespace == "example-namespace"
         assert limit == 25
         return SimpleNamespace(
             items=[
@@ -163,7 +163,7 @@ class _FakeAppsV1:
         )
 
     def list_namespaced_stateful_set(self, namespace: str, limit: int):
-        assert namespace == "rackspace"
+        assert namespace == "example-namespace"
         assert limit == 25
         return SimpleNamespace(
             items=[
@@ -199,7 +199,7 @@ async def test_cluster_inventory_collects_nodes_storage_and_namespace_workloads(
     monkeypatch.setattr(
         bakery_collectors,
         "get_settings",
-        lambda: SimpleNamespace(bakery_monitor_namespace="rackspace"),
+        lambda: SimpleNamespace(bakery_monitor_namespace="example-namespace"),
     )
     monkeypatch.setattr(
         bakery_collectors,
@@ -209,11 +209,11 @@ async def test_cluster_inventory_collects_nodes_storage_and_namespace_workloads(
 
     result = await bakery_collectors.run_collection_job(
         "cluster_inventory",
-        {"namespace": "rackspace", "limit": 25},
+        {"namespace": "example-namespace", "limit": 25},
     )
 
     assert result["collector_type"] == "cluster_inventory"
-    assert result["namespace"] == "rackspace"
+    assert result["namespace"] == "example-namespace"
     assert result["node_count"] == 2
     assert result["ready_node_count"] == 1
     assert result["storage_class_count"] == 1
@@ -222,10 +222,10 @@ async def test_cluster_inventory_collects_nodes_storage_and_namespace_workloads(
     assert result["pod_count"] == 1
     assert result["cluster_summary"]["allocatable"]["cpu_millicores"] == 7600
     assert result["cluster_summary"]["capacity"]["memory_bytes"] == 34359738368
-    assert result["nodes"][0]["labels"]["topology.kubernetes.io/zone"] == "ord-a"
+    assert result["nodes"][0]["labels"]["topology.kubernetes.io/zone"] == "test-region-a"
     assert result["nodes"][1]["schedulable"] is False
     assert result["storage_classes"][0]["name"] == "fast"
-    assert result["persistent_volumes"][0]["claim_ref"] == "rackspace/data-api-0"
+    assert result["persistent_volumes"][0]["claim_ref"] == "example-namespace/data-api-0"
     assert result["persistent_volume_claims"][0]["requested_storage"] == "100Gi"
     assert result["services"][0]["ports"] == ["80/TCP -> 8080"]
     assert "nodes ready" in result["report"]["highlights"][0]

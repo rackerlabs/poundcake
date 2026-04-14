@@ -332,7 +332,7 @@ def test_recipe_update_refreshes_recipe_with_populate_existing(client, mock_db):
         label="Primary route",
         execution_target="rackspace_core",
         destination_target="",
-        provider_config={"account_number": "1781738"},
+        provider_config={"account_number": "1234567"},
         enabled=True,
         position=1,
     )
@@ -494,7 +494,7 @@ def test_recipe_create_validates_ingredients_inside_transaction(client, mock_db)
                     "label": "Rackspace Core",
                     "execution_target": "rackspace_core",
                     "destination_target": "",
-                    "provider_config": {"account_number": "1781738"},
+                    "provider_config": {"account_number": "1234567"},
                     "enabled": True,
                     "position": 1,
                 }
@@ -525,7 +525,7 @@ def test_recipe_create_validates_ingredients_inside_transaction(client, mock_db)
                             "label": "Rackspace Core",
                             "execution_target": "rackspace_core",
                             "destination_target": "",
-                            "provider_config": {"account_number": "1781738"},
+                            "provider_config": {"account_number": "1234567"},
                             "enabled": True,
                             "position": 1,
                         }
@@ -654,7 +654,7 @@ def test_recipe_create_local_communications_use_created_managed_ingredient_ids(c
                             "label": "Rackspace Core",
                             "execution_target": "rackspace_core",
                             "destination_target": "",
-                            "provider_config": {"account_number": "1781738"},
+                            "provider_config": {"account_number": "1234567"},
                             "enabled": True,
                             "position": 1,
                         }

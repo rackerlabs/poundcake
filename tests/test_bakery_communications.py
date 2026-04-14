@@ -51,12 +51,12 @@ def _client_settings() -> SimpleNamespace:
         bakery_bootstrap_hmac_key="",
         bakery_secret_encryption_key="",
         bakery_monitor_id="",
-        bakery_monitor_environment_label="rackspace/poundcake",
-        bakery_monitor_region="ord",
-        bakery_monitor_cluster_name="ord-cluster",
-        bakery_monitor_namespace="rackspace",
+        bakery_monitor_environment_label="example/poundcake",
+        bakery_monitor_region="test-region",
+        bakery_monitor_cluster_name="example-cluster",
+        bakery_monitor_namespace="example-namespace",
         bakery_monitor_release_name="poundcake",
-        bakery_monitor_tags=["prod", "rackspace"],
+        bakery_monitor_tags=["shared-bakery", "example"],
         bakery_monitor_heartbeat_interval_seconds=30,
         bakery_collection_poll_interval_seconds=10,
     )
@@ -197,7 +197,7 @@ async def test_prepare_managed_payload_normalizes_registered_route_context(
         label="Primary Core",
         execution_target="rackspace_core",
         destination_target="primary-core",
-        provider_config={"account_number": "1781738"},
+        provider_config={"account_number": "1234567"},
         enabled=True,
         outage_enabled=True,
         position=1,
@@ -228,7 +228,7 @@ async def test_prepare_managed_payload_normalizes_registered_route_context(
                 "route_id": "core-primary",
                 "execution_target": "rackspace_core",
                 "destination_target": "primary-core",
-                "provider_config": {"account_number": "1781738"},
+                "provider_config": {"account_number": "1234567"},
             }
         },
     }
@@ -238,7 +238,7 @@ async def test_prepare_managed_payload_normalizes_registered_route_context(
     assert normalized["context"]["scope"] == "global"
     assert normalized["context"]["owner_key"] == "global"
     assert normalized["context"]["route_id"] == "core-primary"
-    assert normalized["context"]["provider_config"]["account_number"] == "1781738"
+    assert normalized["context"]["provider_config"]["account_number"] == "1234567"
 
 
 @pytest.mark.asyncio
@@ -261,7 +261,7 @@ async def test_bakery_client_uses_monitor_auth_headers_for_hmac_calls(
 ) -> None:
     settings = _client_settings()
     settings.bakery_auth_mode = "hmac"
-    settings.bakery_monitor_id = "rackspace/poundcake"
+    settings.bakery_monitor_id = "example/poundcake"
     monkeypatch.setattr(bakery_client, "get_settings", lambda: settings)
     monkeypatch.setattr(
         bakery_client,
@@ -325,20 +325,20 @@ async def test_bakery_client_uses_monitor_auth_headers_for_hmac_calls(
 
 def test_monitor_registration_request_accepts_metadata_fields() -> None:
     payload = bakery_monitor.MonitorRegistrationRequest(
-        monitor_id="rackspace/poundcake",
+        monitor_id="example/poundcake",
         installation_id="pod-1",
         app_version="2.0.0",
-        environment_label="rackspace/poundcake",
-        region="ord",
-        cluster_name="ord-cluster",
-        namespace="rackspace",
+        environment_label="example/poundcake",
+        region="test-region",
+        cluster_name="example-cluster",
+        namespace="example-namespace",
         release_name="poundcake",
-        tags=["prod", "rackspace"],
+        tags=["shared-bakery", "example"],
     )
 
-    assert payload.environment_label == "rackspace/poundcake"
-    assert payload.region == "ord"
-    assert payload.tags == ["prod", "rackspace"]
+    assert payload.environment_label == "example/poundcake"
+    assert payload.region == "test-region"
+    assert payload.tags == ["shared-bakery", "example"]
 
 
 @pytest.mark.asyncio
@@ -355,7 +355,7 @@ async def test_process_next_collection_job_completes_successfully(
                 job=CollectionJobResponse(
                     job_id="job-1",
                     monitor_uuid="monitor-1",
-                    monitor_id="rackspace/poundcake",
+                    monitor_id="example/poundcake",
                     collector_type="monitor_diagnostics",
                     status="leased",
                     parameters={"include_health": True},
@@ -374,7 +374,7 @@ async def test_process_next_collection_job_completes_successfully(
         return_value=CollectionJobResponse(
             job_id="job-1",
             monitor_uuid="monitor-1",
-            monitor_id="rackspace/poundcake",
+            monitor_id="example/poundcake",
             collector_type="monitor_diagnostics",
             status="succeeded",
             result={"collector_type": "monitor_diagnostics"},
@@ -407,7 +407,7 @@ async def test_process_next_collection_job_marks_failures(
                 job=CollectionJobResponse(
                     job_id="job-2",
                     monitor_uuid="monitor-1",
-                    monitor_id="rackspace/poundcake",
+                    monitor_id="example/poundcake",
                     collector_type="ticket_context",
                     status="leased",
                     parameters={"req_id": "REQ-2"},
@@ -426,7 +426,7 @@ async def test_process_next_collection_job_marks_failures(
         return_value=CollectionJobResponse(
             job_id="job-2",
             monitor_uuid="monitor-1",
-            monitor_id="rackspace/poundcake",
+            monitor_id="example/poundcake",
             collector_type="ticket_context",
             status="failed",
             error="collector boom",

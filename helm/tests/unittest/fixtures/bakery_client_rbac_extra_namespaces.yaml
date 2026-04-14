@@ -6,8 +6,8 @@ bakery:
     enabled: true
     baseUrl: https://bakery.example.com
     monitor:
-      namespace: rackspace
+      namespace: example-namespace
     collectionRbac:
       namespaces:
-        - rackspace
+        - example-namespace
         - observability

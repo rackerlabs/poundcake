@@ -58,7 +58,7 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml(
 
     destination = tmp_path / "generated"
     stats = sync.refresh_bootstrap_recipe_catalog_from_remote(
-        repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+        repo_url="https://github.com/example/monitoring-rules.git",
         branch="main",
         rules_path="alerts",
         destination_dir=str(destination),
@@ -94,7 +94,7 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_rejects_conflicting_duplic
 
     with pytest.raises(sync.BootstrapRemoteRecipeSyncError):
         sync.refresh_bootstrap_recipe_catalog_from_remote(
-            repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+            repo_url="https://github.com/example/monitoring-rules.git",
             branch="main",
             rules_path="alerts",
             destination_dir=str(tmp_path / "generated"),
@@ -117,7 +117,7 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_ignores_not_yet_finished_d
     monkeypatch.setattr(sync, "_ensure_repo_checkout", lambda **_kwargs: repo_root)
 
     stats = sync.refresh_bootstrap_recipe_catalog_from_remote(
-        repo_url="https://github.com/rackerlabs/genestack-monitoring.git",
+        repo_url="https://github.com/example/monitoring-rules.git",
         branch="main",
         rules_path="alerts",
         destination_dir=str(tmp_path / "generated"),

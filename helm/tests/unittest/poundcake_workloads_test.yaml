@@ -228,13 +228,13 @@ tests:
       prometheus.useCrds: true
       prometheus.crdNamespace: ""
     release:
-      namespace: rackspace
+      namespace: poundcake
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
-            value: "rackspace"
+            value: "poundcake"
         documentIndex: 0
 
   - it: defaults the Prometheus API URL to the monitoring namespace service
@@ -316,7 +316,7 @@ tests:
       bootstrap.ingredientsDir: /custom/bootstrap/ingredients
       bootstrap.recipesDir: /custom/bootstrap/recipes
       bootstrap.remoteSyncEnabled: true
-      bootstrap.rulesRepoUrl: https://github.com/example/monitoring.git
+      bootstrap.rulesRepoUrl: https://github.com/example/monitoring-rules.git
       bootstrap.rulesBranch: release-1
       bootstrap.rulesPath: alerts/team-a
       git.enabled: true
@@ -347,7 +347,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BOOTSTRAP_RULES_REPO_URL
-            value: "https://github.com/example/monitoring.git"
+            value: "https://github.com/example/monitoring-rules.git"
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
@@ -383,7 +383,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BOOTSTRAP_RULES_REPO_URL
-            value: "https://github.com/example/monitoring.git"
+            value: "https://github.com/example/monitoring-rules.git"
         documentIndex: 5
       - contains:
           path: spec.template.spec.containers[0].env
@@ -664,23 +664,23 @@ tests:
 
   - it: renders poundcakeImage pull secrets on PoundCake workloads
     set:
-      poundcakeImage.pullSecrets[0]: ghcr-creds
+      poundcakeImage.pullSecrets[0]: registry-creds
     asserts:
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-creds
+          value: registry-creds
         documentIndex: 0
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-creds
+          value: registry-creds
         documentIndex: 2
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-creds
+          value: registry-creds
         documentIndex: 4
       - equal:
           path: spec.template.spec.imagePullSecrets[0].name
-          value: ghcr-creds
+          value: registry-creds
         documentIndex: 5
 
   - it: mounts alembic config files into poundcake-api without shadowing image migrations
@@ -1131,43 +1131,43 @@ tests:
     set:
       bakery.client.enabled: true
       bakery.client.baseUrl: https://bakery.example.com
-      bakery.client.monitor.id: kronos/rackspace/poundcake
-      bakery.client.monitor.environmentLabel: kronos
-      bakery.client.monitor.region: ord
-      bakery.client.monitor.clusterName: kronos-logging
-      bakery.client.monitor.namespace: rackspace
+      bakery.client.monitor.id: example/poundcake
+      bakery.client.monitor.environmentLabel: example
+      bakery.client.monitor.region: test-region
+      bakery.client.monitor.clusterName: example-cluster
+      bakery.client.monitor.namespace: example-namespace
       bakery.client.monitor.releaseName: poundcake
-      bakery.client.monitor.tags[0]: logging
+      bakery.client.monitor.tags[0]: shared-bakery
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_MONITOR_ID
-            value: kronos/rackspace/poundcake
+            value: example/poundcake
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_MONITOR_ENVIRONMENT_LABEL
-            value: kronos
+            value: example
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_MONITOR_REGION
-            value: ord
+            value: test-region
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_MONITOR_CLUSTER_NAME
-            value: kronos-logging
+            value: example-cluster
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_BAKERY_MONITOR_TAGS
-            value: "[\"logging\"]"
+            value: "[\"shared-bakery\"]"
         documentIndex: 0
 
   - it: fails fast when remote bakery client is enabled without baseUrl

@@ -1,6 +1,6 @@
 # CLI Install And Quickstart
 
-For the full command and flag inventory, see [REFERENCE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REFERENCE.md).
+For the full command and flag inventory, see [REFERENCE.md](REFERENCE.md).
 
 This page keeps the short, practical CLI quickstart.
 
@@ -103,7 +103,7 @@ poundcake --url http://localhost:8000 actions list
 
 ## Authentication
 
-Full auth provider enablement and RBAC setup are documented in [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md).
+Full auth provider enablement and RBAC setup are documented in [AUTH.md](AUTH.md).
 
 List enabled providers:
 

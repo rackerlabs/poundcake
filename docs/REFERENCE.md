@@ -6,19 +6,19 @@ PoundCake resources; Bakery is deployed separately from
 
 For guided deployment steps, use:
 
-- [DEPLOY.md](/Users/aedan/Documents/GitHub/poundcake/docs/DEPLOY.md)
-- [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](/Users/aedan/Documents/GitHub/poundcake/docs/REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
-- [AUTH.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH.md)
-- [CLI.md](/Users/aedan/Documents/GitHub/poundcake/docs/CLI.md)
-- [DEVELOPER.md](/Users/aedan/Documents/GitHub/poundcake/docs/DEVELOPER.md)
+- [DEPLOY.md](DEPLOY.md)
+- [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md)
+- [AUTH.md](AUTH.md)
+- [CLI.md](CLI.md)
+- [DEVELOPER.md](DEVELOPER.md)
 
 ## Install Entry Points
 
 Supported PoundCake entry points:
 
-- [install/install-poundcake-helm.sh](/Users/aedan/Documents/GitHub/poundcake/install/install-poundcake-helm.sh)
-- [helm/bin/install-poundcake.sh](/Users/aedan/Documents/GitHub/poundcake/helm/bin/install-poundcake.sh)
-- [install/set-env-helper.sh](/Users/aedan/Documents/GitHub/poundcake/install/set-env-helper.sh)
+- [install/install-poundcake-helm.sh](../install/install-poundcake-helm.sh)
+- [helm/bin/install-poundcake.sh](../helm/bin/install-poundcake.sh)
+- [install/set-env-helper.sh](../install/set-env-helper.sh)
 
 Bakery install entry points were removed from this repo. Deploy Bakery from:
 
@@ -28,7 +28,7 @@ Bakery install entry points were removed from this repo. Deploy Bakery from:
 
 The PoundCake installer builds Helm input in this order:
 
-1. Chart defaults from [helm/values.yaml](/Users/aedan/Documents/GitHub/poundcake/helm/values.yaml)
+1. Chart defaults from [helm/values.yaml](../helm/values.yaml)
 2. `POUNDCAKE_BASE_OVERRIDES` when the file exists
 3. all `*.yaml` files in `POUNDCAKE_GLOBAL_OVERRIDES_DIR`, sorted
 4. all `*.yaml` files in `POUNDCAKE_SERVICE_CONFIG_DIR`, sorted
@@ -48,14 +48,14 @@ Release and override discovery:
 | Variable | Default | Purpose |
 |---|---|---|
 | `POUNDCAKE_RELEASE_NAME` | `poundcake` | Helm release name |
-| `POUNDCAKE_NAMESPACE` | `rackspace` | Target namespace |
+| `POUNDCAKE_NAMESPACE` | `poundcake` | Target namespace |
 | `POUNDCAKE_HELM_TIMEOUT` | `120m` | Helm timeout |
 | `POUNDCAKE_CHART_REPO` | unset | OCI chart source override |
 | `POUNDCAKE_CHART_VERSION` | unset | Explicit OCI chart version |
 | `POUNDCAKE_VERSION_FILE` | unset | Explicit chart versions file path |
-| `POUNDCAKE_BASE_OVERRIDES` | `/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml` | Optional base values file |
-| `POUNDCAKE_GLOBAL_OVERRIDES_DIR` | `/etc/genestack/helm-configs/global_overrides` | Global values dir |
-| `POUNDCAKE_SERVICE_CONFIG_DIR` | `/etc/genestack/helm-configs/poundcake` | PoundCake values dir |
+| `POUNDCAKE_BASE_OVERRIDES` | `/opt/poundcake/base-helm-configs/poundcake/poundcake-helm-overrides.yaml` | Optional base values file |
+| `POUNDCAKE_GLOBAL_OVERRIDES_DIR` | `/etc/poundcake/helm-configs/global_overrides` | Global values dir |
+| `POUNDCAKE_SERVICE_CONFIG_DIR` | `/etc/poundcake/helm-configs/poundcake` | PoundCake values dir |
 
 Installer behavior:
 
@@ -75,7 +75,7 @@ Registry and pull-secret handling:
 |---|---|---|
 | `HELM_REGISTRY_USERNAME` | unset | OCI login username and pull-secret username |
 | `HELM_REGISTRY_PASSWORD` | unset | OCI login token/password |
-| `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `ghcr-creds` | Pull-secret name |
+| `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `registry-creds` | Pull-secret name |
 | `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `true` | Create/update the Docker registry secret |
 | `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` | `noreply@local` | Email field for generated docker-registry secret |
 
@@ -123,7 +123,7 @@ settings now belong in the standalone Bakery repo.
 ## CLI
 
 The PoundCake CLI ships from this repo. For install details and examples, use
-[CLI.md](/Users/aedan/Documents/GitHub/poundcake/docs/CLI.md).
+[CLI.md](CLI.md).
 
 Quick references:
 

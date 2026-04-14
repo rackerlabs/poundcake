@@ -7,7 +7,7 @@ tests:
       poundcake.enabled: true
       bakery.client.enabled: true
       bakery.client.baseUrl: https://bakery.example.com
-      bakery.client.monitor.namespace: rackspace
+      bakery.client.monitor.namespace: example-namespace
       serviceAccount.create: true
       serviceAccount.name: ""
     asserts:
@@ -43,7 +43,7 @@ tests:
         documentIndex: 2
       - equal:
           path: metadata.namespace
-          value: rackspace
+          value: example-namespace
         documentIndex: 2
       - equal:
           path: rules[0].resources[0]
@@ -74,7 +74,7 @@ tests:
     values:
       - fixtures/bakery_client_rbac_extra_namespaces.yaml
     release:
-      namespace: rackspace
+      namespace: example-namespace
     asserts:
       - hasDocuments:
           count: 6
@@ -88,11 +88,11 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.namespace
-          value: rackspace
+          value: example-namespace
         documentIndex: 2
       - equal:
           path: metadata.namespace
-          value: rackspace
+          value: example-namespace
         documentIndex: 3
       - equal:
           path: metadata.namespace

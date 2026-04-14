@@ -4274,16 +4274,16 @@ function CommunicationRouteProviderConfigFields({
     return (
       <div className="grid-two">
         <FormField label="Account number" help="Required Rackspace Core account number for this route.">
-          <input {...register("account_number")} placeholder="1781738" />
+          <input {...register("account_number")} placeholder="1234567" />
         </FormField>
         <FormField label="Queue" help="Optional Core queue. Bakery defaults still apply when this is blank.">
-          <input {...register("queue")} placeholder="CloudBuilders Support" />
+          <input {...register("queue")} placeholder="Example Support" />
         </FormField>
         <FormField label="Subcategory" help="Optional Core subcategory. Bakery defaults still apply when this is blank.">
           <input {...register("subcategory")} placeholder="Monitoring" />
         </FormField>
-        <FormField label="Source" help="Optional Core source label such as RunBook.">
-          <input {...register("source")} placeholder="RunBook" />
+        <FormField label="Source" help="Optional Core source label such as Automation.">
+          <input {...register("source")} placeholder="Automation" />
         </FormField>
       </div>
     );

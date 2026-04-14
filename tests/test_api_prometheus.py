@@ -123,7 +123,7 @@ async def test_list_rules_surfaces_repo_relative_file_from_crd_metadata(
             {
                 "metadata": {
                     "name": "kube-api-down",
-                    "namespace": "rackspace",
+                    "namespace": "poundcake",
                     "annotations": annotations,
                 },
                 "spec": {

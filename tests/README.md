@@ -36,7 +36,7 @@ Kubernetes full suite:
 
 ```bash
 export POUNDCAKE_AUTH_SERVICE_TOKEN=shared-internal-key
-./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api
+./tests/run_e2e.sh --target k8s --namespace poundcake --service poundcake-api
 ```
 
 Single runner:
@@ -94,7 +94,7 @@ Common optional vars:
 - `TEST_TIMEOUT_SEC` (default timeout used by helper library)
 - `POLL_INTERVAL_SEC` (default poll interval used by helper library)
 - `DEBUG=1` (enables helper debug logs)
-- `POUNDCAKE_NAMESPACE` (default: `rackspace`, k8s mode)
+- `POUNDCAKE_NAMESPACE` (default: `poundcake`, k8s mode)
 - `POUNDCAKE_API_SERVICE` (default: `poundcake-api`, k8s mode)
 - `POUNDCAKE_LOCAL_PORT` (default: `8000`, k8s mode local port-forward when enabled)
 - `POUNDCAKE_REMOTE_PORT` (default: `8000`, k8s mode service port and direct URL port)
@@ -134,7 +134,7 @@ export POUNDCAKE_AUTH_SERVICE_TOKEN=shared-internal-key
 - Optional port-forward can be enabled explicitly:
   - `kubectl -n <namespace> port-forward svc/<service> <local>:<remote>`
 - Defaults:
-  - namespace `rackspace`
+  - namespace `poundcake`
   - service `poundcake-api`
   - local:remote `8000:8000`
 - `--local-port` is valid only with `--enable-port-forward`.
@@ -144,7 +144,7 @@ Example:
 
 ```bash
 export POUNDCAKE_AUTH_SERVICE_TOKEN=shared-internal-key
-./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api
+./tests/run_e2e.sh --target k8s --namespace poundcake --service poundcake-api
 ```
 
 Custom service/port example:

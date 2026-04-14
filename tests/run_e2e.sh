@@ -34,8 +34,8 @@ Options:
 
 Examples:
   ./tests/run_e2e.sh
-  ./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api
-  ./tests/run_e2e.sh --target k8s --namespace rackspace --service poundcake-api --enable-port-forward --local-port 18000
+  ./tests/run_e2e.sh --target k8s --namespace poundcake --service poundcake-api
+  ./tests/run_e2e.sh --target k8s --namespace poundcake --service poundcake-api --enable-port-forward --local-port 18000
   ./tests/run_e2e.sh --single run_single_task_non_blocking_test
 EOF
 }

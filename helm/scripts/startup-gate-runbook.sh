@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Collect deterministic startup-gate diagnostics for PoundCake API init delays.
-NAMESPACE="${1:-rackspace}"
+NAMESPACE="${1:-poundcake}"
 API_POD="${2:-}"
 
 require_cmd() {

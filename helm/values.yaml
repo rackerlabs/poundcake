@@ -9,7 +9,7 @@
 #
 # Namespace behavior:
 # - direct Helm installs use the namespace you pass with `--namespace`
-# - the supported Genestack installer defaults `POUNDCAKE_NAMESPACE` to `rackspace`
+# - the bundled installer defaults `POUNDCAKE_NAMESPACE` to `poundcake`
 # - each release renders into a single namespace; split installs use separate releases
 #
 # High-level chart shape:
@@ -857,7 +857,8 @@ bootstrap:
   ingredientsDir: /app/bootstrap/ingredients
   recipesDir: /app/bootstrap/recipes
   remoteSyncEnabled: true
-  rulesRepoUrl: https://github.com/rackerlabs/genestack-monitoring.git
+  # Remote sync only runs when a repo URL is explicitly configured.
+  rulesRepoUrl: ""
   rulesBranch: main
   rulesPath: alerts
   # One-shot job that mirrors poundcake-bootstrap (dishwasher in bootstrap mode).

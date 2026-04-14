@@ -2,7 +2,7 @@
 # Shared helpers for shell-based e2e tests.
 
 : "${TEST_TARGET:=compose}"
-: "${POUNDCAKE_NAMESPACE:=rackspace}"
+: "${POUNDCAKE_NAMESPACE:=poundcake}"
 : "${POUNDCAKE_API_SERVICE:=poundcake-api}"
 : "${POUNDCAKE_LOCAL_PORT:=8000}"
 : "${POUNDCAKE_REMOTE_PORT:=8000}"

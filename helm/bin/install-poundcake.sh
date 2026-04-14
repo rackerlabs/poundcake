@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 RELEASE_NAME="${POUNDCAKE_RELEASE_NAME:-poundcake}"
-NAMESPACE="${POUNDCAKE_NAMESPACE:-rackspace}"
+NAMESPACE="${POUNDCAKE_NAMESPACE:-poundcake}"
 HELM_TIMEOUT="${POUNDCAKE_HELM_TIMEOUT:-120m}"
 HELM_WAIT="${POUNDCAKE_HELM_WAIT:-false}"
 HELM_ATOMIC="${POUNDCAKE_HELM_ATOMIC:-false}"
@@ -18,16 +18,16 @@ CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
 VERSION_FILE="${POUNDCAKE_VERSION_FILE:-}"
 HELM_REGISTRY_USERNAME="${HELM_REGISTRY_USERNAME:-}"
 HELM_REGISTRY_PASSWORD="${HELM_REGISTRY_PASSWORD:-}"
-IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-ghcr-creds}"
+IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-registry-creds}"
 CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-true}"
 IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-noreply@local}"
 
-BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml}"
-GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-configs/global_overrides}"
-SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-configs/poundcake}"
-POST_RENDERER="${POUNDCAKE_HELM_POST_RENDERER:-/etc/genestack/kustomize/kustomize.sh}"
+BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-/opt/poundcake/base-helm-configs/poundcake/poundcake-helm-overrides.yaml}"
+GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/poundcake/helm-configs/global_overrides}"
+SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/poundcake/helm-configs/poundcake}"
+POST_RENDERER="${POUNDCAKE_HELM_POST_RENDERER:-/etc/poundcake/kustomize/kustomize.sh}"
 POST_RENDERER_ARGS="${POUNDCAKE_HELM_POST_RENDERER_ARGS:-poundcake/overlay}"
-POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/genestack/kustomize/poundcake/overlay}"
+POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/poundcake/kustomize/poundcake/overlay}"
 
 VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 INSTALL_DEBUG="${POUNDCAKE_INSTALL_DEBUG:-false}"
@@ -139,11 +139,11 @@ Environment overrides:
   POUNDCAKE_MONGODB_OPERATOR_CHART_VERSION
   HELM_REGISTRY_USERNAME           (optional; for OCI login)
   HELM_REGISTRY_PASSWORD           (optional; for OCI login)
-  POUNDCAKE_IMAGE_PULL_SECRET_NAME     (default: ghcr-creds)
+  POUNDCAKE_IMAGE_PULL_SECRET_NAME     (default: registry-creds)
   POUNDCAKE_CREATE_IMAGE_PULL_SECRET   (default: true)
   POUNDCAKE_IMAGE_PULL_SECRET_EMAIL    (default: noreply@local)
   POUNDCAKE_RELEASE_NAME           (default: poundcake)
-  POUNDCAKE_NAMESPACE              (default: rackspace)
+  POUNDCAKE_NAMESPACE              (default: poundcake)
   POUNDCAKE_HELM_TIMEOUT           (default: 120m)
   POUNDCAKE_HELM_WAIT              (default: false)
   POUNDCAKE_ALLOW_HOOK_WAIT        (default: false; required when forcing --wait/--atomic)
@@ -152,7 +152,7 @@ Environment overrides:
 
 Image repositories/tags/digests:
   - Configure these in Helm values files or override files only.
-  - Default active override dir: /etc/genestack/helm-configs/poundcake/
+  - Default active override dir: /etc/poundcake/helm-configs/poundcake/
   - Image env vars and image --set overrides are intentionally not supported.
 
 Runtime deployment settings:
@@ -192,7 +192,7 @@ validate_image_env_inputs() {
   if (( ${#deprecated_image_envs[@]} > 0 )); then
     log_error "Image environment variables are no longer supported by the Helm installers: ${deprecated_image_envs[*]}"
     log_error "Configure image repositories/tags/digests in values files or override files instead."
-    log_error "Default active override dir: /etc/genestack/helm-configs/poundcake/"
+    log_error "Default active override dir: /etc/poundcake/helm-configs/poundcake/"
     exit 1
   fi
 }
@@ -289,8 +289,8 @@ resolve_operator_version_from_config() {
     candidate_files+=("${VERSION_FILE}")
   fi
   candidate_files+=(
-    "/etc/genestack/helm-chart-version.yaml"
-    "/etc/genestack/helm-chart-versions.yaml"
+    "/etc/poundcake/helm-chart-version.yaml"
+    "/etc/poundcake/helm-chart-versions.yaml"
   )
 
   local candidate=""
@@ -592,8 +592,8 @@ resolve_chart_version() {
     candidate_files+=("${VERSION_FILE}")
   fi
   candidate_files+=(
-    "/etc/genestack/helm-chart-version.yaml"
-    "/etc/genestack/helm-chart-versions.yaml"
+    "/etc/poundcake/helm-chart-version.yaml"
+    "/etc/poundcake/helm-chart-versions.yaml"
   )
 
   local candidate

@@ -11,8 +11,8 @@ The local superuser is the immutable recovery account. It is always managed from
 
 Dedicated provider guides:
 
-- [AUTH0.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH0.md)
-- [AZURE_AD.md](/Users/aedan/Documents/GitHub/poundcake/docs/AZURE_AD.md)
+- [AUTH0.md](AUTH0.md)
+- [AZURE_AD.md](AZURE_AD.md)
 
 ## Roles
 
@@ -31,12 +31,12 @@ Dedicated provider guides:
 
 ## Helm Configuration
 
-Provider setup lives under `auth` in [helm/values.yaml](/Users/aedan/Documents/GitHub/poundcake/helm/values.yaml).
-In the current Genestack layout, auth settings normally live in:
+Provider setup lives under `auth` in [helm/values.yaml](../helm/values.yaml).
+In the bundled override-file layout, auth settings normally live in:
 
-- `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`
+- `/etc/poundcake/helm-configs/poundcake/20-auth-overrides.yaml`
 
-Secrets still live in the PoundCake namespace, usually `rackspace`.
+Secrets still live in the PoundCake namespace, usually `<namespace>`.
 
 ### Local Superuser
 
@@ -109,7 +109,7 @@ By default, PoundCake extracts group names from the AD `CN=...` component.
 
 ### Auth0
 
-For the step-by-step Genestack operator flow, see [AUTH0.md](/Users/aedan/Documents/GitHub/poundcake/docs/AUTH0.md).
+For the step-by-step Auth0 operator flow, see [AUTH0.md](AUTH0.md).
 
 PoundCake uses one Auth0 tenant with two applications:
 
@@ -190,7 +190,7 @@ Those are Auth0 users only. PoundCake roles are granted later through Access bin
 
 ### Azure AD
 
-For the step-by-step Genestack operator flow, see [AZURE_AD.md](/Users/aedan/Documents/GitHub/poundcake/docs/AZURE_AD.md).
+For the step-by-step Azure AD operator flow, see [AZURE_AD.md](AZURE_AD.md).
 
 PoundCake uses one single-tenant Azure AD / Microsoft Entra app registration set:
 
@@ -339,7 +339,7 @@ poundcake --url https://poundcake.example.com auth principals list --provider az
 
 Useful CLI commands:
 
-If `poundcake` is not installed yet, start with [CLI.md](/Users/aedan/Documents/GitHub/poundcake/docs/CLI.md).
+If `poundcake` is not installed yet, start with [CLI.md](CLI.md).
 
 ```bash
 poundcake --url https://poundcake.example.com auth providers

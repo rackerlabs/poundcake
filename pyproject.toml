@@ -12,7 +12,11 @@ build-backend = "setuptools.build_meta"
 name = "poundcake-api"
 dynamic = ["version"]
 description = "FastAPI application for processing Alertmanager webhooks with StackStorm integration"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+]
 dependencies = [
     "click>=8.1.0",
     "fastapi>=0.115.0",

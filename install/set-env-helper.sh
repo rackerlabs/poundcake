@@ -9,12 +9,12 @@
 # -----------------------------------------------------------------------------
 # Ownership / registry targeting
 # -----------------------------------------------------------------------------
-export FORK_OWNER="${FORK_OWNER:-rackerchris}"
+export FORK_OWNER="${FORK_OWNER:-}"
 
 # Optional auth for private GHCR chart/image repos.
 export HELM_REGISTRY_USERNAME="${HELM_REGISTRY_USERNAME:-$FORK_OWNER}"
 export HELM_REGISTRY_PASSWORD="${HELM_REGISTRY_PASSWORD:-}"
-export POUNDCAKE_IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-ghcr-creds}"
+export POUNDCAKE_IMAGE_PULL_SECRET_NAME="${POUNDCAKE_IMAGE_PULL_SECRET_NAME:-registry-creds}"
 export POUNDCAKE_CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-true}"
 export POUNDCAKE_IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-noreply@local}"
 
@@ -26,15 +26,15 @@ export POUNDCAKE_IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-n
 export POUNDCAKE_CHART_REPO="${POUNDCAKE_CHART_REPO:-}"
 
 # Optional explicit chart version override. If empty, installer may read
-# /etc/genestack/helm-chart-versions.yaml (key: poundcake) when present.
+# /etc/poundcake/helm-chart-versions.yaml (key: poundcake) when present.
 export POUNDCAKE_CHART_VERSION="${POUNDCAKE_CHART_VERSION:-}"
-export POUNDCAKE_VERSION_FILE="${POUNDCAKE_VERSION_FILE:-/etc/genestack/helm-chart-versions.yaml}"
+export POUNDCAKE_VERSION_FILE="${POUNDCAKE_VERSION_FILE:-/etc/poundcake/helm-chart-versions.yaml}"
 
 # -----------------------------------------------------------------------------
 # Release behavior
 # -----------------------------------------------------------------------------
 export POUNDCAKE_RELEASE_NAME="${POUNDCAKE_RELEASE_NAME:-poundcake}"
-export POUNDCAKE_NAMESPACE="${POUNDCAKE_NAMESPACE:-rackspace}"
+export POUNDCAKE_NAMESPACE="${POUNDCAKE_NAMESPACE:-poundcake}"
 export POUNDCAKE_HELM_TIMEOUT="${POUNDCAKE_HELM_TIMEOUT:-120m}"
 
 # For troubleshooting, these are often set false.
@@ -45,12 +45,12 @@ export POUNDCAKE_HELM_CLEANUP_ON_FAIL="${POUNDCAKE_HELM_CLEANUP_ON_FAIL:-false}"
 export POUNDCAKE_HELM_VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 
 # Values/overlay inputs consumed by installer defaults.
-export POUNDCAKE_BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-/opt/genestack/base-helm-configs/poundcake/poundcake-helm-overrides.yaml}"
-export POUNDCAKE_GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-configs/global_overrides}"
-export POUNDCAKE_SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-configs/poundcake}"
-export POUNDCAKE_HELM_POST_RENDERER="${POUNDCAKE_HELM_POST_RENDERER:-/etc/genestack/kustomize/kustomize.sh}"
+export POUNDCAKE_BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-/opt/poundcake/base-helm-configs/poundcake/poundcake-helm-overrides.yaml}"
+export POUNDCAKE_GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/poundcake/helm-configs/global_overrides}"
+export POUNDCAKE_SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/poundcake/helm-configs/poundcake}"
+export POUNDCAKE_HELM_POST_RENDERER="${POUNDCAKE_HELM_POST_RENDERER:-/etc/poundcake/kustomize/kustomize.sh}"
 export POUNDCAKE_HELM_POST_RENDERER_ARGS="${POUNDCAKE_HELM_POST_RENDERER_ARGS:-poundcake/overlay}"
-export POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/genestack/kustomize/poundcake/overlay}"
+export POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/poundcake/kustomize/poundcake/overlay}"
 
 # -----------------------------------------------------------------------------
 # Optional profile switch examples
@@ -75,7 +75,7 @@ echo "PoundCake env helper loaded."
 echo "  Chart mode:  ${CHART_MODE_DISPLAY}"
 echo "  Chart repo:  ${CHART_SOURCE_DISPLAY}"
 echo "  Image refs: configure in values/override files"
-echo "  Override dir: /etc/genestack/helm-configs/poundcake"
+echo "  Override dir: /etc/poundcake/helm-configs/poundcake"
 echo "  Namespace:   ${POUNDCAKE_NAMESPACE}"
 echo "  Release:     ${POUNDCAKE_RELEASE_NAME}"
 echo "  Pull secret management: create=${POUNDCAKE_CREATE_IMAGE_PULL_SECRET} name=${POUNDCAKE_IMAGE_PULL_SECRET_NAME}"
