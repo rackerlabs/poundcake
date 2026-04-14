@@ -9,7 +9,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, update, func, asc, desc, and_, or_, case
 from sqlalchemy.dialects.mysql import insert as mysql_insert
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, List, cast
 from datetime import datetime, timezone, timedelta
@@ -31,6 +31,7 @@ from api.schemas.schemas import (
     DishIngredientResponse,
 )
 from api.schemas.query_params import DishQueryParams, validate_query_params
+from api.services.dish_planner import build_step_parameters, build_step_payload
 from api.services.order_communications import is_remote_state_terminal, is_ticket_communication
 
 router = APIRouter()
@@ -45,6 +46,33 @@ async def _sync_bakery_for_terminal_dish(*_args: Any, **_kwargs: Any) -> None:
 def _rowcount(result: object) -> int:
     """Get affected row count from SQLAlchemy DML result."""
     return int(getattr(cast(Any, result), "rowcount", 0) or 0)
+
+
+def _serialize_dish_ingredient(record: DishIngredient) -> DishIngredientResponse:
+    """Backfill runtime Bakery payloads from the linked recipe step when the row stores JSON null."""
+    payload = DishIngredientResponse.model_validate(record).model_dump(mode="python")
+    recipe_ingredient = getattr(record, "recipe_ingredient", None)
+    ingredient = getattr(recipe_ingredient, "ingredient", None)
+
+    if recipe_ingredient is not None:
+        if payload.get("execution_payload") is None:
+            resolved_payload = build_step_payload(recipe_ingredient)
+            if resolved_payload is not None:
+                payload["execution_payload"] = resolved_payload
+        if payload.get("execution_parameters") is None:
+            resolved_parameters = build_step_parameters(recipe_ingredient)
+            if resolved_parameters is not None:
+                payload["execution_parameters"] = resolved_parameters
+
+    if ingredient is not None:
+        if not payload.get("execution_engine"):
+            payload["execution_engine"] = getattr(ingredient, "execution_engine", None)
+        if not payload.get("execution_target"):
+            payload["execution_target"] = getattr(ingredient, "execution_target", None)
+        if payload.get("destination_target") in (None, ""):
+            payload["destination_target"] = getattr(ingredient, "destination_target", "") or ""
+
+    return DishIngredientResponse.model_validate(payload)
 
 
 @router.get("/dishes", response_model=List[DishDetailResponse])
@@ -391,6 +419,9 @@ async def list_dish_ingredients(
 
     result = await db.execute(
         select(DishIngredient)
+        .options(
+            selectinload(DishIngredient.recipe_ingredient).selectinload(RecipeIngredient.ingredient)
+        )
         .where(DishIngredient.dish_id == dish_id, DishIngredient.deleted.is_(False))
         .order_by(
             DishIngredient.started_at.is_(None),
@@ -405,7 +436,7 @@ async def list_dish_ingredients(
         "Dish ingredients fetched",
         extra={"req_id": req_id, "dish_id": dish_id, "count": len(records)},
     )
-    return records
+    return [_serialize_dish_ingredient(record) for record in records]
 
 
 @router.put("/dishes/{dish_id}", response_model=DishResponse)

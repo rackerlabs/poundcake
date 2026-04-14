@@ -14,7 +14,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.models.models import Dish, DishIngredient, Order, OrderCommunication, Recipe
+from api.models.models import (
+    Dish,
+    DishIngredient,
+    Ingredient,
+    Order,
+    OrderCommunication,
+    Recipe,
+    RecipeIngredient,
+)
 from api.services.bakery_client import BakeryTicketOperation
 
 
@@ -139,9 +147,19 @@ def _make_dish_ingredient(ingredient_id: int = 1) -> DishIngredient:
         id=ingredient_id,
         dish_id=1,
         recipe_ingredient_id=None,
+        task_key=None,
+        execution_engine="stackstorm",
         execution_target="core.local",
         destination_target="",
         execution_ref="st2-1",
+        execution_payload=None,
+        execution_parameters=None,
+        expected_duration_sec=None,
+        timeout_duration_sec=None,
+        retry_count=None,
+        retry_delay=None,
+        on_failure=None,
+        attempt=0,
         execution_status="succeeded",
         started_at=now,
         completed_at=now,
@@ -153,6 +171,74 @@ def _make_dish_ingredient(ingredient_id: int = 1) -> DishIngredient:
         created_at=now,
         updated_at=now,
     )
+
+
+def _make_ingredient(
+    ingredient_id: int = 1,
+    *,
+    execution_engine: str = "stackstorm",
+    execution_target: str = "core.local",
+    destination_target: str = "",
+    execution_purpose: str = "remediation",
+    execution_payload: dict | None = None,
+    execution_parameters: dict | None = None,
+    task_key_template: str = "local",
+) -> Ingredient:
+    now = datetime.now(timezone.utc)
+    return Ingredient(
+        id=ingredient_id,
+        execution_target=execution_target,
+        destination_target=destination_target,
+        task_key_template=task_key_template,
+        execution_engine=execution_engine,
+        execution_purpose=execution_purpose,
+        execution_id=None,
+        execution_payload=execution_payload,
+        execution_parameters=execution_parameters,
+        is_default=False,
+        is_active=True,
+        is_blocking=True,
+        expected_duration_sec=10,
+        timeout_duration_sec=300,
+        retry_count=0,
+        retry_delay=5,
+        on_failure="stop",
+        created_at=now,
+        updated_at=now,
+        deleted=False,
+        deleted_at=None,
+    )
+
+
+def _make_recipe_ingredient(
+    *,
+    ri_id: int = 1,
+    recipe_id: int = 1,
+    ingredient: Ingredient | None = None,
+    step_order: int = 1,
+    run_phase: str = "both",
+    run_condition: str = "always",
+    execution_payload_override: dict | None = None,
+    execution_parameters_override: dict | None = None,
+) -> RecipeIngredient:
+    ingredient = ingredient or _make_ingredient(ingredient_id=1)
+    recipe_ingredient = RecipeIngredient(
+        id=ri_id,
+        recipe_id=recipe_id,
+        ingredient_id=ingredient.id,
+        step_order=step_order,
+        on_success="continue",
+        parallel_group=0,
+        depth=0,
+        execution_payload_override=execution_payload_override,
+        execution_parameters_override=execution_parameters_override,
+        expected_duration_sec_override=None,
+        timeout_duration_sec_override=None,
+        run_phase=run_phase,
+        run_condition=run_condition,
+    )
+    recipe_ingredient.ingredient = ingredient
+    return recipe_ingredient
 
 
 def _make_recipe(recipe_id: int = 1, name: str = "group") -> Recipe:
@@ -384,6 +470,69 @@ def test_dish_finalize_claim__stale_processing_dish_without_execution_ref_is_cla
 
     assert response.status_code == 200
     assert response.json()["id"] == dish.id
+
+
+def test_list_dish_ingredients__backfills_missing_runtime_bakery_payload_from_recipe_step(
+    client, mock_db_session
+):
+    dish = _make_dish(dish_id=7)
+    ingredient = _make_ingredient(
+        ingredient_id=41,
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        destination_target="primary",
+        execution_purpose="comms",
+        task_key_template="core",
+        execution_payload={
+            "template": {
+                "title": "Resolved title",
+                "description": "Resolved description",
+                "context": {"route_id": "route-1", "scope": "recipe"},
+            },
+            "context": {"destination_target": "primary"},
+        },
+        execution_parameters={"state": "resolved_success_open"},
+    )
+    recipe_step = _make_recipe_ingredient(
+        ri_id=22,
+        ingredient=ingredient,
+        execution_parameters_override={"delivery": "managed"},
+    )
+    row = _make_dish_ingredient(ingredient_id=31)
+    row.dish_id = dish.id
+    row.recipe_ingredient_id = recipe_step.id
+    row.execution_engine = None
+    row.execution_target = None
+    row.destination_target = None
+    row.execution_payload = None
+    row.execution_parameters = None
+    row.recipe_ingredient = recipe_step
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(all_=[row])]
+    )
+
+    response = client.get(f"/api/v1/dishes/{dish.id}/ingredients")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["execution_engine"] == "bakery"
+    assert body[0]["execution_target"] == "rackspace_core"
+    assert body[0]["destination_target"] == "primary"
+    assert body[0]["execution_payload"] == {
+        "title": "Resolved title",
+        "description": "Resolved description",
+        "context": {
+            "route_id": "route-1",
+            "scope": "recipe",
+            "destination_target": "primary",
+        },
+    }
+    assert body[0]["execution_parameters"] == {
+        "state": "resolved_success_open",
+        "delivery": "managed",
+    }
 
 
 def test_dish_update__when_firing_complete__moves_order_to_waiting_clear(client, mock_db_session):
