@@ -77,11 +77,43 @@ def build_step_parameters(ri: RecipeIngredient) -> dict[str, Any] | None:
     return base or None
 
 
+def _is_bakery_comms_step(ri: RecipeIngredient) -> bool:
+    ingredient = ri.ingredient
+    if ingredient is None:
+        return False
+    return (
+        str(getattr(ingredient, "execution_engine", "") or "").strip().lower() == "bakery"
+        and str(getattr(ingredient, "execution_purpose", "") or "").strip().lower() == "comms"
+    )
+
+
+def _normalize_bakery_comms_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    template = payload.get("template")
+    if not isinstance(template, dict):
+        return payload
+
+    normalized = {key: value for key, value in payload.items() if key != "template"}
+    for key, value in template.items():
+        if key == "context" and isinstance(value, dict):
+            existing = normalized.get("context")
+            if isinstance(existing, dict):
+                merged = dict(value)
+                merged.update(existing)
+                normalized["context"] = merged
+            else:
+                normalized["context"] = dict(value)
+            continue
+        normalized.setdefault(key, value)
+    return normalized
+
+
 def build_step_payload(ri: RecipeIngredient) -> dict[str, Any] | None:
     base = dict((ri.ingredient.execution_payload if ri.ingredient else None) or {})
     overrides = getattr(ri, "execution_payload_override", None)
     if overrides:
         base.update(overrides)
+    if base and _is_bakery_comms_step(ri):
+        base = _normalize_bakery_comms_payload(base)
     return base or None
 
 

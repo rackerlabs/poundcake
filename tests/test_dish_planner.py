@@ -102,7 +102,41 @@ def test_seed_dish_ingredients_for_phase__resolves_override_fields():
     rows = seed_dish_ingredients_for_phase(dish_id=101, recipe=recipe, phase="firing")
 
     assert len(rows) == 1
-    assert rows[0].execution_payload == {"template": {"name": "core"}, "extra": "payload"}
+    assert rows[0].execution_payload == {"name": "core", "extra": "payload"}
     assert rows[0].execution_parameters == {"base": "value", "override": "value"}
     assert rows[0].expected_duration_sec == 45
     assert rows[0].timeout_duration_sec == 180
+
+
+def test_seed_dish_ingredients_for_phase__unwraps_bakery_template_context():
+    recipe_step = _recipe_ingredient(
+        ri_id=1,
+        run_phase="firing",
+        engine="bakery",
+        purpose="comms",
+        target="core",
+        task_key_template="core",
+    )
+    recipe_step.ingredient.execution_payload = {
+        "template": {
+            "title": "Alert requires attention",
+            "context": {"source": "poundcake"},
+        }
+    }
+    recipe_step.execution_payload_override = {
+        "description": "Disk is filling up",
+        "context": {"route": "rackspace"},
+    }
+    recipe = SimpleNamespace(recipe_ingredients=[recipe_step])
+
+    rows = seed_dish_ingredients_for_phase(dish_id=101, recipe=recipe, phase="firing")
+
+    assert len(rows) == 1
+    assert rows[0].execution_payload == {
+        "title": "Alert requires attention",
+        "description": "Disk is filling up",
+        "context": {
+            "source": "poundcake",
+            "route": "rackspace",
+        },
+    }
