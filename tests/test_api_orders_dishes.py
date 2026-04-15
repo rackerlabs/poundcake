@@ -776,6 +776,36 @@ def test_order_dispatch__without_matching_recipe__returns_skipped(client, mock_d
     assert body["status"] == "skipped"
 
 
+def test_order_dispatch__resolving_waits_for_active_firing_remediation(client, mock_db_session):
+    order = _make_order(status="resolving")
+    order.alert_status = "resolved"
+    order.remediation_outcome = "pending"
+    active_firing_dish = _make_dish(dish_id=7, status="processing", run_phase="firing")
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+            ScalarResult(first=active_firing_dish.id),  # active firing remediation
+        ]
+    )
+
+    with (
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(catch_all_recipe_name="fallback-recipe"),
+        ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=True)),
+    ):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "skipped"
+    assert body["order_id"] == 1
+    assert body["reason"] == "Resolving dispatch is waiting for firing remediation to finish"
+    mock_db_session.add.assert_not_called()
+
+
 def test_order_dispatch__without_group_recipe__uses_fallback_recipe(client, mock_db_session):
     order = _make_order(status="new")
     fallback_recipe = SimpleNamespace(id=22, name="fallback-recipe", recipe_ingredients=[])
@@ -818,6 +848,7 @@ def test_order_dispatch__resolving_status__dispatches_resolve_phase_without_stat
     client, mock_db_session
 ):
     order = _make_order(status="resolving")
+    order.remediation_outcome = "succeeded"
     recipe = SimpleNamespace(id=12, name="group", recipe_ingredients=[])
     policy_recipe = SimpleNamespace(recipe_ingredients=[])
 
@@ -855,6 +886,7 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__without_effective_com
     client, mock_db_session
 ):
     order = _make_order(status="resolving")
+    order.remediation_outcome = "succeeded"
     group_recipe = SimpleNamespace(
         id=12,
         name="group",
@@ -896,6 +928,7 @@ def test_order_dispatch__resolving_stackstorm_only_recipe__injects_global_policy
     client, mock_db_session
 ):
     order = _make_order(status="resolving")
+    order.remediation_outcome = "succeeded"
     group_recipe = SimpleNamespace(
         id=12,
         name="group",
@@ -1015,6 +1048,7 @@ def test_order_dispatch__resolving_with_recipe_bakery_comms__does_not_inject_fal
     client, mock_db_session
 ):
     order = _make_order(status="resolving")
+    order.remediation_outcome = "succeeded"
     recipe = SimpleNamespace(
         id=12,
         name="group",
@@ -1121,6 +1155,7 @@ def test_order_dispatch__firing_with_recipe_bakery_comms__does_not_inject_global
 
 def test_order_dispatch__checks_global_policy_inside_transaction(client, mock_db_session):
     order = _make_order(status="resolving")
+    order.remediation_outcome = "succeeded"
     recipe = SimpleNamespace(
         id=12,
         name="group",

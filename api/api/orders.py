@@ -336,6 +336,26 @@ async def dispatch_order(
                 detail=f"Order is not dispatchable (status={order.processing_status})",
             )
 
+        if run_phase == "resolving" and (order.remediation_outcome or "").lower() == "pending":
+            active_firing_result = await db.execute(
+                select(Dish.id)
+                .where(
+                    Dish.order_id == order.id,
+                    Dish.run_phase == "firing",
+                    Dish.processing_status.in_(("new", "processing", "finalizing")),
+                )
+                .order_by(Dish.created_at.desc())
+                .with_for_update()
+            )
+            if active_firing_result.first() is not None:
+                response = OrderDispatchResponse(
+                    status="skipped",
+                    order_id=order.id,
+                    reason="Resolving dispatch is waiting for firing remediation to finish",
+                )
+                order.updated_at = now
+                return response
+
         recipe_result = await db.execute(
             select(Recipe)
             .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
