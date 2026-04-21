@@ -475,10 +475,16 @@ async def dispatch_order(
                 .where(DishIngredient.dish_id == dish.id, DishIngredient.deleted.is_(False))
                 .with_for_update()
             )
+            existing_rows = existing_result.scalars().all()
             existing_by_recipe_ingredient_id = {
                 row.recipe_ingredient_id: row
-                for row in existing_result.scalars().all()
+                for row in existing_rows
                 if row.recipe_ingredient_id is not None
+            }
+            existing_task_keys = {
+                str(row.task_key)
+                for row in existing_rows
+                if str(getattr(row, "task_key", "") or "").strip()
             }
 
             seeded_rows = seed_dish_ingredients_for_phase(
@@ -487,6 +493,7 @@ async def dispatch_order(
                 phase=run_phase,
                 order=order,
                 existing_by_recipe_ingredient_id=existing_by_recipe_ingredient_id,
+                existing_task_keys=existing_task_keys,
                 extra_recipe_ingredients=extra_policy_steps,
             )
             for row in seeded_rows:

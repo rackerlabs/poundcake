@@ -57,7 +57,7 @@ export POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_
 # -----------------------------------------------------------------------------
 # Optional OCI chart profile example:
 #   export POUNDCAKE_CHART_REPO="oci://ghcr.io/${FORK_OWNER}/charts/poundcake"
-#   export POUNDCAKE_CHART_VERSION="0.2.82"
+#   export POUNDCAKE_CHART_VERSION="0.2.102"
 #
 # Production owner example:
 #   export FORK_OWNER="rackerlabs"

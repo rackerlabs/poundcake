@@ -184,9 +184,11 @@ def seed_dish_ingredients_for_phase(
     phase: str,
     order: Order | None = None,
     existing_by_recipe_ingredient_id: dict[int, DishIngredient] | None = None,
+    existing_task_keys: set[str] | None = None,
     extra_recipe_ingredients: list[RecipeIngredient] | None = None,
 ) -> list[DishIngredient]:
     existing = existing_by_recipe_ingredient_id or {}
+    task_keys = {str(item) for item in (existing_task_keys or set()) if str(item or "").strip()}
     seeded: list[DishIngredient] = []
     normalized_phase = normalize_run_phase(phase)
     for ri in list(recipe.recipe_ingredients) + list(extra_recipe_ingredients or []):
@@ -205,12 +207,15 @@ def seed_dish_ingredients_for_phase(
             continue
         if ri.id in existing:
             continue
+        task_key = build_step_task_key(ri)
+        if task_key in task_keys:
+            continue
 
         seeded.append(
             DishIngredient(
                 dish_id=dish_id,
                 recipe_ingredient_id=ri.id,
-                task_key=build_step_task_key(ri),
+                task_key=task_key,
                 execution_engine=ri.ingredient.execution_engine,
                 execution_target=ri.ingredient.execution_target,
                 destination_target=getattr(ri.ingredient, "destination_target", "") or "",

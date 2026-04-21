@@ -6,6 +6,7 @@ import re
 import uuid
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
+import json
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -620,8 +621,13 @@ async def sync_fallback_policy_recipe(
 
     enabled_routes = [route for route in routes if route.enabled]
     if not enabled_routes:
+        if recipe.enabled is False and not get_recipe_local_routes(recipe):
+            return recipe
         recipe.enabled = False
         await replace_recipe_communication_steps(db, recipe=recipe, step_specs=[])
+        return recipe
+
+    if recipe.enabled and _route_lists_match(get_recipe_local_routes(recipe), enabled_routes):
         return recipe
 
     recipe.enabled = True
@@ -780,6 +786,27 @@ def serialize_route(route: CommunicationRoute) -> dict[str, Any]:
         "enabled": route.enabled,
         "position": route.position,
     }
+
+
+def _route_signature(route: CommunicationRoute) -> tuple[str, str, str, str, str, bool, int]:
+    return (
+        route.id,
+        route.label,
+        route.execution_target,
+        route.destination_target,
+        json.dumps(route.provider_config or {}, sort_keys=True, separators=(",", ":")),
+        route.enabled,
+        route.position,
+    )
+
+
+def _route_lists_match(
+    current: list[CommunicationRoute],
+    expected: list[CommunicationRoute],
+) -> bool:
+    return [_route_signature(route) for route in current] == [
+        _route_signature(route) for route in expected
+    ]
 
 
 def lifecycle_summary() -> dict[str, str]:

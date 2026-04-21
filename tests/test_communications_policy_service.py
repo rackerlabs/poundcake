@@ -108,6 +108,56 @@ async def test_sync_fallback_policy_recipe_first_create_seeds_empty_recipe_relat
     replace_steps.assert_awaited_once_with(db, recipe=recipe, step_specs=[])
 
 
+@pytest.mark.asyncio
+async def test_sync_fallback_policy_recipe_noops_when_enabled_routes_are_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    routes = communications_policy.normalize_routes(
+        [
+            {
+                "id": "route-a",
+                "label": "Primary Core",
+                "execution_target": "rackspace_core",
+                "destination_target": "primary",
+                "provider_config": {
+                    "account_number": "1781738",
+                    "queue": "CloudBuilders Support",
+                    "subcategory": "Monitoring",
+                },
+                "enabled": True,
+                "position": 1,
+            }
+        ]
+    )
+    recipe = SimpleNamespace(
+        name="fallback-recipe",
+        description="existing",
+        enabled=True,
+        deleted=False,
+        deleted_at=None,
+        updated_at=None,
+        recipe_ingredients=[],
+    )
+
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarResult(first=recipe))
+    db.add = Mock()
+    db.flush = AsyncMock()
+
+    replace_steps = AsyncMock()
+    monkeypatch.setattr(communications_policy, "replace_recipe_communication_steps", replace_steps)
+    monkeypatch.setattr(
+        communications_policy,
+        "get_recipe_local_routes",
+        lambda _recipe: routes,
+    )
+
+    result = await communications_policy.sync_fallback_policy_recipe(db, routes=routes)
+
+    assert result is recipe
+    replace_steps.assert_not_awaited()
+
+
 def test_normalize_routes_preserves_provider_config_for_required_targets() -> None:
     routes = communications_policy.normalize_routes(
         [

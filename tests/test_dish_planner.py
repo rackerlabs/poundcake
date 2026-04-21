@@ -140,3 +140,27 @@ def test_seed_dish_ingredients_for_phase__unwraps_bakery_template_context():
             "route": "rackspace",
         },
     }
+
+
+def test_seed_dish_ingredients_for_phase__skips_existing_task_key_even_if_recipe_id_changed():
+    recipe = SimpleNamespace(
+        recipe_ingredients=[
+            _recipe_ingredient(
+                ri_id=22,
+                run_phase="resolving",
+                engine="bakery",
+                purpose="comms",
+                target="rackspace_core",
+                task_key_template="pcmcomms.fallback.fallback.route-a.fallback_notify",
+            )
+        ]
+    )
+
+    rows = seed_dish_ingredients_for_phase(
+        dish_id=101,
+        recipe=recipe,
+        phase="resolving",
+        existing_task_keys={"step_22_pcmcomms_fallback_fallback_route-a_fallback_notify"},
+    )
+
+    assert rows == []
