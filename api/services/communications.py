@@ -14,6 +14,9 @@ DESTINATION_TYPES = {
     "discord",
 }
 
+ROUTE_KIND_TICKETING = "ticketing"
+ROUTE_KIND_NOTIFICATION = "notification"
+
 TICKET_CAPABLE_DESTINATION_TYPES = {
     "servicenow",
     "jira",
@@ -213,6 +216,16 @@ def normalize_run_condition(value: str | None) -> str:
 
 def is_ticket_capable_destination(value: str | None) -> bool:
     return normalize_destination_type(value) in TICKET_CAPABLE_DESTINATION_TYPES
+
+
+def route_kind_for_destination(value: str | None) -> str:
+    if is_ticket_capable_destination(value):
+        return ROUTE_KIND_TICKETING
+    return ROUTE_KIND_NOTIFICATION
+
+
+def gates_incident_close_for_destination(value: str | None) -> bool:
+    return is_ticket_capable_destination(value)
 
 
 def canonical_to_bakery_action(value: Any) -> str:

@@ -72,6 +72,10 @@ bakery:
       existingSecret: bakery-monitor-bootstrap
 ```
 
+For shared-hostname publication, keep the API path on `/api` and the UI path on `/`. Also make
+sure `gateway.gatewayName` and `gateway.gatewayNamespace` match the live Gateway object in the
+target environment.
+
 ## Bootstrap Credential
 
 Bakery owns the long-lived monitor identity. PoundCake uses a Bakery-issued bootstrap credential
@@ -117,6 +121,9 @@ cd /opt/poundcake
 ./install/install-poundcake-helm.sh
 ```
 
+Normal release rollouts should move by chart version. Leave `poundcakeImage.tag` and `uiImage.tag`
+unset unless you intentionally want to override the chart's `appVersion` defaults.
+
 Wait for rollout:
 
 ```bash
@@ -147,6 +154,9 @@ Expected shape:
 - `POUNDCAKE_BAKERY_MONITOR_ID: <explicit monitor id or namespace/release default>`
 - `POUNDCAKE_BAKERY_ENABLED=true`
 
+Creating the `bakery-monitor-bootstrap` secret alone does not enable remote Bakery. The PoundCake
+release must be redeployed with the `bakery.client.*` values shown above.
+
 Confirm the public PoundCake endpoint:
 
 ```bash
@@ -165,6 +175,29 @@ kubectl -n <namespace> exec deploy/poundcake-mariadb -- \
 
 If PoundCake still shows `POUNDCAKE_BAKERY_ENABLED=false` or an in-cluster Bakery URL, the release
 was not redeployed with the remote Bakery client settings.
+
+## Optional Bootstrap Recipe Repo Sync
+
+Leave `bootstrap.rulesRepoUrl` blank unless you explicitly want PoundCake bootstrap recipes to be
+generated from a remote alert-rules repo.
+
+If you do enable it, provide a repo URL that is reachable from the cluster and configure matching
+Git credentials when the repo is private. A private repo URL without matching Git credentials keeps
+`/api/v1/health` unhealthy during bootstrap.
+
+Example:
+
+```yaml
+bootstrap:
+  rulesRepoUrl: https://github.com/example/monitoring-rules.git
+  rulesBranch: main
+  rulesPath: alerts
+
+git:
+  enabled: true
+  provider: github
+  existingSecret: poundcake-git
+```
 
 ## Live Validation
 

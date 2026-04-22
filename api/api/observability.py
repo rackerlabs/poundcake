@@ -24,9 +24,11 @@ from api.schemas.query_params import (
 )
 from api.schemas.schemas import CommunicationActivityRecord, ObservabilityActivityRecord
 from api.services.communications import (
+    gates_incident_close_for_destination,
     is_ticket_capable_destination,
     normalize_destination_target,
     normalize_destination_type,
+    route_kind_for_destination,
 )
 from api.services.suppression_service import normalize_utc_datetime, suppression_status
 
@@ -101,6 +103,10 @@ async def _load_communication_activity(
                             execution_target=communication.execution_target,
                             destination_target=communication.destination_target,
                         ),
+                        route_kind=route_kind_for_destination(communication.execution_target),
+                        gates_incident_close=gates_incident_close_for_destination(
+                            communication.execution_target
+                        ),
                         ticket_id=ticket_id,
                         provider_reference_id=provider_reference_id,
                         operation_id=communication.bakery_operation_id,
@@ -129,6 +135,8 @@ async def _load_communication_activity(
                 reference_name=order.alert_group_name,
                 channel="rackspace_core",
                 destination="rackspace_core",
+                route_kind=route_kind_for_destination("rackspace_core"),
+                gates_incident_close=gates_incident_close_for_destination("rackspace_core"),
                 ticket_id=order.bakery_ticket_id,
                 provider_reference_id=None,
                 operation_id=order.bakery_operation_id,
@@ -161,6 +169,8 @@ async def _load_communication_activity(
                 reference_name=item.suppression.name if item.suppression else None,
                 channel="suppression_summary",
                 destination=item.suppression.name if item.suppression else "Suppression summary",
+                route_kind=route_kind_for_destination("rackspace_core"),
+                gates_incident_close=False,
                 ticket_id=item.bakery_ticket_id,
                 provider_reference_id=None,
                 operation_id=item.bakery_create_operation_id or item.bakery_close_operation_id,
@@ -277,6 +287,8 @@ async def get_observability_activity(
                 metadata={
                     "reference_type": item.reference_type,
                     "reference_id": item.reference_id,
+                    "route_kind": item.route_kind,
+                    "gates_incident_close": item.gates_incident_close,
                     "ticket_id": item.ticket_id,
                     "provider_reference_id": item.provider_reference_id,
                     "last_error": item.last_error,

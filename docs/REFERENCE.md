@@ -40,6 +40,8 @@ Practical rules:
 - keep external credentials in Kubernetes secrets
 - use `00-*`, `10-*`, `20-*`, `30-*` naming if you need deterministic override order
 - remote Bakery is configured only with `bakery.client.*`
+- normal releases should roll forward by chart version; leave image tag overrides unset unless you
+  intentionally need a non-default image
 
 ## Installer Environment Variables
 
@@ -119,6 +121,24 @@ Relevant keys:
 
 Bakery server-side values such as `bakery.gateway.*`, `bakery.database.*`, and provider secret
 settings now belong in the standalone Bakery repo.
+
+## Bootstrap Recipe Repo Values
+
+Bootstrap recipe repo sync is optional. The shipped default is `bootstrap.rulesRepoUrl: ""`.
+
+Relevant keys:
+
+| Key | Purpose |
+|---|---|
+| `bootstrap.rulesRepoUrl` | Optional remote rules repo used to generate bootstrap-managed recipes |
+| `bootstrap.rulesBranch` | Branch used for the bootstrap repo checkout |
+| `bootstrap.rulesPath` | Path inside the repo that contains alert-rule YAML |
+| `bootstrap.remoteSyncEnabled` | Global toggle for remote bootstrap sync |
+| `git.enabled` | Enables repo-sync related Git configuration |
+| `git.existingSecret` | Secret used for Git token or SSH key material |
+
+If `bootstrap.rulesRepoUrl` points at a private repo, matching Git credentials must also be
+configured or bootstrap health will remain unhealthy.
 
 ## CLI
 

@@ -605,6 +605,18 @@ pre {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.route-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.route-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .route-card {
   padding: 18px;
 }
@@ -615,6 +627,15 @@ pre {
   gap: 12px;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.route-card-labels,
+.incident-row-title,
+.route-kind-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .timeline {

@@ -35,6 +35,10 @@ Before deploying, update the `poundcake` chart entry in `/etc/poundcake/helm-cha
 If Bakery is being rolled out or upgraded in the same environment, update the `bakery` entry there
 as well.
 
+For normal releases, roll forward by updating the chart version and redeploying. Leave
+`poundcakeImage.tag`, `uiImage.tag`, and other image tag overrides unset unless you intentionally
+need a non-default image; the chart inherits its default runtime images from `appVersion`.
+
 ## Minimum PoundCake Override Shape
 
 `10-main-overrides.yaml`
@@ -76,6 +80,15 @@ Optional examples:
 - Put `poundcakeImage.pullSecrets` in `00-pull-secret-overrides.yaml` when private GHCR pulls are required.
 - Put non-secret Auth0 or Azure values in `20-auth-overrides.yaml`.
 - Put non-secret Git sync values in `30-git-sync-overrides.yaml`.
+- Leave `bootstrap.rulesRepoUrl` blank unless you explicitly want bootstrap-managed recipes
+  generated from a remote alert-rules repo.
+
+Gateway notes:
+
+- `gateway.gatewayName` and `gateway.gatewayNamespace` must match the live Gateway object in the
+  target cluster.
+- For a shared hostname deployment, keep the API route on `/api` and the UI route on `/`.
+  Reusing `/` for both creates overlapping `HTTPRoute`s.
 
 ## Optional StackStorm Packs
 
@@ -114,6 +127,10 @@ stackstorm:
           caCert: ""
       openstack:
         enabled: true
+        source:
+          type: git
+          name: openstack
+          repoUrl: https://github.com/StackStorm-Exchange/stackstorm-openstack.git
         version: ""
         config:
           cloudsYaml: |
@@ -137,6 +154,8 @@ Important notes:
   mount the cluster CA separately instead of using kubeconfig-embedded `certificate-authority-data`.
 - `stackstorm.bootstrap.packs.openstack.config.caCert` is optional and only needed when the target
   cloud uses a private CA that should be mounted separately.
+- When enabling the `openstack` pack, prefer the Git source shown above instead of relying on the
+  implicit Exchange source.
 - These values are secrets. Keep them only in secured operator-managed override files such as
   `/etc/poundcake/helm-configs/poundcake/10-main-overrides.yaml`, and do not commit real
   credentials or certificate material to the repo.
@@ -210,6 +229,34 @@ Documented operator-facing values:
 - `persistence.stackstormSharedStorage.virtualenvVolumeSize`
 - `longhorn.rwxStorageClass.create`
 - `longhorn.rwxStorageClass.name`
+
+## Optional Bootstrap Recipe Repo Sync
+
+By default, PoundCake bootstraps only from the local recipe catalog files shipped in the chart.
+Leave `bootstrap.rulesRepoUrl` blank for most installs.
+
+Only set a remote bootstrap rules repo when all of the following are true:
+
+- you want bootstrap-managed recipes generated from a remote rules catalog
+- the repo URL is intentionally chosen for this environment
+- Git credentials are configured when the repo is private
+
+Example:
+
+```yaml
+bootstrap:
+  rulesRepoUrl: https://github.com/example/monitoring-rules.git
+  rulesBranch: main
+  rulesPath: alerts
+
+git:
+  enabled: true
+  provider: github
+  existingSecret: poundcake-git
+```
+
+If you set `bootstrap.rulesRepoUrl` to a private repo without matching Git credentials, PoundCake
+bootstrap will stay unhealthy until that configuration is corrected.
 
 ## Bakery Bootstrap Secret
 

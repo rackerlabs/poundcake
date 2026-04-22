@@ -46,6 +46,16 @@ def mock_db():
 
 
 def _make_order(order_id: int = 1) -> Order:
+    return _make_order_with_target(order_id=order_id)
+
+
+def _make_order_with_target(
+    *,
+    order_id: int = 1,
+    execution_target: str = "teams",
+    bakery_ticket_id: str = "teams-message-123",
+    destination_target: str = "ops-alerts",
+) -> Order:
     now = datetime.now(timezone.utc)
     order = Order(
         id=order_id,
@@ -79,9 +89,9 @@ def _make_order(order_id: int = 1) -> Order:
     communication = OrderCommunication(
         id=17,
         order_id=order_id,
-        execution_target="teams",
-        destination_target="ops-alerts",
-        bakery_ticket_id="teams-message-123",
+        execution_target=execution_target,
+        destination_target=destination_target,
+        bakery_ticket_id=bakery_ticket_id,
         bakery_operation_id="op-teams-1",
         lifecycle_state="sent",
         remote_state="delivered",
@@ -192,8 +202,37 @@ def test_communications_activity_returns_incident_and_suppression_rows(client, m
     incident_row = next(item for item in data if item["reference_type"] == "incident")
     suppression_row = next(item for item in data if item["reference_type"] == "suppression")
     assert incident_row["channel"] == "teams"
+    assert incident_row["route_kind"] == "notification"
+    assert incident_row["gates_incident_close"] is False
     assert incident_row["provider_reference_id"] == "teams-message-123"
+    assert suppression_row["route_kind"] == "ticketing"
+    assert suppression_row["gates_incident_close"] is False
     assert suppression_row["ticket_id"] == "260312-02074"
+
+
+def test_communications_activity_classifies_ticket_routes(client, mock_db):
+    order = _make_order_with_target(
+        execution_target="rackspace_core",
+        bakery_ticket_id="260422-01999",
+        destination_target="primary",
+    )
+    _suppression, summary = _make_suppression()
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(all_=[order]),
+            ScalarResult(all_=[summary]),
+        ]
+    )
+
+    response = client.get("/api/v1/communications/activity")
+
+    assert response.status_code == 200
+    incident_row = next(item for item in response.json() if item["reference_type"] == "incident")
+    assert incident_row["route_kind"] == "ticketing"
+    assert incident_row["gates_incident_close"] is True
+    assert incident_row["ticket_id"] == "260422-01999"
+    assert incident_row["provider_reference_id"] is None
 
 
 def test_observability_activity_returns_clickable_typed_feed(client, mock_db):

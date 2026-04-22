@@ -978,6 +978,10 @@ function IncidentDetail({
   highlightedDishId?: string;
 }) {
   const order = data.order;
+  const ticketRoutes = order.communications.filter((route) => route.route_kind === "ticketing");
+  const notificationRoutes = order.communications.filter(
+    (route) => route.route_kind !== "ticketing",
+  );
 
   return (
     <div className="detail-stack">
@@ -1010,34 +1014,36 @@ function IncidentDetail({
           <h4>Communication routes</h4>
           <p>Ticketing and chat delivery status for this incident.</p>
         </div>
-        <div className="route-grid">
-          {order.communications.length ? (
-            order.communications.map((route) => (
-              <div
-                className={`route-card ${
-                  highlightedCommunicationId === String(route.id) ? "highlighted" : ""
-                }`}
-                key={route.id}
-              >
-                <div className="route-card-head">
-                  <strong>{titleize(route.execution_target)}</strong>
-                  <StatusBadge status={route.remote_state || route.lifecycle_state}>
-                    {route.remote_state || route.lifecycle_state}
-                  </StatusBadge>
-                </div>
-                <KeyValue label="Destination" value={route.destination_target || route.execution_target} />
-                <KeyValue label="Reference" value={route.bakery_ticket_id || "-"} />
-                <KeyValue label="Operation ID" value={route.bakery_operation_id || "-"} />
-                <KeyValue label="Writable" value={String(route.writable)} />
-                <KeyValue label="Reopenable" value={String(route.reopenable)} />
-                <KeyValue label="Last update" value={formatLongDate(route.updated_at)} />
-                <KeyValue label="Last error" value={route.last_error || "-"} />
-              </div>
-            ))
-          ) : (
-            <EmptyState message="No communication routes are tracked for this incident yet." />
-          )}
-        </div>
+        {order.processing_status === "waiting_ticket_close" ? (
+          <div className="helper-card">
+            <strong>Incident closure is waiting on ticketing routes</strong>
+            <p>
+              PoundCake only uses ticketing routes to decide whether this incident is still waiting
+              for close confirmation. Chat and notification routes stay visible here, but they do
+              not block incident completion.
+            </p>
+          </div>
+        ) : null}
+        {order.communications.length ? (
+          <div className="route-sections">
+            <CommunicationRouteSection
+              emptyMessage="No ticketing routes are tracked for this incident."
+              highlightedCommunicationId={highlightedCommunicationId}
+              routes={ticketRoutes}
+              subtitle="These routes can keep the incident open until the external ticket is closed."
+              title="Ticketing routes"
+            />
+            <CommunicationRouteSection
+              emptyMessage="No chat or notification routes are tracked for this incident."
+              highlightedCommunicationId={highlightedCommunicationId}
+              routes={notificationRoutes}
+              subtitle="These routes are tracked for delivery history and debugging, but they do not block incident completion."
+              title="Chat / notification routes"
+            />
+          </div>
+        ) : (
+          <EmptyState message="No communication routes are tracked for this incident yet." />
+        )}
       </section>
 
       <section>
@@ -1173,10 +1179,13 @@ function CommunicationsPage() {
                 onClick={() => setSelectedId(item.communication_id)}
               >
                 <div>
-                  <strong>{item.reference_name || item.reference_id}</strong>
+                  <div className="incident-row-title">
+                    <strong>{item.reference_name || item.reference_id}</strong>
+                    <RouteKindBadge routeKind={item.route_kind} />
+                  </div>
                   <p>
                     {titleize(item.channel)} • {item.destination || "No destination"} •{" "}
-                    {item.ticket_id || item.provider_reference_id || "Pending reference"}
+                    {communicationActivityReferenceValue(item)}
                   </p>
                 </div>
                 <div className="feed-meta">
@@ -1193,12 +1202,23 @@ function CommunicationsPage() {
         <Panel title="Selected route" subtitle="Current status, provider references, and last known error.">
           {selected ? (
             <div className="detail-stack">
+              <div className="route-kind-inline">
+                <RouteKindBadge routeKind={selected.route_kind} />
+                {selected.reference_type === "incident" ? (
+                  <span className="eyebrow">
+                    {selected.gates_incident_close
+                      ? "Can block incident close"
+                      : "Does not block incident close"}
+                  </span>
+                ) : null}
+              </div>
               <div className="kv-grid">
                 <KeyValue label="Reference type" value={selected.reference_type} />
                 <KeyValue label="Channel" value={titleize(selected.channel)} />
                 <KeyValue label="Destination" value={selected.destination || "-"} />
-                <KeyValue label="Ticket number" value={selected.ticket_id || "-"} />
-                <KeyValue label="Provider reference" value={selected.provider_reference_id || "-"} />
+                <KeyValue label={communicationReferenceLabel(selected.route_kind)} value={communicationActivityReferenceValue(selected)} />
+                <KeyValue label="Route kind" value={titleize(selected.route_kind)} />
+                <KeyValue label="Blocks incident close" value={selected.reference_type === "incident" ? String(selected.gates_incident_close) : "-"} />
                 <KeyValue label="Operation ID" value={selected.operation_id || "-"} />
                 <KeyValue label="Lifecycle state" value={selected.lifecycle_state || "-"} />
                 <KeyValue label="Remote state" value={selected.remote_state || "-"} />
@@ -3920,6 +3940,15 @@ function StatusBadge({
   return <span className={`status-badge tone-${statusTone(status)}`}>{children}</span>;
 }
 
+function RouteKindBadge({ routeKind }: { routeKind: string }) {
+  const isTicketing = routeKind === "ticketing";
+  return (
+    <span className={`status-badge tone-${isTicketing ? "good" : "neutral"}`}>
+      {isTicketing ? "Ticketing" : "Notification"}
+    </span>
+  );
+}
+
 function FormField({
   label,
   help,
@@ -3998,6 +4027,76 @@ function PageLoading({ message }: { message: string }) {
 
 function PageError({ message, compact = false }: { message: string; compact?: boolean }) {
   return <div className={`error-card ${compact ? "compact" : ""}`}>{message}</div>;
+}
+
+function CommunicationRouteSection({
+  title,
+  subtitle,
+  routes,
+  highlightedCommunicationId,
+  emptyMessage,
+}: {
+  title: string;
+  subtitle: string;
+  routes: OrderResponse["communications"];
+  highlightedCommunicationId?: string;
+  emptyMessage: string;
+}) {
+  return (
+    <div className="route-section">
+      <div className="section-heading">
+        <h4>{title}</h4>
+        <p>{subtitle}</p>
+      </div>
+      {routes.length ? (
+        <div className="route-grid">
+          {routes.map((route) => (
+            <div
+              className={`route-card ${
+                highlightedCommunicationId === String(route.id) ? "highlighted" : ""
+              }`}
+              key={route.id}
+            >
+              <div className="route-card-head">
+                <div className="route-card-labels">
+                  <strong>{titleize(route.execution_target)}</strong>
+                  <RouteKindBadge routeKind={route.route_kind} />
+                </div>
+                <StatusBadge status={route.remote_state || route.lifecycle_state}>
+                  {route.remote_state || route.lifecycle_state}
+                </StatusBadge>
+              </div>
+              <KeyValue label="Destination" value={route.destination_target || route.execution_target} />
+              <KeyValue label={communicationReferenceLabel(route.route_kind)} value={orderCommunicationReferenceValue(route)} />
+              <KeyValue label="Blocks incident close" value={String(route.gates_incident_close)} />
+              <KeyValue label="Operation ID" value={route.bakery_operation_id || "-"} />
+              <KeyValue label="Writable" value={String(route.writable)} />
+              <KeyValue label="Reopenable" value={String(route.reopenable)} />
+              <KeyValue label="Last update" value={formatLongDate(route.updated_at)} />
+              <KeyValue label="Last error" value={route.last_error || "-"} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState message={emptyMessage} />
+      )}
+    </div>
+  );
+}
+
+function communicationReferenceLabel(routeKind: string): string {
+  return routeKind === "ticketing" ? "Ticket number" : "Provider reference";
+}
+
+function orderCommunicationReferenceValue(route: OrderResponse["communications"][number]): string {
+  return route.bakery_ticket_id || "-";
+}
+
+function communicationActivityReferenceValue(item: CommunicationActivityRecord): string {
+  if (item.route_kind === "ticketing") {
+    return item.ticket_id || "Pending ticket reference";
+  }
+  return item.provider_reference_id || "Pending provider reference";
 }
 
 function FullscreenState({

@@ -211,6 +211,8 @@ export const orderCommunicationSchema = strictObject({
   writable: z.boolean(),
   reopenable: z.boolean(),
   last_error: z.string().nullable().optional(),
+  route_kind: z.string(),
+  gates_incident_close: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -274,6 +276,8 @@ export const communicationActivityRecordSchema = strictObject({
   reference_name: z.string().nullable().optional(),
   channel: z.string(),
   destination: z.string().nullable().optional(),
+  route_kind: z.string(),
+  gates_incident_close: z.boolean(),
   ticket_id: z.string().nullable().optional(),
   provider_reference_id: z.string().nullable().optional(),
   operation_id: z.string().nullable().optional(),

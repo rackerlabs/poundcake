@@ -41,8 +41,10 @@ from api.types import (
 from api.services.communications import (
     ALERTMANAGER_REQUIRED_ANNOTATION_FIELDS,
     ALERTMANAGER_REQUIRED_LABEL_FIELDS,
+    gates_incident_close_for_destination,
     normalize_destination_type,
     normalize_route_provider_config,
+    route_kind_for_destination,
 )
 
 
@@ -658,6 +660,14 @@ class OrderCommunicationBase(BaseModel):
     writable: bool = True
     reopenable: bool = False
     last_error: Optional[str] = None
+    route_kind: Optional[str] = None
+    gates_incident_close: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _normalize_route_metadata(self) -> "OrderCommunicationBase":
+        self.route_kind = route_kind_for_destination(self.execution_target)
+        self.gates_incident_close = gates_incident_close_for_destination(self.execution_target)
+        return self
 
 
 class OrderCommunicationResponse(OrderCommunicationBase):
@@ -841,6 +851,8 @@ class CommunicationActivityRecord(BaseModel):
     reference_name: Optional[str] = None
     channel: str
     destination: Optional[str] = None
+    route_kind: str
+    gates_incident_close: bool
     ticket_id: Optional[str] = None
     provider_reference_id: Optional[str] = None
     operation_id: Optional[str] = None

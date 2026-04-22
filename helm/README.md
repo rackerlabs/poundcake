@@ -12,11 +12,16 @@ This chart deploys PoundCake, its UI, and the StackStorm components it depends o
 
 ## Install
 
+Recommended path:
+
 ```bash
-helm upgrade --install poundcake ./helm \
-  --set poundcakeImage.repository=<your-repo/poundcake> \
-  --set poundcakeImage.tag=<tag>
+./install/install-poundcake-helm.sh
 ```
+
+For repeatable rollouts, update `/etc/poundcake/helm-chart-versions.yaml` or export
+`POUNDCAKE_CHART_VERSION` before running the installer. Normal releases should move by chart
+version; leave image tag overrides unset so PoundCake, UI, and helper images inherit the chart's
+`appVersion` defaults.
 
 ## Remote Bakery
 
@@ -31,6 +36,9 @@ bakery:
     auth:
       existingSecret: bakery-monitor-bootstrap
 ```
+
+Creating the bootstrap secret alone does not enable remote Bakery. PoundCake must be deployed with
+`bakery.client.enabled=true` and `bakery.client.baseUrl` pointing at the external Bakery URL.
 
 ## Installer
 
@@ -98,6 +106,10 @@ stackstorm:
           caCert: ""
       openstack:
         enabled: true
+        source:
+          type: git
+          name: openstack
+          repoUrl: https://github.com/StackStorm-Exchange/stackstorm-openstack.git
         version: ""
         config:
           cloudsYaml: |
@@ -119,7 +131,17 @@ Operational requirements:
 - StackStorm pods need outbound access to StackStorm Exchange / GitHub to install the packs.
 - The `kubernetes` pack needs a valid kubeconfig and enough RBAC on the target cluster.
 - The `openstack` pack needs a valid `clouds.yaml`-style config and credentials that can reach Keystone and the requested service APIs.
+- When enabling the `openstack` pack, prefer the Git source shown above instead of relying on the
+  implicit Exchange source.
 - If either remote endpoint uses a private CA, provide the CA content in `caCert` and reference it from the corresponding config.
+
+## Optional Bootstrap Recipe Repo Sync
+
+The chart defaults `bootstrap.rulesRepoUrl` to blank. Leave it blank unless you explicitly want
+bootstrap-managed recipes generated from a remote rules repo.
+
+If you do enable it, make sure the repo is reachable from the cluster and that `git.existingSecret`
+or another supported Git credential path is configured when the repo is private.
 
 For the operator override-file version of these examples, including how to place Kubernetes admin
 cert/key material and OpenStack credentials into `10-main-overrides.yaml`, see

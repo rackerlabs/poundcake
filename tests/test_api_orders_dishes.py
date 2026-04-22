@@ -714,6 +714,64 @@ def test_dish_update__resolving_complete_with_open_ticket_routes_moves_to_waitin
     assert order.is_active is True
 
 
+def test_dish_update__resolving_complete_with_notification_routes_completes_order(
+    client, mock_db_session
+):
+    dish = _make_dish(status="processing", run_phase="resolving")
+    order = _make_order(status="resolving")
+    order.communications = [
+        OrderCommunication(
+            id=1,
+            order_id=order.id,
+            bakery_ticket_id="discord-message-1",
+            execution_target="discord",
+            destination_target="ops-alerts",
+            lifecycle_state="succeeded",
+            remote_state="open",
+            writable=True,
+            reopenable=False,
+        )
+    ]
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    response = client.put("/api/v1/dishes/1", json={"processing_status": "complete"})
+
+    assert response.status_code == 200
+    assert order.processing_status == "complete"
+    assert order.is_active is False
+
+
+def test_dish_update__resolving_failure_with_notification_routes_fails_order(
+    client, mock_db_session
+):
+    dish = _make_dish(status="processing", run_phase="resolving")
+    order = _make_order(status="resolving")
+    order.communications = [
+        OrderCommunication(
+            id=1,
+            order_id=order.id,
+            bakery_ticket_id="teams-message-1",
+            execution_target="teams",
+            destination_target="ops-alerts",
+            lifecycle_state="failed",
+            remote_state="open",
+            writable=True,
+            reopenable=False,
+        )
+    ]
+    mock_db_session.execute = AsyncMock(
+        side_effect=[ScalarResult(first=dish), ScalarResult(first=order)]
+    )
+
+    response = client.put("/api/v1/dishes/1", json={"processing_status": "failed"})
+
+    assert response.status_code == 200
+    assert order.processing_status == "failed"
+    assert order.is_active is False
+
+
 def test_dish_update__catch_all_recipe_terminal__keeps_order_active(client, mock_db_session):
     dish = _make_dish(status="processing")
     dish.recipe = _make_recipe(name="fallback-recipe")
@@ -1202,6 +1260,49 @@ def test_order_dispatch__checks_global_policy_inside_transaction(client, mock_db
 
     assert response.status_code == 200
     assert response.json()["status"] == "dispatched"
+
+
+def test_get_order__classifies_ticket_and_notification_routes(client, mock_db_session):
+    order = _make_order(status="processing")
+    now = datetime.now(timezone.utc)
+    order.communications = [
+        OrderCommunication(
+            id=1,
+            order_id=order.id,
+            bakery_ticket_id="260422-01999",
+            execution_target="rackspace_core",
+            destination_target="primary",
+            lifecycle_state="succeeded",
+            remote_state="open",
+            writable=True,
+            reopenable=False,
+            created_at=now,
+            updated_at=now,
+        ),
+        OrderCommunication(
+            id=2,
+            order_id=order.id,
+            bakery_ticket_id="discord-message-1",
+            execution_target="discord",
+            destination_target="ops-alerts",
+            lifecycle_state="succeeded",
+            remote_state="delivered",
+            writable=True,
+            reopenable=False,
+            created_at=now,
+            updated_at=now,
+        ),
+    ]
+    mock_db_session.execute = AsyncMock(return_value=ScalarResult(first=order))
+
+    response = client.get("/api/v1/orders/1")
+
+    assert response.status_code == 200
+    communications = response.json()["communications"]
+    assert communications[0]["route_kind"] == "ticketing"
+    assert communications[0]["gates_incident_close"] is True
+    assert communications[1]["route_kind"] == "notification"
+    assert communications[1]["gates_incident_close"] is False
 
 
 def test_order_timeline_get__returns_events(client, mock_db_session):

@@ -22,5 +22,12 @@ gateway:
   hostnames:
     - "<poundcake-public-hostname>"
 
+  # Keep the API and UI on distinct paths when sharing a hostname.
+  listeners:
+    api:
+      pathPrefix: /api
+    ui:
+      pathPrefix: /
+
   # Optional annotations for the HTTPRoute
   annotations: {}
