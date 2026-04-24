@@ -103,6 +103,8 @@ Each available app/chart version is notified once. Closing the remote advisory t
 not cause PoundCake to recreate it; a later available release creates a new advisory set. If Bakery
 or global communications routes are unavailable, the checker records a blocked state and retries
 later instead of marking the release notified.
+Existing alpha databases with the consolidated baseline revision are repaired idempotently at API
+startup so the advisory state tables exist after upgrade.
 
 PoundCake controls the advisory title, description, and route context. Bakery controls the final
 provider-native formatting, such as Rackspace Core BBCode, Jira ADF, GitHub Markdown, Discord

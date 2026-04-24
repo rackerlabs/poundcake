@@ -32,6 +32,10 @@ else
     exit 1
 fi
 
+echo "Ensuring alpha compatibility schema..."
+python3 -m api.scripts.ensure_alpha_schema
+echo "[OK] Alpha compatibility schema verified"
+
 # Start the Application
 # --no-access-log: Disable uvicorn access logs (our middleware logs all requests)
 exec uvicorn api.main:app --host 0.0.0.0 --port 8000 --no-access-log
