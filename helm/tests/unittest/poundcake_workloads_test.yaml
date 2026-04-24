@@ -140,6 +140,67 @@ tests:
           value: 9
         documentIndex: 0
 
+  - it: enables release update advisories by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_ENABLED
+            value: "true"
+        documentIndex: 0
+
+  - it: wires release update advisory env defaults and registry auth secret
+    set:
+      releaseUpdateNotifications.enabled: true
+      releaseUpdateNotifications.checkIntervalSeconds: 3600
+      releaseUpdateNotifications.ociRepository: oci://ghcr.io/example/charts/poundcake
+      releaseUpdateNotifications.includePrereleases: true
+      releaseUpdateNotifications.registryAuth.existingSecret: poundcake-oci
+      releaseUpdateNotifications.registryAuth.secretKeys.username: oci-user
+      releaseUpdateNotifications.registryAuth.secretKeys.password: oci-password
+      releaseUpdateNotifications.registryAuth.secretKeys.token: oci-token
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_CHART_VERSION
+            value: "0.2.104"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_CHECK_INTERVAL_SECONDS
+            value: "3600"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_OCI_REPOSITORY
+            value: oci://ghcr.io/example/charts/poundcake
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_INCLUDE_PRERELEASES
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-oci
+                key: oci-user
+                optional: true
+        documentIndex: 0
+
   - it: applies configured poundcake API probe settings
     set:
       poundcakeApi.readiness.periodSeconds: 7

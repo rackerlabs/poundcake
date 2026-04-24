@@ -36,6 +36,10 @@ from api.services.bakery_monitor import (
     start_bakery_monitor_heartbeat,
     stop_bakery_monitor_heartbeat,
 )
+from api.services.release_update_notifications import (
+    start_release_update_notification_checker,
+    stop_release_update_notification_checker,
+)
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -48,7 +52,9 @@ async def lifespan(app: FastAPI):
     logger.info("PoundCake API is starting up", extra={"req_id": "SYSTEM-STARTUP"})
     await wait_for_stackstorm_ready()
     await start_bakery_monitor_heartbeat()
+    await start_release_update_notification_checker()
     yield
+    await stop_release_update_notification_checker()
     await stop_bakery_monitor_heartbeat()
     await close_async_http_client()
     close_sync_http_client()

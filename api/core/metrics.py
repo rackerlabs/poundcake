@@ -130,6 +130,18 @@ POUNDCAKE_SUPPRESSION_SUMMARY_FAILURES = Counter(
     "Total suppression summary lifecycle failures",
 )
 
+POUNDCAKE_RELEASE_UPDATE_CHECKS = Counter(
+    "poundcake_release_update_checks_total",
+    "Total release update advisory checks",
+    ["status"],
+)
+
+POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS = Counter(
+    "poundcake_release_update_notifications_total",
+    "Total release update advisory notification outcomes",
+    ["status"],
+)
+
 # Endpoint deprecation telemetry
 DEPRECATED_ENDPOINT_HITS = Counter(
     "poundcake_deprecated_endpoint_hits_total",
@@ -306,3 +318,13 @@ def record_suppression_summary_ticket(status: str) -> None:
 def record_suppression_summary_failure() -> None:
     """Record suppression lifecycle failure."""
     POUNDCAKE_SUPPRESSION_SUMMARY_FAILURES.inc()
+
+
+def record_release_update_check(status: str) -> None:
+    """Record release update checker status."""
+    POUNDCAKE_RELEASE_UPDATE_CHECKS.labels(status=status).inc()
+
+
+def record_release_update_notification(status: str) -> None:
+    """Record release update advisory delivery status."""
+    POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS.labels(status=status).inc()

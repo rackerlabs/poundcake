@@ -80,6 +80,8 @@ Optional examples:
 - Put `poundcakeImage.pullSecrets` in `00-pull-secret-overrides.yaml` when private GHCR pulls are required.
 - Put non-secret Auth0 or Azure values in `20-auth-overrides.yaml`.
 - Put non-secret Git sync values in `30-git-sync-overrides.yaml`.
+- Release update advisories are enabled by default. Set `releaseUpdateNotifications.enabled: false`
+  only when an environment must suppress advisory communications.
 - Leave `bootstrap.rulesRepoUrl` blank unless you explicitly want bootstrap-managed recipes
   generated from a remote alert-rules repo.
 
@@ -89,6 +91,22 @@ Gateway notes:
   target cluster.
 - For a shared hostname deployment, keep the API route on `/api` and the UI route on `/`.
   Reusing `/` for both creates overlapping `HTTPRoute`s.
+
+## Release Update Advisories
+
+By default, the PoundCake API periodically checks
+`oci://ghcr.io/rackerlabs/charts/poundcake` for a newer chart whose `appVersion` is newer than the
+running app version. When a newer release is found, PoundCake opens one informational advisory
+through each enabled global communications route. It does not run Helm or upgrade itself.
+
+Each available app/chart version is notified once. Closing the remote advisory ticket/message does
+not cause PoundCake to recreate it; a later available release creates a new advisory set. If Bakery
+or global communications routes are unavailable, the checker records a blocked state and retries
+later instead of marking the release notified.
+
+PoundCake controls the advisory title, description, and route context. Bakery controls the final
+provider-native formatting, such as Rackspace Core BBCode, Jira ADF, GitHub Markdown, Discord
+embeds, and notification text for Teams, ServiceNow, and PagerDuty.
 
 ## Optional StackStorm Packs
 

@@ -113,6 +113,8 @@ spec:
               value: {{ .Values.logFormat | quote }}
             - name: POUNDCAKE_APP_VERSION
               value: {{ include "poundcake.poundcakeImageVersion" . | quote }}
+            - name: POUNDCAKE_CHART_VERSION
+              value: {{ .Chart.Version | quote }}
             - name: POUNDCAKE_PROMETHEUS_URL
               value: {{ .Values.prometheus.url | quote }}
             - name: POUNDCAKE_PROMETHEUS_VERIFY_SSL
@@ -369,6 +371,41 @@ spec:
               value: {{ .Values.poundcakeApi.ticketing.catchAllRecipeName | default "fallback-recipe" | quote }}
             - name: POUNDCAKE_BAKERY_RACKSPACE_CONFIRMED_SOLVED_STATUS
               value: {{ .Values.poundcakeApi.ticketing.rackspaceConfirmedSolvedStatus | default "confirmed solved" | quote }}
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_ENABLED
+              value: {{ .Values.releaseUpdateNotifications.enabled | quote }}
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_CHECK_INTERVAL_SECONDS
+              value: {{ .Values.releaseUpdateNotifications.checkIntervalSeconds | quote }}
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_OCI_REPOSITORY
+              value: {{ .Values.releaseUpdateNotifications.ociRepository | quote }}
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_INCLUDE_PRERELEASES
+              value: {{ .Values.releaseUpdateNotifications.includePrereleases | quote }}
+            {{- if .Values.releaseUpdateNotifications.registryAuth.existingSecret }}
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.releaseUpdateNotifications.registryAuth.existingSecret }}
+                  key: {{ .Values.releaseUpdateNotifications.registryAuth.secretKeys.username }}
+                  optional: true
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.releaseUpdateNotifications.registryAuth.existingSecret }}
+                  key: {{ .Values.releaseUpdateNotifications.registryAuth.secretKeys.password }}
+                  optional: true
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.releaseUpdateNotifications.registryAuth.existingSecret }}
+                  key: {{ .Values.releaseUpdateNotifications.registryAuth.secretKeys.token }}
+                  optional: true
+            {{- else }}
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_USERNAME
+              value: ""
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_PASSWORD
+              value: ""
+            - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_TOKEN
+              value: ""
+            {{- end }}
             {{- $bakeryClientSecretName := .Values.bakery.client.auth.existingSecret | default (include "poundcake.bakerySecretName" .) }}
             - name: POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY_ID
               valueFrom:

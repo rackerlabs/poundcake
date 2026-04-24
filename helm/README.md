@@ -40,6 +40,18 @@ bakery:
 Creating the bootstrap secret alone does not enable remote Bakery. PoundCake must be deployed with
 `bakery.client.enabled=true` and `bakery.client.baseUrl` pointing at the external Bakery URL.
 
+## Release Update Advisories
+
+`releaseUpdateNotifications.enabled` defaults to `true`. The API checks the configured OCI chart
+repository every `releaseUpdateNotifications.checkIntervalSeconds` seconds and opens informational
+advisories through the enabled global communications routes when it finds a newer PoundCake
+`appVersion`. PoundCake never upgrades itself.
+
+PoundCake records each available app/chart version after successful delivery, so manually closing
+the remote ticket or notification does not recreate that advisory. If Bakery or global routes are
+not ready, the checker retries later. PoundCake supplies the advisory content and route context;
+Bakery renders the final provider-native format.
+
 ## Installer
 
 Use the repo wrapper for PoundCake:

@@ -417,6 +417,127 @@ def upgrade() -> None:
         unique=False,
     )
 
+    op.create_table(
+        "release_update_notifications",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("oci_repository", sa.String(length=512), nullable=False),
+        sa.Column("current_app_version", sa.String(length=100), nullable=False),
+        sa.Column("current_chart_version", sa.String(length=100), nullable=False),
+        sa.Column("available_app_version", sa.String(length=100), nullable=False),
+        sa.Column("available_chart_version", sa.String(length=100), nullable=False),
+        sa.Column("available_created_at", sa.DateTime(), nullable=True),
+        sa.Column("state", sa.String(length=32), nullable=False),
+        sa.Column("latest_error", sa.Text(), nullable=True),
+        sa.Column("detected_at", sa.DateTime(), nullable=False),
+        sa.Column("notified_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "oci_repository",
+            "available_app_version",
+            "available_chart_version",
+            name="ux_release_update_notifications_release",
+        ),
+    )
+    op.create_index(
+        "ix_release_update_notifications_id",
+        "release_update_notifications",
+        ["id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notifications_oci_repository",
+        "release_update_notifications",
+        ["oci_repository"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notifications_available_app_version",
+        "release_update_notifications",
+        ["available_app_version"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notifications_available_chart_version",
+        "release_update_notifications",
+        ["available_chart_version"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notifications_state",
+        "release_update_notifications",
+        ["state"],
+        unique=False,
+    )
+
+    op.create_table(
+        "release_update_notification_deliveries",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("notification_id", sa.Integer(), nullable=False),
+        sa.Column("route_id", sa.String(length=255), nullable=False),
+        sa.Column("route_label", sa.String(length=255), nullable=False),
+        sa.Column("execution_target", sa.String(length=100), nullable=False),
+        sa.Column("destination_target", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column("provider_config", mysql.JSON(), nullable=True),
+        sa.Column("state", sa.String(length=32), nullable=False),
+        sa.Column("bakery_communication_id", sa.String(length=255), nullable=True),
+        sa.Column("bakery_operation_id", sa.String(length=255), nullable=True),
+        sa.Column("last_error", sa.Text(), nullable=True),
+        sa.Column("delivered_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["notification_id"], ["release_update_notifications.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "notification_id",
+            "route_id",
+            name="ux_release_update_notification_deliveries_route",
+        ),
+    )
+    op.create_index(
+        "ix_release_update_notification_deliveries_id",
+        "release_update_notification_deliveries",
+        ["id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notification_deliveries_notification_id",
+        "release_update_notification_deliveries",
+        ["notification_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notification_deliveries_route_id",
+        "release_update_notification_deliveries",
+        ["route_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notification_deliveries_execution_target",
+        "release_update_notification_deliveries",
+        ["execution_target"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notification_deliveries_state",
+        "release_update_notification_deliveries",
+        ["state"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notification_deliveries_bakery_communication_id",
+        "release_update_notification_deliveries",
+        ["bakery_communication_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_update_notification_deliveries_bakery_operation_id",
+        "release_update_notification_deliveries",
+        ["bakery_operation_id"],
+        unique=False,
+    )
+
     # Alert suppressions
     op.create_table(
         "alert_suppressions",
@@ -706,6 +827,55 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_release_update_notification_deliveries_bakery_operation_id",
+        table_name="release_update_notification_deliveries",
+    )
+    op.drop_index(
+        "ix_release_update_notification_deliveries_bakery_communication_id",
+        table_name="release_update_notification_deliveries",
+    )
+    op.drop_index(
+        "ix_release_update_notification_deliveries_state",
+        table_name="release_update_notification_deliveries",
+    )
+    op.drop_index(
+        "ix_release_update_notification_deliveries_execution_target",
+        table_name="release_update_notification_deliveries",
+    )
+    op.drop_index(
+        "ix_release_update_notification_deliveries_route_id",
+        table_name="release_update_notification_deliveries",
+    )
+    op.drop_index(
+        "ix_release_update_notification_deliveries_notification_id",
+        table_name="release_update_notification_deliveries",
+    )
+    op.drop_index(
+        "ix_release_update_notification_deliveries_id",
+        table_name="release_update_notification_deliveries",
+    )
+    op.drop_table("release_update_notification_deliveries")
+
+    op.drop_index(
+        "ix_release_update_notifications_state",
+        table_name="release_update_notifications",
+    )
+    op.drop_index(
+        "ix_release_update_notifications_available_chart_version",
+        table_name="release_update_notifications",
+    )
+    op.drop_index(
+        "ix_release_update_notifications_available_app_version",
+        table_name="release_update_notifications",
+    )
+    op.drop_index(
+        "ix_release_update_notifications_oci_repository",
+        table_name="release_update_notifications",
+    )
+    op.drop_index("ix_release_update_notifications_id", table_name="release_update_notifications")
+    op.drop_table("release_update_notifications")
+
     op.drop_index(
         "ix_bakery_monitor_state_last_heartbeat_at",
         table_name="bakery_monitor_state",

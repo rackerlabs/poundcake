@@ -527,6 +527,32 @@
         }
       }
     },
+    "releaseUpdateNotifications": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "checkIntervalSeconds": { "type": "integer", "minimum": 60, "default": 21600 },
+        "ociRepository": {
+          "type": "string",
+          "default": "oci://ghcr.io/rackerlabs/charts/poundcake"
+        },
+        "includePrereleases": { "type": "boolean", "default": false },
+        "registryAuth": {
+          "type": "object",
+          "properties": {
+            "existingSecret": { "type": "string", "default": "" },
+            "secretKeys": {
+              "type": "object",
+              "properties": {
+                "username": { "type": "string", "default": "username" },
+                "password": { "type": "string", "default": "password" },
+                "token": { "type": "string", "default": "token" }
+              }
+            }
+          }
+        }
+      }
+    },
     "gateway": {
       "type": "object",
       "properties": {

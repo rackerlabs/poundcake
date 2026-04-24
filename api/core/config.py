@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     # ==========================================================================
     app_name: str = "PoundCake"
     app_version: str = Field(default=__version__)
+    chart_version: str = ""
     debug: bool = False
     testing: bool = Field(
         default_factory=lambda: os.getenv("TESTING", "").strip().lower() in {"1", "true", "yes"}
@@ -458,6 +459,17 @@ class Settings(BaseSettings):
     suppression_lifecycle_enabled: bool = True
     suppression_lifecycle_interval_seconds: int = 30
     suppression_lifecycle_batch_limit: int = 25
+
+    # ==========================================================================
+    # Release Update Advisory Settings
+    # ==========================================================================
+    release_update_notifications_enabled: bool = True
+    release_update_notifications_check_interval_seconds: int = 21600
+    release_update_notifications_oci_repository: str = "oci://ghcr.io/rackerlabs/charts/poundcake"
+    release_update_notifications_include_prereleases: bool = False
+    release_update_notifications_registry_username: str = ""
+    release_update_notifications_registry_password: str = ""
+    release_update_notifications_registry_token: str = ""
 
 
 settings = Settings()

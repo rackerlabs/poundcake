@@ -122,6 +122,31 @@ Relevant keys:
 Bakery server-side values such as `bakery.gateway.*`, `bakery.database.*`, and provider secret
 settings now belong in the standalone Bakery repo.
 
+## Release Update Advisories
+
+PoundCake checks the configured OCI Helm chart repository for newer PoundCake releases and opens
+informational advisory communications through the enabled global communications routes. This is
+enabled by default and never performs an upgrade.
+
+Relevant keys:
+
+| Key | Default | Purpose |
+|---|---|---|
+| `releaseUpdateNotifications.enabled` | `true` | Enables the API background release checker |
+| `releaseUpdateNotifications.checkIntervalSeconds` | `21600` | Poll interval |
+| `releaseUpdateNotifications.ociRepository` | `oci://ghcr.io/rackerlabs/charts/poundcake` | OCI Helm chart repository to inspect |
+| `releaseUpdateNotifications.includePrereleases` | `false` | Includes prerelease tags when selecting the newest release |
+| `releaseUpdateNotifications.registryAuth.existingSecret` | `""` | Optional registry auth secret for private OCI registries |
+
+The checker creates one advisory set per discovered available app/chart version. If an operator
+closes the remote ticket or message, PoundCake still remembers that release as notified and will
+not recreate it. If Bakery or global communications routes are unavailable, PoundCake logs/metrics
+the blocked state and retries later instead of marking the release notified.
+
+Formatting boundary: PoundCake supplies the advisory title, description, route context, and
+provider config. Bakery owns provider-native rendering, including Rackspace Core BBCode, Jira ADF,
+GitHub Markdown, Discord embeds, and Teams/ServiceNow/PagerDuty text.
+
 ## Bootstrap Recipe Repo Values
 
 Bootstrap recipe repo sync is optional. The shipped default is `bootstrap.rulesRepoUrl: ""`.

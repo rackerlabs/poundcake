@@ -398,6 +398,81 @@ class BakeryMonitorState(Base):
     )
 
 
+class ReleaseUpdateNotification(Base):
+    """Durable notification state for one detected PoundCake release."""
+
+    __tablename__ = "release_update_notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "oci_repository",
+            "available_app_version",
+            "available_chart_version",
+            name="ux_release_update_notifications_release",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    oci_repository: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    current_app_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    current_chart_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    available_app_version: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    available_chart_version: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    available_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    state: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
+    latest_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detected_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+    deliveries: Mapped[list["ReleaseUpdateNotificationDelivery"]] = relationship(
+        "ReleaseUpdateNotificationDelivery",
+        back_populates="notification",
+        cascade="all, delete-orphan",
+    )
+
+
+class ReleaseUpdateNotificationDelivery(Base):
+    """Per-global-route delivery state for a release update notification."""
+
+    __tablename__ = "release_update_notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "notification_id",
+            "route_id",
+            name="ux_release_update_notification_deliveries_route",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    notification_id: Mapped[int] = mapped_column(
+        ForeignKey("release_update_notifications.id"), nullable=False, index=True
+    )
+    route_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    route_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    execution_target: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    destination_target: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    provider_config: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    state: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
+    bakery_communication_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    bakery_operation_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+    notification: Mapped["ReleaseUpdateNotification"] = relationship(
+        "ReleaseUpdateNotification",
+        back_populates="deliveries",
+    )
+
+
 class AlertSuppression(Base):
     """Maintenance window for suppressing webhook alerts."""
 
