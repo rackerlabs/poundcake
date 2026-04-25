@@ -553,6 +553,36 @@
         }
       }
     },
+    "git": {
+      "type": "object",
+      "description": "Git-backed import/export settings for alert rules, workflows, and actions",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "repoUrl": { "type": "string", "default": "" },
+        "branch": { "type": "string", "default": "main" },
+        "rulesPath": { "type": "string", "default": "prometheus/rules" },
+        "unmappedRulesPath": { "type": "string", "default": "imported" },
+        "workflowsPath": { "type": "string", "default": "poundcake/workflows" },
+        "actionsPath": { "type": "string", "default": "poundcake/actions" },
+        "filePerAlert": { "type": "boolean", "default": true },
+        "filePattern": { "type": "string", "default": "{alert_name}.yaml" },
+        "userName": { "type": "string", "default": "PoundCake" },
+        "userEmail": { "type": "string", "default": "poundcake@example.com" },
+        "provider": {
+          "type": "string",
+          "enum": ["github", "gitlab", "gitea", "none"],
+          "default": "github"
+        },
+        "existingSecret": { "type": "string", "default": "" },
+        "secretKeys": {
+          "type": "object",
+          "properties": {
+            "token": { "type": "string", "default": "git-token" },
+            "sshKey": { "type": "string", "default": "git-ssh-key" }
+          }
+        }
+      }
+    },
     "gateway": {
       "type": "object",
       "properties": {

@@ -244,6 +244,7 @@ class Settings(BaseSettings):
     git_repo_url: str = ""
     git_branch: str = "main"
     git_rules_path: str = "prometheus/rules"
+    git_unmapped_rules_path: str = "imported"
     git_workflows_path: str = "poundcake/workflows"
     git_actions_path: str = "poundcake/actions"
     git_file_per_alert: bool = True

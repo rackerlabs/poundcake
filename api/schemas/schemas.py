@@ -1223,6 +1223,7 @@ class SettingsResponse(BaseModel):
     git_repo_url: Optional[str] = None
     git_branch: Optional[str] = None
     git_rules_path: Optional[str] = None
+    git_unmapped_rules_path: Optional[str] = None
     git_workflows_path: Optional[str] = None
     git_actions_path: Optional[str] = None
     stackstorm_enabled: bool
@@ -1249,6 +1250,7 @@ class RepoSyncResponse(BaseModel):
     skipped: Optional[Dict[str, int]] = None
     warnings: Optional[List[str]] = None
     cleared: Optional[Dict[str, int]] = None
+    details: Optional[Dict[str, Any]] = None
 
 
 class PrometheusRuleResponse(BaseModel):

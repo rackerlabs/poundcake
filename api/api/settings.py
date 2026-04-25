@@ -51,6 +51,11 @@ async def get_application_settings(
             "git_repo_url": settings.git_repo_url if settings.git_enabled else None,
             "git_branch": settings.git_branch if settings.git_enabled else None,
             "git_rules_path": settings.git_rules_path if settings.git_enabled else None,
+            "git_unmapped_rules_path": (
+                getattr(settings, "git_unmapped_rules_path", "imported")
+                if settings.git_enabled
+                else None
+            ),
             "git_workflows_path": settings.git_workflows_path if settings.git_enabled else None,
             "git_actions_path": settings.git_actions_path if settings.git_enabled else None,
             "stackstorm_enabled": True,

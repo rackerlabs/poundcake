@@ -1787,6 +1787,13 @@ function AlertRulesPage() {
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
+  const exportPreviewMutation = useMutation({
+    mutationFn: () =>
+      apiPost("/api/v1/repo-sync/alert-rules/export-preview", repoSyncResponseSchema),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+
   const importMutation = useMutation({
     mutationFn: () => apiPost("/api/v1/repo-sync/alert-rules/import", repoSyncResponseSchema),
     onSuccess: async (result) => {
@@ -1849,9 +1856,16 @@ function AlertRulesPage() {
         canClear={canClear}
         canEdit={canEdit}
         canImport={settings.prometheus_use_crds}
-        isPending={exportMutation.isPending || importMutation.isPending || clearMutation.isPending || importRecoveryPending}
+        isPending={
+          exportMutation.isPending
+          || exportPreviewMutation.isPending
+          || importMutation.isPending
+          || clearMutation.isPending
+          || importRecoveryPending
+        }
         onClear={() => clearMutation.mutate()}
         onExport={() => exportMutation.mutate()}
+        onPreview={() => exportPreviewMutation.mutate()}
         onImport={() => importMutation.mutate()}
         settings={settings}
       />
@@ -3643,6 +3657,7 @@ function AlertRuleRepoSyncPanel({
   canImport,
   isPending,
   onExport,
+  onPreview,
   onImport,
   onClear,
 }: {
@@ -3652,6 +3667,7 @@ function AlertRuleRepoSyncPanel({
   canImport: boolean;
   isPending: boolean;
   onExport: () => void;
+  onPreview: () => void;
   onImport: () => void;
   onClear: () => void;
 }) {
@@ -3668,6 +3684,7 @@ function AlertRuleRepoSyncPanel({
             <strong>Configured repository</strong>
             <p>{formatRepoLocation(settings.git_repo_url, settings.git_branch)}</p>
             <p>Alert rules directory: {settings.git_rules_path || "-"}</p>
+            <p>Unmapped rules directory: {settings.git_unmapped_rules_path || "imported"}</p>
           </div>
           {!canImport ? (
             <div className="helper-card">
@@ -3685,6 +3702,9 @@ function AlertRuleRepoSyncPanel({
             </div>
           ) : null}
           <div className="form-actions">
+            <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onPreview}>
+              {isPending ? "Working..." : "Preview export"}
+            </button>
             <button className="ghost-button" disabled={!canEdit || isPending} type="button" onClick={onExport}>
               {isPending ? "Working..." : "Export to repo"}
             </button>

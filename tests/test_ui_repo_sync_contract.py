@@ -16,6 +16,7 @@ def test_alert_rules_page_exposes_repo_sync_controls() -> None:
     assert "Only admins can clear live alert rules." in content
     assert '"/api/v1/repo-sync/alert-rules/import"' in content
     assert '"/api/v1/repo-sync/alert-rules/export"' in content
+    assert '"/api/v1/repo-sync/alert-rules/export-preview"' in content
 
 
 def test_workflows_page_uses_combined_repo_sync_modal_flow() -> None:

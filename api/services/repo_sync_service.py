@@ -43,12 +43,18 @@ from api.services.alert_rule_repo import (
     ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
     AlertRuleSource,
     build_alert_rule_repo_index,
+    default_wrapper_key_for_path,
+    delete_rule_from_document,
+    document_has_rules,
     dump_alert_rule_document,
+    dump_round_trip_alert_rule_document,
     iter_rule_groups as iter_alert_rule_groups,
+    load_round_trip_repo_documents,
     load_alert_rule_sources_from_annotations,
     looks_like_repo_relative_rule_path,
     normalize_repo_relative_path,
     render_alert_rule_document,
+    upsert_rule_in_document,
 )
 from api.services.git_manager import get_git_manager
 from api.services.prometheus_crd_manager import get_prometheus_crd_manager
@@ -689,6 +695,13 @@ class RepoSyncService:
         no_change_message: str,
         extra: dict[str, Any],
     ) -> dict[str, Any]:
+        if not changes:
+            return {
+                "status": "success",
+                "message": no_change_message,
+                **extra,
+            }
+
         success, branch_name = await self.git_manager.commit_and_push_files(
             changes,
             commit_message,
@@ -1063,6 +1076,7 @@ class RepoSyncService:
         rule_name: str,
         group_name: str,
         repo_index: dict[str, Any],
+        base_dir: Path | None = None,
     ) -> AlertRuleSource:
         raw_file = str(item.get("file") or "").strip()
         raw_format = str(item.get("source_format") or "").strip()
@@ -1070,66 +1084,297 @@ class RepoSyncService:
 
         if raw_file and raw_format and looks_like_repo_relative_rule_path(raw_file):
             try:
-                return AlertRuleSource(
+                source = AlertRuleSource(
                     relative_path=normalize_repo_relative_path(raw_file),
                     source_format=raw_format,
                     wrapper_key=raw_wrapper,
                 )
+                if base_dir is None or (base_dir / source.relative_path).exists():
+                    return source
             except ValueError:
                 pass
 
         repo_entry = repo_index.get(rule_name)
-        if repo_entry is not None:
+        if repo_entry is not None and str(repo_entry.group_name or "").strip() == group_name:
             return repo_entry.source
 
         if raw_file and looks_like_repo_relative_rule_path(raw_file):
             try:
-                return AlertRuleSource(relative_path=normalize_repo_relative_path(raw_file))
+                source = AlertRuleSource(relative_path=normalize_repo_relative_path(raw_file))
+                if base_dir is None or (base_dir / source.relative_path).exists():
+                    return source
             except ValueError:
                 pass
 
-        file_hint = sanitize_crd_name(str(item.get("crd") or raw_file or rule_name))
-        return AlertRuleSource(
-            relative_path=self.rule_manager._get_file_path(rule_name, group_name, file_hint),
-            source_format=ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+        return self._unmapped_rule_source(
+            item=item,
+            rule_name=rule_name,
+            group_name=group_name,
         )
 
-    async def export_alert_rules(self) -> dict[str, Any]:
+    def _unmapped_rule_source(
+        self,
+        *,
+        item: dict[str, Any],
+        rule_name: str,
+        group_name: str,
+    ) -> AlertRuleSource:
+        unmapped_dir = normalize_repo_relative_path(
+            str(getattr(self.settings, "git_unmapped_rules_path", "imported") or "imported")
+        )
+        file_hint = sanitize_crd_name(str(item.get("crd") or rule_name))
+        if bool(getattr(self.settings, "git_file_per_alert", True)):
+            pattern = str(getattr(self.settings, "git_file_pattern", "{alert_name}.yaml") or "")
+            raw_file_name = pattern.format(
+                alert_name=rule_name,
+                group_name=group_name,
+                crd_name=file_hint,
+            )
+            file_name = PurePosixPath(raw_file_name).name
+        else:
+            file_name = f"{file_hint}.yaml"
+        relative_path = f"{unmapped_dir}/{file_name}"
+        return AlertRuleSource(
+            relative_path=relative_path,
+            source_format=ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+            wrapper_key=default_wrapper_key_for_path(relative_path),
+        )
+
+    async def _build_alert_rule_export_changes(self) -> dict[str, Any]:
         rules = await self._current_alert_rules()
         repo_path = await self._ensure_git_repo()
         rules_dir = _normalize_repo_directory(self.settings.git_rules_path, label="Alert rules")
+        base_dir = repo_path / rules_dir
         try:
-            repo_index = build_alert_rule_repo_index(repo_path / rules_dir)
+            repo_index = build_alert_rule_repo_index(base_dir)
         except ValueError as exc:
             raise RepoSyncError(str(exc)) from exc
 
         files_by_relative_path: dict[str, list[tuple[str, dict[str, Any], AlertRuleSource]]] = {}
+        live_rule_names: set[str] = set()
         for item in rules:
             rule_name = str(
                 item["rule"].get("alert") or item["rule"].get("record") or "rule"
             ).strip()
             group_name = str(item["group"] or "default").strip() or "default"
+            live_rule_names.add(rule_name)
             source = self._rule_source_from_item(
                 item=item,
                 rule_name=rule_name,
                 group_name=group_name,
                 repo_index=repo_index.by_alert_name,
+                base_dir=base_dir,
             )
             files_by_relative_path.setdefault(source.relative_path, []).append(
                 (group_name, item["rule"], source)
             )
 
-        files: dict[str, str] = {}
-        for relative_path, records in sorted(files_by_relative_path.items()):
-            try:
-                document = render_alert_rule_document(records, relative_path=relative_path)
-            except ValueError as exc:
-                raise RepoSyncError(str(exc)) from exc
-            files[f"{rules_dir}/{relative_path}"] = dump_alert_rule_document(
-                document, relative_path
-            )
+        changes: dict[str, str | None] = {}
+        changed_files: list[str] = []
+        added_files: list[str] = []
+        deleted_files: list[str] = []
+        unchanged_files = 0
 
-        changes = await self._build_export_changes(relative_dir=rules_dir, new_files=files)
+        for relative_path, records in sorted(files_by_relative_path.items()):
+            repo_relative_path = f"{rules_dir}/{relative_path}"
+            full_path = base_dir / relative_path
+
+            if not full_path.exists():
+                try:
+                    document = render_alert_rule_document(records, relative_path=relative_path)
+                except ValueError as exc:
+                    raise RepoSyncError(str(exc)) from exc
+                changes[repo_relative_path] = dump_alert_rule_document(document, relative_path)
+                added_files.append(repo_relative_path)
+                continue
+
+            try:
+                documents = load_round_trip_repo_documents(full_path)
+            except Exception as exc:  # noqa: BLE001
+                raise RepoSyncError(
+                    f"Failed to parse alert rule file '{relative_path}': {exc}"
+                ) from exc
+            if len(documents) != 1:
+                raise RepoSyncError(
+                    f"Alert-rule file '{relative_path}' must contain exactly one document for export"
+                )
+
+            document = documents[0]
+            file_changed = False
+            for group_name, live_rule, source in records:
+                rule_name = str(live_rule.get("alert") or live_rule.get("record") or "rule").strip()
+                repo_entry = repo_index.by_alert_name.get(rule_name)
+                repo_rule = repo_entry.rule_data if repo_entry is not None else None
+                if (
+                    repo_entry is not None
+                    and repo_entry.source.relative_path == relative_path
+                    and normalize_rule_data(rule_name, repo_rule or {})
+                    == normalize_rule_data(rule_name, live_rule)
+                ):
+                    continue
+
+                document = upsert_rule_in_document(
+                    document,
+                    source=source,
+                    group_name=group_name,
+                    rule_name=rule_name,
+                    rule_data=live_rule,
+                )
+                file_changed = True
+
+            for repo_entry in sorted(
+                repo_index.by_alert_name.values(),
+                key=lambda entry: entry.alert_name,
+            ):
+                if repo_entry.source.relative_path != relative_path:
+                    continue
+                if not repo_entry.rule_data.get("alert"):
+                    continue
+                if repo_entry.alert_name in live_rule_names:
+                    continue
+                document, deleted = delete_rule_from_document(
+                    document,
+                    source=repo_entry.source,
+                    group_name=repo_entry.group_name,
+                    rule_name=repo_entry.alert_name,
+                )
+                file_changed = file_changed or deleted
+
+            if not file_changed:
+                unchanged_files += 1
+                continue
+
+            if not document_has_rules(document):
+                changes[repo_relative_path] = None
+                deleted_files.append(repo_relative_path)
+                continue
+
+            updated_text = dump_round_trip_alert_rule_document(document, relative_path)
+            if updated_text == full_path.read_text(encoding="utf-8"):
+                unchanged_files += 1
+                continue
+            changes[repo_relative_path] = updated_text
+            changed_files.append(repo_relative_path)
+
+        obsolete_entries_by_path: dict[str, list[Any]] = {}
+        for repo_entry in sorted(
+            repo_index.by_alert_name.values(),
+            key=lambda entry: (entry.source.relative_path, entry.alert_name),
+        ):
+            relative_path = repo_entry.source.relative_path
+            if relative_path in files_by_relative_path:
+                continue
+            if not repo_entry.rule_data.get("alert"):
+                continue
+            if repo_entry.alert_name in live_rule_names:
+                continue
+            obsolete_entries_by_path.setdefault(relative_path, []).append(repo_entry)
+
+        for relative_path, obsolete_entries in sorted(obsolete_entries_by_path.items()):
+            full_path = base_dir / relative_path
+            repo_relative_path = f"{rules_dir}/{relative_path}"
+            if not full_path.exists() or repo_relative_path in changes:
+                continue
+
+            try:
+                documents = load_round_trip_repo_documents(full_path)
+            except Exception as exc:  # noqa: BLE001
+                raise RepoSyncError(
+                    f"Failed to parse alert rule file '{relative_path}': {exc}"
+                ) from exc
+            if len(documents) != 1:
+                raise RepoSyncError(
+                    f"Alert-rule file '{relative_path}' must contain exactly one document for export"
+                )
+
+            document = documents[0]
+            file_changed = False
+            for repo_entry in obsolete_entries:
+                document, deleted = delete_rule_from_document(
+                    document,
+                    source=repo_entry.source,
+                    group_name=repo_entry.group_name,
+                    rule_name=repo_entry.alert_name,
+                )
+                file_changed = file_changed or deleted
+
+            if not file_changed:
+                unchanged_files += 1
+                continue
+            if not document_has_rules(document):
+                changes[repo_relative_path] = None
+                deleted_files.append(repo_relative_path)
+                continue
+
+            updated_text = dump_round_trip_alert_rule_document(document, relative_path)
+            if updated_text == full_path.read_text(encoding="utf-8"):
+                unchanged_files += 1
+                continue
+            changes[repo_relative_path] = updated_text
+            changed_files.append(repo_relative_path)
+
+        return {
+            "rules": rules,
+            "rules_dir": rules_dir,
+            "changes": changes,
+            "changed_files": sorted(changed_files),
+            "added_files": sorted(added_files),
+            "deleted_files": sorted(deleted_files),
+            "unchanged_files": unchanged_files,
+        }
+
+    def _alert_rule_export_details(self, plan: dict[str, Any]) -> dict[str, Any]:
+        changes = plan["changes"]
+        return {
+            "changed_files": plan["changed_files"],
+            "added_files": plan["added_files"],
+            "deleted_files": plan["deleted_files"],
+            "change_count": len(changes),
+            "unchanged_files": plan["unchanged_files"],
+        }
+
+    async def export_alert_rules_preview(self) -> dict[str, Any]:
+        plan = await self._build_alert_rule_export_changes()
+        rules = plan["rules"]
+        details = self._alert_rule_export_details(plan)
+        return {
+            "status": "success",
+            "message": (
+                "Alert-rule export preview has no changes."
+                if not plan["changes"]
+                else "Alert-rule export preview found changes."
+            ),
+            "exported": {
+                "alert_rules": len(rules),
+                "files_changed": len(plan["changed_files"]),
+                "files_added": len(plan["added_files"]),
+                "files_deleted": len(plan["deleted_files"]),
+                "rules_path": plan["rules_dir"],
+            },
+            "details": details,
+        }
+
+    async def export_alert_rules(self) -> dict[str, Any]:
+        plan = await self._build_alert_rule_export_changes()
+        rules = plan["rules"]
+        changes = plan["changes"]
+        rules_dir = plan["rules_dir"]
+        details = self._alert_rule_export_details(plan)
+        if not changes:
+            return {
+                "status": "success",
+                "message": "Alert rules are already in sync with Git.",
+                "exported": {
+                    "alert_rules": len(rules),
+                    "files_written": 0,
+                    "files_changed": 0,
+                    "files_added": 0,
+                    "files_deleted": 0,
+                    "rules_path": rules_dir,
+                },
+                "details": details,
+            }
+
         return await self._finalize_git_export(
             changes=changes,
             commit_message=f"Export PoundCake alert rules\n\nAlert rules: {len(rules)}",
@@ -1137,16 +1382,23 @@ class RepoSyncService:
             pr_description=(
                 "## PoundCake alert-rule export\n\n"
                 f"- Alert rules: `{len(rules)}`\n"
-                f"- Rule directory: `{rules_dir}`"
+                f"- Rule directory: `{rules_dir}`\n"
+                f"- Changed files: `{len(plan['changed_files'])}`\n"
+                f"- Added files: `{len(plan['added_files'])}`\n"
+                f"- Deleted files: `{len(plan['deleted_files'])}`"
             ),
             success_message="Exported alert rules to Git.",
             no_change_message="Alert rules are already in sync with Git.",
             extra={
                 "exported": {
                     "alert_rules": len(rules),
-                    "files_written": len(files),
+                    "files_written": len(changes),
+                    "files_changed": len(plan["changed_files"]),
+                    "files_added": len(plan["added_files"]),
+                    "files_deleted": len(plan["deleted_files"]),
                     "rules_path": rules_dir,
-                }
+                },
+                "details": details,
             },
         )
 

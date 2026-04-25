@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import io
 import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -148,6 +150,35 @@ def load_repo_documents(path: Path) -> list[Any]:
         payload = json.loads(text)
         return [] if payload is None else [payload]
     return [payload for payload in yaml.safe_load_all(text) if payload is not None]
+
+
+def _round_trip_yaml() -> Any:
+    """Create a ruamel.yaml round-trip loader/dumper."""
+    yaml_module = importlib.import_module("ruamel.yaml")
+    yaml_rt = yaml_module.YAML()
+    yaml_rt.preserve_quotes = True
+    yaml_rt.indent(mapping=2, sequence=4, offset=2)
+    yaml_rt.width = 4096
+    return yaml_rt
+
+
+def load_round_trip_repo_documents(path: Path) -> list[Any]:
+    """Load repo YAML while preserving formatting metadata for changed-file writes."""
+    if path.suffix.lower() == ".json":
+        return load_repo_documents(path)
+    yaml_rt = _round_trip_yaml()
+    text = path.read_text(encoding="utf-8")
+    return [payload for payload in yaml_rt.load_all(text) if payload is not None]
+
+
+def dump_round_trip_alert_rule_document(document: Any, relative_path: str) -> str:
+    """Serialize an edited repo document while preserving YAML style where possible."""
+    if relative_path.endswith(".json"):
+        return json.dumps(document, indent=2, sort_keys=False) + "\n"
+    yaml_rt = _round_trip_yaml()
+    stream = io.StringIO()
+    yaml_rt.dump(document, stream)
+    return stream.getvalue()
 
 
 def build_alert_rule_repo_index(base_dir: Path) -> AlertRuleRepoIndex:

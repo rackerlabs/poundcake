@@ -81,6 +81,7 @@ export const appSettingsSchema = strictObject({
   git_repo_url: z.string().nullable(),
   git_branch: z.string().nullable(),
   git_rules_path: z.string().nullable(),
+  git_unmapped_rules_path: z.string().nullable().optional(),
   git_workflows_path: z.string().nullable(),
   git_actions_path: z.string().nullable(),
   stackstorm_enabled: z.boolean(),
@@ -104,6 +105,7 @@ export const repoSyncResponseSchema = strictObject({
   skipped: z.record(z.number()).nullable().optional(),
   warnings: z.array(z.string()).nullable().optional(),
   cleared: z.record(z.number()).nullable().optional(),
+  details: z.record(z.unknown()).nullable().optional(),
 });
 export type RepoSyncResponse = z.infer<typeof repoSyncResponseSchema>;
 

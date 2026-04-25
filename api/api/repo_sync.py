@@ -33,6 +33,24 @@ async def export_alert_rules(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.post("/repo-sync/alert-rules/export-preview", response_model=RepoSyncResponse)
+async def export_alert_rules_preview(
+    request: Request,
+    _user: str | None = Depends(require_auth_if_enabled),
+) -> RepoSyncResponse:
+    """Preview alert-rule export changes without committing or opening a PR."""
+    try:
+        return RepoSyncResponse.model_validate(await RepoSyncService().export_alert_rules_preview())
+    except RepoSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(
+            "Failed to preview alert rule export",
+            extra={"req_id": request.state.req_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.post("/repo-sync/alert-rules/import", response_model=RepoSyncResponse)
 async def import_alert_rules(
     request: Request,

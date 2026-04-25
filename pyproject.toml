@@ -38,6 +38,7 @@ dependencies = [
     "python-multipart>=0.0.18",
     "python-dateutil>=2.9.0",
     "PyYAML>=6.0.2",
+    "ruamel.yaml>=0.18.10",
     "prometheus-client>=0.21.0",
     "redis>=5.2.1",
 ]

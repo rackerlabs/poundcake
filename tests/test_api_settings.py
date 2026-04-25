@@ -37,6 +37,7 @@ def test_settings_reports_git_repo_paths_when_enabled():
         git_repo_url="https://github.com/example/config.git",
         git_branch="config-main",
         git_rules_path="prometheus/rules",
+        git_unmapped_rules_path="imported",
         git_workflows_path="poundcake/workflows",
         git_actions_path="poundcake/actions",
         app_version="2.0.142",
@@ -65,5 +66,6 @@ def test_settings_reports_git_repo_paths_when_enabled():
     assert payload["git_repo_url"] == "https://github.com/example/config.git"
     assert payload["git_branch"] == "config-main"
     assert payload["git_rules_path"] == "prometheus/rules"
+    assert payload["git_unmapped_rules_path"] == "imported"
     assert payload["git_workflows_path"] == "poundcake/workflows"
     assert payload["git_actions_path"] == "poundcake/actions"

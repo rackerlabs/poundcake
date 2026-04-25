@@ -47,6 +47,7 @@ kubernetes==35.0.0
 python-dateutil==2.9.0.post0
 pytz==2025.2
 PyYAML==6.0.3
+ruamel.yaml==0.18.16
 redis==7.3.0
 
 # JSON Logging

@@ -133,6 +133,8 @@ spec:
               value: {{ .Values.git.branch | quote }}
             - name: POUNDCAKE_GIT_RULES_PATH
               value: {{ .Values.git.rulesPath | quote }}
+            - name: POUNDCAKE_GIT_UNMAPPED_RULES_PATH
+              value: {{ .Values.git.unmappedRulesPath | quote }}
             - name: POUNDCAKE_GIT_WORKFLOWS_PATH
               value: {{ .Values.git.workflowsPath | quote }}
             - name: POUNDCAKE_GIT_ACTIONS_PATH

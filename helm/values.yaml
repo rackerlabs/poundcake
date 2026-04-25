@@ -539,6 +539,9 @@ git:
   # Path to Prometheus rules directory in repo
   rulesPath: prometheus/rules
 
+  # Directory under rulesPath for exported rules whose original repo file cannot be determined
+  unmappedRulesPath: imported
+
   # Path to workflow export/import directory in repo
   workflowsPath: poundcake/workflows
 
