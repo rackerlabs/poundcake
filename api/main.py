@@ -40,6 +40,10 @@ from api.services.release_update_notifications import (
     start_release_update_notification_checker,
     stop_release_update_notification_checker,
 )
+from api.services.watchdog_heartbeat import (
+    start_watchdog_heartbeat_checker,
+    stop_watchdog_heartbeat_checker,
+)
 
 # Configure logging with custom formatter that includes req_id
 setup_logging()
@@ -53,7 +57,9 @@ async def lifespan(app: FastAPI):
     await wait_for_stackstorm_ready()
     await start_bakery_monitor_heartbeat()
     await start_release_update_notification_checker()
+    await start_watchdog_heartbeat_checker()
     yield
+    await stop_watchdog_heartbeat_checker()
     await stop_release_update_notification_checker()
     await stop_bakery_monitor_heartbeat()
     await close_async_http_client()

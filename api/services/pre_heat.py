@@ -19,6 +19,7 @@ from api.core.logging import get_logger
 from api.core.metrics import record_order_resolved_before_dish_start
 from api.core.statuses import can_transition_to_resolving, is_order_terminal, should_keep_active
 from api.services.suppression_service import find_first_matching_suppression, save_suppressed_event
+from api.services.watchdog_heartbeat import is_watchdog_alert, record_watchdog_heartbeat
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -207,6 +208,19 @@ async def pre_heat(payload: dict, db: AsyncSession, req_id: str) -> dict:
                 "fingerprint": fingerprint,
             },
         )
+
+        if settings.watchdog_heartbeat_enabled and is_watchdog_alert(labels):
+            if await _in_transaction(db):
+                await db.rollback()
+            watchdog_result = await record_watchdog_heartbeat(
+                db,
+                alert_data,
+                fingerprint=fingerprint,
+                alert_name=alert_name,
+                req_id=req_id,
+            )
+            results.append(watchdog_result)
+            continue
 
         if settings.suppressions_enabled:
             suppression = await find_first_matching_suppression(

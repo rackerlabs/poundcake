@@ -398,6 +398,30 @@ class BakeryMonitorState(Base):
     )
 
 
+class WatchdogHeartbeatState(Base):
+    """Durable deadman/Watchdog heartbeat state."""
+
+    __tablename__ = "watchdog_heartbeat_state"
+    __table_args__ = (UniqueConstraint("heartbeat_key", name="ux_watchdog_heartbeat_state_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    heartbeat_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    alert_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    alert_fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    last_received_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    missing_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    synthetic_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id"), nullable=True, index=True
+    )
+    last_payload: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False
+    )
+
+
 class ReleaseUpdateNotification(Base):
     """Durable notification state for one detected PoundCake release."""
 

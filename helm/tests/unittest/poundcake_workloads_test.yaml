@@ -149,6 +149,21 @@ tests:
             value: "true"
         documentIndex: 0
 
+  - it: wires watchdog heartbeat env defaults
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_WATCHDOG_HEARTBEAT_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_WATCHDOG_HEARTBEAT_MISSING_THRESHOLD_SECONDS
+            value: "300"
+        documentIndex: 0
+
   - it: wires release update advisory env defaults and registry auth secret
     set:
       releaseUpdateNotifications.enabled: true
@@ -164,7 +179,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_CHART_VERSION
-            value: "0.2.109"
+            value: "0.2.110"
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env

@@ -324,7 +324,9 @@ def upgrade() -> None:
         sa.Column("destination_target", sa.String(length=255), nullable=False, server_default=""),
         sa.Column("bakery_ticket_id", sa.String(length=36), nullable=True),
         sa.Column("bakery_operation_id", sa.String(length=36), nullable=True),
-        sa.Column("lifecycle_state", sa.String(length=32), nullable=False, server_default="pending"),
+        sa.Column(
+            "lifecycle_state", sa.String(length=32), nullable=False, server_default="pending"
+        ),
         sa.Column("remote_state", sa.String(length=64), nullable=True),
         sa.Column("writable", sa.Boolean(), nullable=False, server_default=sa.text("1")),
         sa.Column("reopenable", sa.Boolean(), nullable=False, server_default=sa.text("0")),
@@ -414,6 +416,67 @@ def upgrade() -> None:
         "ix_bakery_monitor_state_last_heartbeat_at",
         "bakery_monitor_state",
         ["last_heartbeat_at"],
+        unique=False,
+    )
+
+    op.create_table(
+        "watchdog_heartbeat_state",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("heartbeat_key", sa.String(length=255), nullable=False),
+        sa.Column("alert_name", sa.String(length=255), nullable=True),
+        sa.Column("alert_fingerprint", sa.String(length=255), nullable=True),
+        sa.Column("last_status", sa.String(length=32), nullable=True),
+        sa.Column("last_seen_at", sa.DateTime(), nullable=True),
+        sa.Column("last_received_at", sa.DateTime(), nullable=True),
+        sa.Column("missing_since", sa.DateTime(), nullable=True),
+        sa.Column("synthetic_order_id", sa.Integer(), nullable=True),
+        sa.Column("last_payload", mysql.JSON(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["synthetic_order_id"], ["orders.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("heartbeat_key", name="ux_watchdog_heartbeat_state_key"),
+    )
+    op.create_index(
+        "ix_watchdog_heartbeat_state_id",
+        "watchdog_heartbeat_state",
+        ["id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_watchdog_heartbeat_state_heartbeat_key",
+        "watchdog_heartbeat_state",
+        ["heartbeat_key"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_watchdog_heartbeat_state_last_status",
+        "watchdog_heartbeat_state",
+        ["last_status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_watchdog_heartbeat_state_last_seen_at",
+        "watchdog_heartbeat_state",
+        ["last_seen_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_watchdog_heartbeat_state_last_received_at",
+        "watchdog_heartbeat_state",
+        ["last_received_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_watchdog_heartbeat_state_missing_since",
+        "watchdog_heartbeat_state",
+        ["missing_since"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_watchdog_heartbeat_state_synthetic_order_id",
+        "watchdog_heartbeat_state",
+        ["synthetic_order_id"],
         unique=False,
     )
 
@@ -875,6 +938,33 @@ def downgrade() -> None:
     )
     op.drop_index("ix_release_update_notifications_id", table_name="release_update_notifications")
     op.drop_table("release_update_notifications")
+
+    op.drop_index(
+        "ix_watchdog_heartbeat_state_synthetic_order_id",
+        table_name="watchdog_heartbeat_state",
+    )
+    op.drop_index(
+        "ix_watchdog_heartbeat_state_missing_since",
+        table_name="watchdog_heartbeat_state",
+    )
+    op.drop_index(
+        "ix_watchdog_heartbeat_state_last_received_at",
+        table_name="watchdog_heartbeat_state",
+    )
+    op.drop_index(
+        "ix_watchdog_heartbeat_state_last_seen_at",
+        table_name="watchdog_heartbeat_state",
+    )
+    op.drop_index(
+        "ix_watchdog_heartbeat_state_last_status",
+        table_name="watchdog_heartbeat_state",
+    )
+    op.drop_index(
+        "ix_watchdog_heartbeat_state_heartbeat_key",
+        table_name="watchdog_heartbeat_state",
+    )
+    op.drop_index("ix_watchdog_heartbeat_state_id", table_name="watchdog_heartbeat_state")
+    op.drop_table("watchdog_heartbeat_state")
 
     op.drop_index(
         "ix_bakery_monitor_state_last_heartbeat_at",

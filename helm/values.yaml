@@ -232,6 +232,12 @@ releaseUpdateNotifications:
       password: password
       token: token
 
+watchdogHeartbeat:
+  enabled: true
+  expectedIntervalSeconds: 60
+  missingThresholdSeconds: 300
+  checkIntervalSeconds: 30
+
 # StackStorm integration (external chart managed by install script).
 stackstorm:
   # External StackStorm release name used for service/secret defaults.

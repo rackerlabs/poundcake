@@ -285,6 +285,10 @@ class Settings(BaseSettings):
     chef_missing_execution_timeout_seconds: int = 60
     incident_reconcile_interval_seconds: int = 30
     incident_reconcile_limit: int = 25
+    watchdog_heartbeat_enabled: bool = True
+    watchdog_heartbeat_expected_interval_seconds: int = 60
+    watchdog_heartbeat_missing_threshold_seconds: int = 300
+    watchdog_heartbeat_check_interval_seconds: int = 30
 
     log_level: str = "INFO"
     log_format: str = "console"  # Change to 'json' for production/Helm

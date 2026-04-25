@@ -144,6 +144,45 @@ async def test_pre_heat_firing_increments_existing():
 
 
 @pytest.mark.asyncio
+async def test_pre_heat_watchdog_firing_records_heartbeat_without_order():
+    db = AsyncMock()
+    db.begin = Mock(return_value=DummyBegin())
+    db.in_transaction = Mock(return_value=False)
+    record = AsyncMock(
+        return_value={
+            "status": "watchdog_heartbeat_recorded",
+            "order_id": None,
+            "fingerprint": "watchdog-fp",
+            "alert_name": "watchdog-warning",
+            "alert_status": "firing",
+        }
+    )
+
+    payload = {
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {
+                    "alertname": "watchdog-warning",
+                    "group_name": "watchdog",
+                    "severity": "warning",
+                },
+                "annotations": {},
+                "fingerprint": "watchdog-fp",
+            }
+        ]
+    }
+
+    with patch("api.services.pre_heat.record_watchdog_heartbeat", record):
+        result = await pre_heat(payload, db=db, req_id="REQ-WATCHDOG")
+
+    assert result["status"] == "watchdog_heartbeat_recorded"
+    assert result["order_id"] is None
+    db.execute.assert_not_called()
+    record.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_pre_heat_correlates_child_alert_to_active_root_order():
     parent = _make_order(status="waiting_clear")
     parent.labels = {

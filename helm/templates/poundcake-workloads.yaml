@@ -381,6 +381,14 @@ spec:
               value: {{ .Values.releaseUpdateNotifications.ociRepository | quote }}
             - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_INCLUDE_PRERELEASES
               value: {{ .Values.releaseUpdateNotifications.includePrereleases | quote }}
+            - name: POUNDCAKE_WATCHDOG_HEARTBEAT_ENABLED
+              value: {{ .Values.watchdogHeartbeat.enabled | quote }}
+            - name: POUNDCAKE_WATCHDOG_HEARTBEAT_EXPECTED_INTERVAL_SECONDS
+              value: {{ .Values.watchdogHeartbeat.expectedIntervalSeconds | quote }}
+            - name: POUNDCAKE_WATCHDOG_HEARTBEAT_MISSING_THRESHOLD_SECONDS
+              value: {{ .Values.watchdogHeartbeat.missingThresholdSeconds | quote }}
+            - name: POUNDCAKE_WATCHDOG_HEARTBEAT_CHECK_INTERVAL_SECONDS
+              value: {{ .Values.watchdogHeartbeat.checkIntervalSeconds | quote }}
             {{- if .Values.releaseUpdateNotifications.registryAuth.existingSecret }}
             - name: POUNDCAKE_RELEASE_UPDATE_NOTIFICATIONS_REGISTRY_USERNAME
               valueFrom:
