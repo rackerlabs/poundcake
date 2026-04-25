@@ -286,6 +286,54 @@ def _build_remediation_context(order: Order) -> dict[str, Any]:
     }
 
 
+def _build_correlation_context(order: Order) -> dict[str, Any]:
+    labels = dict(order.labels or {})
+    raw_data = dict(order.raw_data or {})
+    stored = raw_data.get("correlation") if isinstance(raw_data.get("correlation"), dict) else {}
+    children = [child for child in stored.get("children", []) if isinstance(child, dict)]
+    return {
+        "scope": _first_text(labels.get("correlation_scope"), stored.get("scope")),
+        "key": _first_text(labels.get("correlation_key"), stored.get("key")),
+        "affected_node": _first_text(labels.get("affected_node"), labels.get("node")),
+        "root_cause": _first_text(labels.get("root_cause")).lower() == "true",
+        "child_count": int(stored.get("child_count") or len(children)),
+        "active_child_count": int(
+            stored.get("active_child_count")
+            if stored.get("active_child_count") is not None
+            else len([child for child in children if child.get("status") != "resolved"])
+        ),
+        "child_counts_by_group": stored.get("child_counts_by_group") or {},
+        "affected_namespaces": stored.get("affected_namespaces") or [],
+        "affected_workloads": stored.get("affected_workloads") or [],
+        "affected_nodes": stored.get("affected_nodes") or [],
+        "children": children[:25],
+    }
+
+
+def _format_correlation_summary(correlation: dict[str, Any]) -> str:
+    if not correlation.get("root_cause") or int(correlation.get("child_count") or 0) <= 0:
+        return ""
+    parts = [
+        "Correlated child alerts: "
+        f"{correlation.get('child_count')} total, {correlation.get('active_child_count')} active."
+    ]
+    namespaces = [str(item) for item in correlation.get("affected_namespaces") or [] if item]
+    if namespaces:
+        parts.append(
+            "Namespaces: " + ", ".join(namespaces[:10]) + (" ..." if len(namespaces) > 10 else "")
+        )
+    workloads = [str(item) for item in correlation.get("affected_workloads") or [] if item]
+    if workloads:
+        parts.append(
+            "Workloads: " + ", ".join(workloads[:10]) + (" ..." if len(workloads) > 10 else "")
+        )
+    counts = correlation.get("child_counts_by_group") or {}
+    if isinstance(counts, dict) and counts:
+        rendered = ", ".join(f"{name}={count}" for name, count in sorted(counts.items())[:10])
+        parts.append("Alert groups: " + rendered)
+    return "\n".join(parts)
+
+
 def build_canonical_communication_context(
     *,
     order: Order,
@@ -319,6 +367,18 @@ def build_canonical_communication_context(
         url = _first_text(annotations.get(key))
         if url:
             links.append({"label": label, "url": url})
+
+    correlation = _build_correlation_context(order)
+    detail = _first_text(
+        semantic_text.get("detail"),
+        payload.get("message"),
+        payload.get("comment"),
+        payload.get("resolution_notes"),
+        annotations.get("description"),
+    )
+    correlation_summary = _format_correlation_summary(correlation)
+    if correlation_summary:
+        detail = f"{detail}\n\n{correlation_summary}" if detail else correlation_summary
 
     return {
         "schema_version": 1,
@@ -372,13 +432,7 @@ def build_canonical_communication_context(
                 payload.get("description"),
                 annotations.get("summary"),
             ),
-            "detail": _first_text(
-                semantic_text.get("detail"),
-                payload.get("message"),
-                payload.get("comment"),
-                payload.get("resolution_notes"),
-                annotations.get("description"),
-            ),
+            "detail": detail,
             "resolution": _first_text(
                 semantic_text.get("resolution"),
                 payload.get("resolution_notes"),
@@ -386,5 +440,6 @@ def build_canonical_communication_context(
                 payload.get("message"),
             ),
         },
+        "correlation": correlation,
         "remediation": _build_remediation_context(order),
     }

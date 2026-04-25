@@ -81,6 +81,71 @@ def test_build_canonical_communication_context_includes_alert_links_and_route_co
     assert canonical["remediation"]["summary"]["total"] == 0
 
 
+def test_build_canonical_communication_context_includes_correlation_summary() -> None:
+    now = datetime.now(timezone.utc)
+    order = Order(
+        id=8,
+        req_id="REQ-8",
+        fingerprint="root-fp",
+        alert_status="firing",
+        processing_status="waiting_clear",
+        is_active=True,
+        remediation_outcome="none",
+        clear_timeout_sec=None,
+        clear_deadline_at=None,
+        clear_timed_out_at=None,
+        auto_close_eligible=False,
+        alert_group_name="kube-node-not-ready",
+        severity="critical",
+        instance="node-1",
+        counter=3,
+        labels={
+            "alertname": "kube-node-not-ready-critical",
+            "severity": "critical",
+            "correlation_key": "node/node-1",
+            "correlation_scope": "node",
+            "affected_node": "node-1",
+            "root_cause": "true",
+        },
+        annotations={"summary": "Node is not ready.", "description": "Node node-1 is not ready."},
+        raw_data={
+            "correlation": {
+                "child_count": 2,
+                "active_child_count": 1,
+                "child_counts_by_group": {"kube-pod-not-ready": 2},
+                "affected_namespaces": ["openstack"],
+                "affected_workloads": ["openstack/nova-api-1"],
+                "children": [
+                    {
+                        "fingerprint": "child-fp",
+                        "alert_name": "kube-pod-not-ready-warning",
+                        "group_name": "kube-pod-not-ready",
+                        "status": "firing",
+                    }
+                ],
+            }
+        },
+        starts_at=now,
+        ends_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+    canonical = build_canonical_communication_context(
+        order=order,
+        execution_target="rackspace_core",
+        destination_target="primary-core",
+        operation="open",
+        execution_payload={"context": {}},
+    )
+
+    assert canonical["correlation"]["root_cause"] is True
+    assert canonical["correlation"]["child_count"] == 2
+    assert "Correlated child alerts: 2 total, 1 active." in canonical["text"]["detail"]
+    assert "Namespaces: openstack" in canonical["text"]["detail"]
+    assert "Alert groups: kube-pod-not-ready=2" in canonical["text"]["detail"]
+
+
 def _make_recipe_ingredient(
     *,
     ingredient_id: int,

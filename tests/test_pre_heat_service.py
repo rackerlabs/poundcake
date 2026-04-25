@@ -16,14 +16,18 @@ from api.services.pre_heat import pre_heat
 
 
 class ScalarResult:
-    def __init__(self, first=None):
+    def __init__(self, first=None, items=None):
         self._first = first
+        self._items = items if items is not None else ([] if first is None else [first])
 
     def scalars(self):
         return self
 
     def first(self):
         return self._first
+
+    def all(self):
+        return self._items
 
     def scalar(self):
         return self._first
@@ -137,6 +141,126 @@ async def test_pre_heat_firing_increments_existing():
         result = await pre_heat(payload, db=db, req_id="REQ-1")
     assert result["status"] == "counter_incremented"
     assert result["order_id"] == existing.id
+
+
+@pytest.mark.asyncio
+async def test_pre_heat_correlates_child_alert_to_active_root_order():
+    parent = _make_order(status="waiting_clear")
+    parent.labels = {
+        "alertname": "kube-node-not-ready-warning",
+        "correlation_key": "node/node-1",
+        "correlation_scope": "node",
+        "affected_node": "node-1",
+        "root_cause": "true",
+    }
+    db = AsyncMock()
+    db.begin = Mock(return_value=DummyBegin())
+    db.execute = AsyncMock(side_effect=[ScalarResult(first=None), ScalarResult(items=[parent])])
+
+    payload = {
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {
+                    "alertname": "kube-pod-not-ready-warning",
+                    "group_name": "kube-pod-not-ready",
+                    "severity": "warning",
+                    "correlation_key": "node/node-1",
+                    "correlation_scope": "node",
+                    "affected_node": "node-1",
+                    "namespace": "openstack",
+                    "pod": "nova-api-1",
+                },
+                "annotations": {"summary": "Pod is not ready"},
+                "fingerprint": "child-fp",
+                "startsAt": "2026-02-10T00:00:00Z",
+            }
+        ]
+    }
+
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await pre_heat(payload, db=db, req_id="REQ-1")
+
+    assert result["status"] == "correlated_child"
+    assert result["order_id"] == parent.id
+    assert parent.counter == 2
+    correlation = parent.raw_data["correlation"]
+    assert correlation["child_count"] == 1
+    assert correlation["active_child_count"] == 1
+    assert correlation["affected_namespaces"] == ["openstack"]
+    assert correlation["affected_workloads"] == ["openstack/nova-api-1"]
+    assert correlation["child_counts_by_group"] == {"kube-pod-not-ready": 1}
+    db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pre_heat_updates_correlated_child_resolution_on_parent():
+    parent = _make_order(status="waiting_clear")
+    parent.labels = {
+        "alertname": "kube-node-not-ready-warning",
+        "correlation_key": "node/node-1",
+        "correlation_scope": "node",
+        "affected_node": "node-1",
+        "root_cause": "true",
+    }
+    parent.raw_data = {
+        "correlation": {
+            "children": [
+                {
+                    "fingerprint": "child-fp",
+                    "alert_name": "kube-pod-not-ready-warning",
+                    "group_name": "kube-pod-not-ready",
+                    "status": "firing",
+                    "counter": 1,
+                }
+            ]
+        }
+    }
+    db = AsyncMock()
+    db.begin = Mock(return_value=DummyBegin())
+    db.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=None),
+            ScalarResult(first=None),
+            ScalarResult(items=[parent]),
+        ]
+    )
+
+    payload = {
+        "alerts": [
+            {
+                "status": "resolved",
+                "labels": {
+                    "alertname": "kube-pod-not-ready-warning",
+                    "group_name": "kube-pod-not-ready",
+                    "severity": "warning",
+                    "correlation_key": "node/node-1",
+                    "correlation_scope": "node",
+                    "affected_node": "node-1",
+                    "namespace": "openstack",
+                    "pod": "nova-api-1",
+                },
+                "annotations": {"summary": "Pod is not ready"},
+                "fingerprint": "child-fp",
+                "endsAt": "2026-02-10T00:05:00Z",
+            }
+        ]
+    }
+
+    with patch(
+        "api.services.pre_heat.find_first_matching_suppression",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await pre_heat(payload, db=db, req_id="REQ-1")
+
+    assert result["status"] == "correlated_child"
+    child = parent.raw_data["correlation"]["children"][0]
+    assert child["status"] == "resolved"
+    assert child["counter"] == 2
+    assert parent.raw_data["correlation"]["active_child_count"] == 0
 
 
 @pytest.mark.asyncio
