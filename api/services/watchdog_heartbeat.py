@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,6 +77,18 @@ async def _find_active_missing_order(db: AsyncSession) -> Order | None:
     return result.scalars().first()
 
 
+def _mark_order_resolved(order: Order, *, now: datetime) -> None:
+    order.alert_status = "resolved"
+    order.ends_at = now
+    if can_transition_to_resolving(order.processing_status, "alert_resolved"):
+        order.processing_status = "resolving"
+    if is_order_terminal(order.processing_status):
+        order.is_active = False
+    else:
+        order.is_active = should_keep_active(order.processing_status)
+    order.updated_at = now
+
+
 async def _resolve_missing_order(
     db: AsyncSession,
     state: WatchdogHeartbeatState,
@@ -87,21 +99,51 @@ async def _resolve_missing_order(
     if not order or str(order.alert_status or "").lower() == "resolved":
         return None
 
-    order.alert_status = "resolved"
-    order.ends_at = now
-    if can_transition_to_resolving(order.processing_status, "alert_resolved"):
-        order.processing_status = "resolving"
-    if is_order_terminal(order.processing_status):
-        order.is_active = False
-    else:
-        order.is_active = should_keep_active(order.processing_status)
-    order.updated_at = now
+    _mark_order_resolved(order, now=now)
     state.synthetic_order_id = order.id
     state.updated_at = now
     logger.info(
         "Watchdog heartbeat resumed; synthetic incident resolved", extra={"order_id": order.id}
     )
     return order.id
+
+
+async def _find_active_legacy_watchdog_orders(db: AsyncSession) -> list[Order]:
+    result = await db.execute(
+        select(Order)
+        .where(
+            Order.is_active.is_(True),
+            or_(
+                Order.fingerprint.is_(None),
+                Order.fingerprint != WATCHDOG_MISSING_FINGERPRINT,
+            ),
+            or_(
+                Order.alert_group_name == WATCHDOG_HEARTBEAT_KEY,
+                Order.alert_group_name == "Watchdog",
+                Order.alert_group_name.like("watchdog-%"),
+                Order.alert_group_name.like("watchdog_%"),
+            ),
+        )
+        .order_by(Order.created_at.asc())
+        .with_for_update()
+    )
+    return list(result.scalars().all())
+
+
+async def _resolve_legacy_watchdog_orders(db: AsyncSession, *, now: datetime) -> list[int]:
+    resolved_order_ids: list[int] = []
+    for order in await _find_active_legacy_watchdog_orders(db):
+        if str(order.alert_status or "").lower() == "resolved":
+            continue
+        _mark_order_resolved(order, now=now)
+        resolved_order_ids.append(order.id)
+
+    if resolved_order_ids:
+        logger.info(
+            "Watchdog heartbeat resumed; legacy incidents resolved",
+            extra={"order_ids": resolved_order_ids},
+        )
+    return resolved_order_ids
 
 
 async def record_watchdog_heartbeat(
@@ -149,10 +191,12 @@ async def record_watchdog_heartbeat(
         state.updated_at = now
 
         resolved_order_id = None
+        resolved_legacy_order_ids: list[int] = []
         if alert_status == "firing":
             state.last_seen_at = now
             state.missing_since = None
             resolved_order_id = await _resolve_missing_order(db, state, now=now)
+            resolved_legacy_order_ids = await _resolve_legacy_watchdog_orders(db, now=now)
 
     logger.info(
         "Watchdog heartbeat recorded",
@@ -161,11 +205,13 @@ async def record_watchdog_heartbeat(
             "alert_status": alert_status,
             "fingerprint": fingerprint,
             "resolved_order_id": resolved_order_id,
+            "resolved_legacy_order_ids": resolved_legacy_order_ids,
         },
     )
     return {
         "status": "watchdog_heartbeat_recorded",
         "order_id": resolved_order_id,
+        "legacy_order_ids": resolved_legacy_order_ids,
         "fingerprint": fingerprint,
         "alert_name": alert_name,
         "alert_status": alert_status,
