@@ -1414,6 +1414,96 @@ async def test_export_alert_rules_noop_tolerates_promql_block_scalar_whitespace(
 
 
 @pytest.mark.asyncio
+async def test_export_alert_rules_update_preserves_unchanged_rule_formatting(
+    tmp_path: Path,
+) -> None:
+    alerts_dir = tmp_path / "alerts" / "kubernetes"
+    alerts_dir.mkdir(parents=True)
+    original_text = """additionalPrometheusRulesMap:
+  kube-node-not-ready:
+    groups:
+      - name: kube-node-not-ready
+        rules:
+          - alert: kube-node-not-ready-warning
+            expr: >-
+              kube_node_status_condition{condition="Ready", status="true"} == 0
+
+              and on (node) kube_node_spec_unschedulable == 0
+            for: 5m
+            labels:
+              severity: warning
+              group_name: kube-node-not-ready
+              node_hostname: '{{ reReplaceAll ":.*" "" $labels.instance }}'
+            annotations:
+              description: >-
+                Node {{ $labels.node }} has been unready for more than 5 minutes.
+              runbook_url: default_runbook_url
+              summary: Node is not ready.
+              dashboard_url: default_dashboard_url
+"""
+    (alerts_dir / "kube-node-not-ready.yaml").write_text(original_text, encoding="utf-8")
+
+    service = RepoSyncService()
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_rules_path="alerts",
+        git_file_per_alert=True,
+        prometheus_use_crds=True,
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+    service._current_alert_rules = AsyncMock(
+        return_value=[
+            {
+                "group": "kube-node-not-ready",
+                "crd": "kube-node-not-ready",
+                "file": "kubernetes/kube-node-not-ready.yaml",
+                "source_format": ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+                "wrapper_key": "kube-node-not-ready",
+                "rule": {
+                    "alert": "kube-node-not-ready-warning",
+                    "expr": (
+                        'kube_node_status_condition{condition="Ready", status="true"} == 0\n'
+                        "and on (node) kube_node_spec_unschedulable == 0"
+                    ),
+                    "for": "5m",
+                    "labels": {
+                        "severity": "warning",
+                        "group_name": "kube-node-not-ready",
+                        "node_hostname": "{{ $labels.node }}",
+                        "affected_node": "{{ $labels.node }}",
+                        "correlation_scope": "node",
+                        "correlation_key": "node/{{ $labels.node }}",
+                        "root_cause": "true",
+                    },
+                    "annotations": {
+                        "description": (
+                            "Node {{ $labels.node }} has been unready for more than 5 minutes."
+                        ),
+                        "runbook_url": "default_runbook_url",
+                        "summary": "Node is not ready.",
+                        "dashboard_url": "default_dashboard_url",
+                    },
+                },
+            },
+        ]
+    )
+
+    result = await service.export_alert_rules()
+
+    assert result["status"] == "success"
+    assert result["details"]["changed_files"] == ["alerts/kubernetes/kube-node-not-ready.yaml"]
+    assert service.git_manager.last_changes is not None
+    updated_text = service.git_manager.last_changes["alerts/kubernetes/kube-node-not-ready.yaml"]
+    assert updated_text is not None
+    assert "expr: >-" in updated_text
+    assert "description: >-" in updated_text
+    assert "annotations:\n              description:" in updated_text
+    assert "affected_node: '{{ $labels.node }}'" in updated_text
+    assert "correlation_key: node/{{ $labels.node }}" in updated_text
+
+
+@pytest.mark.asyncio
 async def test_export_alert_rules_scans_repo_when_annotation_is_stale(
     tmp_path: Path,
 ) -> None:

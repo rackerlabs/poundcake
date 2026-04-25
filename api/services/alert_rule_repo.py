@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import io
 import json
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -18,6 +19,15 @@ ALERT_RULE_SOURCE_FORMAT_GROUPS = "groups"
 ALERT_RULE_SOURCE_FORMAT_RULES = "rules"
 ALERT_RULE_SOURCE_FORMAT_SPEC_GROUPS = "spec.groups"
 ALERT_RULE_REPO_SUFFIXES = {".json", ".yaml", ".yml"}
+ALERT_RULE_FIELDS = {
+    "alert",
+    "record",
+    "expr",
+    "for",
+    "labels",
+    "annotations",
+    "keep_firing_for",
+}
 
 
 @dataclass(frozen=True)
@@ -310,6 +320,110 @@ def _ensure_group_entry(groups: list[dict[str, Any]], group_name: str) -> dict[s
     return group
 
 
+def _normalize_promql_expr_for_compare(value: str) -> str:
+    """Normalize PromQL whitespace outside quoted strings for semantic comparisons."""
+    result: list[str] = []
+    quote: str | None = None
+    escaped = False
+    pending_space = False
+    idx = 0
+
+    while idx < len(value):
+        char = value[idx]
+
+        if quote is None and char == "#":
+            while idx < len(value) and value[idx] not in "\r\n":
+                idx += 1
+            pending_space = True
+            continue
+
+        if quote is None and char.isspace():
+            pending_space = True
+            idx += 1
+            continue
+
+        if quote is None and char in {'"', "'", "`"}:
+            if pending_space and result:
+                result.append(" ")
+            pending_space = False
+            quote = char
+            escaped = False
+            result.append(char)
+            idx += 1
+            continue
+
+        if quote is not None:
+            result.append(char)
+            if quote != "`" and char == "\\" and not escaped:
+                escaped = True
+            elif char == quote and not escaped:
+                quote = None
+                escaped = False
+            else:
+                escaped = False
+            idx += 1
+            continue
+
+        if pending_space and result:
+            result.append(" ")
+        pending_space = False
+        result.append(char)
+        idx += 1
+
+    return "".join(result).strip()
+
+
+def _mapping_payload_matches(existing: Any, payload: Any) -> bool:
+    if isinstance(existing, MutableMapping) and isinstance(payload, MutableMapping):
+        return dict(existing) == dict(payload)
+    return existing == payload
+
+
+def _merge_mapping_preserving_order(
+    existing: MutableMapping[str, Any], payload: MutableMapping[str, Any]
+) -> None:
+    for key in list(existing.keys()):
+        if key not in payload:
+            del existing[key]
+
+    for key, value in payload.items():
+        current = existing.get(key)
+        if _mapping_payload_matches(current, value):
+            continue
+        if isinstance(current, MutableMapping) and isinstance(value, MutableMapping):
+            _merge_mapping_preserving_order(current, value)
+        else:
+            existing[key] = value
+
+
+def _rule_field_matches(key: str, existing: Any, value: Any) -> bool:
+    if key == "expr" and isinstance(existing, str) and isinstance(value, str):
+        return _normalize_promql_expr_for_compare(existing) == _normalize_promql_expr_for_compare(
+            value
+        )
+    return _mapping_payload_matches(existing, value)
+
+
+def _merge_rule_payload(existing: Any, payload: dict[str, Any]) -> Any:
+    if not isinstance(existing, MutableMapping):
+        return payload
+
+    for key in list(existing.keys()):
+        if key in ALERT_RULE_FIELDS and key not in payload:
+            del existing[key]
+
+    for key, value in payload.items():
+        if key in existing and _rule_field_matches(key, existing[key], value):
+            continue
+        current = existing.get(key)
+        if isinstance(current, MutableMapping) and isinstance(value, MutableMapping):
+            _merge_mapping_preserving_order(current, value)
+        else:
+            existing[key] = value
+
+    return existing
+
+
 def upsert_rule_in_document(
     document: Any,
     *,
@@ -327,10 +441,10 @@ def upsert_rule_in_document(
         rules = group.setdefault("rules", [])
         for idx, existing in enumerate(list(rules)):
             if (
-                isinstance(existing, dict)
+                isinstance(existing, MutableMapping)
                 and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
             ):
-                rules[idx] = payload
+                rules[idx] = _merge_rule_payload(existing, payload)
                 break
         else:
             rules.append(payload)
@@ -350,10 +464,10 @@ def upsert_rule_in_document(
             document["rules"] = rules
         for idx, existing in enumerate(list(rules)):
             if (
-                isinstance(existing, dict)
+                isinstance(existing, MutableMapping)
                 and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
             ):
-                rules[idx] = payload
+                rules[idx] = _merge_rule_payload(existing, payload)
                 break
         else:
             rules.append(payload)
@@ -392,10 +506,10 @@ def upsert_rule_in_document(
     rules = group.setdefault("rules", [])
     for idx, existing in enumerate(list(rules)):
         if (
-            isinstance(existing, dict)
+            isinstance(existing, MutableMapping)
             and str(existing.get("alert") or existing.get("record") or "").strip() == rule_name
         ):
-            rules[idx] = payload
+            rules[idx] = _merge_rule_payload(existing, payload)
             break
     else:
         rules.append(payload)
