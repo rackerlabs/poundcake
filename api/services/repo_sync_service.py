@@ -151,6 +151,68 @@ def _yaml_text(payload: dict[str, Any]) -> str:
     return yaml.safe_dump(payload, sort_keys=False)
 
 
+def _normalize_promql_expr_for_compare(value: str) -> str:
+    """Normalize PromQL whitespace outside quoted strings for semantic comparisons."""
+    result: list[str] = []
+    quote: str | None = None
+    escaped = False
+    pending_space = False
+    idx = 0
+
+    while idx < len(value):
+        char = value[idx]
+
+        if quote is None and char == "#":
+            while idx < len(value) and value[idx] not in "\r\n":
+                idx += 1
+            pending_space = True
+            continue
+
+        if quote is None and char.isspace():
+            pending_space = True
+            idx += 1
+            continue
+
+        if quote is None and char in {'"', "'", "`"}:
+            if pending_space and result:
+                result.append(" ")
+            pending_space = False
+            quote = char
+            escaped = False
+            result.append(char)
+            idx += 1
+            continue
+
+        if quote is not None:
+            result.append(char)
+            if quote != "`" and char == "\\" and not escaped:
+                escaped = True
+            elif char == quote and not escaped:
+                quote = None
+                escaped = False
+            else:
+                escaped = False
+            idx += 1
+            continue
+
+        if pending_space and result:
+            result.append(" ")
+        pending_space = False
+        result.append(char)
+        idx += 1
+
+    return "".join(result).strip()
+
+
+def _normalize_rule_data_for_compare(rule_name: str, rule_data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize alert rule data for semantic export comparisons."""
+    normalized = normalize_rule_data(rule_name, rule_data)
+    expr = normalized.get("expr")
+    if isinstance(expr, str):
+        normalized["expr"] = _normalize_promql_expr_for_compare(expr)
+    return normalized
+
+
 def _is_skippable_invalid_alert_rule_result(result: dict[str, Any]) -> bool:
     """Return True when a CRD write failure is an invalid-rule validation error."""
     code = result.get("code")
@@ -1208,8 +1270,8 @@ class RepoSyncService:
                 if (
                     repo_entry is not None
                     and repo_entry.source.relative_path == relative_path
-                    and normalize_rule_data(rule_name, repo_rule or {})
-                    == normalize_rule_data(rule_name, live_rule)
+                    and _normalize_rule_data_for_compare(rule_name, repo_rule or {})
+                    == _normalize_rule_data_for_compare(rule_name, live_rule)
                 ):
                     continue
 

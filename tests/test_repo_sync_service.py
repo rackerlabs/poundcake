@@ -1343,6 +1343,77 @@ async def test_export_alert_rules_noop_does_not_commit_or_rewrite(
 
 
 @pytest.mark.asyncio
+async def test_export_alert_rules_noop_tolerates_promql_block_scalar_whitespace(
+    tmp_path: Path,
+) -> None:
+    alerts_dir = tmp_path / "alerts" / "mariadb"
+    alerts_dir.mkdir(parents=True)
+    original_text = """additionalPrometheusRulesMap:
+  mariadb-backup-failure:
+    groups:
+      - name: mariadb-backup-failure
+        rules:
+          - alert: mariadb-backup-failure-warning
+            expr: 'time() - kube_cronjob_status_last_successful_time{cronjob="mariadb-backup", namespace="openstack"} > 86400 or
+
+              time() - kube_cronjob_status_last_successful_time{cronjob="mariadb-backup", namespace="monitoring"} > 86400
+
+              '
+            for: 1h
+            labels:
+              severity: warning
+              group_name: mariadb-backup-failure
+            annotations:
+              summary: Last MariaDB backup not successful within 1 hour of scheduled run
+"""
+    (alerts_dir / "mariadb-backup-failure.yaml").write_text(original_text, encoding="utf-8")
+
+    service = RepoSyncService()
+    service.settings = SimpleNamespace(
+        git_enabled=True,
+        git_repo_url="https://github.com/example/config.git",
+        git_rules_path="alerts",
+        git_file_per_alert=True,
+        prometheus_use_crds=True,
+    )
+    service.git_manager = _FakeGitManager(tmp_path)
+    service._current_alert_rules = AsyncMock(
+        return_value=[
+            {
+                "group": "mariadb-backup-failure",
+                "crd": "mariadb-backup-failure",
+                "file": "mariadb/mariadb-backup-failure.yaml",
+                "source_format": ALERT_RULE_SOURCE_FORMAT_ADDITIONAL_MAP,
+                "wrapper_key": "mariadb-backup-failure",
+                "rule": {
+                    "alert": "mariadb-backup-failure-warning",
+                    "expr": (
+                        'time() - kube_cronjob_status_last_successful_time{cronjob="mariadb-backup", namespace="openstack"} > 86400 or\n'
+                        'time() - kube_cronjob_status_last_successful_time{cronjob="mariadb-backup", namespace="monitoring"} > 86400'
+                    ),
+                    "for": "1h",
+                    "labels": {
+                        "severity": "warning",
+                        "group_name": "mariadb-backup-failure",
+                    },
+                    "annotations": {
+                        "summary": "Last MariaDB backup not successful within 1 hour of scheduled run"
+                    },
+                },
+            },
+        ]
+    )
+
+    result = await service.export_alert_rules()
+
+    assert result["status"] == "success"
+    assert result["exported"]["files_written"] == 0
+    assert result["details"]["change_count"] == 0
+    assert service.git_manager.last_changes is None
+    assert (alerts_dir / "mariadb-backup-failure.yaml").read_text(encoding="utf-8") == original_text
+
+
+@pytest.mark.asyncio
 async def test_export_alert_rules_scans_repo_when_annotation_is_stale(
     tmp_path: Path,
 ) -> None:
