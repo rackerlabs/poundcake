@@ -227,6 +227,9 @@ async def test_reconcile_waiting_ticket_close_notifies_once_and_then_completes(
     assert order.processing_status == "complete"
     assert order.is_active is False
     assert notify.await_count == 1
+    note_payload = notify.await_args.kwargs["payload"]
+    assert "PoundCake did not remediate or validate a fix" in note_payload["comment"]
+    assert "ticket remains open for human investigation" in note_payload["comment"]
     assert second["actions"] == ["complete_incident"]
     db.flush.assert_awaited()
 

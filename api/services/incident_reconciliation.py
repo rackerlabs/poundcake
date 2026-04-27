@@ -200,8 +200,8 @@ def _clear_ticket_note(order: Order, communication: OrderCommunication) -> str:
     route = _route_metadata(order, communication)
     route_label = str(route.get("route_label") or communication.execution_target).strip()
     return (
-        f"Alert {order.alert_group_name} is no longer firing, but PoundCake did not validate a "
-        f"successful automated fix. The {route_label} ticket remains open for human "
+        f"Alert {order.alert_group_name} is no longer firing, but PoundCake did not remediate "
+        f"or validate a fix. The {route_label} ticket remains open for human "
         "investigation; PoundCake will keep the incident active until the ticket is closed."
     )
 
