@@ -20,6 +20,17 @@ KNOWN_LINK_FIELDS = (
     ("investigation_url", "Investigation"),
     ("silence_url", "Silence"),
 )
+NODE_LABEL_FIELDS = (
+    "affected_node",
+    "node",
+    "k8s_node_name",
+    "host_name",
+    "node_hostname",
+    "hostname",
+    "host",
+    "service_instance_id",
+    "instance",
+)
 RESULT_TEXT_PRIORITY = (
     "stdout",
     "stderr",
@@ -83,6 +94,10 @@ def _truncate(text: str, limit: int) -> str:
     if limit <= 3:
         return text[:limit]
     return text[: limit - 3].rstrip() + "..."
+
+
+def _affected_node_from_labels(labels: dict[str, Any]) -> str:
+    return _first_text(*(labels.get(key) for key in NODE_LABEL_FIELDS))
 
 
 def _result_scalar_lines(value: dict[str, Any]) -> list[str]:
@@ -291,10 +306,17 @@ def _build_correlation_context(order: Order) -> dict[str, Any]:
     raw_data = dict(order.raw_data or {})
     stored = raw_data.get("correlation") if isinstance(raw_data.get("correlation"), dict) else {}
     children = [child for child in stored.get("children", []) if isinstance(child, dict)]
+    affected_node = _affected_node_from_labels(labels)
+    raw_affected_nodes = (
+        stored.get("affected_nodes") if isinstance(stored.get("affected_nodes"), list) else []
+    )
+    affected_nodes = [str(item).strip() for item in raw_affected_nodes if str(item or "").strip()]
+    if affected_node and affected_node not in affected_nodes:
+        affected_nodes.append(affected_node)
     return {
         "scope": _first_text(labels.get("correlation_scope"), stored.get("scope")),
         "key": _first_text(labels.get("correlation_key"), stored.get("key")),
-        "affected_node": _first_text(labels.get("affected_node"), labels.get("node")),
+        "affected_node": affected_node,
         "root_cause": _first_text(labels.get("root_cause")).lower() == "true",
         "child_count": int(stored.get("child_count") or len(children)),
         "active_child_count": int(
@@ -305,7 +327,7 @@ def _build_correlation_context(order: Order) -> dict[str, Any]:
         "child_counts_by_group": stored.get("child_counts_by_group") or {},
         "affected_namespaces": stored.get("affected_namespaces") or [],
         "affected_workloads": stored.get("affected_workloads") or [],
-        "affected_nodes": stored.get("affected_nodes") or [],
+        "affected_nodes": affected_nodes,
         "children": children[:25],
     }
 
@@ -369,6 +391,9 @@ def build_canonical_communication_context(
             links.append({"label": label, "url": url})
 
     correlation = _build_correlation_context(order)
+    alert_instance = _first_text(
+        order.instance, labels.get("instance"), correlation.get("affected_node")
+    )
     detail = _first_text(
         semantic_text.get("detail"),
         payload.get("message"),
@@ -412,7 +437,7 @@ def build_canonical_communication_context(
             "severity": _first_text(order.severity, labels.get("severity"), "unknown"),
             "status": _first_text(order.alert_status),
             "fingerprint": _first_text(order.fingerprint),
-            "instance": _first_text(order.instance, labels.get("instance")),
+            "instance": alert_instance,
             "starts_at": _iso(order.starts_at),
             "ends_at": _iso(order.ends_at),
             "labels": labels,

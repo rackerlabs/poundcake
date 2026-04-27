@@ -122,3 +122,94 @@ async def test_bakery_adapter_polls_operation_and_maps_failed_terminal_status(
     )
     assert result.status == "failed"
     assert "unrecoverable" in str(result.error_message)
+
+
+@pytest.mark.asyncio
+async def test_bakery_adapter_preserves_managed_route_context_when_reopening(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    update_mock = AsyncMock(
+        return_value=BakeryTicketAccepted(
+            ticket_id="INC-3",
+            operation_id="op-reopen",
+            action="update",
+            status="queued",
+            created_at="2026-03-19T00:00:00Z",
+        )
+    )
+    notify_mock = AsyncMock(
+        return_value=BakeryTicketAccepted(
+            ticket_id="INC-3",
+            operation_id="op-notify",
+            action="notify",
+            status="queued",
+            created_at="2026-03-19T00:00:00Z",
+        )
+    )
+    monkeypatch.setattr(
+        "api.services.execution_adapters.bakery.update_ticket_with_key",
+        update_mock,
+    )
+    monkeypatch.setattr(
+        "api.services.execution_adapters.bakery.add_ticket_comment_with_key",
+        notify_mock,
+    )
+    monkeypatch.setattr(
+        "api.services.execution_adapters.bakery.poll_operation",
+        AsyncMock(
+            return_value=BakeryTicketOperation(
+                operation_id="op-notify",
+                ticket_id="INC-3",
+                action="notify",
+                status="succeeded",
+                attempt_count=1,
+                max_attempts=5,
+                created_at="2026-03-19T00:00:00Z",
+                updated_at="2026-03-19T00:00:00Z",
+            )
+        ),
+    )
+    managed_context = {
+        "provider_type": "rackspace_core",
+        "destination_target": "",
+        "provider_config": {"account_number": "1234567"},
+        "poundcake_policy": {
+            "scope": "fallback",
+            "owner_key": "fallback",
+            "route_id": "core",
+            "label": "Rackspace Core",
+            "execution_target": "rackspace_core",
+            "destination_target": "",
+            "provider_config": {"account_number": "1234567"},
+        },
+    }
+
+    adapter = BakeryExecutionAdapter()
+    result = await adapter.execute_once(
+        ExecutionContext(
+            engine="bakery",
+            execution_target="rackspace_core",
+            execution_payload={
+                "title": "Alert requires attention",
+                "message": "No matching workflow is configured.",
+                "context": managed_context,
+            },
+            execution_parameters={"operation": "open"},
+            req_id="REQ-BAKERY-3",
+            context={
+                "order_id": 2,
+                "recipe_ingredient_id": 10,
+                "bakery_ticket_id": "INC-3",
+                "communication_reuse_mode": "reopen",
+            },
+        )
+    )
+
+    assert result.status == "succeeded"
+    reopen_payload = update_mock.await_args.kwargs["payload"]
+    assert reopen_payload["state"] == "open"
+    assert reopen_payload["context"]["poundcake_policy"]["route_id"] == "core"
+    assert reopen_payload["context"]["attributes"]["status"] == "New"
+    comment_payload = notify_mock.await_args.kwargs["payload"]
+    assert comment_payload["comment"] == "No matching workflow is configured."
+    assert comment_payload["context"]["poundcake_policy"]["route_id"] == "core"

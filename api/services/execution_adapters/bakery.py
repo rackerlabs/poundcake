@@ -59,10 +59,31 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         return "PoundCake updated an existing communication route."
 
     @staticmethod
-    def _reopen_payload(target: str) -> dict[str, Any]:
+    def _payload_context(payload: dict[str, Any]) -> dict[str, Any]:
+        context = payload.get("context")
+        return dict(context) if isinstance(context, dict) else {}
+
+    @classmethod
+    def _comment_payload(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        comment_payload: dict[str, Any] = {"comment": cls._payload_comment(payload)}
+        context = cls._payload_context(payload)
+        if context:
+            comment_payload["context"] = context
+        return comment_payload
+
+    @classmethod
+    def _reopen_payload(cls, target: str, payload: dict[str, Any]) -> dict[str, Any]:
+        context = cls._payload_context(payload)
+        reopen_payload: dict[str, Any] = {"state": "open"}
         if target == "rackspace_core":
-            return {"context": {"attributes": {"status": "New"}}}
-        return {"state": "open"}
+            attributes = context.get("attributes")
+            context["attributes"] = {
+                **(attributes if isinstance(attributes, dict) else {}),
+                "status": "New",
+            }
+        if context:
+            reopen_payload["context"] = context
+        return reopen_payload
 
     def validate(self, ctx: ExecutionContext) -> str | None:
         payload = ctx.execution_payload if isinstance(ctx.execution_payload, dict) else {}
@@ -112,13 +133,13 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                         await update_ticket_with_key(
                             req_id=ctx.req_id,
                             ticket_id=ticket_id,
-                            payload=self._reopen_payload(target),
+                            payload=self._reopen_payload(target, payload),
                             idempotency_key=idem_key,
                         )
                     accepted = await add_ticket_comment_with_key(
                         req_id=ctx.req_id,
                         ticket_id=ticket_id,
-                        payload={"comment": self._payload_comment(payload)},
+                        payload=self._comment_payload(payload),
                         idempotency_key=idem_key,
                     )
                 else:

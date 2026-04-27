@@ -146,6 +146,55 @@ def test_build_canonical_communication_context_includes_correlation_summary() ->
     assert "Alert groups: kube-pod-not-ready=2" in canonical["text"]["detail"]
 
 
+def test_build_canonical_communication_context_uses_node_label_when_instance_missing() -> None:
+    now = datetime.now(timezone.utc)
+    order = Order(
+        id=11,
+        req_id="REQ-11",
+        fingerprint="fp-11",
+        alert_status="firing",
+        processing_status="new",
+        is_active=True,
+        remediation_outcome="none",
+        clear_timeout_sec=None,
+        clear_deadline_at=None,
+        clear_timed_out_at=None,
+        auto_close_eligible=False,
+        alert_group_name="node-memory-major-pages-faults",
+        severity="warning",
+        instance=None,
+        counter=1,
+        labels={
+            "alertname": "NodeMemoryMajorPagesFaults",
+            "group_name": "node-memory-major-pages-faults",
+            "severity": "warning",
+            "k8s_node_name": "472292-storage01",
+            "host_name": "472292-storage01",
+        },
+        annotations={
+            "summary": "Memory major page faults are occurring at a high rate.",
+            "description": "Memory major pages are occurring at very high rate at , 500 major page faults per second.",
+        },
+        raw_data={},
+        starts_at=now,
+        ends_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+    canonical = build_canonical_communication_context(
+        order=order,
+        execution_target="rackspace_core",
+        destination_target="primary-core",
+        operation="open",
+        execution_payload={"context": {}},
+    )
+
+    assert canonical["alert"]["instance"] == "472292-storage01"
+    assert canonical["correlation"]["affected_node"] == "472292-storage01"
+    assert canonical["correlation"]["affected_nodes"] == ["472292-storage01"]
+
+
 def _make_recipe_ingredient(
     *,
     ingredient_id: int,
