@@ -122,6 +122,63 @@ interface ToastMessage {
   message: string;
 }
 
+const INCIDENT_STATUS_FILTERS = [
+  { value: "new", label: "New" },
+  { value: "processing", label: "Processing" },
+  { value: "resolving", label: "Resolving" },
+  { value: "waiting_clear", label: "Waiting clear" },
+  { value: "waiting_ticket_close", label: "Waiting ticket close" },
+  { value: "escalation", label: "Escalation" },
+  { value: "complete", label: "Complete" },
+  { value: "failed", label: "Failed" },
+  { value: "canceled", label: "Canceled" },
+];
+
+const INCIDENT_LABEL_SEARCH_KEYS = [
+  "alertname",
+  "cluster",
+  "namespace",
+  "horizontalpodautoscaler",
+  "hpa",
+  "deployment",
+  "statefulset",
+  "daemonset",
+  "replicaset",
+  "workload",
+  "pod",
+  "container",
+  "persistentvolumeclaim",
+  "service",
+  "job",
+  "endpoint",
+  "affected_node",
+  "k8s_node_name",
+  "node_hostname",
+  "node",
+  "host_name",
+  "hostname",
+  "instance",
+];
+
+const INCIDENT_VISIBLE_LABEL_KEYS = [
+  "alertname",
+  "namespace",
+  "horizontalpodautoscaler",
+  "deployment",
+  "statefulset",
+  "daemonset",
+  "workload",
+  "pod",
+  "container",
+  "service",
+  "job",
+  "endpoint",
+  "affected_node",
+  "node_hostname",
+  "instance",
+  "cluster",
+];
+
 const ruleSchema = z.object({
   name: z.string().min(1, "Rule name is required"),
   group: z.string().min(1, "Group name is required"),
@@ -855,9 +912,14 @@ function IncidentsPage() {
     }
     const haystack = [
       incident.alert_group_name,
+      incidentSummary(incident),
+      incidentDescription(incident),
+      incidentPrimaryResource(incident),
       incident.instance,
       incident.severity,
       incident.req_id,
+      incident.fingerprint,
+      ...incidentSearchValues(incident),
     ]
       .filter(Boolean)
       .join(" ")
@@ -901,11 +963,9 @@ function IncidentsPage() {
           Lifecycle
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option value="">All</option>
-            <option value="new">New</option>
-            <option value="processing">Processing</option>
-            <option value="complete">Complete</option>
-            <option value="failed">Failed</option>
-            <option value="canceled">Canceled</option>
+            {INCIDENT_STATUS_FILTERS.map((status) => (
+              <option key={status.value} value={status.value}>{status.label}</option>
+            ))}
           </select>
         </label>
         <label className="toolbar-search">
@@ -932,9 +992,12 @@ function IncidentsPage() {
                   <div>
                     <strong>{incident.alert_group_name}</strong>
                     <p>
-                      {incident.instance || "No instance"} • {incident.severity || "unknown severity"} •{" "}
+                      {incidentPrimaryResource(incident)} - {incident.severity || "unknown severity"} -{" "}
                       {incident.communications.length} route(s)
                     </p>
+                    {incidentSummary(incident) !== incident.alert_group_name ? (
+                      <p className="incident-row-summary">{incidentSummary(incident)}</p>
+                    ) : null}
                   </div>
                   <div className="feed-meta">
                     <StatusBadge status={incident.processing_status}>{incident.processing_status}</StatusBadge>
@@ -982,6 +1045,12 @@ function IncidentDetail({
   const notificationRoutes = order.communications.filter(
     (route) => route.route_kind !== "ticketing",
   );
+  const summary = incidentSummary(order);
+  const description = incidentDescription(order);
+  const resource = incidentPrimaryResource(order);
+  const scopeFields = incidentScopeFields(order);
+  const detailLinks = incidentLinks(order);
+  const labelEntries = incidentVisibleLabelEntries(order);
 
   return (
     <div className="detail-stack">
@@ -990,7 +1059,7 @@ function IncidentDetail({
           <div className="eyebrow">Incident #{order.id}</div>
           <h3>{order.alert_group_name}</h3>
           <p>
-            {order.instance || "No instance"} • {order.severity || "unknown severity"} • started{" "}
+            {resource} - {order.severity || "unknown severity"} - started{" "}
             {formatLongDate(order.starts_at)}
           </p>
         </div>
@@ -1008,6 +1077,53 @@ function IncidentDetail({
         <KeyValue label="Auto-close eligible" value={String(order.auto_close_eligible)} />
         <KeyValue label="Clear deadline" value={formatLongDate(order.clear_deadline_at)} />
       </div>
+
+      {order.processing_status === "waiting_clear" ? (
+        <div className="helper-card">
+          <strong>Alert is still firing</strong>
+          <p>
+            PoundCake is waiting for Alertmanager to report this incident as cleared. Use the
+            alert details below to investigate the affected resource.
+          </p>
+        </div>
+      ) : null}
+
+      <section className="alert-context">
+        <div className="section-heading">
+          <h4>Alert details</h4>
+          <p>Prometheus labels, annotations, and source links carried by the incident.</p>
+        </div>
+        <div className="alert-context-grid">
+          <div className="alert-context-main">
+            <strong>{summary}</strong>
+            <p>{description || "No alert description was provided by the source alert."}</p>
+          </div>
+          <div className="scope-grid">
+            {scopeFields.map((field) => (
+              <KeyValue key={field.label} label={field.label} value={field.value} />
+            ))}
+          </div>
+        </div>
+        {detailLinks.length ? (
+          <div className="link-list">
+            {detailLinks.map((link) => (
+              <a href={link.url} key={`${link.label}-${link.url}`} rel="noreferrer" target="_blank">
+                {link.label}
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {labelEntries.length ? (
+          <div className="label-chip-list">
+            {labelEntries.map((entry) => (
+              <span className="label-chip" key={entry.key}>
+                <span>{entry.key}</span>
+                <strong>{entry.value}</strong>
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       <section>
         <div className="section-heading">
@@ -4047,6 +4163,170 @@ function PageLoading({ message }: { message: string }) {
 
 function PageError({ message, compact = false }: { message: string; compact?: boolean }) {
   return <div className={`error-card ${compact ? "compact" : ""}`}>{message}</div>;
+}
+
+function asUnknownRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function textFromUnknown(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function firstRecordText(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = textFromUnknown(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function scopedResource(namespace: string, resource: string): string {
+  if (!resource) {
+    return "";
+  }
+  if (!namespace || resource.includes("/")) {
+    return resource;
+  }
+  return `${namespace}/${resource}`;
+}
+
+function incidentSummary(order: OrderResponse): string {
+  const annotations = asUnknownRecord(order.annotations);
+  return firstRecordText(annotations, ["summary", "headline"]) || order.alert_group_name;
+}
+
+function incidentDescription(order: OrderResponse): string {
+  const annotations = asUnknownRecord(order.annotations);
+  return firstRecordText(annotations, ["description", "impact", "message"]);
+}
+
+function incidentPrimaryResource(order: OrderResponse): string {
+  const labels = asUnknownRecord(order.labels);
+  const namespace = firstRecordText(labels, ["namespace", "kubernetes_namespace"]);
+  const namespacedResource = firstRecordText(labels, [
+    "horizontalpodautoscaler",
+    "hpa",
+    "deployment",
+    "statefulset",
+    "daemonset",
+    "replicaset",
+    "workload",
+    "pod",
+    "persistentvolumeclaim",
+    "service",
+    "job_name",
+    "cronjob",
+  ]);
+  if (namespacedResource) {
+    return scopedResource(namespace, namespacedResource);
+  }
+  return firstRecordText(labels, [
+    "affected_node",
+    "k8s_node_name",
+    "node_hostname",
+    "node",
+    "host_name",
+    "hostname",
+    "instance",
+  ]) || order.instance || "No resource";
+}
+
+function incidentSearchValues(order: OrderResponse): string[] {
+  const labels = asUnknownRecord(order.labels);
+  const annotations = asUnknownRecord(order.annotations);
+  const rawData = asUnknownRecord(order.raw_data);
+  return [
+    ...INCIDENT_LABEL_SEARCH_KEYS.map((key) => textFromUnknown(labels[key])),
+    firstRecordText(annotations, [
+      "summary",
+      "description",
+      "message",
+      "runbook_url",
+      "dashboard_url",
+      "playbook_url",
+      "investigation_url",
+    ]),
+    firstRecordText(rawData, ["generatorURL", "generator_url", "externalURL"]),
+  ].filter(Boolean);
+}
+
+function incidentScopeFields(order: OrderResponse): Array<{ label: string; value: string }> {
+  const labels = asUnknownRecord(order.labels);
+  const fields: Array<{ label: string; value: string }> = [];
+  const add = (label: string, value: string) => {
+    if (!value || fields.some((field) => field.label === label)) {
+      return;
+    }
+    fields.push({ label, value });
+  };
+
+  const resource = incidentPrimaryResource(order);
+  add("Resource", resource === "No resource" ? "" : resource);
+  add("Namespace", firstRecordText(labels, ["namespace", "kubernetes_namespace"]));
+  add("Horizontal Pod Autoscaler", firstRecordText(labels, ["horizontalpodautoscaler", "hpa"]));
+  add("Workload", firstRecordText(labels, ["workload", "deployment", "statefulset", "daemonset", "replicaset", "job_name", "cronjob"]));
+  add("Pod", firstRecordText(labels, ["pod", "pod_name", "kubernetes_pod_name"]));
+  add("Container", firstRecordText(labels, ["container", "container_name"]));
+  add("Node", firstRecordText(labels, ["affected_node", "k8s_node_name", "node_hostname", "node", "host_name", "hostname"]));
+  add("Instance", order.instance || firstRecordText(labels, ["instance"]));
+  add("Service", firstRecordText(labels, ["service"]));
+  add("Job", firstRecordText(labels, ["job"]));
+  add("Endpoint", firstRecordText(labels, ["endpoint"]));
+  add("Cluster", firstRecordText(labels, ["cluster"]));
+  add("Alert rule", firstRecordText(labels, ["alertname"]) || order.alert_group_name);
+  add("Fingerprint", order.fingerprint_when_active || order.fingerprint);
+  return fields;
+}
+
+function usefulHttpUrl(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : "";
+}
+
+function incidentLinks(order: OrderResponse): Array<{ label: string; url: string }> {
+  const annotations = asUnknownRecord(order.annotations);
+  const rawData = asUnknownRecord(order.raw_data);
+  const links: Array<{ label: string; url: string }> = [];
+  const add = (label: string, value: string) => {
+    const url = usefulHttpUrl(value);
+    if (!url || links.some((link) => link.url === url)) {
+      return;
+    }
+    links.push({ label, url });
+  };
+
+  add("Source", firstRecordText(rawData, ["generatorURL", "generator_url", "externalURL"]));
+  add("Runbook", firstRecordText(annotations, ["runbook_url"]));
+  add("Dashboard", firstRecordText(annotations, ["dashboard_url"]));
+  add("Playbook", firstRecordText(annotations, ["playbook_url"]));
+  add("Investigation", firstRecordText(annotations, ["investigation_url"]));
+  return links;
+}
+
+function incidentVisibleLabelEntries(order: OrderResponse): Array<{ key: string; value: string }> {
+  const labels = asUnknownRecord(order.labels);
+  const entries: Array<{ key: string; value: string }> = [];
+  for (const key of INCIDENT_VISIBLE_LABEL_KEYS) {
+    const value = textFromUnknown(labels[key]);
+    if (value && !entries.some((entry) => entry.key === key)) {
+      entries.push({ key, value });
+    }
+  }
+  return entries;
 }
 
 function CommunicationRouteSection({

@@ -29,6 +29,17 @@ def test_overview_page_polls_for_fresh_dashboard_data() -> None:
     assert "refetchOnWindowFocus: true" in content
 
 
+def test_incident_drilldown_surfaces_alert_context_for_waiting_clear_triage() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert "Alert details" in content
+    assert "incidentPrimaryResource" in content
+    assert "incidentScopeFields" in content
+    assert "horizontalpodautoscaler" in content
+    assert "generatorURL" in content
+    assert "waiting_clear" in content
+    assert "waiting_ticket_close" in content
+
+
 def test_ui_contract_objects_are_strict() -> None:
     content = CONTRACTS_TS.read_text(encoding="utf-8")
     assert (
