@@ -442,7 +442,6 @@ async def upsert_bootstrap_recipe_catalog(
         valid_recipe_names = {payload["name"] for payload in valid_recipes}
         obsolete_query = select(Recipe).where(
             Recipe.deleted.is_(False),
-            Recipe.enabled.is_(True),
             ~Recipe.name.in_(valid_recipe_names),
         )
         obsolete_result = await db.execute(obsolete_query)

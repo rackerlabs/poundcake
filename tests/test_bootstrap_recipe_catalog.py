@@ -246,6 +246,15 @@ recipe:
         deleted_at=None,
         updated_at=None,
     )
+    disabled_obsolete_recipe = SimpleNamespace(
+        id=11,
+        name="already-disabled-old-node",
+        description="Bootstrap-generated recipe for alert group already-disabled-old-node",
+        enabled=False,
+        deleted=False,
+        deleted_at=None,
+        updated_at=None,
+    )
     user_recipe = SimpleNamespace(
         id=9,
         name="user-workflow",
@@ -273,10 +282,17 @@ recipe:
             _ScalarResult(all_=[]),  # node-a recipe_ingredient ids
             _ScalarResult(),  # delete node-a recipe_ingredients
             _ScalarResult(
-                all_=[obsolete_recipe, user_recipe, hidden_policy_recipe]
+                all_=[
+                    obsolete_recipe,
+                    disabled_obsolete_recipe,
+                    user_recipe,
+                    hidden_policy_recipe,
+                ]
             ),  # obsolete candidates
             _ScalarResult(all_=[]),  # obsolete recipe_ingredient ids
             _ScalarResult(),  # delete obsolete recipe_ingredients
+            _ScalarResult(all_=[]),  # disabled obsolete recipe_ingredient ids
+            _ScalarResult(),  # delete disabled obsolete recipe_ingredients
         ]
     )
     db.flush = AsyncMock(return_value=None)
@@ -284,11 +300,15 @@ recipe:
 
     stats = await upsert_bootstrap_recipe_catalog(db, recipes_dir=str(recipes_dir))
 
-    assert stats["obsolete_deleted"] == 1
+    assert stats["obsolete_deleted"] == 2
     assert obsolete_recipe.enabled is False
     assert obsolete_recipe.deleted is True
     assert obsolete_recipe.deleted_at is not None
     assert obsolete_recipe.updated_at is not None
+    assert disabled_obsolete_recipe.enabled is False
+    assert disabled_obsolete_recipe.deleted is True
+    assert disabled_obsolete_recipe.deleted_at is not None
+    assert disabled_obsolete_recipe.updated_at is not None
     assert user_recipe.enabled is True
     assert user_recipe.deleted is False
     assert hidden_policy_recipe.enabled is True
