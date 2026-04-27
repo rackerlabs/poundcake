@@ -40,6 +40,17 @@ def test_incident_drilldown_surfaces_alert_context_for_waiting_clear_triage() ->
     assert "waiting_ticket_close" in content
 
 
+def test_suppression_form_supports_multiple_matchers() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    assert 'name: "matchers"' in content
+    assert "matcherFields.append(emptySuppressionMatcher())" in content
+    assert "matcherFields.fields.map" in content
+    assert "matchers.${index}.label_key" in content
+    assert "matchers.${index}.operator" in content
+    assert "matchers.${index}.value" in content
+    assert "values.matchers.map((matcher)" in content
+
+
 def test_ui_contract_objects_are_strict() -> None:
     content = CONTRACTS_TS.read_text(encoding="utf-8")
     assert (

@@ -701,6 +701,17 @@ pre {
   color: #96f0d3;
 }
 
+.matcher-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.7fr) minmax(150px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(143, 163, 168, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .label-chip {
   max-width: 100%;
 }
@@ -1089,6 +1100,7 @@ pre {
   .editor-grid,
   .master-detail,
   .alert-context-grid,
+  .matcher-row,
   .hero-panel,
   .grid-three,
   .grid-two,

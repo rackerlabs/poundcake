@@ -256,6 +256,12 @@ const emptyActionFormValues: z.infer<typeof actionSchema> = {
   execution_parameters_text: "",
 };
 
+const emptySuppressionMatcher = () => ({
+  label_key: "alertname",
+  operator: "eq",
+  value: "",
+});
+
 const suppressionSchema = z.object({
   name: z.string().min(1, "Suppression name is required"),
   reason: z.string().optional(),
@@ -263,9 +269,21 @@ const suppressionSchema = z.object({
   ends_at: z.string().min(1, "End time is required"),
   scope: z.string().min(1),
   summary_ticket_enabled: z.boolean(),
-  matcher_key: z.string().optional(),
-  matcher_operator: z.string().min(1),
-  matcher_value: z.string().optional(),
+  matchers: z.array(
+    z.object({
+      label_key: z.string().min(1, "Matcher key is required"),
+      operator: z.string().min(1, "Operator is required"),
+      value: z.string().optional(),
+    }),
+  ),
+}).superRefine((values, context) => {
+  if (values.scope === "matchers" && !values.matchers.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "At least one matcher is required when scope is matchers.",
+      path: ["matchers"],
+    });
+  }
 });
 
 const communicationsPolicySchema = z.object({
@@ -1374,11 +1392,14 @@ function SuppressionsPage() {
       ends_at: "",
       scope: "matchers",
       summary_ticket_enabled: true,
-      matcher_key: "alertname",
-      matcher_operator: "eq",
-      matcher_value: "",
+      matchers: [emptySuppressionMatcher()],
     },
   });
+  const matcherFields = useFieldArray({
+    control: form.control,
+    name: "matchers",
+  });
+  const suppressionScope = form.watch("scope");
 
   const createMutation = useMutation({
     mutationFn: async (values: z.infer<typeof suppressionSchema>) => {
@@ -1391,22 +1412,27 @@ function SuppressionsPage() {
         enabled: true,
         created_by: "ui-v2",
         summary_ticket_enabled: values.summary_ticket_enabled,
-        matchers:
-          values.scope === "matchers" && values.matcher_key
-            ? [
-                {
-                  label_key: values.matcher_key,
-                  operator: values.matcher_operator,
-                  value: values.matcher_value || null,
-                },
-              ]
-            : [],
+        matchers: values.scope === "matchers"
+          ? values.matchers.map((matcher) => ({
+              label_key: matcher.label_key,
+              operator: matcher.operator,
+              value: matcher.value || null,
+            }))
+          : [],
       });
       return apiPost("/api/v1/suppressions", suppressionRecordSchema, request);
     },
     onSuccess: async () => {
       notify("success", "Suppression created.");
-      form.reset();
+      form.reset({
+        name: "",
+        reason: "",
+        starts_at: "",
+        ends_at: "",
+        scope: "matchers",
+        summary_ticket_enabled: true,
+        matchers: [emptySuppressionMatcher()],
+      });
       await queryClient.invalidateQueries({ queryKey: ["suppressions"] });
     },
     onError: (error) => notify("error", getErrorMessage(error)),
@@ -1479,24 +1505,55 @@ function SuppressionsPage() {
                 </label>
               </FormField>
             </div>
-            <div className="grid-three">
-              <FormField label="Matcher key" help="The alert label to match, such as alertname or cluster.">
-                <input {...form.register("matcher_key")} />
-              </FormField>
-              <FormField label="Operator" help="eq matches exact values; regex allows pattern matching.">
-                <select {...form.register("matcher_operator")}>
-                  <option value="eq">eq</option>
-                  <option value="neq">neq</option>
-                  <option value="regex">regex</option>
-                  <option value="nregex">nregex</option>
-                  <option value="exists">exists</option>
-                  <option value="not_exists">not_exists</option>
-                </select>
-              </FormField>
-              <FormField label="Matcher value" help="Leave value blank for exists and not_exists operators.">
-                <input {...form.register("matcher_value")} />
-              </FormField>
-            </div>
+            {suppressionScope === "matchers" ? (
+              <div className="form-stack">
+                <div className="section-heading">
+                  <h4>Matchers</h4>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => matcherFields.append(emptySuppressionMatcher())}
+                  >
+                    Add matcher
+                  </button>
+                </div>
+                {matcherFields.fields.map((field, index) => (
+                  <div className="matcher-row" key={field.id}>
+                    <FormField label="Matcher key" help="The alert label to match, such as alertname, k8s_node_name, or cluster.">
+                      <input {...form.register(`matchers.${index}.label_key` as const)} />
+                      <FieldError message={form.formState.errors.matchers?.[index]?.label_key?.message} />
+                    </FormField>
+                    <FormField label="Operator" help="eq matches exact values; regex allows pattern matching. Multiple rows are combined with AND.">
+                      <select {...form.register(`matchers.${index}.operator` as const)}>
+                        <option value="eq">eq</option>
+                        <option value="neq">neq</option>
+                        <option value="regex">regex</option>
+                        <option value="nregex">nregex</option>
+                        <option value="exists">exists</option>
+                        <option value="not_exists">not_exists</option>
+                      </select>
+                      <FieldError message={form.formState.errors.matchers?.[index]?.operator?.message} />
+                    </FormField>
+                    <FormField label="Matcher value" help="Leave value blank for exists and not_exists operators.">
+                      <input {...form.register(`matchers.${index}.value` as const)} />
+                    </FormField>
+                    <button
+                      className="danger-button"
+                      type="button"
+                      onClick={() => matcherFields.remove(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <FieldError message={form.formState.errors.matchers?.message} />
+              </div>
+            ) : (
+              <div className="helper-card">
+                <strong>Global suppression scope</strong>
+                <p>All alerts are suppressed for this window. Switch back to matcher scope to target specific alert labels.</p>
+              </div>
+            )}
             <div className="form-actions">
               <button className="primary-button" disabled={createMutation.isPending} type="submit">
                 {createMutation.isPending ? "Creating..." : "Create suppression"}
