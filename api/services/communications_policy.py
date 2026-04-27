@@ -38,7 +38,7 @@ MATCHED_ROUTE_EVENTS = (
 
 FALLBACK_ROUTE_EVENTS = (
     ("fallback_open", "open", "firing", "always", 1000),
-    ("fallback_close", "close", "resolving", "resolved_after_no_remediation", 2000),
+    ("fallback_notify", "notify", "resolving", "resolved_after_no_remediation", 2000),
 )
 
 
@@ -252,13 +252,13 @@ def _managed_payload(
         "resolved_failure_notify": {
             "headline": "Alert cleared after escalation",
             "summary": "The alert cleared after an escalated communication was already opened.",
-            "detail": "Leaving the communication open for the responder.",
+            "detail": "PoundCake did not validate a successful automated fix. Leaving the communication open for human investigation.",
             "resolution": "",
         },
         "resolved_timeout_notify": {
             "headline": "Alert cleared after timeout escalation",
             "summary": "The alert cleared after automation timed out and a communication was already opened.",
-            "detail": "Leaving the communication open for the responder.",
+            "detail": "PoundCake did not validate a successful automated fix. Leaving the communication open for human investigation.",
             "resolution": "",
         },
         "fallback_open": {
@@ -267,11 +267,11 @@ def _managed_payload(
             "detail": "No matching workflow is configured for this alert.",
             "resolution": "",
         },
-        "fallback_close": {
+        "fallback_notify": {
             "headline": "Alert cleared",
-            "summary": "The unmatched alert has cleared and PoundCake is closing the fallback communication.",
-            "detail": "Closing the existing communication because the alert has cleared.",
-            "resolution": "Closing communication.",
+            "summary": "The unmatched alert is no longer firing, but PoundCake did not remediate or validate a fix.",
+            "detail": "Leaving the communication open for human investigation.",
+            "resolution": "",
         },
     }[event_name]
     metadata = {
@@ -814,7 +814,7 @@ def lifecycle_summary() -> dict[str, str]:
         "success": "When an alert clears after successful auto-remediation, PoundCake opens and then closes each configured route.",
         "failure_or_escalation": "When remediation fails or escalation is needed, PoundCake opens each configured route and leaves it open.",
         "unmatched_alert": "When no matching workflow exists, PoundCake opens each configured fallback route immediately.",
-        "clear_after_escalation": "When an escalated alert later clears, PoundCake closes fallback routes automatically and leaves escalation routes open for the responder.",
+        "clear_after_escalation": "When an unmatched or escalated alert later clears without successful auto-remediation, PoundCake adds a clear-status note and leaves ticket-capable routes open for investigation.",
     }
 
 
@@ -846,6 +846,8 @@ def should_seed_route_step(
     params = getattr(ingredient, "execution_parameters", None) or {}
     operation = str(params.get("operation") or "").strip().lower()
     run_condition = str(getattr(recipe_ingredient, "run_condition", "") or "").strip().lower()
+    if operation == "close" and run_condition == "resolved_after_no_remediation":
+        return False
     if operation not in {"notify", "close"}:
         return True
     if run_condition not in {

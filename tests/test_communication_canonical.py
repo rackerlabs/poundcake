@@ -81,6 +81,55 @@ def test_build_canonical_communication_context_includes_alert_links_and_route_co
     assert canonical["remediation"]["summary"]["total"] == 0
 
 
+def test_build_canonical_communication_context_promotes_affected_device_labels() -> None:
+    now = datetime.now(timezone.utc)
+    order = Order(
+        id=17,
+        req_id="REQ-17",
+        fingerprint="fp-17",
+        alert_status="firing",
+        processing_status="waiting_clear",
+        is_active=True,
+        remediation_outcome="none",
+        clear_timeout_sec=None,
+        clear_deadline_at=None,
+        clear_timed_out_at=None,
+        auto_close_eligible=False,
+        alert_group_name="node-memory-major-page-faults",
+        severity="critical",
+        instance="10.0.0.17:9100",
+        counter=1,
+        labels={
+            "alertname": "node-memory-major-page-faults",
+            "severity": "critical",
+            "k8s_node_name": "472292-storage01",
+            "instance": "10.0.0.17:9100",
+        },
+        annotations={"summary": "Major page faults are high."},
+        raw_data={},
+        starts_at=now,
+        ends_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+    canonical = build_canonical_communication_context(
+        order=order,
+        execution_target="rackspace_core",
+        destination_target="primary-core",
+        operation="open",
+        execution_payload={"context": {}},
+    )
+
+    assert canonical["device"] == {
+        "name": "472292-storage01",
+        "hostname": "472292-storage01",
+        "number": "472292",
+        "source_label": "k8s_node_name",
+    }
+    assert canonical["alert"]["instance"] == "472292-storage01"
+
+
 def test_build_canonical_communication_context_includes_correlation_summary() -> None:
     now = datetime.now(timezone.utc)
     order = Order(

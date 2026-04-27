@@ -85,6 +85,24 @@ class BakeryExecutionAdapter(ExecutionAdapter):
             reopen_payload["context"] = context
         return reopen_payload
 
+    @classmethod
+    def _blocked_ticket_close_reason(cls, ctx: ExecutionContext, payload: dict[str, Any]) -> str:
+        if not _coerce_optional_int(ctx.context.get("order_id")):
+            return ""
+        context = cls._payload_context(payload)
+        canonical = context.get("_canonical")
+        order = canonical.get("order") if isinstance(canonical, dict) else {}
+        if not isinstance(order, dict):
+            return "missing canonical order context"
+        remediation_outcome = str(order.get("remediation_outcome") or "").strip().lower()
+        auto_close_eligible = bool(order.get("auto_close_eligible"))
+        if remediation_outcome == "succeeded" and auto_close_eligible:
+            return ""
+        return (
+            "refusing to close communication because PoundCake did not record successful "
+            "auto-remediation for this order"
+        )
+
     def validate(self, ctx: ExecutionContext) -> str | None:
         payload = ctx.execution_payload if isinstance(ctx.execution_payload, dict) else {}
         parameters = ctx.execution_parameters if isinstance(ctx.execution_parameters, dict) else {}
@@ -126,6 +144,25 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         try:
             accepted: BakeryTicketAccepted
             context_updates: dict[str, Any] = {}
+            if operation == "close" and is_ticket_capable_destination(target):
+                blocked_reason = self._blocked_ticket_close_reason(ctx, payload)
+                if blocked_reason:
+                    logger.warning(
+                        "Blocked unsafe Bakery close operation",
+                        extra={
+                            "req_id": ctx.req_id,
+                            "target": ctx.execution_target,
+                            "order_id": ctx.context.get("order_id"),
+                            "reason": blocked_reason,
+                        },
+                    )
+                    return ExecutionResult(
+                        engine=self.engine,
+                        status="succeeded",
+                        result={"skipped": True, "reason": blocked_reason},
+                        raw={"skipped": True, "reason": blocked_reason},
+                        context_updates=context_updates,
+                    )
             if operation == "open":
                 reuse_mode = str(ctx.context.get("communication_reuse_mode") or "").strip().lower()
                 if ticket_id and is_ticket_capable_destination(target):

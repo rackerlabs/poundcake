@@ -340,6 +340,50 @@ async def test_reconcile_resolved_order_skips_clear_note_while_resolving_step_is
 
 
 @pytest.mark.asyncio
+async def test_reconcile_resolved_order_skips_duplicate_clear_note_after_managed_notify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order = _make_order(status="waiting_ticket_close")
+    order.alert_status = "resolved"
+    order.ends_at = datetime.now(timezone.utc)
+    _make_communication(order=order, remote_state="open")
+    step = _make_resolving_dish_step()
+    step.execution_parameters = {"operation": "notify"}
+    step.execution_status = "succeeded"
+    step.completed_at = datetime.now(timezone.utc)
+    order.dishes = [_make_resolving_dish(step)]
+    order.dishes[0].processing_status = "complete"
+    db = SimpleNamespace(flush=AsyncMock())
+
+    notify = AsyncMock()
+
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "load_order_with_communications",
+        AsyncMock(return_value=order),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "get_prometheus_client",
+        lambda: SimpleNamespace(get_alerts=AsyncMock(return_value=[])),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "refresh_remote_state",
+        AsyncMock(return_value=("open", True, False)),
+    )
+    monkeypatch.setattr(incident_reconciliation, "notify_communication", notify)
+
+    result = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+
+    assert result["status"] == "reconciled"
+    assert order.processing_status == "waiting_ticket_close"
+    assert order.is_active is True
+    notify.assert_not_awaited()
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_reconcile_firing_alert_reopens_closed_ticket(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

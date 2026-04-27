@@ -200,8 +200,9 @@ def _clear_ticket_note(order: Order, communication: OrderCommunication) -> str:
     route = _route_metadata(order, communication)
     route_label = str(route.get("route_label") or communication.execution_target).strip()
     return (
-        f"Alert {order.alert_group_name} is clear. PoundCake will keep monitoring {route_label} "
-        "until the ticket is closed, then the PoundCake incident will close."
+        f"Alert {order.alert_group_name} is no longer firing, but PoundCake did not validate a "
+        f"successful automated fix. The {route_label} ticket remains open for human "
+        "investigation; PoundCake will keep the incident active until the ticket is closed."
     )
 
 
@@ -284,6 +285,33 @@ def _has_active_resolving_route_step(order: Order, communication: OrderCommunica
             ):
                 continue
             return True
+    return False
+
+
+def _has_completed_resolving_notify_step(order: Order, communication: OrderCommunication) -> bool:
+    for dish in list(order.dishes or []):
+        if str(getattr(dish, "run_phase", "") or "").strip().lower() != "resolving":
+            continue
+        for step in list(getattr(dish, "dish_ingredients", []) or []):
+            if getattr(step, "deleted", False):
+                continue
+            if str(getattr(step, "execution_engine", "") or "").strip().lower() != "bakery":
+                continue
+            if normalize_destination_type(getattr(step, "execution_target", "")) != (
+                communication.execution_target
+            ):
+                continue
+            if normalize_destination_target(getattr(step, "destination_target", "")) != (
+                communication.destination_target
+            ):
+                continue
+            params = (
+                step.execution_parameters if isinstance(step.execution_parameters, dict) else {}
+            )
+            operation = str(params.get("operation") or "").strip().lower()
+            status = str(getattr(step, "execution_status", "") or "").strip().lower()
+            if operation == "notify" and status in {"succeeded", "success", "completed"}:
+                return True
     return False
 
 
@@ -520,6 +548,8 @@ async def reconcile_order(
     else:
         for communication in ticket_routes:
             if _has_active_resolving_route_step(order, communication):
+                continue
+            if _has_completed_resolving_notify_step(order, communication):
                 continue
             if not is_remote_state_terminal(communication.remote_state):
                 await _notify_clear_ticket(

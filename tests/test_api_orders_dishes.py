@@ -549,7 +549,7 @@ def test_list_dish_ingredients__collapses_duplicate_runtime_rows_by_task_key(
         execution_target="rackspace_core",
         destination_target="",
         execution_purpose="comms",
-        task_key_template="pcmcomms.fallback.route.fallback_close",
+        task_key_template="pcmcomms.fallback.route.fallback_notify",
         execution_payload={
             "title": "Alert cleared",
             "context": {
@@ -563,7 +563,7 @@ def test_list_dish_ingredients__collapses_duplicate_runtime_rows_by_task_key(
                 },
             },
         },
-        execution_parameters={"operation": "close"},
+        execution_parameters={"operation": "notify"},
     )
     recipe_step = _make_recipe_ingredient(
         ri_id=23,
@@ -598,7 +598,7 @@ def test_list_dish_ingredients__collapses_duplicate_runtime_rows_by_task_key(
     linked_row.execution_payload = None
     linked_row.execution_parameters = None
     linked_row.execution_status = "failed"
-    linked_row.error_message = "close failed"
+    linked_row.error_message = "notify failed"
     linked_row.recipe_ingredient = recipe_step
     linked_row.started_at = datetime.now(timezone.utc) - timedelta(minutes=1)
     linked_row.completed_at = datetime.now(timezone.utc)
@@ -616,7 +616,7 @@ def test_list_dish_ingredients__collapses_duplicate_runtime_rows_by_task_key(
     assert body[0]["id"] == linked_row.id
     assert body[0]["recipe_ingredient_id"] == recipe_step.id
     assert body[0]["execution_payload"] == ingredient.execution_payload
-    assert body[0]["execution_parameters"] == {"operation": "close"}
+    assert body[0]["execution_parameters"] == {"operation": "notify"}
 
 
 def test_dish_update__when_firing_complete__moves_order_to_waiting_clear(client, mock_db_session):

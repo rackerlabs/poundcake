@@ -213,3 +213,105 @@ async def test_bakery_adapter_preserves_managed_route_context_when_reopening(
     comment_payload = notify_mock.await_args.kwargs["payload"]
     assert comment_payload["comment"] == "No matching workflow is configured."
     assert comment_payload["context"]["poundcake_policy"]["route_id"] == "core"
+
+
+@pytest.mark.asyncio
+async def test_bakery_adapter_blocks_ticket_close_without_successful_remediation(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    close_mock = AsyncMock()
+    monkeypatch.setattr(
+        "api.services.execution_adapters.bakery.close_ticket_with_key",
+        close_mock,
+    )
+
+    adapter = BakeryExecutionAdapter()
+    result = await adapter.execute_once(
+        ExecutionContext(
+            engine="bakery",
+            execution_target="rackspace_core",
+            execution_payload={
+                "ticket_id": "INC-4",
+                "context": {
+                    "_canonical": {
+                        "order": {
+                            "remediation_outcome": "none",
+                            "auto_close_eligible": False,
+                        }
+                    }
+                },
+            },
+            execution_parameters={"operation": "close"},
+            req_id="REQ-BAKERY-4",
+            context={"order_id": 4, "recipe_ingredient_id": 44},
+        )
+    )
+
+    assert result.status == "succeeded"
+    assert result.result == {
+        "skipped": True,
+        "reason": (
+            "refusing to close communication because PoundCake did not record successful "
+            "auto-remediation for this order"
+        ),
+    }
+    close_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_bakery_adapter_allows_ticket_close_after_successful_remediation(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    close_mock = AsyncMock(
+        return_value=BakeryTicketAccepted(
+            ticket_id="INC-5",
+            operation_id="op-close",
+            action="close",
+            status="queued",
+            created_at="2026-03-19T00:00:00Z",
+        )
+    )
+    monkeypatch.setattr(
+        "api.services.execution_adapters.bakery.close_ticket_with_key",
+        close_mock,
+    )
+    monkeypatch.setattr(
+        "api.services.execution_adapters.bakery.poll_operation",
+        AsyncMock(
+            return_value=BakeryTicketOperation(
+                operation_id="op-close",
+                ticket_id="INC-5",
+                action="close",
+                status="succeeded",
+                attempt_count=1,
+                max_attempts=5,
+                created_at="2026-03-19T00:00:00Z",
+                updated_at="2026-03-19T00:00:00Z",
+            )
+        ),
+    )
+
+    adapter = BakeryExecutionAdapter()
+    result = await adapter.execute_once(
+        ExecutionContext(
+            engine="bakery",
+            execution_target="rackspace_core",
+            execution_payload={
+                "ticket_id": "INC-5",
+                "context": {
+                    "_canonical": {
+                        "order": {
+                            "remediation_outcome": "succeeded",
+                            "auto_close_eligible": True,
+                        }
+                    }
+                },
+            },
+            execution_parameters={"operation": "close"},
+            req_id="REQ-BAKERY-5",
+            context={"order_id": 5, "recipe_ingredient_id": 55},
+        )
+    )
+
+    assert result.status == "succeeded"
+    close_mock.assert_awaited_once()

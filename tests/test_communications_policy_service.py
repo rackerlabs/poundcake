@@ -208,7 +208,7 @@ def test_build_recipe_local_policy_step_specs_accepts_pre_normalized_routes() ->
     assert step_specs[0]["execution_parameters"]["operation"] == "open"
 
 
-def test_build_fallback_policy_step_specs_closes_on_clear() -> None:
+def test_build_fallback_policy_step_specs_notifies_on_clear_without_closing() -> None:
     normalized = communications_policy.normalize_routes(
         [
             {
@@ -232,8 +232,34 @@ def test_build_fallback_policy_step_specs_closes_on_clear() -> None:
         fallback=True,
     )
 
-    assert [item["execution_parameters"]["operation"] for item in step_specs] == ["open", "close"]
+    assert [item["execution_parameters"]["operation"] for item in step_specs] == ["open", "notify"]
     assert step_specs[1]["run_condition"] == "resolved_after_no_remediation"
+    assert "fallback_notify" in step_specs[1]["task_key_template"]
+    assert (
+        step_specs[1]["execution_payload"]["context"]["semantic_text"]["detail"]
+        == "Leaving the communication open for human investigation."
+    )
+
+
+def test_should_seed_route_step_skips_legacy_no_remediation_close() -> None:
+    ingredient = SimpleNamespace(
+        execution_parameters={"operation": "close"},
+        execution_payload={},
+        execution_target="rackspace_core",
+        destination_target="",
+    )
+    recipe_ingredient = SimpleNamespace(
+        ingredient=ingredient,
+        run_condition="resolved_after_no_remediation",
+    )
+
+    assert (
+        communications_policy.should_seed_route_step(
+            recipe_ingredient=recipe_ingredient,
+            order=SimpleNamespace(communications=[]),
+        )
+        is False
+    )
 
 
 def test_get_recipe_local_routes_hydrates_legacy_provider_config(

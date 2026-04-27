@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -30,6 +31,25 @@ NODE_LABEL_FIELDS = (
     "host",
     "service_instance_id",
     "instance",
+)
+DEVICE_NUMBER_LABEL_FIELDS = (
+    "device_number",
+    "device_id",
+    "computer_number",
+    "computer_id",
+    "core_device_number",
+    "core_device_id",
+    "rackspace_device_number",
+    "rackspace_device_id",
+    "rackspace_com_device_number",
+    "rackspace_com_device_id",
+    "server_number",
+)
+DEVICE_NAME_LABEL_FIELDS = (
+    "affected_device",
+    "device_name",
+    "device",
+    *NODE_LABEL_FIELDS,
 )
 RESULT_TEXT_PRIORITY = (
     "stdout",
@@ -98,6 +118,33 @@ def _truncate(text: str, limit: int) -> str:
 
 def _affected_node_from_labels(labels: dict[str, Any]) -> str:
     return _first_text(*(labels.get(key) for key in NODE_LABEL_FIELDS))
+
+
+def _device_context_from_labels(labels: dict[str, Any]) -> dict[str, Any]:
+    name = ""
+    source_label = ""
+    for key in DEVICE_NAME_LABEL_FIELDS:
+        value = _collapse_line(labels.get(key))
+        if value:
+            name = value
+            source_label = key
+            break
+
+    number = _first_text(*(labels.get(key) for key in DEVICE_NUMBER_LABEL_FIELDS))
+    if not number and name:
+        match = re.match(r"^(\d+)(?:[-_.].*)?$", name)
+        if match:
+            number = match.group(1)
+
+    if not name and not number:
+        return {}
+
+    return {
+        "name": name,
+        "hostname": name,
+        "number": number,
+        "source_label": source_label,
+    }
 
 
 def _result_scalar_lines(value: dict[str, Any]) -> list[str]:
@@ -391,8 +438,12 @@ def build_canonical_communication_context(
             links.append({"label": label, "url": url})
 
     correlation = _build_correlation_context(order)
+    device = _device_context_from_labels(labels)
     alert_instance = _first_text(
-        order.instance, labels.get("instance"), correlation.get("affected_node")
+        device.get("name"),
+        correlation.get("affected_node"),
+        order.instance,
+        labels.get("instance"),
     )
     detail = _first_text(
         semantic_text.get("detail"),
@@ -444,6 +495,7 @@ def build_canonical_communication_context(
             "annotations": annotations,
             "generator_url": generator_url,
         },
+        "device": device,
         "links": links,
         "text": {
             "headline": _first_text(
