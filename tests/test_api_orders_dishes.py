@@ -832,6 +832,8 @@ def test_order_dispatch__without_matching_recipe__returns_skipped(client, mock_d
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "skipped"
+    recipe_query = mock_db_session.execute.call_args_list[1].args[0]
+    assert "recipes.deleted" in str(recipe_query)
 
 
 def test_order_dispatch__resolving_waits_for_active_firing_remediation(client, mock_db_session):
@@ -899,6 +901,8 @@ def test_order_dispatch__without_group_recipe__uses_fallback_recipe(client, mock
     assert body["run_phase"] == "firing"
     assert body["recipe_id"] == 22
     assert body["recipe_name"] == "fallback-recipe"
+    fallback_query = mock_db_session.execute.call_args_list[2].args[0]
+    assert "recipes.deleted" in str(fallback_query)
     ensure_fallback.assert_awaited_once()
 
 

@@ -157,12 +157,16 @@ Relevant keys:
 
 | Key | Purpose |
 |---|---|
-| `bootstrap.rulesRepoUrl` | Optional remote rules repo used to generate bootstrap-managed recipes |
+| `bootstrap.rulesRepoUrl` | Optional remote rules repo scanned during bootstrap cleanup |
 | `bootstrap.rulesBranch` | Branch used for the bootstrap repo checkout |
 | `bootstrap.rulesPath` | Path inside the repo that contains alert-rule YAML |
 | `bootstrap.remoteSyncEnabled` | Global toggle for remote bootstrap sync |
 | `git.enabled` | Enables repo-sync related Git configuration |
 | `git.existingSecret` | Secret used for Git token or SSH key material |
+
+Alert-rule repo sync does not create PoundCake workflows. It scans alert-rule YAML and keeps
+legacy alert-rule-generated communication recipes out of the active workflow catalog. Use
+workflow/action repo sync for explicit PoundCake workflows.
 
 If `bootstrap.rulesRepoUrl` points at a private repo, matching Git credentials must also be
 configured or bootstrap health will remain unhealthy.

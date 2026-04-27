@@ -82,8 +82,8 @@ Optional examples:
 - Put non-secret Git sync values in `30-git-sync-overrides.yaml`.
 - Release update advisories are enabled by default. Set `releaseUpdateNotifications.enabled: false`
   only when an environment must suppress advisory communications.
-- Leave `bootstrap.rulesRepoUrl` blank unless you explicitly want bootstrap-managed recipes
-  generated from a remote alert-rules repo.
+- Leave `bootstrap.rulesRepoUrl` blank unless you explicitly want PoundCake to scan a remote
+  alert-rules repo during bootstrap cleanup.
 
 Gateway notes:
 
@@ -257,9 +257,14 @@ Leave `bootstrap.rulesRepoUrl` blank for most installs.
 
 Only set a remote bootstrap rules repo when all of the following are true:
 
-- you want bootstrap-managed recipes generated from a remote rules catalog
+- you want PoundCake to scan a remote rules catalog during bootstrap cleanup
 - the repo URL is intentionally chosen for this environment
 - Git credentials are configured when the repo is private
+
+Alert-rule repo sync does not create PoundCake workflows. Alert rules fire incidents; explicit
+PoundCake workflows come from workflow/action sync or local workflow configuration. Remote
+bootstrap cleanup removes legacy alert-rule-generated communication-only recipes so unmatched
+alerts use the fallback/global communications policy.
 
 Example:
 

@@ -1018,6 +1018,7 @@ class StackStormSyncStepResponse(BaseModel):
     skipped: Optional[int] = None
     processed: Optional[int] = None
     conflicts: Optional[int] = None
+    obsolete_deleted: Optional[int] = None
     errors: Optional[int] = None
     error_messages: List[str] = Field(default_factory=list)
     source: Optional[str] = None

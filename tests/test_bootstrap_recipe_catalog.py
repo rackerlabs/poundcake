@@ -157,6 +157,7 @@ recipe:
             _ScalarResult(first=None),  # node-b
             _ScalarResult(all_=[]),  # node-b recipe_ingredient ids
             _ScalarResult(),  # delete node-b recipe_ingredients
+            _ScalarResult(all_=[]),  # obsolete managed recipes
         ]
     )
     db.flush = AsyncMock(return_value=None)
@@ -168,6 +169,7 @@ recipe:
     assert stats["created"] == 1
     assert stats["updated"] == 1
     assert stats["conflicts"] == 0
+    assert stats["obsolete_deleted"] == 0
     assert stats["errors"] == 0
 
     assert existing_recipe.description == "generated"
@@ -188,6 +190,109 @@ recipe:
     added_rows = [call.args[0] for call in db.add.call_args_list]
     assert any(isinstance(row, Recipe) and row.name == "node-b" for row in added_rows)
     assert any(isinstance(row, RecipeIngredient) for row in added_rows)
+
+
+@pytest.mark.asyncio
+async def test_upsert_bootstrap_recipe_catalog_soft_deletes_obsolete_managed_recipes(
+    tmp_path,
+) -> None:
+    recipes_dir = tmp_path / "recipes"
+    recipes_dir.mkdir()
+    (recipes_dir / "node-a.yaml").write_text(
+        """
+apiVersion: poundcake/v1
+kind: RecipeCatalogEntry
+recipe:
+  name: node-a
+  description: generated
+  enabled: true
+  recipe_ingredients:
+    - execution_engine: bakery
+      execution_target: rackspace_core
+      task_key_template: rackspace_core.update
+      step_order: 1
+      run_phase: resolving
+      on_success: continue
+      parallel_group: 0
+      depth: 0
+      execution_parameters_override: null
+""".strip(),
+        encoding="utf-8",
+    )
+    ingredient = SimpleNamespace(
+        id=41,
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        task_key_template="rackspace_core.update",
+        destination_target="",
+    )
+    existing_recipe = SimpleNamespace(
+        id=7,
+        name="node-a",
+        description="Bootstrap-managed remote recipe for alert rule node-a [source-sha256:old]",
+        enabled=True,
+        clear_timeout_sec=None,
+        recipe_ingredients=[],
+        deleted=False,
+        deleted_at=None,
+        updated_at=None,
+    )
+    obsolete_recipe = SimpleNamespace(
+        id=8,
+        name="old-node",
+        description="Bootstrap-generated recipe for alert group old-node",
+        enabled=True,
+        deleted=False,
+        deleted_at=None,
+        updated_at=None,
+    )
+    user_recipe = SimpleNamespace(
+        id=9,
+        name="user-workflow",
+        description="User workflow",
+        enabled=True,
+        deleted=False,
+        deleted_at=None,
+        updated_at=None,
+    )
+    hidden_policy_recipe = SimpleNamespace(
+        id=10,
+        name="pcm-policy-global",
+        description="[managed-comms:global] Global communications policy",
+        enabled=True,
+        deleted=False,
+        deleted_at=None,
+        updated_at=None,
+    )
+    db = AsyncMock()
+    db.add = Mock()
+    db.execute = AsyncMock(
+        side_effect=[
+            _ScalarResult(all_=[ingredient]),  # ingredient map
+            _ScalarResult(first=existing_recipe),  # node-a
+            _ScalarResult(all_=[]),  # node-a recipe_ingredient ids
+            _ScalarResult(),  # delete node-a recipe_ingredients
+            _ScalarResult(
+                all_=[obsolete_recipe, user_recipe, hidden_policy_recipe]
+            ),  # obsolete candidates
+            _ScalarResult(all_=[]),  # obsolete recipe_ingredient ids
+            _ScalarResult(),  # delete obsolete recipe_ingredients
+        ]
+    )
+    db.flush = AsyncMock(return_value=None)
+    db.commit = AsyncMock(return_value=None)
+
+    stats = await upsert_bootstrap_recipe_catalog(db, recipes_dir=str(recipes_dir))
+
+    assert stats["obsolete_deleted"] == 1
+    assert obsolete_recipe.enabled is False
+    assert obsolete_recipe.deleted is True
+    assert obsolete_recipe.deleted_at is not None
+    assert obsolete_recipe.updated_at is not None
+    assert user_recipe.enabled is True
+    assert user_recipe.deleted is False
+    assert hidden_policy_recipe.enabled is True
+    assert hidden_policy_recipe.deleted is False
 
 
 @pytest.mark.asyncio

@@ -70,7 +70,7 @@ async def test_sync_stackstorm_includes_bootstrap_catalog_stats_when_marked(
             "refreshed": True,
             "files_scanned": 4,
             "rules_discovered": 3,
-            "generated": 3,
+            "generated": 0,
             "errors": 0,
             "error_messages": [],
             "source": "/app/bootstrap/recipes",
@@ -198,7 +198,7 @@ async def test_sync_stackstorm_refreshes_remote_bootstrap_catalog_on_periodic_ru
             "refreshed": True,
             "files_scanned": 6,
             "rules_discovered": 4,
-            "generated": 4,
+            "generated": 0,
             "errors": 0,
             "error_messages": [],
             "source": "/app/bootstrap/recipes",
@@ -230,7 +230,7 @@ async def test_sync_stackstorm_refreshes_remote_bootstrap_catalog_on_periodic_ru
 
     assert stats["bootstrap_catalog"]["ingredients"]["created"] == 1
     assert stats["bootstrap_catalog"]["recipes"]["updated"] == 1
-    assert stats["bootstrap_catalog"]["remote_recipes"]["generated"] == 4
+    assert stats["bootstrap_catalog"]["remote_recipes"]["generated"] == 0
     assert "bootstrap_marked" not in stats
     upsert_ingredients_catalog.assert_called_once()
     upsert_recipes_catalog.assert_called_once()

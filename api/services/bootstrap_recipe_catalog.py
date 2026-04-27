@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from sqlalchemy import select, tuple_
@@ -329,6 +329,7 @@ async def upsert_bootstrap_recipe_catalog(
     skipped = 0
     processed = 0
     conflicts = 0
+    obsolete_deleted = 0
 
     def _step_signature(step: RecipeIngredient | dict[str, Any]) -> tuple[Any, ...]:
         if isinstance(step, RecipeIngredient):
@@ -437,6 +438,24 @@ async def upsert_bootstrap_recipe_catalog(
                 )
             )
 
+    if not load_errors:
+        valid_recipe_names = {payload["name"] for payload in valid_recipes}
+        obsolete_query = select(Recipe).where(
+            Recipe.deleted.is_(False),
+            Recipe.enabled.is_(True),
+            ~Recipe.name.in_(valid_recipe_names),
+        )
+        obsolete_result = await db.execute(obsolete_query)
+        for obsolete_recipe in cast(list[Recipe], obsolete_result.scalars().all()):
+            if not _is_managed_bootstrap_recipe_description(obsolete_recipe.description):
+                continue
+            await delete_recipe_ingredients_safely(db, recipe_id=obsolete_recipe.id)
+            obsolete_recipe.enabled = False
+            obsolete_recipe.deleted = True
+            obsolete_recipe.deleted_at = now
+            obsolete_recipe.updated_at = now
+            obsolete_deleted += 1
+
     await db.commit()
     return {
         "created": created,
@@ -445,6 +464,7 @@ async def upsert_bootstrap_recipe_catalog(
         "skipped": skipped,
         "processed": processed,
         "conflicts": conflicts,
+        "obsolete_deleted": obsolete_deleted,
         "errors": len(load_errors),
         "error_messages": load_errors,
         "source": recipes_dir,

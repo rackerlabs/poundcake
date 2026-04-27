@@ -359,7 +359,11 @@ async def dispatch_order(
         recipe_result = await db.execute(
             select(Recipe)
             .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))
-            .where(Recipe.name == order.alert_group_name, Recipe.enabled.is_(True))
+            .where(
+                Recipe.name == order.alert_group_name,
+                Recipe.enabled.is_(True),
+                Recipe.deleted.is_(False),
+            )
             .with_for_update()
         )
         recipe = recipe_result.unique().scalars().first()
@@ -377,6 +381,7 @@ async def dispatch_order(
                         )
                     )
                     .where(Recipe.name == catch_all_name, Recipe.enabled.is_(True))
+                    .where(Recipe.deleted.is_(False))
                     .with_for_update()
                 )
                 recipe = fallback_result.unique().scalars().first()

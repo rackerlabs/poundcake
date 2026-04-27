@@ -178,12 +178,17 @@ was not redeployed with the remote Bakery client settings.
 
 ## Optional Bootstrap Recipe Repo Sync
 
-Leave `bootstrap.rulesRepoUrl` blank unless you explicitly want PoundCake bootstrap recipes to be
-generated from a remote alert-rules repo.
+Leave `bootstrap.rulesRepoUrl` blank unless you explicitly want PoundCake to scan a remote
+alert-rules repo during bootstrap cleanup.
 
 If you do enable it, provide a repo URL that is reachable from the cluster and configure matching
 Git credentials when the repo is private. A private repo URL without matching Git credentials keeps
 `/api/v1/health` unhealthy during bootstrap.
+
+Alert-rule repo sync does not create PoundCake workflows. Alert rules fire incidents; explicit
+PoundCake workflows come from workflow/action sync or local workflow configuration. Remote
+bootstrap cleanup removes legacy alert-rule-generated communication-only recipes so unmatched
+alerts use the fallback/global communications policy.
 
 Example:
 

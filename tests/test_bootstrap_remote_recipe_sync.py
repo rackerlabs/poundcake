@@ -15,7 +15,7 @@ def _write_rule_file(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
-def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml(
+def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml_without_generating_recipes(
     monkeypatch, tmp_path
 ) -> None:
     repo_root = tmp_path / "repo"
@@ -66,15 +66,9 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_scans_nested_yaml(
 
     assert stats["files_scanned"] == 2
     assert stats["rules_discovered"] == 2
-    assert stats["generated"] == 2
+    assert stats["generated"] == 0
     generated_files = sorted(path.name for path in destination.glob("*.yaml"))
-    assert generated_files == ["diskfullsoon.yaml", "highcpuusage.yaml"]
-    payload = yaml.safe_load((destination / "highcpuusage.yaml").read_text(encoding="utf-8"))
-    assert payload["recipe"]["name"] == "HighCPUUsage"
-    assert payload["recipe"]["recipe_ingredients"][0]["execution_target"] == "rackspace_core"
-    assert (
-        payload["recipe"]["recipe_ingredients"][0]["task_key_template"] == "rackspace_core.update"
-    )
+    assert generated_files == []
 
 
 def test_refresh_bootstrap_recipe_catalog_from_remote_rejects_conflicting_duplicate_alerts(
@@ -126,7 +120,7 @@ def test_refresh_bootstrap_recipe_catalog_from_remote_ignores_not_yet_finished_d
     assert stats["files_scanned"] == 1
     assert stats["rules_discovered"] == 1
     generated_files = sorted(path.name for path in (tmp_path / "generated").glob("*.yaml"))
-    assert generated_files == ["sharedalert.yaml"]
+    assert generated_files == []
 
 
 def test_ensure_repo_checkout_uses_git_credentials(monkeypatch, tmp_path: Path) -> None:

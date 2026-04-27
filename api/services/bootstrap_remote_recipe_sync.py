@@ -36,46 +36,6 @@ def is_managed_bootstrap_recipe_description(description: str | None) -> bool:
     )
 
 
-def slugify_recipe_filename(value: str) -> str:
-    """Normalize a recipe name into a stable file name."""
-    normalized = "".join(ch.lower() if ch.isalnum() else "-" for ch in value).strip("-")
-    while "--" in normalized:
-        normalized = normalized.replace("--", "-")
-    return normalized or "recipe"
-
-
-def render_managed_recipe_payload(
-    *,
-    alert_name: str,
-    rule_hash: str,
-) -> dict[str, Any]:
-    """Build a runtime bootstrap recipe catalog entry for a single alert rule."""
-    return {
-        "apiVersion": "poundcake/v1",
-        "kind": "RecipeCatalogEntry",
-        "recipe": {
-            "name": alert_name,
-            "description": (
-                f"{MANAGED_DESCRIPTION_PREFIX} {alert_name} " f"[source-sha256:{rule_hash[:12]}]"
-            ),
-            "enabled": True,
-            "recipe_ingredients": [
-                {
-                    "execution_engine": "bakery",
-                    "execution_target": "rackspace_core",
-                    "task_key_template": "rackspace_core.update",
-                    "step_order": 1,
-                    "run_phase": "resolving",
-                    "on_success": "continue",
-                    "parallel_group": 0,
-                    "depth": 0,
-                    "execution_parameters_override": None,
-                }
-            ],
-        },
-    }
-
-
 def _load_git_module() -> Any:
     try:
         return importlib.import_module("git")
@@ -231,15 +191,9 @@ def _write_generated_recipes(
     destination_dir: Path,
     alert_rules: dict[str, dict[str, Any]],
 ) -> int:
+    """Create an empty recipe catalog; alert rules no longer imply workflows."""
     destination_dir.mkdir(parents=True, exist_ok=True)
-    for alert_name, payload in sorted(alert_rules.items()):
-        recipe_payload = render_managed_recipe_payload(
-            alert_name=alert_name,
-            rule_hash=payload["rule_hash"],
-        )
-        target = destination_dir / f"{slugify_recipe_filename(alert_name)}.yaml"
-        target.write_text(yaml.safe_dump(recipe_payload, sort_keys=False), encoding="utf-8")
-    return len(alert_rules)
+    return 0
 
 
 def _move_tree(source: Path, target: Path) -> None:
@@ -278,7 +232,7 @@ def refresh_bootstrap_recipe_catalog_from_remote(
     rules_path: str,
     destination_dir: str,
 ) -> dict[str, Any]:
-    """Clone/pull the remote rules repo, render recipes, validate, and promote atomically."""
+    """Clone/pull the remote rules repo, scan alert rules, and promote an empty catalog."""
     repo_path = _ensure_repo_checkout(repo_url=repo_url, branch=branch)
     source_dir = repo_path / str(rules_path).strip("/")
     if not source_dir.exists() or not source_dir.is_dir():
