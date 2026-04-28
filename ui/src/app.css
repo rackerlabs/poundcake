@@ -524,6 +524,41 @@ pre {
   font-size: 13px;
 }
 
+.suppression-window-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  width: 100%;
+}
+
+.suppression-window-main {
+  min-width: 0;
+}
+
+.suppression-window-main strong,
+.suppression-window-main p {
+  overflow-wrap: anywhere;
+}
+
+.suppression-window-actions {
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.suppression-window-actions .ghost-button {
+  flex: 0 0 auto;
+  min-width: 86px;
+  padding: 8px 12px;
+}
+
+.suppression-window-actions .status-badge {
+  min-width: 0;
+}
+
 .feed-title-row {
   display: flex;
   gap: 10px;

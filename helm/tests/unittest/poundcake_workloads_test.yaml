@@ -179,7 +179,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_CHART_VERSION
-            value: "0.2.120"
+            value: "0.2.121"
         documentIndex: 0
       - contains:
           path: spec.template.spec.containers[0].env

@@ -1630,15 +1630,18 @@ function SuppressionsPage() {
         <Panel title="Suppression windows" subtitle="Click any window to see its current status and cancel active ones.">
           <div className="list-stack">
             {suppressionsQuery.data.map((item) => (
-              <div className={`feed-row card-row ${focusedId === String(item.id) ? "highlighted" : ""}`} key={item.id}>
-                <div>
+              <div
+                className={`feed-row card-row suppression-window-row ${focusedId === String(item.id) ? "highlighted" : ""}`}
+                key={item.id}
+              >
+                <div className="suppression-window-main">
                   <strong>{item.name}</strong>
                   <p>
                     {item.reason || "No reason provided."} • {formatDate(item.starts_at)} to{" "}
                     {formatSuppressionEndsAt(item.ends_at)}
                   </p>
                 </div>
-                <div className="feed-meta">
+                <div className="feed-meta suppression-window-actions">
                   <StatusBadge status={item.status}>{item.status}</StatusBadge>
                   <button
                     className="ghost-button"

@@ -59,10 +59,14 @@ def test_suppression_form_supports_until_canceled_windows() -> None:
     assert "datetimeLocalToUtcIso(values.starts_at)" in content
     assert 'datetimeLocalToUtcIso(values.ends_at || "")' in content
     assert "suppression-schedule-grid" in content
+    assert "suppression-window-row" in content
+    assert "suppression-window-actions" in content
     assert "Until canceled" in content
     assert "formatSuppressionEndsAt(item.ends_at)" in content
     assert 'input[type="checkbox"]' in css
     assert ".suppression-schedule-grid" in css
+    assert ".suppression-window-row" in css
+    assert ".suppression-window-actions" in css
     assert ".checkbox-card" in css
 
 
