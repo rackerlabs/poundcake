@@ -51,6 +51,17 @@ def test_suppression_form_supports_multiple_matchers() -> None:
     assert "values.matchers.map((matcher)" in content
 
 
+def test_suppression_form_supports_until_canceled_windows() -> None:
+    content = APP_TSX.read_text(encoding="utf-8")
+    css = (REPO_ROOT / "ui" / "src" / "app.css").read_text(encoding="utf-8")
+    assert 'ends_mode: z.enum(["at_time", "until_canceled"])' in content
+    assert 'PERMANENT_SUPPRESSION_ENDS_AT = "9999-12-31T23:59:59Z"' in content
+    assert "Until canceled" in content
+    assert "formatSuppressionEndsAt(item.ends_at)" in content
+    assert 'input[type="checkbox"]' in css
+    assert ".checkbox-card" in css
+
+
 def test_ui_contract_objects_are_strict() -> None:
     content = CONTRACTS_TS.read_text(encoding="utf-8")
     assert (

@@ -71,8 +71,23 @@ select {
   padding: 12px 14px;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--brand);
+}
+
 textarea {
   resize: vertical;
+}
+
+fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 table {
@@ -315,6 +330,12 @@ pre {
 .list-stack,
 .help-list,
 .hint-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-stack > fieldset {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -710,6 +731,19 @@ pre {
   border-radius: 16px;
   border: 1px solid rgba(143, 163, 168, 0.12);
   background: rgba(255, 255, 255, 0.03);
+}
+
+.suppression-end-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.checkbox-card {
+  min-height: 46px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: rgba(10, 21, 30, 0.52);
 }
 
 .label-chip {

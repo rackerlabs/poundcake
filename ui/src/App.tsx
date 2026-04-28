@@ -262,11 +262,19 @@ const emptySuppressionMatcher = () => ({
   value: "",
 });
 
+const PERMANENT_SUPPRESSION_ENDS_AT = "9999-12-31T23:59:59Z";
+
+function localDatetimeInputValue(date = new Date()): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 const suppressionSchema = z.object({
   name: z.string().min(1, "Suppression name is required"),
   reason: z.string().optional(),
   starts_at: z.string().min(1, "Start time is required"),
-  ends_at: z.string().min(1, "End time is required"),
+  ends_mode: z.enum(["at_time", "until_canceled"]),
+  ends_at: z.string().optional(),
   scope: z.string().min(1),
   summary_ticket_enabled: z.boolean(),
   matchers: z.array(
@@ -282,6 +290,13 @@ const suppressionSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: "At least one matcher is required when scope is matchers.",
       path: ["matchers"],
+    });
+  }
+  if (values.ends_mode === "at_time" && !values.ends_at?.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End time is required unless the suppression is until canceled.",
+      path: ["ends_at"],
     });
   }
 });
@@ -865,7 +880,7 @@ function OverviewPage() {
           </div>
         </Panel>
 
-        <Panel title="Suppressions" subtitle="Time-boxed monitoring suppressions and their impact.">
+        <Panel title="Suppressions" subtitle="Monitoring suppressions and their impact.">
           <div className="list-stack">
             {suppressions.slice(0, 6).map((item) => (
               <Link className="feed-row" key={item.id} to={`/suppressions?suppression=${item.id}`}>
@@ -875,7 +890,7 @@ function OverviewPage() {
                 </div>
                 <div className="feed-meta">
                   <StatusBadge status={item.status}>{item.status}</StatusBadge>
-                  <span>{formatDate(item.ends_at)}</span>
+                  <span>{formatSuppressionEndsAt(item.ends_at)}</span>
                 </div>
               </Link>
             ))}
@@ -1371,6 +1386,14 @@ function CommunicationsPage() {
   );
 }
 
+function isUntilCanceledSuppression(endsAt?: string | null): boolean {
+  return Boolean(endsAt && /^9999-/.test(endsAt));
+}
+
+function formatSuppressionEndsAt(endsAt?: string | null): string {
+  return isUntilCanceledSuppression(endsAt) ? "Until canceled" : formatDate(endsAt);
+}
+
 function SuppressionsPage() {
   const notify = useToast();
   const principal = usePrincipal();
@@ -1388,7 +1411,8 @@ function SuppressionsPage() {
     defaultValues: {
       name: "",
       reason: "",
-      starts_at: "",
+      starts_at: localDatetimeInputValue(),
+      ends_mode: "at_time",
       ends_at: "",
       scope: "matchers",
       summary_ticket_enabled: true,
@@ -1400,6 +1424,7 @@ function SuppressionsPage() {
     name: "matchers",
   });
   const suppressionScope = form.watch("scope");
+  const suppressionEndsMode = form.watch("ends_mode");
 
   const createMutation = useMutation({
     mutationFn: async (values: z.infer<typeof suppressionSchema>) => {
@@ -1407,7 +1432,9 @@ function SuppressionsPage() {
         name: values.name,
         reason: values.reason || null,
         starts_at: values.starts_at,
-        ends_at: values.ends_at,
+        ends_at: values.ends_mode === "until_canceled"
+          ? PERMANENT_SUPPRESSION_ENDS_AT
+          : values.ends_at,
         scope: values.scope,
         enabled: true,
         created_by: "ui-v2",
@@ -1427,7 +1454,8 @@ function SuppressionsPage() {
       form.reset({
         name: "",
         reason: "",
-        starts_at: "",
+        starts_at: localDatetimeInputValue(),
+        ends_mode: "at_time",
         ends_at: "",
         scope: "matchers",
         summary_ticket_enabled: true,
@@ -1461,11 +1489,11 @@ function SuppressionsPage() {
     <div className="page-stack">
       <PageHeader
         title="Suppressions"
-        description="Manage temporary monitoring suppressions and see which windows are active, scheduled, or already expired."
+        description="Manage monitoring suppressions and see which windows are active, scheduled, until canceled, or already expired."
       />
 
       <div className="editor-grid">
-        <Panel title="Create suppression" subtitle="Use clear dates and matcher scope so operators know exactly what is being muted.">
+        <Panel title="Create suppression" subtitle="Use a clear scope so operators know exactly what is being muted.">
           {!canEdit ? (
             <div className="helper-card">
               <strong>Read-only access</strong>
@@ -1486,10 +1514,33 @@ function SuppressionsPage() {
                 <input type="datetime-local" {...form.register("starts_at")} />
                 <FieldError message={form.formState.errors.starts_at?.message} />
               </FormField>
-              <FormField label="Ends at" help="End of the suppression window in local time.">
-                <input type="datetime-local" {...form.register("ends_at")} />
-                <FieldError message={form.formState.errors.ends_at?.message} />
-              </FormField>
+              <div className="suppression-end-controls">
+                <FormField label="Ends at" help="End of the suppression window in local time. Choose until canceled for standing suppressions.">
+                  <input
+                    disabled={suppressionEndsMode === "until_canceled"}
+                    type="datetime-local"
+                    {...form.register("ends_at")}
+                  />
+                  <FieldError message={form.formState.errors.ends_at?.message} />
+                </FormField>
+                <label className="toggle-row checkbox-card">
+                  <input
+                    checked={suppressionEndsMode === "until_canceled"}
+                    type="checkbox"
+                    onChange={(event) => {
+                      form.setValue(
+                        "ends_mode",
+                        event.target.checked ? "until_canceled" : "at_time",
+                        { shouldDirty: true, shouldValidate: true },
+                      );
+                      if (event.target.checked) {
+                        form.clearErrors("ends_at");
+                      }
+                    }}
+                  />
+                  <span>Until canceled</span>
+                </label>
+              </div>
             </div>
             <div className="grid-two">
               <FormField label="Scope" help="Matcher scope targets alerts by label rather than silencing everything globally.">
@@ -1498,12 +1549,19 @@ function SuppressionsPage() {
                   <option value="all">All</option>
                 </select>
               </FormField>
-              <FormField label="Summary communication" help="Enable this when you want the suppression lifecycle summarized into a ticket.">
-                <label className="toggle-row">
+              <div className="form-field">
+                <span className="field-label">
+                  Summary communication
+                  <HelpBubble
+                    help="Enable this when you want the suppression lifecycle summarized into a ticket."
+                    label="Summary communication"
+                  />
+                </span>
+                <label className="toggle-row checkbox-card">
                   <input type="checkbox" {...form.register("summary_ticket_enabled")} />
                   <span>Send summary communication</span>
                 </label>
-              </FormField>
+              </div>
             </div>
             {suppressionScope === "matchers" ? (
               <div className="form-stack">
@@ -1571,7 +1629,7 @@ function SuppressionsPage() {
                   <strong>{item.name}</strong>
                   <p>
                     {item.reason || "No reason provided."} • {formatDate(item.starts_at)} to{" "}
-                    {formatDate(item.ends_at)}
+                    {formatSuppressionEndsAt(item.ends_at)}
                   </p>
                 </div>
                 <div className="feed-meta">
