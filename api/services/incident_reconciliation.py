@@ -132,6 +132,14 @@ def _alert_is_firing(order: Order, alerts: list[dict[str, Any]]) -> bool:
 
 CLEAR_NOTE_TICKET_IDS_KEY = "clear_note_ticket_ids"
 LAST_CLEAR_NOTE_TICKET_ID_KEY = "last_clear_note_ticket_id"
+TICKET_ALERT_NOTE_STATE_BY_TICKET_KEY = "ticket_alert_note_state_by_ticket"
+TICKET_ALERT_NOTE_STATE_AT_BY_TICKET_KEY = "ticket_alert_note_state_at_by_ticket"
+LAST_TICKET_ALERT_NOTE_TICKET_ID_KEY = "last_ticket_alert_note_ticket_id"
+LAST_TICKET_ALERT_NOTE_STATE_KEY = "last_ticket_alert_note_state"
+LAST_TICKET_ALERT_NOTE_STATE_AT_KEY = "last_ticket_alert_note_state_at"
+ALERT_NOTE_STATE_FIRING = "firing"
+ALERT_NOTE_STATE_RESOLVED = "resolved"
+ALERT_NOTE_STATES = {ALERT_NOTE_STATE_FIRING, ALERT_NOTE_STATE_RESOLVED}
 
 
 def _clear_note_ticket_ids(metadata: dict[str, Any]) -> set[str]:
@@ -154,6 +162,78 @@ def _remember_clear_note_for_ticket(metadata: dict[str, Any], ticket_id: str) ->
     ticket_ids.add(ticket_id)
     metadata[CLEAR_NOTE_TICKET_IDS_KEY] = sorted(ticket_ids)
     metadata[LAST_CLEAR_NOTE_TICKET_ID_KEY] = ticket_id
+
+
+def _normalize_alert_note_state(value: Any) -> str | None:
+    state = str(value or "").strip().lower()
+    return state if state in ALERT_NOTE_STATES else None
+
+
+def _coerce_metadata_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _ticket_alert_note_state(metadata: dict[str, Any], ticket_id: str) -> str | None:
+    value = metadata.get(TICKET_ALERT_NOTE_STATE_BY_TICKET_KEY)
+    if isinstance(value, dict):
+        state = _normalize_alert_note_state(value.get(ticket_id))
+        if state:
+            return state
+    if str(metadata.get(LAST_TICKET_ALERT_NOTE_TICKET_ID_KEY) or "").strip() == ticket_id:
+        state = _normalize_alert_note_state(metadata.get(LAST_TICKET_ALERT_NOTE_STATE_KEY))
+        if state:
+            return state
+    if _has_clear_note_for_ticket(metadata, ticket_id):
+        return ALERT_NOTE_STATE_RESOLVED
+    return None
+
+
+def _ticket_alert_note_state_at(metadata: dict[str, Any], ticket_id: str) -> datetime | None:
+    value = metadata.get(TICKET_ALERT_NOTE_STATE_AT_BY_TICKET_KEY)
+    if isinstance(value, dict):
+        parsed = _coerce_metadata_datetime(value.get(ticket_id))
+        if parsed:
+            return parsed
+    if str(metadata.get(LAST_TICKET_ALERT_NOTE_TICKET_ID_KEY) or "").strip() == ticket_id:
+        return _coerce_metadata_datetime(metadata.get(LAST_TICKET_ALERT_NOTE_STATE_AT_KEY))
+    return None
+
+
+def _remember_ticket_alert_note_state(
+    metadata: dict[str, Any],
+    ticket_id: str,
+    state: str,
+) -> None:
+    normalized_state = _normalize_alert_note_state(state)
+    if not normalized_state:
+        return
+    states = metadata.get(TICKET_ALERT_NOTE_STATE_BY_TICKET_KEY)
+    state_by_ticket = dict(states) if isinstance(states, dict) else {}
+    state_by_ticket[ticket_id] = normalized_state
+
+    state_at = _now().isoformat()
+    times = metadata.get(TICKET_ALERT_NOTE_STATE_AT_BY_TICKET_KEY)
+    state_at_by_ticket = dict(times) if isinstance(times, dict) else {}
+    state_at_by_ticket[ticket_id] = state_at
+
+    metadata[TICKET_ALERT_NOTE_STATE_BY_TICKET_KEY] = state_by_ticket
+    metadata[TICKET_ALERT_NOTE_STATE_AT_BY_TICKET_KEY] = state_at_by_ticket
+    metadata[LAST_TICKET_ALERT_NOTE_TICKET_ID_KEY] = ticket_id
+    metadata[LAST_TICKET_ALERT_NOTE_STATE_KEY] = normalized_state
+    metadata[LAST_TICKET_ALERT_NOTE_STATE_AT_KEY] = state_at
+    if normalized_state == ALERT_NOTE_STATE_RESOLVED:
+        _remember_clear_note_for_ticket(metadata, ticket_id)
 
 
 def _route_metadata(order: Order, communication: OrderCommunication) -> dict[str, Any]:
@@ -245,6 +325,17 @@ def _firing_ticket_note(order: Order, communication: OrderCommunication) -> str:
     return (
         f"Alert {order.alert_group_name} is still firing. PoundCake reopened or recreated the "
         f"{route_label} incident because it cannot be closed until the alert clears."
+    )
+
+
+def _refire_ticket_note(order: Order, communication: OrderCommunication) -> str:
+    route = _route_metadata(order, communication)
+    route_label = str(route.get("route_label") or communication.execution_target).strip()
+    return (
+        f"Alert {order.alert_group_name} is firing again after previously clearing. "
+        "PoundCake did not remediate or validate a fix. The "
+        f"{route_label} ticket remains open; this update documents the renewed alert "
+        "in the existing incident."
     )
 
 
@@ -340,7 +431,12 @@ def _has_active_resolving_route_step(order: Order, communication: OrderCommunica
     return False
 
 
-def _has_completed_resolving_notify_step(order: Order, communication: OrderCommunication) -> bool:
+def _has_completed_resolving_notify_step(
+    order: Order,
+    communication: OrderCommunication,
+    *,
+    since: datetime | None = None,
+) -> bool:
     for dish in list(order.dishes or []):
         if str(getattr(dish, "run_phase", "") or "").strip().lower() != "resolving":
             continue
@@ -363,6 +459,14 @@ def _has_completed_resolving_notify_step(order: Order, communication: OrderCommu
             operation = str(params.get("operation") or "").strip().lower()
             status = str(getattr(step, "execution_status", "") or "").strip().lower()
             if operation == "notify" and status in {"succeeded", "success", "completed"}:
+                if since is not None:
+                    completed_at = (
+                        _coerce_metadata_datetime(getattr(step, "completed_at", None))
+                        or _coerce_metadata_datetime(getattr(step, "updated_at", None))
+                        or _coerce_metadata_datetime(getattr(step, "created_at", None))
+                    )
+                    if completed_at is None or completed_at < since:
+                        continue
                 return True
     return False
 
@@ -432,7 +536,7 @@ async def _reopen_or_recreate_ticket(
             return
         await refresh_remote_state(communication)
         metadata["last_reopen_ticket_id"] = old_ticket_id
-        metadata.pop("last_clear_note_ticket_id", None)
+        _remember_ticket_alert_note_state(metadata, old_ticket_id, ALERT_NOTE_STATE_FIRING)
         communication.reconcile_metadata = metadata
         actions.append(
             f"reopened:{communication.execution_target}:{communication.destination_target}"
@@ -456,11 +560,53 @@ async def _reopen_or_recreate_ticket(
     communication.writable = True
     communication.reopenable = False
     metadata["last_successor_from_ticket_id"] = old_ticket_id
-    metadata.pop("last_clear_note_ticket_id", None)
+    if accepted.communication_id:
+        _remember_ticket_alert_note_state(
+            metadata,
+            accepted.communication_id,
+            ALERT_NOTE_STATE_FIRING,
+        )
     communication.reconcile_metadata = metadata
     await refresh_remote_state(communication)
     actions.append(
         f"recreated:{communication.execution_target}:{communication.destination_target}:{accepted.communication_id}"
+    )
+
+
+async def _notify_refire_ticket(
+    *,
+    order: Order,
+    communication: OrderCommunication,
+    req_id: str,
+    actions: list[str],
+) -> None:
+    metadata = dict(communication.reconcile_metadata or {})
+    ticket_id = str(communication.bakery_ticket_id or "").strip()
+    if not ticket_id:
+        return
+    if _ticket_alert_note_state(metadata, ticket_id) == ALERT_NOTE_STATE_FIRING:
+        communication.reconcile_metadata = metadata
+        return
+    accepted = await notify_communication(
+        req_id=req_id,
+        communication_id=ticket_id,
+        payload={
+            "comment": _refire_ticket_note(order, communication),
+            "context": _reconcile_context(order, communication),
+        },
+    )
+    success, error = await _await_operation(accepted.operation_id)
+    communication.bakery_operation_id = accepted.operation_id
+    communication.lifecycle_state = "succeeded" if success else "failed"
+    communication.last_error = error
+    if not success:
+        communication.reconcile_metadata = metadata
+        return
+    _remember_ticket_alert_note_state(metadata, ticket_id, ALERT_NOTE_STATE_FIRING)
+    communication.reconcile_metadata = metadata
+    await refresh_remote_state(communication)
+    actions.append(
+        f"notified_firing:{communication.execution_target}:{communication.destination_target}"
     )
 
 
@@ -475,7 +621,7 @@ async def _notify_clear_ticket(
     ticket_id = str(communication.bakery_ticket_id or "").strip()
     if not ticket_id:
         return
-    if _has_clear_note_for_ticket(metadata, ticket_id):
+    if _ticket_alert_note_state(metadata, ticket_id) == ALERT_NOTE_STATE_RESOLVED:
         communication.reconcile_metadata = metadata
         return
     accepted = await notify_communication(
@@ -493,7 +639,7 @@ async def _notify_clear_ticket(
     if not success:
         communication.reconcile_metadata = metadata
         return
-    _remember_clear_note_for_ticket(metadata, ticket_id)
+    _remember_ticket_alert_note_state(metadata, ticket_id, ALERT_NOTE_STATE_RESOLVED)
     communication.reconcile_metadata = metadata
     await refresh_remote_state(communication)
     actions.append(
@@ -522,6 +668,9 @@ async def reconcile_order(
         result["status"] = "skipped"
         return result
 
+    previous_processing_status = str(order.processing_status or "").strip().lower()
+    previous_alert_status = str(order.alert_status or "").strip().lower()
+
     alerts = await get_prometheus_client().get_alerts()
     if alerts is None:
         result["status"] = "deferred"
@@ -531,15 +680,16 @@ async def reconcile_order(
     alert_firing = _alert_is_firing(order, alerts)
     now = _now()
     result["observed_alert_status"] = "firing" if alert_firing else "resolved"
+    refired_existing_incident = alert_firing and (
+        previous_processing_status in {"resolving", "waiting_ticket_close"}
+        or previous_alert_status == "resolved"
+    )
 
     if alert_firing:
         order.alert_status = "firing"
         order.ends_at = None
         order.is_active = True
-        if str(order.processing_status or "").strip().lower() in {
-            "resolving",
-            "waiting_ticket_close",
-        }:
+        if previous_processing_status in {"resolving", "waiting_ticket_close"}:
             order.processing_status = "new"
             result["actions"].append("redispatch_firing")
     else:
@@ -577,13 +727,6 @@ async def reconcile_order(
         result["reason"] = "bakery_sync_failed"
         return result
 
-    for communication in ticket_routes:
-        metadata = dict(communication.reconcile_metadata or {})
-        if alert_firing and not is_remote_state_terminal(communication.remote_state):
-            metadata.pop("last_reopen_ticket_id", None)
-            communication.reconcile_metadata = metadata
-            continue
-
     if alert_firing:
         for communication in ticket_routes:
             if is_remote_state_terminal(communication.remote_state):
@@ -593,11 +736,47 @@ async def reconcile_order(
                     req_id=req_id,
                     actions=result["actions"],
                 )
+            else:
+                metadata = dict(communication.reconcile_metadata or {})
+                metadata.pop("last_reopen_ticket_id", None)
+                communication.reconcile_metadata = metadata
+                if refired_existing_incident:
+                    await _notify_refire_ticket(
+                        order=order,
+                        communication=communication,
+                        req_id=req_id,
+                        actions=result["actions"],
+                    )
     else:
         for communication in ticket_routes:
             if _has_active_resolving_route_step(order, communication):
                 continue
-            if _has_completed_resolving_notify_step(order, communication):
+            ticket_id = str(communication.bakery_ticket_id or "").strip()
+            metadata = dict(communication.reconcile_metadata or {})
+            last_note_state = _ticket_alert_note_state(metadata, ticket_id) if ticket_id else None
+            last_note_state_at = (
+                _ticket_alert_note_state_at(metadata, ticket_id) if ticket_id else None
+            )
+            completed_notify_since = (
+                last_note_state_at if last_note_state == ALERT_NOTE_STATE_FIRING else None
+            )
+            completed_notify_already_ran = (
+                False
+                if last_note_state == ALERT_NOTE_STATE_FIRING and last_note_state_at is None
+                else _has_completed_resolving_notify_step(
+                    order,
+                    communication,
+                    since=completed_notify_since,
+                )
+            )
+            if completed_notify_already_ran:
+                if ticket_id and last_note_state != ALERT_NOTE_STATE_RESOLVED:
+                    _remember_ticket_alert_note_state(
+                        metadata,
+                        ticket_id,
+                        ALERT_NOTE_STATE_RESOLVED,
+                    )
+                    communication.reconcile_metadata = metadata
                 continue
             if not is_remote_state_terminal(communication.remote_state):
                 await _notify_clear_ticket(

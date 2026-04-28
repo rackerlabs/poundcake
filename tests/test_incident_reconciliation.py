@@ -200,6 +200,12 @@ async def test_reconcile_refire_waiting_ticket_close_resets_order_to_new(
         "refresh_remote_state",
         AsyncMock(return_value=("open", True, False)),
     )
+    notify = AsyncMock(
+        return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1")
+    )
+    poll = AsyncMock(return_value=SimpleNamespace(status="succeeded", last_error=None))
+    monkeypatch.setattr(incident_reconciliation, "notify_communication", notify)
+    monkeypatch.setattr(incident_reconciliation, "poll_operation", poll)
 
     result = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
 
@@ -207,7 +213,12 @@ async def test_reconcile_refire_waiting_ticket_close_resets_order_to_new(
     assert order.processing_status == "new"
     assert order.alert_status == "firing"
     assert "redispatch_firing" in result["actions"]
-    assert communication.reconcile_metadata.get("last_clear_note_ticket_id") is None
+    assert "notified_firing:rackspace_core:primary" in result["actions"]
+    note_payload = notify.await_args.kwargs["payload"]
+    assert "is firing again after previously clearing" in note_payload["comment"]
+    assert communication.reconcile_metadata["ticket_alert_note_state_by_ticket"] == {
+        "comm-1": "firing"
+    }
     db.flush.assert_awaited_once()
 
 
@@ -264,7 +275,7 @@ async def test_reconcile_waiting_ticket_close_notifies_once_and_then_completes(
 
 
 @pytest.mark.asyncio
-async def test_reconcile_clear_note_is_not_duplicated_after_alert_flap(
+async def test_reconcile_documents_flap_transitions_without_duplicate_notes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     order = _make_order(status="waiting_ticket_close")
@@ -279,7 +290,7 @@ async def test_reconcile_clear_note_is_not_duplicated_after_alert_flap(
             "instance": "host1",
         },
     }
-    alert_sequences = iter([[], [firing_alert], []])
+    alert_sequences = iter([[], [firing_alert], [firing_alert], [], []])
 
     notify = AsyncMock(
         return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1")
@@ -307,13 +318,31 @@ async def test_reconcile_clear_note_is_not_duplicated_after_alert_flap(
     first = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
     second = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
     third = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+    fourth = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+    fifth = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
 
     assert first["actions"] == ["notified_clear:rackspace_core:primary"]
-    assert second["actions"] == ["redispatch_firing"]
-    assert third["actions"] == ["dispatch_resolving"]
-    assert notify.await_count == 1
+    assert second["actions"] == [
+        "redispatch_firing",
+        "notified_firing:rackspace_core:primary",
+    ]
+    assert third["actions"] == []
+    assert fourth["actions"] == [
+        "dispatch_resolving",
+        "notified_clear:rackspace_core:primary",
+    ]
+    assert fifth["actions"] == []
+    assert notify.await_count == 3
+    comments = [call.kwargs["payload"]["comment"] for call in notify.await_args_list]
+    assert "is no longer firing" in comments[0]
+    assert "is firing again after previously clearing" in comments[1]
+    assert "is no longer firing" in comments[2]
     assert communication.reconcile_metadata["last_clear_note_ticket_id"] == "comm-1"
     assert communication.reconcile_metadata["clear_note_ticket_ids"] == ["comm-1"]
+    assert communication.reconcile_metadata["ticket_alert_note_state_by_ticket"] == {
+        "comm-1": "resolved"
+    }
+    assert communication.reconcile_metadata["last_ticket_alert_note_state"] == "resolved"
     db.flush.assert_awaited()
 
 
