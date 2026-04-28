@@ -130,6 +130,32 @@ def _alert_is_firing(order: Order, alerts: list[dict[str, Any]]) -> bool:
     return False
 
 
+CLEAR_NOTE_TICKET_IDS_KEY = "clear_note_ticket_ids"
+LAST_CLEAR_NOTE_TICKET_ID_KEY = "last_clear_note_ticket_id"
+
+
+def _clear_note_ticket_ids(metadata: dict[str, Any]) -> set[str]:
+    ticket_ids: set[str] = set()
+    value = metadata.get(CLEAR_NOTE_TICKET_IDS_KEY)
+    if isinstance(value, list):
+        ticket_ids.update(str(item).strip() for item in value if str(item or "").strip())
+    legacy = str(metadata.get(LAST_CLEAR_NOTE_TICKET_ID_KEY) or "").strip()
+    if legacy:
+        ticket_ids.add(legacy)
+    return ticket_ids
+
+
+def _has_clear_note_for_ticket(metadata: dict[str, Any], ticket_id: str) -> bool:
+    return ticket_id in _clear_note_ticket_ids(metadata)
+
+
+def _remember_clear_note_for_ticket(metadata: dict[str, Any], ticket_id: str) -> None:
+    ticket_ids = _clear_note_ticket_ids(metadata)
+    ticket_ids.add(ticket_id)
+    metadata[CLEAR_NOTE_TICKET_IDS_KEY] = sorted(ticket_ids)
+    metadata[LAST_CLEAR_NOTE_TICKET_ID_KEY] = ticket_id
+
+
 def _route_metadata(order: Order, communication: OrderCommunication) -> dict[str, Any]:
     metadata = dict(communication.reconcile_metadata or {})
     if not metadata.get("route_label"):
@@ -449,7 +475,7 @@ async def _notify_clear_ticket(
     ticket_id = str(communication.bakery_ticket_id or "").strip()
     if not ticket_id:
         return
-    if metadata.get("last_clear_note_ticket_id") == ticket_id:
+    if _has_clear_note_for_ticket(metadata, ticket_id):
         communication.reconcile_metadata = metadata
         return
     accepted = await notify_communication(
@@ -467,7 +493,7 @@ async def _notify_clear_ticket(
     if not success:
         communication.reconcile_metadata = metadata
         return
-    metadata["last_clear_note_ticket_id"] = ticket_id
+    _remember_clear_note_for_ticket(metadata, ticket_id)
     communication.reconcile_metadata = metadata
     await refresh_remote_state(communication)
     actions.append(
@@ -555,12 +581,8 @@ async def reconcile_order(
         metadata = dict(communication.reconcile_metadata or {})
         if alert_firing and not is_remote_state_terminal(communication.remote_state):
             metadata.pop("last_reopen_ticket_id", None)
-            metadata.pop("last_clear_note_ticket_id", None)
             communication.reconcile_metadata = metadata
             continue
-        if not alert_firing and is_remote_state_terminal(communication.remote_state):
-            metadata.pop("last_clear_note_ticket_id", None)
-            communication.reconcile_metadata = metadata
 
     if alert_firing:
         for communication in ticket_routes:

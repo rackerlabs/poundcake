@@ -264,6 +264,60 @@ async def test_reconcile_waiting_ticket_close_notifies_once_and_then_completes(
 
 
 @pytest.mark.asyncio
+async def test_reconcile_clear_note_is_not_duplicated_after_alert_flap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order = _make_order(status="waiting_ticket_close")
+    communication = _make_communication(order=order, remote_state="open")
+    db = SimpleNamespace(flush=AsyncMock())
+
+    firing_alert = {
+        "state": "firing",
+        "labels": {
+            "alertname": "DiskFull",
+            "group_name": "group",
+            "instance": "host1",
+        },
+    }
+    alert_sequences = iter([[], [firing_alert], []])
+
+    notify = AsyncMock(
+        return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1")
+    )
+    poll = AsyncMock(return_value=SimpleNamespace(status="succeeded", last_error=None))
+
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "load_order_with_communications",
+        AsyncMock(return_value=order),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "get_prometheus_client",
+        lambda: SimpleNamespace(get_alerts=AsyncMock(side_effect=lambda: next(alert_sequences))),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "refresh_remote_state",
+        AsyncMock(return_value=("open", True, False)),
+    )
+    monkeypatch.setattr(incident_reconciliation, "notify_communication", notify)
+    monkeypatch.setattr(incident_reconciliation, "poll_operation", poll)
+
+    first = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+    second = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+    third = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+
+    assert first["actions"] == ["notified_clear:rackspace_core:primary"]
+    assert second["actions"] == ["redispatch_firing"]
+    assert third["actions"] == ["dispatch_resolving"]
+    assert notify.await_count == 1
+    assert communication.reconcile_metadata["last_clear_note_ticket_id"] == "comm-1"
+    assert communication.reconcile_metadata["clear_note_ticket_ids"] == ["comm-1"]
+    db.flush.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_reconcile_waiting_clear_without_live_alert_moves_to_resolving(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
