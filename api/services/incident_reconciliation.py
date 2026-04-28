@@ -60,11 +60,37 @@ def _sync_legacy_order_fields(order: Order) -> None:
     order.bakery_comms_id = None
 
 
+RECONCILE_MATCH_LABEL_KEYS = (
+    "alertname",
+    "group_name",
+    "severity",
+    "namespace",
+    "cluster",
+    "horizontalpodautoscaler",
+    "deployment",
+    "statefulset",
+    "daemonset",
+    "replicaset",
+    "persistentvolumeclaim",
+    "persistentvolume",
+    "pod",
+    "container",
+    "node",
+    "node_name",
+    "k8s_node_name",
+    "host_name",
+    "node_hostname",
+    "hostname",
+    "instance",
+    "job",
+    "service",
+)
+
+
 def _matching_labels(order: Order) -> dict[str, str]:
     labels = dict(order.labels or {})
-    keys = ("alertname", "group_name", "instance", "job", "namespace", "cluster", "service")
     result: dict[str, str] = {}
-    for key in keys:
+    for key in RECONCILE_MATCH_LABEL_KEYS:
         value = labels.get(key)
         if value not in (None, ""):
             result[key] = str(value)

@@ -135,6 +135,35 @@ def _make_resolving_dish(*steps: DishIngredient) -> Dish:
     return dish
 
 
+def test_alert_match_requires_same_hpa_when_hpa_label_is_present() -> None:
+    order = _make_order()
+    order.labels = {
+        "alertname": "kube-hpa-maxed-out-warning",
+        "group_name": "kube-hpa-maxed-out",
+        "namespace": "openstack",
+        "job": "kube-state-metrics",
+        "service": "opentelemetry-kube-stack-kube-state-metrics",
+        "instance": "10.236.13.166:8080",
+        "severity": "warning",
+        "horizontalpodautoscaler": "cinder-api",
+    }
+
+    assert not incident_reconciliation._alert_matches_order(
+        order,
+        {
+            "state": "firing",
+            "labels": {
+                **order.labels,
+                "horizontalpodautoscaler": "heat-engine",
+            },
+        },
+    )
+    assert incident_reconciliation._alert_matches_order(
+        order,
+        {"state": "firing", "labels": dict(order.labels)},
+    )
+
+
 @pytest.mark.asyncio
 async def test_reconcile_refire_waiting_ticket_close_resets_order_to_new(
     monkeypatch: pytest.MonkeyPatch,
