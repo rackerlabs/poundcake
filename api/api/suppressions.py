@@ -129,7 +129,11 @@ async def create_suppression(
     db: AsyncSession = Depends(get_db),
 ) -> SuppressionResponse:
     req_id = request.state.req_id
-    if payload.ends_at <= payload.starts_at:
+    starts_at = normalize_utc_datetime(payload.starts_at)
+    ends_at = normalize_utc_datetime(payload.ends_at)
+    if starts_at is None or ends_at is None:
+        raise HTTPException(status_code=400, detail="starts_at and ends_at are required")
+    if ends_at <= starts_at:
         raise HTTPException(status_code=400, detail="ends_at must be greater than starts_at")
     if payload.scope == "matchers" and not payload.matchers:
         raise HTTPException(status_code=400, detail="matchers required when scope=matchers")
@@ -139,8 +143,8 @@ async def create_suppression(
         reason=payload.reason,
         scope=payload.scope,
         enabled=payload.enabled,
-        starts_at=payload.starts_at,
-        ends_at=payload.ends_at,
+        starts_at=starts_at,
+        ends_at=ends_at,
         created_by=payload.created_by,
         summary_ticket_enabled=payload.summary_ticket_enabled,
     )
@@ -223,6 +227,7 @@ async def patch_suppression(
         starts_at = normalize_utc_datetime(suppression.starts_at)
         if updated_ends_at is not None and starts_at is not None and updated_ends_at <= starts_at:
             raise HTTPException(status_code=400, detail="ends_at must be greater than starts_at")
+        changes["ends_at"] = updated_ends_at
 
     for field in ("name", "ends_at", "reason", "enabled"):
         if field in changes:

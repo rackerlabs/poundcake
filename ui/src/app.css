@@ -724,7 +724,7 @@ pre {
 
 .matcher-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.7fr) minmax(150px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.7fr) minmax(240px, 1.2fr) auto;
   gap: 12px;
   align-items: end;
   padding: 14px;
@@ -733,9 +733,11 @@ pre {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.suppression-end-controls {
+.suppression-schedule-grid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(190px, 1fr) minmax(190px, 1fr) minmax(170px, 0.7fr);
+  gap: 18px;
+  align-items: start;
 }
 
 .checkbox-card {
@@ -1135,6 +1137,7 @@ pre {
   .master-detail,
   .alert-context-grid,
   .matcher-row,
+  .suppression-schedule-grid,
   .hero-panel,
   .grid-three,
   .grid-two,

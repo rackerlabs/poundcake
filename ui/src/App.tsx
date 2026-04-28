@@ -269,6 +269,11 @@ function localDatetimeInputValue(date = new Date()): string {
   return local.toISOString().slice(0, 16);
 }
 
+function datetimeLocalToUtcIso(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
 const suppressionSchema = z.object({
   name: z.string().min(1, "Suppression name is required"),
   reason: z.string().optional(),
@@ -1431,10 +1436,10 @@ function SuppressionsPage() {
       const request = suppressionCreateRequestSchema.parse({
         name: values.name,
         reason: values.reason || null,
-        starts_at: values.starts_at,
+        starts_at: datetimeLocalToUtcIso(values.starts_at),
         ends_at: values.ends_mode === "until_canceled"
           ? PERMANENT_SUPPRESSION_ENDS_AT
-          : values.ends_at,
+          : datetimeLocalToUtcIso(values.ends_at || ""),
         scope: values.scope,
         enabled: true,
         created_by: "ui-v2",
@@ -1509,20 +1514,21 @@ function SuppressionsPage() {
             <FormField label="Reason" help="Explain why alerts are being suppressed and who requested it.">
               <textarea {...form.register("reason")} rows={3} />
             </FormField>
-            <div className="grid-two">
+            <div className="suppression-schedule-grid">
               <FormField label="Starts at" help="Start of the suppression window in local time.">
                 <input type="datetime-local" {...form.register("starts_at")} />
                 <FieldError message={form.formState.errors.starts_at?.message} />
               </FormField>
-              <div className="suppression-end-controls">
-                <FormField label="Ends at" help="End of the suppression window in local time. Choose until canceled for standing suppressions.">
-                  <input
-                    disabled={suppressionEndsMode === "until_canceled"}
-                    type="datetime-local"
-                    {...form.register("ends_at")}
-                  />
-                  <FieldError message={form.formState.errors.ends_at?.message} />
-                </FormField>
+              <FormField label="Ends at" help="End of the suppression window in local time. Choose until canceled for standing suppressions.">
+                <input
+                  disabled={suppressionEndsMode === "until_canceled"}
+                  type="datetime-local"
+                  {...form.register("ends_at")}
+                />
+                <FieldError message={form.formState.errors.ends_at?.message} />
+              </FormField>
+              <div className="form-field">
+                <span className="field-label">Duration</span>
                 <label className="toggle-row checkbox-card">
                   <input
                     checked={suppressionEndsMode === "until_canceled"}

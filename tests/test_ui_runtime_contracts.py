@@ -56,9 +56,13 @@ def test_suppression_form_supports_until_canceled_windows() -> None:
     css = (REPO_ROOT / "ui" / "src" / "app.css").read_text(encoding="utf-8")
     assert 'ends_mode: z.enum(["at_time", "until_canceled"])' in content
     assert 'PERMANENT_SUPPRESSION_ENDS_AT = "9999-12-31T23:59:59Z"' in content
+    assert "datetimeLocalToUtcIso(values.starts_at)" in content
+    assert 'datetimeLocalToUtcIso(values.ends_at || "")' in content
+    assert "suppression-schedule-grid" in content
     assert "Until canceled" in content
     assert "formatSuppressionEndsAt(item.ends_at)" in content
     assert 'input[type="checkbox"]' in css
+    assert ".suppression-schedule-grid" in css
     assert ".checkbox-card" in css
 
 
