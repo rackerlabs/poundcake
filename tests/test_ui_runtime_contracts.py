@@ -61,6 +61,8 @@ def test_suppression_form_supports_until_canceled_windows() -> None:
     assert "suppression-schedule-grid" in content
     assert "suppression-window-row" in content
     assert "suppression-window-actions" in content
+    assert 'return status === "active" || status === "scheduled";' in content
+    assert "showCancelAction" in content
     assert "Until canceled" in content
     assert "formatSuppressionEndsAt(item.ends_at)" in content
     assert 'input[type="checkbox"]' in css

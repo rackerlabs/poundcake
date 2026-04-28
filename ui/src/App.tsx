@@ -1399,6 +1399,10 @@ function formatSuppressionEndsAt(endsAt?: string | null): string {
   return isUntilCanceledSuppression(endsAt) ? "Until canceled" : formatDate(endsAt);
 }
 
+function canCancelSuppressionWindow(status: string): boolean {
+  return status === "active" || status === "scheduled";
+}
+
 function SuppressionsPage() {
   const notify = useToast();
   const principal = usePrincipal();
@@ -1629,35 +1633,40 @@ function SuppressionsPage() {
 
         <Panel title="Suppression windows" subtitle="Click any window to see its current status and cancel active ones.">
           <div className="list-stack">
-            {suppressionsQuery.data.map((item) => (
-              <div
-                className={`feed-row card-row suppression-window-row ${focusedId === String(item.id) ? "highlighted" : ""}`}
-                key={item.id}
-              >
-                <div className="suppression-window-main">
-                  <strong>{item.name}</strong>
-                  <p>
-                    {item.reason || "No reason provided."} • {formatDate(item.starts_at)} to{" "}
-                    {formatSuppressionEndsAt(item.ends_at)}
-                  </p>
+            {suppressionsQuery.data.map((item) => {
+              const showCancelAction = canEdit && canCancelSuppressionWindow(item.status);
+              return (
+                <div
+                  className={`feed-row card-row suppression-window-row ${focusedId === String(item.id) ? "highlighted" : ""}`}
+                  key={item.id}
+                >
+                  <div className="suppression-window-main">
+                    <strong>{item.name}</strong>
+                    <p>
+                      {item.reason || "No reason provided."} • {formatDate(item.starts_at)} to{" "}
+                      {formatSuppressionEndsAt(item.ends_at)}
+                    </p>
+                  </div>
+                  <div className="feed-meta suppression-window-actions">
+                    <StatusBadge status={item.status}>{item.status}</StatusBadge>
+                    {showCancelAction ? (
+                      <button
+                        className="ghost-button"
+                        disabled={cancelMutation.isPending}
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Cancel suppression "${item.name}"?`)) {
+                            cancelMutation.mutate(item.id);
+                          }
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="feed-meta suppression-window-actions">
-                  <StatusBadge status={item.status}>{item.status}</StatusBadge>
-                  <button
-                    className="ghost-button"
-                    disabled={!canEdit || cancelMutation.isPending || item.status === "canceled"}
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm(`Cancel suppression "${item.name}"?`)) {
-                        cancelMutation.mutate(item.id);
-                      }
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       </div>
