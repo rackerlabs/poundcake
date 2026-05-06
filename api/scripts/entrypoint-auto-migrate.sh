@@ -21,20 +21,17 @@ if [ "$MIGRATION_COUNT" -eq 0 ]; then
 fi
 echo "[OK] Found $MIGRATION_COUNT existing migration(s)"
 
-# Run database migrations
-echo "Running database migrations..."
-python3 -m alembic upgrade head
+# Run the single alpha baseline. The bootstrap wrapper allows an unstamped
+# partial baseline to finish, but rejects unexpected revision chains.
+echo "Running database baseline bootstrap..."
+python3 -m api.scripts.bootstrap_schema
 
 if [ $? -eq 0 ]; then
-    echo "[OK] Database migrations applied successfully"
+    echo "[OK] Database baseline bootstrap completed successfully"
 else
-    echo "✗ Database migration failed!"
+    echo "✗ Database baseline bootstrap failed!"
     exit 1
 fi
-
-echo "Ensuring alpha compatibility schema..."
-python3 -m api.scripts.ensure_alpha_schema
-echo "[OK] Alpha compatibility schema verified"
 
 # Start the Application
 # --no-access-log: Disable uvicorn access logs (our middleware logs all requests)

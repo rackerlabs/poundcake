@@ -7,15 +7,10 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
-from sqlalchemy import create_engine, inspect
 
 from api.models.models import (
     ReleaseUpdateNotification,
     ReleaseUpdateNotificationDelivery,
-)
-from api.scripts.ensure_alpha_schema import (
-    RELEASE_UPDATE_TABLE_NAMES,
-    ensure_release_update_tables,
 )
 from api.services.communications_policy import POLICY_METADATA_KEY, CommunicationRoute
 from api.services import release_update_notifications as updates
@@ -374,19 +369,10 @@ def test_idempotency_key_is_stable_per_release_and_route():
     )
 
 
-def test_alpha_schema_repair_creates_release_update_tables(tmp_path):
-    database_url = f"sqlite:///{tmp_path / 'alpha-schema.db'}"
-
-    created = ensure_release_update_tables(database_url)
-
-    assert tuple(created) == RELEASE_UPDATE_TABLE_NAMES
-    engine = create_engine(database_url)
-    assert set(RELEASE_UPDATE_TABLE_NAMES).issubset(set(inspect(engine).get_table_names()))
-    assert ensure_release_update_tables(database_url) == []
-
-
-def test_auto_migration_entrypoint_runs_alpha_schema_repair():
+def test_auto_migration_entrypoint_runs_single_baseline_bootstrap():
     repo_root = Path(__file__).resolve().parents[1]
     entrypoint = repo_root / "api/scripts/entrypoint-auto-migrate.sh"
+    content = entrypoint.read_text(encoding="utf-8")
 
-    assert "python3 -m api.scripts.ensure_alpha_schema" in entrypoint.read_text(encoding="utf-8")
+    assert "python3 -m api.scripts.bootstrap_schema" in content
+    assert "python3 -m api.scripts.ensure_alpha_schema" not in content

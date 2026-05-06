@@ -25,9 +25,30 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(table_name: str) -> bool:
+    return bool(sa.inspect(op.get_bind()).has_table(table_name))
+
+
+def _index_exists(table_name: str, index_name: str) -> bool:
+    inspector = sa.inspect(op.get_bind())
+    return str(index_name) in {str(index["name"]) for index in inspector.get_indexes(table_name)}
+
+
+def _create_table_if_missing(table_name: str, *columns, **kwargs) -> None:
+    if _table_exists(table_name):
+        return
+    op.create_table(table_name, *columns, **kwargs)
+
+
+def _create_index_if_missing(index_name: str, table_name: str, columns, **kwargs) -> None:
+    if _index_exists(table_name, str(index_name)):
+        return
+    op.create_index(index_name, table_name, columns, **kwargs)
+
+
 def upgrade() -> None:
     # Recipes
-    op.create_table(
+    _create_table_if_missing(
         "recipes",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
@@ -40,11 +61,11 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_recipes_id"), "recipes", ["id"], unique=False)
-    op.create_index(op.f("ix_recipes_name"), "recipes", ["name"], unique=True)
+    _create_index_if_missing(op.f("ix_recipes_id"), "recipes", ["id"], unique=False)
+    _create_index_if_missing(op.f("ix_recipes_name"), "recipes", ["name"], unique=True)
 
     # Ingredients (global)
-    op.create_table(
+    _create_table_if_missing(
         "ingredients",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("execution_target", sa.String(length=100), nullable=False),
@@ -73,11 +94,11 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_ingredients_id"), "ingredients", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing(op.f("ix_ingredients_id"), "ingredients", ["id"], unique=False)
+    _create_index_if_missing(
         op.f("ix_ingredients_execution_target"), "ingredients", ["execution_target"], unique=False
     )
-    op.create_index(
+    _create_index_if_missing(
         "ux_ingredients_engine_target",
         "ingredients",
         ["execution_engine", "execution_target", "destination_target", "task_key_template"],
@@ -85,7 +106,7 @@ def upgrade() -> None:
     )
 
     # Recipe Ingredients (junction)
-    op.create_table(
+    _create_table_if_missing(
         "recipe_ingredients",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("recipe_id", sa.Integer(), nullable=False),
@@ -104,8 +125,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["recipe_id"], ["recipes.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_recipe_ingredients_id"), "recipe_ingredients", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing(
+        op.f("ix_recipe_ingredients_id"), "recipe_ingredients", ["id"], unique=False
+    )
+    _create_index_if_missing(
         "idx_recipe_ingredient_order",
         "recipe_ingredients",
         ["recipe_id", "step_order"],
@@ -115,7 +138,8 @@ def upgrade() -> None:
     # Orders (old alerts)
     # Note: We need to use raw SQL to create the table with the generated column
     # because SQLAlchemy doesn't support GENERATED columns in create_table()
-    op.execute("""
+    if not _table_exists("orders"):
+        op.execute("""
         CREATE TABLE orders (
             id INTEGER NOT NULL AUTO_INCREMENT,
             req_id VARCHAR(100) NOT NULL,
@@ -149,33 +173,35 @@ def upgrade() -> None:
             PRIMARY KEY (id)
         )
         """)
-    op.create_index(op.f("ix_orders_id"), "orders", ["id"], unique=False)
-    op.create_index(op.f("ix_orders_req_id"), "orders", ["req_id"], unique=False)
-    op.create_index(op.f("ix_orders_fingerprint"), "orders", ["fingerprint"], unique=False)
-    op.create_index(op.f("ix_orders_alert_status"), "orders", ["alert_status"], unique=False)
-    op.create_index(
+    _create_index_if_missing(op.f("ix_orders_id"), "orders", ["id"], unique=False)
+    _create_index_if_missing(op.f("ix_orders_req_id"), "orders", ["req_id"], unique=False)
+    _create_index_if_missing(op.f("ix_orders_fingerprint"), "orders", ["fingerprint"], unique=False)
+    _create_index_if_missing(
+        op.f("ix_orders_alert_status"), "orders", ["alert_status"], unique=False
+    )
+    _create_index_if_missing(
         op.f("ix_orders_processing_status"), "orders", ["processing_status"], unique=False
     )
-    op.create_index(op.f("ix_orders_is_active"), "orders", ["is_active"], unique=False)
-    op.create_index(
+    _create_index_if_missing(op.f("ix_orders_is_active"), "orders", ["is_active"], unique=False)
+    _create_index_if_missing(
         "ix_orders_remediation_outcome",
         "orders",
         ["remediation_outcome"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_orders_clear_deadline_at",
         "orders",
         ["clear_deadline_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_orders_clear_timed_out_at",
         "orders",
         ["clear_timed_out_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_orders_auto_close_eligible",
         "orders",
         ["auto_close_eligible"],
@@ -185,25 +211,25 @@ def upgrade() -> None:
     # Create unique index on the generated column
     # Since it's NULL for inactive orders, multiple inactive orders can have the same fingerprint
     # But only one active order per fingerprint is allowed
-    op.create_index(
+    _create_index_if_missing(
         "ux_orders_fingerprint_active", "orders", ["fingerprint_when_active"], unique=True
     )
-    op.create_index(
+    _create_index_if_missing(
         op.f("ix_orders_alert_group_name"), "orders", ["alert_group_name"], unique=False
     )
-    op.create_index(op.f("ix_orders_severity"), "orders", ["severity"], unique=False)
-    op.create_index(op.f("ix_orders_instance"), "orders", ["instance"], unique=False)
-    op.create_index(op.f("ix_orders_created_at"), "orders", ["created_at"], unique=False)
-    op.create_index(
+    _create_index_if_missing(op.f("ix_orders_severity"), "orders", ["severity"], unique=False)
+    _create_index_if_missing(op.f("ix_orders_instance"), "orders", ["instance"], unique=False)
+    _create_index_if_missing(op.f("ix_orders_created_at"), "orders", ["created_at"], unique=False)
+    _create_index_if_missing(
         op.f("ix_orders_bakery_ticket_id"), "orders", ["bakery_ticket_id"], unique=False
     )
-    op.create_index(
+    _create_index_if_missing(
         op.f("ix_orders_bakery_operation_id"), "orders", ["bakery_operation_id"], unique=False
     )
-    op.create_index(
+    _create_index_if_missing(
         op.f("ix_orders_bakery_ticket_state"), "orders", ["bakery_ticket_state"], unique=False
     )
-    op.create_index(
+    _create_index_if_missing(
         op.f("ix_orders_bakery_permanent_failure"),
         "orders",
         ["bakery_permanent_failure"],
@@ -211,7 +237,7 @@ def upgrade() -> None:
     )
 
     # Dishes
-    op.create_table(
+    _create_table_if_missing(
         "dishes",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("req_id", sa.String(length=100), nullable=False),
@@ -234,21 +260,21 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["recipe_id"], ["recipes.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_dishes_id"), "dishes", ["id"], unique=False)
-    op.create_index(op.f("ix_dishes_req_id"), "dishes", ["req_id"], unique=False)
-    op.create_index(
+    _create_index_if_missing(op.f("ix_dishes_id"), "dishes", ["id"], unique=False)
+    _create_index_if_missing(op.f("ix_dishes_req_id"), "dishes", ["req_id"], unique=False)
+    _create_index_if_missing(
         op.f("ix_dishes_execution_ref"),
         "dishes",
         ["execution_ref"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         op.f("ix_dishes_processing_status"), "dishes", ["processing_status"], unique=False
     )
-    op.create_index(op.f("ix_dishes_run_phase"), "dishes", ["run_phase"], unique=False)
+    _create_index_if_missing(op.f("ix_dishes_run_phase"), "dishes", ["run_phase"], unique=False)
 
     # Dish Ingredients (per-task executions)
-    op.create_table(
+    _create_table_if_missing(
         "dish_ingredients",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("dish_id", sa.Integer(), nullable=False),
@@ -295,28 +321,32 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["recipe_ingredient_id"], ["recipe_ingredients.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_dish_ingredients_dish_id", "dish_ingredients", ["dish_id"], unique=False)
-    op.create_index("ix_dish_ingredients_task_key", "dish_ingredients", ["task_key"], unique=False)
-    op.create_index(
+    _create_index_if_missing(
+        "ix_dish_ingredients_dish_id", "dish_ingredients", ["dish_id"], unique=False
+    )
+    _create_index_if_missing(
+        "ix_dish_ingredients_task_key", "dish_ingredients", ["task_key"], unique=False
+    )
+    _create_index_if_missing(
         "ix_dish_ingredients_execution_ref",
         "dish_ingredients",
         ["execution_ref"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_dish_ingredients_execution_engine",
         "dish_ingredients",
         ["execution_engine"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ux_dish_ingredients_dish_step",
         "dish_ingredients",
         ["dish_id", "recipe_ingredient_id_norm", "task_key_norm"],
         unique=True,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "order_communications",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("order_id", sa.Integer(), nullable=False),
@@ -343,39 +373,41 @@ def upgrade() -> None:
             name="ux_order_communications_route",
         ),
     )
-    op.create_index("ix_order_communications_id", "order_communications", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing(
+        "ix_order_communications_id", "order_communications", ["id"], unique=False
+    )
+    _create_index_if_missing(
         "ix_order_communications_order_id",
         "order_communications",
         ["order_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_order_communications_execution_target",
         "order_communications",
         ["execution_target"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_order_communications_bakery_ticket_id",
         "order_communications",
         ["bakery_ticket_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_order_communications_bakery_operation_id",
         "order_communications",
         ["bakery_operation_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_order_communications_remote_state",
         "order_communications",
         ["remote_state"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "bakery_monitor_state",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("monitor_id", sa.String(length=255), nullable=False),
@@ -393,33 +425,35 @@ def upgrade() -> None:
         sa.UniqueConstraint("monitor_id", name="ux_bakery_monitor_state_monitor_id"),
         sa.UniqueConstraint("monitor_uuid", name="ux_bakery_monitor_state_monitor_uuid"),
     )
-    op.create_index("ix_bakery_monitor_state_id", "bakery_monitor_state", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing(
+        "ix_bakery_monitor_state_id", "bakery_monitor_state", ["id"], unique=False
+    )
+    _create_index_if_missing(
         "ix_bakery_monitor_state_monitor_id",
         "bakery_monitor_state",
         ["monitor_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_bakery_monitor_state_monitor_uuid",
         "bakery_monitor_state",
         ["monitor_uuid"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_bakery_monitor_state_last_heartbeat_status",
         "bakery_monitor_state",
         ["last_heartbeat_status"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_bakery_monitor_state_last_heartbeat_at",
         "bakery_monitor_state",
         ["last_heartbeat_at"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "watchdog_heartbeat_state",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("heartbeat_key", sa.String(length=255), nullable=False),
@@ -437,50 +471,50 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("heartbeat_key", name="ux_watchdog_heartbeat_state_key"),
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_watchdog_heartbeat_state_id",
         "watchdog_heartbeat_state",
         ["id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_watchdog_heartbeat_state_heartbeat_key",
         "watchdog_heartbeat_state",
         ["heartbeat_key"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_watchdog_heartbeat_state_last_status",
         "watchdog_heartbeat_state",
         ["last_status"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_watchdog_heartbeat_state_last_seen_at",
         "watchdog_heartbeat_state",
         ["last_seen_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_watchdog_heartbeat_state_last_received_at",
         "watchdog_heartbeat_state",
         ["last_received_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_watchdog_heartbeat_state_missing_since",
         "watchdog_heartbeat_state",
         ["missing_since"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_watchdog_heartbeat_state_synthetic_order_id",
         "watchdog_heartbeat_state",
         ["synthetic_order_id"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "release_update_notifications",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("oci_repository", sa.String(length=512), nullable=False),
@@ -503,38 +537,38 @@ def upgrade() -> None:
             name="ux_release_update_notifications_release",
         ),
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notifications_id",
         "release_update_notifications",
         ["id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notifications_oci_repository",
         "release_update_notifications",
         ["oci_repository"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notifications_available_app_version",
         "release_update_notifications",
         ["available_app_version"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notifications_available_chart_version",
         "release_update_notifications",
         ["available_chart_version"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notifications_state",
         "release_update_notifications",
         ["state"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "release_update_notification_deliveries",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("notification_id", sa.Integer(), nullable=False),
@@ -558,51 +592,51 @@ def upgrade() -> None:
             name="ux_release_update_notification_deliveries_route",
         ),
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notification_deliveries_id",
         "release_update_notification_deliveries",
         ["id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notification_deliveries_notification_id",
         "release_update_notification_deliveries",
         ["notification_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notification_deliveries_route_id",
         "release_update_notification_deliveries",
         ["route_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notification_deliveries_execution_target",
         "release_update_notification_deliveries",
         ["execution_target"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_release_update_notification_deliveries_state",
         "release_update_notification_deliveries",
         ["state"],
         unique=False,
     )
-    op.create_index(
-        "ix_release_update_notification_deliveries_bakery_communication_id",
+    _create_index_if_missing(
+        "ix_relupd_deliv_comm_id",
         "release_update_notification_deliveries",
         ["bakery_communication_id"],
         unique=False,
     )
-    op.create_index(
-        "ix_release_update_notification_deliveries_bakery_operation_id",
+    _create_index_if_missing(
+        "ix_relupd_deliv_op_id",
         "release_update_notification_deliveries",
         ["bakery_operation_id"],
         unique=False,
     )
 
     # Alert suppressions
-    op.create_table(
+    _create_table_if_missing(
         "alert_suppressions",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
@@ -618,31 +652,33 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_alert_suppressions_id", "alert_suppressions", ["id"], unique=False)
-    op.create_index("ix_alert_suppressions_name", "alert_suppressions", ["name"], unique=False)
-    op.create_index(
+    _create_index_if_missing("ix_alert_suppressions_id", "alert_suppressions", ["id"], unique=False)
+    _create_index_if_missing(
+        "ix_alert_suppressions_name", "alert_suppressions", ["name"], unique=False
+    )
+    _create_index_if_missing(
         "ix_alert_suppressions_starts_at",
         "alert_suppressions",
         ["starts_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_alert_suppressions_ends_at", "alert_suppressions", ["ends_at"], unique=False
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_alert_suppressions_canceled_at",
         "alert_suppressions",
         ["canceled_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "idx_alert_suppressions_active_lookup",
         "alert_suppressions",
         ["enabled", "starts_at", "ends_at", "canceled_at"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "alert_suppression_matchers",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("suppression_id", sa.Integer(), nullable=False),
@@ -653,20 +689,20 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["suppression_id"], ["alert_suppressions.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_alert_suppression_matchers_id",
         "alert_suppression_matchers",
         ["id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_alert_suppression_matchers_suppression_id",
         "alert_suppression_matchers",
         ["suppression_id"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "suppressed_events",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("suppression_id", sa.Integer(), nullable=False),
@@ -683,58 +719,60 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["suppression_id"], ["alert_suppressions.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_suppressed_events_id", "suppressed_events", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing("ix_suppressed_events_id", "suppressed_events", ["id"], unique=False)
+    _create_index_if_missing(
         "ix_suppressed_events_suppression_id",
         "suppressed_events",
         ["suppression_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppressed_events_received_at",
         "suppressed_events",
         ["received_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppressed_events_fingerprint",
         "suppressed_events",
         ["fingerprint"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppressed_events_alertname",
         "suppressed_events",
         ["alertname"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppressed_events_severity",
         "suppressed_events",
         ["severity"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppressed_events_payload_hash",
         "suppressed_events",
         ["payload_hash"],
         unique=False,
     )
-    op.create_index("ix_suppressed_events_req_id", "suppressed_events", ["req_id"], unique=False)
-    op.create_index(
+    _create_index_if_missing(
+        "ix_suppressed_events_req_id", "suppressed_events", ["req_id"], unique=False
+    )
+    _create_index_if_missing(
         "idx_suppressed_events_suppression_received_at",
         "suppressed_events",
         ["suppression_id", "received_at"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "idx_suppressed_events_fingerprint",
         "suppressed_events",
         ["fingerprint"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "suppression_summaries",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("suppression_id", sa.Integer(), nullable=False),
@@ -759,39 +797,41 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("suppression_id"),
     )
-    op.create_index("ix_suppression_summaries_id", "suppression_summaries", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing(
+        "ix_suppression_summaries_id", "suppression_summaries", ["id"], unique=False
+    )
+    _create_index_if_missing(
         "ix_suppression_summaries_suppression_id",
         "suppression_summaries",
         ["suppression_id"],
         unique=True,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppression_summaries_bakery_ticket_id",
         "suppression_summaries",
         ["bakery_ticket_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppression_summaries_bakery_create_operation_id",
         "suppression_summaries",
         ["bakery_create_operation_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppression_summaries_bakery_close_operation_id",
         "suppression_summaries",
         ["bakery_close_operation_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_suppression_summaries_state",
         "suppression_summaries",
         ["state"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "auth_principals",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("provider", sa.String(length=32), nullable=False),
@@ -810,27 +850,27 @@ def upgrade() -> None:
             name="ux_auth_principals_provider_subject",
         ),
     )
-    op.create_index("ix_auth_principals_id", "auth_principals", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing("ix_auth_principals_id", "auth_principals", ["id"], unique=False)
+    _create_index_if_missing(
         "ix_auth_principals_provider",
         "auth_principals",
         ["provider"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_auth_principals_username",
         "auth_principals",
         ["username"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_auth_principals_provider_username",
         "auth_principals",
         ["provider", "username"],
         unique=False,
     )
 
-    op.create_table(
+    _create_table_if_missing(
         "auth_role_bindings",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("provider", sa.String(length=32), nullable=False),
@@ -856,32 +896,32 @@ def upgrade() -> None:
             name="ux_auth_role_bindings_provider_type_group",
         ),
     )
-    op.create_index("ix_auth_role_bindings_id", "auth_role_bindings", ["id"], unique=False)
-    op.create_index(
+    _create_index_if_missing("ix_auth_role_bindings_id", "auth_role_bindings", ["id"], unique=False)
+    _create_index_if_missing(
         "ix_auth_role_bindings_provider",
         "auth_role_bindings",
         ["provider"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_auth_role_bindings_binding_type",
         "auth_role_bindings",
         ["binding_type"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_auth_role_bindings_role",
         "auth_role_bindings",
         ["role"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_auth_role_bindings_principal_id",
         "auth_role_bindings",
         ["principal_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index_if_missing(
         "ix_auth_role_bindings_external_group",
         "auth_role_bindings",
         ["external_group"],
@@ -891,11 +931,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index(
-        "ix_release_update_notification_deliveries_bakery_operation_id",
+        "ix_relupd_deliv_op_id",
         table_name="release_update_notification_deliveries",
     )
     op.drop_index(
-        "ix_release_update_notification_deliveries_bakery_communication_id",
+        "ix_relupd_deliv_comm_id",
         table_name="release_update_notification_deliveries",
     )
     op.drop_index(

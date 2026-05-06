@@ -1,4 +1,10 @@
-from api.models.models import Ingredient, OrderCommunication, Recipe, RecipeIngredient
+from api.models.models import (
+    Ingredient,
+    OrderCommunication,
+    Recipe,
+    RecipeIngredient,
+    ReleaseUpdateNotificationDelivery,
+)
 from api.schemas.schemas import IngredientCreate, RecipeCreate, RecipeIngredientCreate
 from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON
 
@@ -18,6 +24,15 @@ def test_model_defaults_and_constraints_align_with_alembic_contract():
     )
     assert Recipe.__table__.c.deleted.nullable is False
     assert Ingredient.__table__.c.deleted.nullable is False
+
+    release_delivery_indexes = {
+        index.name for index in ReleaseUpdateNotificationDelivery.__table__.indexes
+    }
+    assert "ix_relupd_deliv_comm_id" in release_delivery_indexes
+    assert "ix_relupd_deliv_op_id" in release_delivery_indexes
+    assert all(
+        len(str(index.name)) <= 64 for index in ReleaseUpdateNotificationDelivery.__table__.indexes
+    )
 
 
 def test_schema_defaults_execution_engine_are_undefined():

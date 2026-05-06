@@ -63,17 +63,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 def init_db() -> None:
-    """Initialize database using Alembic migrations with retry logic."""
-    from alembic.config import Config
-    from alembic import command
-    import os
-
-    # Get the directory containing this file
-    current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    alembic_ini_path = os.path.join(current_dir, "alembic.ini")
-
-    alembic_cfg = Config(alembic_ini_path)
-    alembic_cfg.set_main_option("sqlalchemy.url", get_sync_database_url())
+    """Initialize database using the alpha baseline bootstrap with retry logic."""
+    from api.scripts.bootstrap_schema import ensure_baseline_schema
 
     max_retries = 10
     retry_interval = 5
@@ -84,8 +75,8 @@ def init_db() -> None:
                 "Attempting to run database migrations",
                 extra={"attempt": i + 1, "max_attempts": max_retries},
             )
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Database migrations applied successfully.")
+            ensure_baseline_schema()
+            logger.info("Database baseline schema verified successfully.")
             return
         except Exception as e:
             if i < max_retries - 1:

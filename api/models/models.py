@@ -468,6 +468,8 @@ class ReleaseUpdateNotificationDelivery(Base):
             "route_id",
             name="ux_release_update_notification_deliveries_route",
         ),
+        Index("ix_relupd_deliv_comm_id", "bakery_communication_id"),
+        Index("ix_relupd_deliv_op_id", "bakery_operation_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -480,10 +482,8 @@ class ReleaseUpdateNotificationDelivery(Base):
     destination_target: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     provider_config: Mapped[dict[str, Any] | None] = mapped_column(MYSQL_JSON, nullable=True)
     state: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
-    bakery_communication_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, index=True
-    )
-    bakery_operation_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    bakery_communication_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    bakery_operation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now, nullable=False)
