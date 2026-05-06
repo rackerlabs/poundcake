@@ -50,14 +50,14 @@ Release and override discovery:
 | Variable | Default | Purpose |
 |---|---|---|
 | `POUNDCAKE_RELEASE_NAME` | `poundcake` | Helm release name |
-| `POUNDCAKE_NAMESPACE` | `poundcake` | Target namespace |
+| `POUNDCAKE_NAMESPACE` | `rackspace` | Target namespace |
 | `POUNDCAKE_HELM_TIMEOUT` | `120m` | Helm timeout |
 | `POUNDCAKE_CHART_REPO` | unset | OCI chart source override |
 | `POUNDCAKE_CHART_VERSION` | unset | Explicit OCI chart version |
-| `POUNDCAKE_VERSION_FILE` | unset | Explicit chart versions file path |
-| `POUNDCAKE_BASE_OVERRIDES` | `/opt/poundcake/base-helm-configs/poundcake/poundcake-helm-overrides.yaml` | Optional base values file |
-| `POUNDCAKE_GLOBAL_OVERRIDES_DIR` | `/etc/poundcake/helm-configs/global_overrides` | Global values dir |
-| `POUNDCAKE_SERVICE_CONFIG_DIR` | `/etc/poundcake/helm-configs/poundcake` | PoundCake values dir |
+| `POUNDCAKE_VERSION_FILE` | `/etc/genestack/helm-chart-versions.yaml` lookup | Explicit chart versions file path |
+| `POUNDCAKE_BASE_OVERRIDES` | unset | Optional explicit base values file |
+| `POUNDCAKE_GLOBAL_OVERRIDES_DIR` | `/etc/genestack/helm-overrides/global_overrides` | Global values dir |
+| `POUNDCAKE_SERVICE_CONFIG_DIR` | `/etc/genestack/helm-overrides/poundcake` | PoundCake values dir |
 
 Installer behavior:
 
@@ -78,7 +78,7 @@ Registry and pull-secret handling:
 | `HELM_REGISTRY_USERNAME` | unset | OCI login username and pull-secret username |
 | `HELM_REGISTRY_PASSWORD` | unset | OCI login token/password |
 | `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `registry-creds` | Pull-secret name |
-| `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `true` | Create/update the Docker registry secret |
+| `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `false` | Create/update the Docker registry secret |
 | `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` | `noreply@local` | Email field for generated docker-registry secret |
 
 Important installer guardrails:

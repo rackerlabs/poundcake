@@ -587,8 +587,40 @@
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean", "default": false },
+        "gatewayName": { "type": "string", "default": "" },
+        "gatewayNamespace": { "type": "string", "default": "" },
         "className": { "type": "string", "default": "envoyproxy" },
         "name": { "type": "string", "default": "poundcake-gateway" },
+        "listener": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "default": "" },
+            "hostname": { "type": "string", "default": "" },
+            "port": { "type": "integer", "default": 443 },
+            "protocol": {
+              "type": "string",
+              "enum": ["HTTP", "HTTPS"],
+              "default": "HTTPS"
+            },
+            "tlsSecretName": { "type": "string", "default": "" },
+            "allowedNamespaces": {
+              "type": "string",
+              "enum": ["All", "Same", "Selector"],
+              "default": "All"
+            },
+            "updateIfExists": { "type": "boolean", "default": true }
+          }
+        },
+        "hostnames": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        },
         "listeners": {
           "type": "object",
           "properties": {
@@ -610,7 +642,9 @@
                     "secretName": { "type": "string", "default": "" }
                   }
                 },
-                "pathPrefix": { "type": "string", "default": "/" }
+                "pathPrefix": { "type": "string", "default": "/api" },
+                "requestTimeout": { "type": "string", "default": "300s" },
+                "backendRequestTimeout": { "type": "string", "default": "300s" }
               }
             },
             "ui": {

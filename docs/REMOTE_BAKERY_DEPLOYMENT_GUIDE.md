@@ -17,9 +17,9 @@ Use this sequence:
 
 - PoundCake repo root: `/opt/poundcake`
 - Bakery repo root: `/opt/bakery`
-- PoundCake overrides: `/etc/poundcake/helm-configs/poundcake/`
-- Bakery overrides: `/etc/bakery/helm-configs/bakery/`
-- Shared chart versions file: `/etc/poundcake/helm-chart-versions.yaml`
+- PoundCake overrides: `/etc/genestack/helm-overrides/poundcake/`
+- Bakery overrides: `/etc/genestack/helm-overrides/bakery/`
+- Shared chart versions file: `/etc/genestack/helm-chart-versions.yaml`
 
 ## Bakery Deployment Source
 
@@ -38,7 +38,7 @@ export BAKERY_URL="https://bakery.example.com"
 ## PoundCake Override Example
 
 Put the PoundCake-side remote Bakery settings in the active override file, typically
-`/etc/poundcake/helm-configs/poundcake/10-main-overrides.yaml`:
+`/etc/genestack/helm-overrides/poundcake/10-main-overrides.yaml`:
 
 ```yaml
 gateway:
@@ -74,7 +74,8 @@ bakery:
 
 For shared-hostname publication, keep the API path on `/api` and the UI path on `/`. Also make
 sure `gateway.gatewayName` and `gateway.gatewayNamespace` match the live Gateway object in the
-target environment.
+target environment. When Gateway support is enabled, the chart hook idempotently adds or updates
+the configured listener on that Gateway.
 
 ## Bootstrap Credential
 
@@ -113,7 +114,7 @@ kubectl -n <namespace> create secret generic bakery-monitor-bootstrap \
 
 ## Install PoundCake
 
-Update `/etc/poundcake/helm-chart-versions.yaml` so the `poundcake` entry matches the chart you
+Update `/etc/genestack/helm-chart-versions.yaml` so the `poundcake` entry matches the chart you
 intend to deploy, then install PoundCake from this repo:
 
 ```bash

@@ -38,6 +38,10 @@ tests:
           value: 8000
         documentIndex: 0
       - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /api
+        documentIndex: 0
+      - equal:
           path: spec.rules[0].timeouts.request
           value: 300s
         documentIndex: 0
@@ -65,6 +69,10 @@ tests:
           path: spec.rules[0].backendRefs[0].port
           value: 80
         documentIndex: 1
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /
+        documentIndex: 1
 
   - it: applies parent gateway and route overrides
     set:
@@ -72,6 +80,8 @@ tests:
       gateway.gatewayName: flex-gateway
       gateway.gatewayNamespace: envoy-gateway
       gateway.listener.name: poundcake-https
+      gateway.listener.hostname: poundcake.api.example.com
+      gateway.listener.tlsSecretName: poundcake-tls
       gateway.hostnames:
         - poundcake.api.example.com
       gateway.listeners.api.hostname: api.example.com
@@ -167,6 +177,8 @@ tests:
       gateway.listeners.ui.port: 443
       gateway.listeners.api.protocol: HTTPS
       gateway.listeners.ui.protocol: HTTPS
+      gateway.listeners.api.tls.secretName: poundcake-tls
+      gateway.listeners.ui.tls.secretName: poundcake-tls
     asserts:
       - hasDocuments:
           count: 2

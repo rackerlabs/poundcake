@@ -200,7 +200,7 @@ Note:
   - Bakery now lives in the standalone [rackerlabs/bakery](https://github.com/rackerlabs/bakery) repo.
   - For remote Bakery, put PoundCake client settings in override files.
   - For the PoundCake side of the split-environment flow, see [REMOTE_BAKERY_DEPLOYMENT_GUIDE.md](REMOTE_BAKERY_DEPLOYMENT_GUIDE.md).
-- `install/install-poundcake-helm.sh` reads desired chart versions from `/etc/poundcake/helm-chart-versions.yaml`:
+- `install/install-poundcake-helm.sh` reads desired chart versions from `/etc/genestack/helm-chart-versions.yaml`:
   - `poundcake`
   - `stackstorm`
   - `mariadb-operator`
@@ -220,16 +220,16 @@ If you source `install/set-env-helper.sh`, those helper exports may override the
 | `HELM_REGISTRY_PASSWORD` | `""` | Required for private GHCR | Token/password for OCI login and pull-secret auth; must include `read:packages` for private pulls | Set when using private GHCR |
 | `POUNDCAKE_CHART_REPO` | local chart path (`./helm`) (helper leaves unset for local mode) | Optional | Chart source (`oci://...` or local) | Set for OCI-based deployments |
 | `POUNDCAKE_CHART_VERSION` | `""` | Optional | Explicit OCI chart version | Pin chart version for repeatable deploys |
-| `POUNDCAKE_VERSION_FILE` | `/etc/poundcake/helm-chart-versions.yaml` | Optional | Source for auto-detected chart version key `poundcake` | Change only if your version file is elsewhere |
+| `POUNDCAKE_VERSION_FILE` | `/etc/genestack/helm-chart-versions.yaml` | Optional | Source for auto-detected chart version key `poundcake` | Change only if your version file is elsewhere |
 | `POUNDCAKE_RELEASE_NAME` | `poundcake` | Optional | Helm release name | Change for parallel installs |
-| `POUNDCAKE_NAMESPACE` | `poundcake` | Optional | Kubernetes namespace for install | Set per environment/tenant |
+| `POUNDCAKE_NAMESPACE` | `rackspace` | Optional | Kubernetes namespace for install | Set only for non-standard namespaces |
 | `POUNDCAKE_HELM_TIMEOUT` | `120m` | Optional | Helm operation timeout | Increase for slower clusters |
 | `POUNDCAKE_HELM_WAIT` | `false` | Optional | Enable Helm `--wait` | Only for advanced troubleshooting; guarded due to hook deadlock risk |
 | `POUNDCAKE_ALLOW_HOOK_WAIT` | `false` | Optional | Bypass wait deadlock guard | Set only when intentionally forcing wait/atomic |
 | `POUNDCAKE_HELM_ATOMIC` | `false` | Optional | Enable Helm `--atomic` | Use only if you accept hook/wait behavior implications |
 | `POUNDCAKE_HELM_CLEANUP_ON_FAIL` | `false` | Optional | Enable Helm cleanup on failure | Enable in strict CI environments |
 | `POUNDCAKE_IMAGE_PULL_SECRET_NAME` | `registry-creds` | Optional | Pull secret name created/reused by installer | Override when the target namespace uses a different secret name |
-| `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `true` | Optional | Auto-create/apply docker-registry secret | Disable if secret is pre-provisioned |
+| `POUNDCAKE_CREATE_IMAGE_PULL_SECRET` | `false` | Optional | Auto-create/apply docker-registry secret | Enable only when the installer should manage a private registry secret |
 | `POUNDCAKE_IMAGE_PULL_SECRET_EMAIL` | `noreply@local` | Optional | Email field used when creating docker-registry secret | Set if your policy requires real address |
 
 Important clarifications:
@@ -268,7 +268,7 @@ source ./install/set-env-helper.sh
 export HELM_REGISTRY_PASSWORD="<github-token-with-read:packages>"
 
 # Configure image repositories/tags in your values/override files.
-# export POUNDCAKE_NAMESPACE="poundcake"
+# export POUNDCAKE_NAMESPACE="rackspace"
 
 ./install/install-poundcake-helm.sh
 ```

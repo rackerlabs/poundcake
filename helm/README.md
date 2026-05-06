@@ -18,7 +18,7 @@ Recommended path:
 ./install/install-poundcake-helm.sh
 ```
 
-For repeatable rollouts, update `/etc/poundcake/helm-chart-versions.yaml` or export
+For repeatable rollouts, update `/etc/genestack/helm-chart-versions.yaml` or export
 `POUNDCAKE_CHART_VERSION` before running the installer. Normal releases should move by chart
 version; leave image tag overrides unset so PoundCake, UI, and helper images inherit the chart's
 `appVersion` defaults.

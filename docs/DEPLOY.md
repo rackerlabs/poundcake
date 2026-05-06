@@ -17,10 +17,10 @@ Auth provider and RBAC setup live in [AUTH.md](AUTH.md).
 
 ## Canonical Paths
 
-- PoundCake override directory: `/etc/poundcake/helm-configs/poundcake/`
-- Bakery override directory: `/etc/bakery/helm-configs/bakery/`
-- Global overrides: `/etc/poundcake/helm-configs/global_overrides/`
-- Shared chart version file: `/etc/poundcake/helm-chart-versions.yaml`
+- PoundCake override directory: `/etc/genestack/helm-overrides/poundcake/`
+- Bakery override directory: `/etc/genestack/helm-overrides/bakery/`
+- Global overrides: `/etc/genestack/helm-overrides/global_overrides/`
+- Shared chart version file: `/etc/genestack/helm-chart-versions.yaml`
 - PoundCake installer wrapper: [install/install-poundcake-helm.sh](../install/install-poundcake-helm.sh)
 - Standalone Bakery repo: [rackerlabs/bakery](https://github.com/rackerlabs/bakery)
 
@@ -31,7 +31,7 @@ Recommended override layout:
 - `20-auth-overrides.yaml`
 - `30-git-sync-overrides.yaml`
 
-Before deploying, update the `poundcake` chart entry in `/etc/poundcake/helm-chart-versions.yaml`.
+Before deploying, update the `poundcake` chart entry in `/etc/genestack/helm-chart-versions.yaml`.
 If Bakery is being rolled out or upgraded in the same environment, update the `bakery` entry there
 as well.
 
@@ -89,6 +89,8 @@ Gateway notes:
 
 - `gateway.gatewayName` and `gateway.gatewayNamespace` must match the live Gateway object in the
   target cluster.
+- When `gateway.enabled=true`, the chart runs a post-install/post-upgrade hook that idempotently
+  adds or updates the configured Gateway listener before the routes settle.
 - For a shared hostname deployment, keep the API route on `/api` and the UI route on `/`.
   Reusing `/` for both creates overlapping `HTTPRoute`s.
 
@@ -177,7 +179,7 @@ Important notes:
 - When enabling the `openstack` pack, prefer the Git source shown above instead of relying on the
   implicit Exchange source.
 - These values are secrets. Keep them only in secured operator-managed override files such as
-  `/etc/poundcake/helm-configs/poundcake/10-main-overrides.yaml`, and do not commit real
+  `/etc/genestack/helm-overrides/poundcake/10-main-overrides.yaml`, and do not commit real
   credentials or certificate material to the repo.
 
 Once these values are present, the PoundCake Helm bootstrap flow will install and configure the

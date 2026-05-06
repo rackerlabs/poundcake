@@ -1,0 +1,267 @@
+{{- if and .Values.poundcake.enabled .Values.gateway.enabled }}
+{{- $gateway := .Values.gateway | default dict }}
+{{- $listener := $gateway.listener | default dict }}
+{{- $api := $gateway.listeners.api | default dict }}
+{{- $ui := $gateway.listeners.ui | default dict }}
+{{- $apiTls := $api.tls | default dict }}
+{{- $uiTls := $ui.tls | default dict }}
+{{- $gatewayName := default $gateway.name $gateway.gatewayName }}
+{{- $gatewayNamespace := default .Release.Namespace $gateway.gatewayNamespace }}
+{{- $routeHostnames := $gateway.hostnames | default (list) }}
+{{- $listenerName := default "" $listener.name }}
+{{- $listenerHostname := default "" $listener.hostname }}
+{{- $allowedNamespaces := default "All" $listener.allowedNamespaces }}
+{{- $updateIfExists := true }}
+{{- if hasKey $listener "updateIfExists" }}
+{{- $updateIfExists = $listener.updateIfExists }}
+{{- end }}
+{{- $apiEnabled := $api.enabled | default false }}
+{{- $uiEnabled := $ui.enabled | default false }}
+{{- $apiHostname := default "" $api.hostname }}
+{{- $uiHostname := default "" $ui.hostname }}
+{{- $apiPort := int (default 80 $api.port) }}
+{{- $uiPort := int (default 80 $ui.port) }}
+{{- $apiProtocol := upper (default "HTTP" $api.protocol) }}
+{{- $uiProtocol := upper (default "HTTP" $ui.protocol) }}
+{{- $sharedListener := and $apiEnabled $uiEnabled (eq $apiHostname $uiHostname) (eq $apiPort $uiPort) (eq $apiProtocol $uiProtocol) }}
+{{- $listeners := list }}
+{{- if $listenerName }}
+{{- $hostname := $listenerHostname }}
+{{- if and (not $hostname) (gt (len $routeHostnames) 0) }}
+{{- $hostname = index $routeHostnames 0 }}
+{{- end }}
+{{- if and (not $hostname) $apiEnabled }}
+{{- $hostname = $apiHostname }}
+{{- end }}
+{{- if and (not $hostname) $uiEnabled }}
+{{- $hostname = $uiHostname }}
+{{- end }}
+{{- $tlsSecret := default (default "" $apiTls.secretName) $listener.tlsSecretName }}
+{{- if and (not $tlsSecret) $uiTls.secretName }}
+{{- $tlsSecret = $uiTls.secretName }}
+{{- end }}
+{{- $listeners = append $listeners (dict "name" $listenerName "hostname" $hostname "port" (int (default 443 $listener.port)) "protocol" (upper (default "HTTPS" $listener.protocol)) "tlsSecretName" $tlsSecret) }}
+{{- else if $sharedListener }}
+{{- $tlsSecret := default (default "" $listener.tlsSecretName) $apiTls.secretName }}
+{{- $listeners = append $listeners (dict "name" "api" "hostname" $apiHostname "port" $apiPort "protocol" $apiProtocol "tlsSecretName" $tlsSecret) }}
+{{- else }}
+{{- if $apiEnabled }}
+{{- $tlsSecret := default (default "" $listener.tlsSecretName) $apiTls.secretName }}
+{{- $listeners = append $listeners (dict "name" "api" "hostname" $apiHostname "port" $apiPort "protocol" $apiProtocol "tlsSecretName" $tlsSecret) }}
+{{- end }}
+{{- if $uiEnabled }}
+{{- $tlsSecret := default (default "" $listener.tlsSecretName) $uiTls.secretName }}
+{{- $listeners = append $listeners (dict "name" "ui" "hostname" $uiHostname "port" $uiPort "protocol" $uiProtocol "tlsSecretName" $tlsSecret) }}
+{{- end }}
+{{- end }}
+{{- if gt (len $listeners) 0 }}
+{{- $jobName := printf "%s-gateway-listener" (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-listener
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: {{ $jobName }}
+      labels:
+        {{- include "poundcake.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway-listener
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "poundcake.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      containers:
+        - name: gateway-listener
+          image: {{ .Values.images.kubectl | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- toYaml .Values.utilitySecurityContext | nindent 12 }}
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -euo pipefail
+
+              GATEWAY_NAME={{ $gatewayName | quote }}
+              GATEWAY_NAMESPACE={{ $gatewayNamespace | quote }}
+              UPDATE_IF_EXISTS={{ ternary "true" "false" $updateIfExists | quote }}
+
+              echo "Configuring PoundCake Gateway listeners"
+              echo "Gateway: ${GATEWAY_NAMESPACE}/${GATEWAY_NAME}"
+              echo "updateIfExists: ${UPDATE_IF_EXISTS}"
+
+              if ! kubectl get gateway.gateway.networking.k8s.io "${GATEWAY_NAME}" -n "${GATEWAY_NAMESPACE}" >/dev/null 2>&1; then
+                echo "ERROR: Gateway '${GATEWAY_NAMESPACE}/${GATEWAY_NAME}' was not found."
+                exit 1
+              fi
+
+              json_escape() {
+                printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+              }
+
+              listener_jsonpath() {
+                local listener_name="$1"
+                local field="$2"
+                kubectl get gateway.gateway.networking.k8s.io "${GATEWAY_NAME}" -n "${GATEWAY_NAMESPACE}" \
+                  -o "jsonpath={.spec.listeners[?(@.name==\"${listener_name}\")].${field}}" 2>/dev/null || true
+              }
+
+              find_listener_index() {
+                local listener_name="$1"
+                local index=0
+                while IFS= read -r existing_name; do
+                  if [[ "${existing_name}" == "${listener_name}" ]]; then
+                    echo "${index}"
+                    return 0
+                  fi
+                  index=$((index + 1))
+                done < <(kubectl get gateway.gateway.networking.k8s.io "${GATEWAY_NAME}" -n "${GATEWAY_NAMESPACE}" \
+                  -o jsonpath='{range .spec.listeners[*]}{.name}{"\n"}{end}')
+                echo ""
+              }
+
+              write_listener_value() {
+                local listener_name="$1"
+                local hostname="$2"
+                local port="$3"
+                local protocol="$4"
+                local tls_secret="$5"
+                local allowed_namespaces="$6"
+                local output_file="$7"
+
+                if [[ "${protocol}" == "HTTPS" && -z "${tls_secret}" ]]; then
+                  echo "ERROR: listener '${listener_name}' uses HTTPS but no TLS secret was provided."
+                  exit 1
+                fi
+
+                local escaped_name escaped_hostname escaped_protocol escaped_tls_secret escaped_allowed
+                escaped_name="$(json_escape "${listener_name}")"
+                escaped_hostname="$(json_escape "${hostname}")"
+                escaped_protocol="$(json_escape "${protocol}")"
+                escaped_tls_secret="$(json_escape "${tls_secret}")"
+                escaped_allowed="$(json_escape "${allowed_namespaces}")"
+
+                {
+                  echo "{"
+                  echo "  \"name\": \"${escaped_name}\","
+                  if [[ -n "${hostname}" ]]; then
+                    echo "  \"hostname\": \"${escaped_hostname}\","
+                  fi
+                  echo "  \"port\": ${port},"
+                  echo "  \"protocol\": \"${escaped_protocol}\","
+                  if [[ "${protocol}" == "HTTPS" ]]; then
+                    echo "  \"tls\": {"
+                    echo "    \"mode\": \"Terminate\","
+                    echo "    \"certificateRefs\": ["
+                    echo "      {"
+                    echo "        \"kind\": \"Secret\","
+                    echo "        \"name\": \"${escaped_tls_secret}\""
+                    echo "      }"
+                    echo "    ]"
+                    echo "  },"
+                  fi
+                  echo "  \"allowedRoutes\": {"
+                  echo "    \"namespaces\": {"
+                  echo "      \"from\": \"${escaped_allowed}\""
+                  echo "    }"
+                  echo "  }"
+                  echo "}"
+                } > "${output_file}"
+              }
+
+              listener_matches() {
+                local listener_name="$1"
+                local hostname="$2"
+                local port="$3"
+                local protocol="$4"
+                local tls_secret="$5"
+                local allowed_namespaces="$6"
+
+                local current_hostname current_port current_protocol current_tls_secret current_allowed
+                current_hostname="$(listener_jsonpath "${listener_name}" hostname)"
+                current_port="$(listener_jsonpath "${listener_name}" port)"
+                current_protocol="$(listener_jsonpath "${listener_name}" protocol)"
+                current_tls_secret="$(listener_jsonpath "${listener_name}" 'tls.certificateRefs[0].name')"
+                current_allowed="$(listener_jsonpath "${listener_name}" 'allowedRoutes.namespaces.from')"
+
+                [[ "${current_hostname}" == "${hostname}" ]] &&
+                  [[ "${current_port}" == "${port}" ]] &&
+                  [[ "${current_protocol}" == "${protocol}" ]] &&
+                  [[ "${current_tls_secret}" == "${tls_secret}" ]] &&
+                  [[ "${current_allowed}" == "${allowed_namespaces}" ]]
+              }
+
+              configure_listener() {
+                local listener_name="$1"
+                local hostname="$2"
+                local port="$3"
+                local protocol="$4"
+                local tls_secret="$5"
+                local allowed_namespaces="$6"
+
+                echo "Reconciling listener '${listener_name}' (${protocol} ${hostname}:${port})"
+
+                local existing_name
+                existing_name="$(listener_jsonpath "${listener_name}" name)"
+
+                if [[ -n "${existing_name}" ]]; then
+                  if listener_matches "${listener_name}" "${hostname}" "${port}" "${protocol}" "${tls_secret}" "${allowed_namespaces}"; then
+                    echo "Listener '${listener_name}' already matches desired config; skipping."
+                    return 0
+                  fi
+
+                  if [[ "${UPDATE_IF_EXISTS}" != "true" ]]; then
+                    echo "Listener '${listener_name}' exists and updateIfExists=false; skipping."
+                    return 0
+                  fi
+                fi
+
+                local listener_file patch_file op path listener_index
+                listener_file="/tmp/poundcake-listener-${listener_name}.json"
+                patch_file="/tmp/poundcake-listener-${listener_name}-patch.json"
+                write_listener_value "${listener_name}" "${hostname}" "${port}" "${protocol}" "${tls_secret}" "${allowed_namespaces}" "${listener_file}"
+
+                if [[ -n "${existing_name}" ]]; then
+                  listener_index="$(find_listener_index "${listener_name}")"
+                  if [[ -z "${listener_index}" ]]; then
+                    echo "ERROR: listener '${listener_name}' exists but its index could not be resolved."
+                    exit 1
+                  fi
+                  op="replace"
+                  path="/spec/listeners/${listener_index}"
+                else
+                  op="add"
+                  path="/spec/listeners/-"
+                fi
+
+                {
+                  echo "["
+                  echo "  {"
+                  echo "    \"op\": \"${op}\","
+                  echo "    \"path\": \"${path}\","
+                  echo "    \"value\": $(cat "${listener_file}")"
+                  echo "  }"
+                  echo "]"
+                } > "${patch_file}"
+
+                kubectl patch gateway.gateway.networking.k8s.io "${GATEWAY_NAME}" -n "${GATEWAY_NAMESPACE}" \
+                  --type=json \
+                  --patch-file "${patch_file}"
+              }
+
+              {{- range $desired := $listeners }}
+              configure_listener {{ $desired.name | quote }} {{ $desired.hostname | quote }} {{ printf "%d" (int $desired.port) | quote }} {{ $desired.protocol | quote }} {{ $desired.tlsSecretName | quote }} {{ $allowedNamespaces | quote }}
+              {{- end }}
+
+              echo "PoundCake Gateway listener reconciliation complete."
+{{- end }}
+{{- end }}

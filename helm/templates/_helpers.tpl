@@ -36,6 +36,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "poundcake.gatewayManagerName" -}}
+{{- printf "%s-%s-gateway-manager" .Release.Namespace (include "poundcake.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "poundcake.stackstormActionrunnerServiceAccountName" -}}
 {{- $cfg := .Values.stackstormActionrunner | default dict -}}
 {{- $serviceAccount := $cfg.serviceAccount | default dict -}}

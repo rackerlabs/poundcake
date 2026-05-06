@@ -1,0 +1,145 @@
+suite: gateway-listener
+templates:
+  - templates/poundcake-gateway-listener-job.yaml
+  - templates/poundcake-gateway-rbac.yaml
+tests:
+  - it: does not render listener management resources by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders listener job and gateway rbac when gateway is enabled
+    set:
+      gateway.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/poundcake-gateway-listener-job.yaml
+      - equal:
+          path: kind
+          value: Job
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-poundcake-gateway-listener
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'UPDATE_IF_EXISTS="true"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'configure_listener "api" "api.poundcake.local" "80" "HTTP" "" "All"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'configure_listener "ui" "ui.poundcake.local" "80" "HTTP" "" "All"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - hasDocuments:
+          count: 2
+        template: templates/poundcake-gateway-rbac.yaml
+      - equal:
+          path: kind
+          value: ClusterRole
+        template: templates/poundcake-gateway-rbac.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: NAMESPACE-RELEASE-NAME-poundcake-gateway-manager
+        template: templates/poundcake-gateway-rbac.yaml
+        documentIndex: 0
+      - contains:
+          path: rules[0].verbs
+          content: patch
+        template: templates/poundcake-gateway-rbac.yaml
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: ClusterRoleBinding
+        template: templates/poundcake-gateway-rbac.yaml
+        documentIndex: 1
+      - equal:
+          path: subjects[0].namespace
+          value: NAMESPACE
+        template: templates/poundcake-gateway-rbac.yaml
+        documentIndex: 1
+
+  - it: passes parent gateway and explicit listener overrides into the job
+    set:
+      gateway.enabled: true
+      gateway.gatewayName: flex-gateway
+      gateway.gatewayNamespace: envoy-gateway
+      gateway.listener.name: poundcake-https
+      gateway.listener.hostname: poundcake.api.example.com
+      gateway.listener.tlsSecretName: poundcake-tls
+      gateway.listener.updateIfExists: false
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'GATEWAY_NAME="flex-gateway"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'GATEWAY_NAMESPACE="envoy-gateway"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'UPDATE_IF_EXISTS="false"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'updateIfExists=false; skipping'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'configure_listener "poundcake-https" "poundcake.api.example.com" "443" "HTTPS" "poundcake-tls" "All"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+
+  - it: reconciles only the api listener when ui listener is disabled
+    set:
+      gateway.enabled: true
+      gateway.listeners.ui.enabled: false
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'configure_listener "api" "api.poundcake.local" "80" "HTTP" "" "All"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'configure_listener "ui"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+
+  - it: reconciles one shared listener when api and ui listener tuples are identical
+    set:
+      gateway.enabled: true
+      gateway.listeners.api.hostname: poundcake.example.com
+      gateway.listeners.ui.hostname: poundcake.example.com
+      gateway.listeners.api.port: 443
+      gateway.listeners.ui.port: 443
+      gateway.listeners.api.protocol: HTTPS
+      gateway.listeners.ui.protocol: HTTPS
+      gateway.listeners.api.tls.secretName: poundcake-tls
+      gateway.listeners.ui.tls.secretName: poundcake-tls
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'configure_listener "api" "poundcake.example.com" "443" "HTTPS" "poundcake-tls" "All"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'configure_listener "ui"'
+        template: templates/poundcake-gateway-listener-job.yaml
+        documentIndex: 0

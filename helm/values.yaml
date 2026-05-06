@@ -9,7 +9,7 @@
 #
 # Namespace behavior:
 # - direct Helm installs use the namespace you pass with `--namespace`
-# - the bundled installer defaults `POUNDCAKE_NAMESPACE` to `poundcake`
+# - the bundled installer defaults `POUNDCAKE_NAMESPACE` to `rackspace`
 # - each release renders into a single namespace; split installs use separate releases
 #
 # High-level chart shape:
@@ -93,8 +93,8 @@ ingress:
   #      - poundcake.local
 
 # Gateway API route attachment configuration.
-# When enabled, PoundCake renders HTTPRoutes that attach to an existing Gateway.
-# PoundCake does not create a Gateway resource.
+# When enabled, PoundCake renders HTTPRoutes and a Helm hook Job that idempotently
+# creates or updates the configured listener sections on an existing Gateway.
 gateway:
   enabled: false
 
@@ -104,8 +104,8 @@ gateway:
   gatewayName: ""  # Example: <gateway-name>
   gatewayNamespace: ""  # Example: <gateway-namespace>
 
-  # Existing listener section on the parent Gateway.
-  # If omitted, route defaults are derived from gateway.listeners.* compatibility fields.
+  # Optional explicit listener section on the parent Gateway.
+  # If name is omitted, API/UI listener sections are derived from gateway.listeners.*.
   listener:
     # Existing listener section name on parent Gateway (used as HTTPRoute parentRefs.sectionName)
     name: ""  # Example: <gateway-listener-name>
@@ -131,7 +131,7 @@ gateway:
   #   application: gateway-api
   #   route: poundcake
 
-  # Legacy compatibility fields used for path prefix and fallback section names.
+  # Listener and route defaults used by the listener hook and HTTPRoutes.
   # If gatewayName is empty, gateway.name is used as parentRefs.name.
   className: envoyproxy
   name: poundcake-gateway
@@ -149,7 +149,7 @@ gateway:
       tls:
         mode: Terminate
         secretName: ""
-      pathPrefix: /
+      pathPrefix: /api
     ui:
       enabled: true
       hostname: ui.poundcake.local

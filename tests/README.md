@@ -94,7 +94,7 @@ Common optional vars:
 - `TEST_TIMEOUT_SEC` (default timeout used by helper library)
 - `POLL_INTERVAL_SEC` (default poll interval used by helper library)
 - `DEBUG=1` (enables helper debug logs)
-- `POUNDCAKE_NAMESPACE` (default: `poundcake`, k8s mode)
+- `POUNDCAKE_NAMESPACE` (default: `rackspace`, k8s mode)
 - `POUNDCAKE_API_SERVICE` (default: `poundcake-api`, k8s mode)
 - `POUNDCAKE_LOCAL_PORT` (default: `8000`, k8s mode local port-forward when enabled)
 - `POUNDCAKE_REMOTE_PORT` (default: `8000`, k8s mode service port and direct URL port)
