@@ -17,8 +17,8 @@ Use this sequence:
 
 - PoundCake repo root: `/opt/poundcake`
 - Bakery repo root: `/opt/bakery`
-- PoundCake overrides: `/etc/genestack/helm-overrides/poundcake/`
-- Bakery overrides: `/etc/genestack/helm-overrides/bakery/`
+- PoundCake overrides: `/etc/genestack/helm-configs/poundcake/`
+- Bakery overrides: `/etc/genestack/helm-configs/bakery/`
 - Shared chart versions file: `/etc/genestack/helm-chart-versions.yaml`
 
 ## Bakery Deployment Source
@@ -38,7 +38,7 @@ export BAKERY_URL="https://bakery.example.com"
 ## PoundCake Override Example
 
 Put the PoundCake-side remote Bakery settings in the active override file, typically
-`/etc/genestack/helm-overrides/poundcake/10-main-overrides.yaml`:
+`/etc/genestack/helm-configs/poundcake/10-main-overrides.yaml`:
 
 ```yaml
 gateway:

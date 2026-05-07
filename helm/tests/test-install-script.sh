@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WRAPPER="${SCRIPT_DIR}/../../install/install-poundcake-helm.sh"
 INSTALLER="${SCRIPT_DIR}/../bin/install-poundcake.sh"
+HELPER="${SCRIPT_DIR}/../../install/set-env-helper.sh"
 
 fail() {
   echo "[FAIL] $*" >&2
@@ -49,11 +50,15 @@ assert_not_contains '/api/v1/health.' "${INSTALLER}"
 assert_contains 'NAMESPACE="${POUNDCAKE_NAMESPACE:-rackspace}"' "${INSTALLER}"
 assert_contains 'CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-false}"' "${INSTALLER}"
 assert_contains '"/etc/genestack/helm-chart-versions.yaml"' "${INSTALLER}"
-assert_contains 'GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-overrides/global_overrides}"' "${INSTALLER}"
-assert_contains 'SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-overrides/poundcake}"' "${INSTALLER}"
+assert_contains 'GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-configs/global_overrides}"' "${INSTALLER}"
+assert_contains 'SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-configs/poundcake}"' "${INSTALLER}"
 assert_contains 'POST_RENDERER="${POUNDCAKE_HELM_POST_RENDERER:-/etc/genestack/kustomize/kustomize.sh}"' "${INSTALLER}"
 assert_not_contains '/etc/poundcake/helm-chart-versions.yaml' "${INSTALLER}"
 assert_not_contains '/etc/poundcake/helm-configs/poundcake' "${INSTALLER}"
+
+echo "Checking environment helper defaults..."
+assert_contains 'export POUNDCAKE_GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-configs/global_overrides}"' "${HELPER}"
+assert_contains 'export POUNDCAKE_SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-configs/poundcake}"' "${HELPER}"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT

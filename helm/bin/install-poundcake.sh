@@ -23,8 +23,8 @@ CREATE_IMAGE_PULL_SECRET="${POUNDCAKE_CREATE_IMAGE_PULL_SECRET:-false}"
 IMAGE_PULL_SECRET_EMAIL="${POUNDCAKE_IMAGE_PULL_SECRET_EMAIL:-noreply@local}"
 
 BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-}"
-GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-overrides/global_overrides}"
-SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-overrides/poundcake}"
+GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-configs/global_overrides}"
+SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-configs/poundcake}"
 POST_RENDERER="${POUNDCAKE_HELM_POST_RENDERER:-/etc/genestack/kustomize/kustomize.sh}"
 POST_RENDERER_ARGS="${POUNDCAKE_HELM_POST_RENDERER_ARGS:-poundcake/overlay}"
 POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/genestack/kustomize/poundcake/overlay}"
@@ -152,7 +152,7 @@ Environment overrides:
 
 Image repositories/tags/digests:
   - Configure these in Helm values files or override files only.
-  - Default active override dir: /etc/genestack/helm-overrides/poundcake/
+  - Default active override dir: /etc/genestack/helm-configs/poundcake/
   - Image env vars and image --set overrides are intentionally not supported.
 
 Runtime deployment settings:
@@ -192,7 +192,7 @@ validate_image_env_inputs() {
   if (( ${#deprecated_image_envs[@]} > 0 )); then
     log_error "Image environment variables are no longer supported by the Helm installers: ${deprecated_image_envs[*]}"
     log_error "Configure image repositories/tags/digests in values files or override files instead."
-    log_error "Default active override dir: /etc/genestack/helm-overrides/poundcake/"
+    log_error "Default active override dir: /etc/genestack/helm-configs/poundcake/"
     exit 1
   fi
 }

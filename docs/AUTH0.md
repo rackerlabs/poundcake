@@ -11,7 +11,7 @@ Use this when you want:
 ## Assumptions
 
 - PoundCake is deployed into a Kubernetes environment.
-- The active auth override file is `/etc/genestack/helm-overrides/poundcake/20-auth-overrides.yaml`.
+- The active auth override file is `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`.
 - PoundCake is published at `https://<poundcake-public-url-host>`.
 - The PoundCake namespace is `<namespace>`.
 
@@ -53,7 +53,7 @@ Collect these values:
 
 ## 2. Write The Auth Override File
 
-Create or update `/etc/genestack/helm-overrides/poundcake/20-auth-overrides.yaml`:
+Create or update `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`:
 
 ```yaml
 auth:

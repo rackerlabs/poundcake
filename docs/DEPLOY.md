@@ -17,9 +17,9 @@ Auth provider and RBAC setup live in [AUTH.md](AUTH.md).
 
 ## Canonical Paths
 
-- PoundCake override directory: `/etc/genestack/helm-overrides/poundcake/`
-- Bakery override directory: `/etc/genestack/helm-overrides/bakery/`
-- Global overrides: `/etc/genestack/helm-overrides/global_overrides/`
+- PoundCake override directory: `/etc/genestack/helm-configs/poundcake/`
+- Bakery override directory: `/etc/genestack/helm-configs/bakery/`
+- Global overrides: `/etc/genestack/helm-configs/global_overrides/`
 - Shared chart version file: `/etc/genestack/helm-chart-versions.yaml`
 - PoundCake installer wrapper: [install/install-poundcake-helm.sh](../install/install-poundcake-helm.sh)
 - Standalone Bakery repo: [rackerlabs/bakery](https://github.com/rackerlabs/bakery)
@@ -178,7 +178,7 @@ Important notes:
 - When enabling the `openstack` pack, prefer the Git source shown above instead of relying on the
   implicit Exchange source.
 - These values are secrets. Keep them only in secured operator-managed override files such as
-  `/etc/genestack/helm-overrides/poundcake/10-main-overrides.yaml`, and do not commit real
+  `/etc/genestack/helm-configs/poundcake/10-main-overrides.yaml`, and do not commit real
   credentials or certificate material to the repo.
 
 Once these values are present, the PoundCake Helm bootstrap flow will install and configure the

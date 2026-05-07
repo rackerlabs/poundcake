@@ -34,7 +34,7 @@ Dedicated provider guides:
 Provider setup lives under `auth` in [helm/values.yaml](../helm/values.yaml).
 In the bundled override-file layout, auth settings normally live in:
 
-- `/etc/genestack/helm-overrides/poundcake/20-auth-overrides.yaml`
+- `/etc/genestack/helm-configs/poundcake/20-auth-overrides.yaml`
 
 Secrets still live in the PoundCake namespace, usually `<namespace>`.
 

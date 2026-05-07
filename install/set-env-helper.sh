@@ -46,8 +46,8 @@ export POUNDCAKE_HELM_VALIDATE="${POUNDCAKE_HELM_VALIDATE:-false}"
 
 # Values/overlay inputs consumed by installer defaults.
 export POUNDCAKE_BASE_OVERRIDES="${POUNDCAKE_BASE_OVERRIDES:-}"
-export POUNDCAKE_GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-overrides/global_overrides}"
-export POUNDCAKE_SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-overrides/poundcake}"
+export POUNDCAKE_GLOBAL_OVERRIDES_DIR="${POUNDCAKE_GLOBAL_OVERRIDES_DIR:-/etc/genestack/helm-configs/global_overrides}"
+export POUNDCAKE_SERVICE_CONFIG_DIR="${POUNDCAKE_SERVICE_CONFIG_DIR:-/etc/genestack/helm-configs/poundcake}"
 export POUNDCAKE_HELM_POST_RENDERER="${POUNDCAKE_HELM_POST_RENDERER:-/etc/genestack/kustomize/kustomize.sh}"
 export POUNDCAKE_HELM_POST_RENDERER_ARGS="${POUNDCAKE_HELM_POST_RENDERER_ARGS:-poundcake/overlay}"
 export POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR="${POUNDCAKE_HELM_POST_RENDERER_OVERLAY_DIR:-/etc/genestack/kustomize/poundcake/overlay}"

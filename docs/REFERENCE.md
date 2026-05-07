@@ -56,8 +56,8 @@ Release and override discovery:
 | `POUNDCAKE_CHART_VERSION` | unset | Explicit OCI chart version |
 | `POUNDCAKE_VERSION_FILE` | `/etc/genestack/helm-chart-versions.yaml` lookup | Explicit chart versions file path |
 | `POUNDCAKE_BASE_OVERRIDES` | unset | Optional explicit base values file |
-| `POUNDCAKE_GLOBAL_OVERRIDES_DIR` | `/etc/genestack/helm-overrides/global_overrides` | Global values dir |
-| `POUNDCAKE_SERVICE_CONFIG_DIR` | `/etc/genestack/helm-overrides/poundcake` | PoundCake values dir |
+| `POUNDCAKE_GLOBAL_OVERRIDES_DIR` | `/etc/genestack/helm-configs/global_overrides` | Global values dir |
+| `POUNDCAKE_SERVICE_CONFIG_DIR` | `/etc/genestack/helm-configs/poundcake` | PoundCake values dir |
 
 Installer behavior:
 
