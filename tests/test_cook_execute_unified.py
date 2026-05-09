@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.models.models import Order
+from api.models.models import Dish, DishIngredient, Order
 from api.services.execution_types import ExecutionResult
 
 
@@ -20,6 +20,14 @@ class ScalarResult:
 
     def first(self):
         return self._first
+
+
+class AsyncBegin:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, *_exc_info: object) -> None:
+        return None
 
 
 def test_cook_execute_returns_canonical_envelope_for_stackstorm():
@@ -113,8 +121,57 @@ def test_cook_execute_skips_bakery_call_for_suppressed_order():
         created_at=now,
         updated_at=now,
     )
-    mock_db = SimpleNamespace(execute=AsyncMock(return_value=ScalarResult(first=order)))
-    suppression = SimpleNamespace(id=5, name="upgrade in progress")
+    ingredient = DishIngredient(
+        id=11,
+        dish_id=7,
+        recipe_ingredient_id=3,
+        task_key="notify",
+        deleted=False,
+        deleted_at=None,
+        execution_engine="bakery",
+        execution_target="core",
+        destination_target="primary",
+        execution_payload={},
+        execution_parameters={},
+        execution_ref=None,
+        expected_duration_sec=15,
+        timeout_duration_sec=120,
+        retry_count=0,
+        retry_delay=0,
+        on_failure="continue",
+        attempt=0,
+        execution_status="pending",
+        started_at=None,
+        completed_at=None,
+        canceled_at=None,
+        result=None,
+        error_message=None,
+        created_at=now,
+        updated_at=now,
+    )
+    dish = Dish(
+        id=7,
+        req_id="REQ-42",
+        order_id=order.id,
+        recipe_id=1,
+        run_phase="resolving",
+        processing_status="processing",
+        execution_status="running",
+        execution_ref=None,
+        result=None,
+        error_message=None,
+        created_at=now,
+        updated_at=now,
+        completed_at=None,
+    )
+    dish.dish_ingredients = [ingredient]
+    order.dishes = [dish]
+    mock_db = SimpleNamespace(
+        execute=AsyncMock(return_value=ScalarResult(first=order)),
+        flush=AsyncMock(),
+        begin=lambda: AsyncBegin(),
+    )
+    suppression = SimpleNamespace(id=5, name="upgrade in progress", scope="all")
     orchestrator_execute = AsyncMock()
 
     with (
@@ -151,6 +208,11 @@ def test_cook_execute_skips_bakery_call_for_suppressed_order():
     assert body["status"] == "succeeded"
     assert body["raw"]["skipped"] is True
     assert body["raw"]["suppression_id"] == suppression.id
+    assert body["raw"]["discarded_backlog"] == 1
+    assert order.processing_status == "canceled"
+    assert dish.processing_status == "canceled"
+    assert ingredient.execution_status == "canceled"
+    mock_db.flush.assert_awaited_once()
     orchestrator_execute.assert_not_awaited()
 
 

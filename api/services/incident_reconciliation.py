@@ -580,6 +580,7 @@ async def _reopen_or_recreate_ticket(
 
 async def _notify_refire_ticket(
     *,
+    db: AsyncSession,
     order: Order,
     communication: OrderCommunication,
     req_id: str,
@@ -592,14 +593,32 @@ async def _notify_refire_ticket(
     if _ticket_alert_note_state(metadata, ticket_id) == ALERT_NOTE_STATE_FIRING:
         communication.reconcile_metadata = metadata
         return
-    accepted = await notify_communication(
-        req_id=req_id,
-        communication_id=ticket_id,
-        payload={
-            "comment": _refire_ticket_note(order, communication),
-            "context": _reconcile_context(order, communication),
-        },
-    )
+    _remember_ticket_alert_note_state(metadata, ticket_id, ALERT_NOTE_STATE_FIRING)
+    communication.reconcile_metadata = metadata
+    await db.flush()
+    try:
+        accepted = await notify_communication(
+            req_id=req_id,
+            communication_id=ticket_id,
+            payload={
+                "comment": _refire_ticket_note(order, communication),
+                "context": _reconcile_context(order, communication),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        communication.lifecycle_state = "failed"
+        communication.last_error = str(exc)
+        await db.flush()
+        logger.warning(
+            "Failed to submit refire ticket note after idempotency claim",
+            extra={
+                "req_id": req_id,
+                "order_id": order.id,
+                "ticket_id": ticket_id,
+                "error": str(exc),
+            },
+        )
+        return
     success, error = await _await_operation(accepted.operation_id)
     communication.bakery_operation_id = accepted.operation_id
     communication.lifecycle_state = "succeeded" if success else "failed"
@@ -607,7 +626,6 @@ async def _notify_refire_ticket(
     if not success:
         communication.reconcile_metadata = metadata
         return
-    _remember_ticket_alert_note_state(metadata, ticket_id, ALERT_NOTE_STATE_FIRING)
     communication.reconcile_metadata = metadata
     await refresh_remote_state(communication)
     actions.append(
@@ -617,6 +635,7 @@ async def _notify_refire_ticket(
 
 async def _notify_clear_ticket(
     *,
+    db: AsyncSession,
     order: Order,
     communication: OrderCommunication,
     req_id: str,
@@ -629,14 +648,32 @@ async def _notify_clear_ticket(
     if _ticket_alert_note_state(metadata, ticket_id) == ALERT_NOTE_STATE_RESOLVED:
         communication.reconcile_metadata = metadata
         return
-    accepted = await notify_communication(
-        req_id=req_id,
-        communication_id=ticket_id,
-        payload={
-            "comment": _clear_ticket_note(order, communication),
-            "context": _reconcile_context(order, communication),
-        },
-    )
+    _remember_ticket_alert_note_state(metadata, ticket_id, ALERT_NOTE_STATE_RESOLVED)
+    communication.reconcile_metadata = metadata
+    await db.flush()
+    try:
+        accepted = await notify_communication(
+            req_id=req_id,
+            communication_id=ticket_id,
+            payload={
+                "comment": _clear_ticket_note(order, communication),
+                "context": _reconcile_context(order, communication),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        communication.lifecycle_state = "failed"
+        communication.last_error = str(exc)
+        await db.flush()
+        logger.warning(
+            "Failed to submit clear ticket note after idempotency claim",
+            extra={
+                "req_id": req_id,
+                "order_id": order.id,
+                "ticket_id": ticket_id,
+                "error": str(exc),
+            },
+        )
+        return
     success, error = await _await_operation(accepted.operation_id)
     communication.bakery_operation_id = accepted.operation_id
     communication.lifecycle_state = "succeeded" if success else "failed"
@@ -644,7 +681,6 @@ async def _notify_clear_ticket(
     if not success:
         communication.reconcile_metadata = metadata
         return
-    _remember_ticket_alert_note_state(metadata, ticket_id, ALERT_NOTE_STATE_RESOLVED)
     communication.reconcile_metadata = metadata
     await refresh_remote_state(communication)
     actions.append(
@@ -774,6 +810,7 @@ async def reconcile_order(
                 communication.reconcile_metadata = metadata
                 if refired_existing_incident:
                     await _notify_refire_ticket(
+                        db=db,
                         order=order,
                         communication=communication,
                         req_id=req_id,
@@ -812,6 +849,7 @@ async def reconcile_order(
                 continue
             if not is_remote_state_terminal(communication.remote_state):
                 await _notify_clear_ticket(
+                    db=db,
                     order=order,
                     communication=communication,
                     req_id=req_id,

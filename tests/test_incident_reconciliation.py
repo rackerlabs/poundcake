@@ -213,6 +213,50 @@ async def test_reconcile_order_skips_bakery_sync_when_suppressed(
 
 
 @pytest.mark.asyncio
+async def test_reconcile_clear_note_is_not_repeated_after_failed_poll(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order = _make_order(status="waiting_ticket_close")
+    communication = _make_communication(order=order, remote_state="open")
+    db = SimpleNamespace(flush=AsyncMock())
+
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "load_order_with_communications",
+        AsyncMock(return_value=order),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "get_prometheus_client",
+        lambda: SimpleNamespace(get_alerts=AsyncMock(return_value=[])),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "refresh_remote_state",
+        AsyncMock(return_value=("open", True, False)),
+    )
+    notify = AsyncMock(
+        return_value=SimpleNamespace(operation_id="op-note", communication_id="comm-1")
+    )
+    poll = AsyncMock(return_value=SimpleNamespace(status="failed", last_error="poll timed out"))
+    monkeypatch.setattr(incident_reconciliation, "notify_communication", notify)
+    monkeypatch.setattr(incident_reconciliation, "poll_operation", poll)
+
+    first = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+    second = await incident_reconciliation.reconcile_order(db, order_id=order.id, req_id="REQ-1")
+
+    assert first["actions"] == []
+    assert second["actions"] == []
+    assert notify.await_count == 1
+    assert communication.lifecycle_state == "failed"
+    assert communication.reconcile_metadata["ticket_alert_note_state_by_ticket"] == {
+        "comm-1": "resolved"
+    }
+    assert communication.reconcile_metadata["last_ticket_alert_note_state"] == "resolved"
+    assert db.flush.await_count >= 3
+
+
+@pytest.mark.asyncio
 async def test_reconcile_refire_waiting_ticket_close_resets_order_to_new(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -267,7 +311,7 @@ async def test_reconcile_refire_waiting_ticket_close_resets_order_to_new(
     assert communication.reconcile_metadata["ticket_alert_note_state_by_ticket"] == {
         "comm-1": "firing"
     }
-    db.flush.assert_awaited_once()
+    assert db.flush.await_count >= 2
 
 
 @pytest.mark.asyncio

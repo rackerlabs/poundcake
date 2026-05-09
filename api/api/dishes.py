@@ -36,6 +36,7 @@ from api.services.dish_planner import (
     build_step_payload,
     build_step_task_key,
 )
+from api.services.execution_types import TERMINAL_EXECUTION_STATUSES
 from api.services.order_communications import is_remote_state_terminal, is_ticket_communication
 
 router = APIRouter()
@@ -431,6 +432,9 @@ async def upsert_dish_ingredients(
 
         if rows:
             insert_stmt = mysql_insert(DishIngredient).values(rows)
+            existing_terminal_status = DishIngredient.execution_status.in_(
+                tuple(TERMINAL_EXECUTION_STATUSES)
+            )
             update_stmt = {
                 "task_key": func.coalesce(DishIngredient.task_key, insert_stmt.inserted.task_key),
                 "execution_engine": func.coalesce(
@@ -469,15 +473,33 @@ async def upsert_dish_ingredients(
                     DishIngredient.on_failure,
                     insert_stmt.inserted.on_failure,
                 ),
-                "execution_status": insert_stmt.inserted.execution_status,
-                "attempt": insert_stmt.inserted.attempt,
+                "execution_status": case(
+                    (existing_terminal_status, DishIngredient.execution_status),
+                    else_=insert_stmt.inserted.execution_status,
+                ),
+                "attempt": case(
+                    (existing_terminal_status, DishIngredient.attempt),
+                    else_=insert_stmt.inserted.attempt,
+                ),
                 "started_at": func.coalesce(
                     DishIngredient.started_at, insert_stmt.inserted.started_at
                 ),
-                "completed_at": insert_stmt.inserted.completed_at,
-                "canceled_at": insert_stmt.inserted.canceled_at,
-                "result": insert_stmt.inserted.result,
-                "error_message": insert_stmt.inserted.error_message,
+                "completed_at": case(
+                    (existing_terminal_status, DishIngredient.completed_at),
+                    else_=insert_stmt.inserted.completed_at,
+                ),
+                "canceled_at": case(
+                    (existing_terminal_status, DishIngredient.canceled_at),
+                    else_=insert_stmt.inserted.canceled_at,
+                ),
+                "result": case(
+                    (existing_terminal_status, DishIngredient.result),
+                    else_=insert_stmt.inserted.result,
+                ),
+                "error_message": case(
+                    (existing_terminal_status, DishIngredient.error_message),
+                    else_=insert_stmt.inserted.error_message,
+                ),
                 "updated_at": insert_stmt.inserted.updated_at,
                 "recipe_ingredient_id": func.coalesce(
                     DishIngredient.recipe_ingredient_id,
