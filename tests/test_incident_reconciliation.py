@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -162,6 +162,54 @@ def test_alert_match_requires_same_hpa_when_hpa_label_is_present() -> None:
         order,
         {"state": "firing", "labels": dict(order.labels)},
     )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_order_skips_bakery_sync_when_suppressed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order = _make_order(status="processing")
+    _make_communication(order=order, remote_state="open")
+    step = _make_resolving_dish_step()
+    step.execution_status = "pending"
+    order.dishes = [_make_resolving_dish(step)]
+    db = SimpleNamespace(execute=AsyncMock(), flush=AsyncMock())
+    suppression = SimpleNamespace(id=5, name="upgrade in progress", scope="all")
+
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "load_order_with_communications",
+        AsyncMock(return_value=order),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "find_first_matching_suppression",
+        AsyncMock(return_value=suppression),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "refresh_remote_state",
+        AsyncMock(side_effect=AssertionError("should not sync Bakery")),
+    )
+    monkeypatch.setattr(
+        incident_reconciliation,
+        "get_prometheus_client",
+        Mock(side_effect=AssertionError("should not query Prometheus")),
+    )
+
+    result = await incident_reconciliation.reconcile_order(
+        db,
+        order_id=order.id,
+        req_id="REQ-1",
+    )
+
+    assert result["status"] == "skipped"
+    assert result["reason"] == "suppressed"
+    assert result["suppression_id"] == suppression.id
+    assert order.processing_status == "canceled"
+    assert order.is_active is False
+    assert step.execution_status == "canceled"
+    db.flush.assert_awaited_once()
 
 
 @pytest.mark.asyncio

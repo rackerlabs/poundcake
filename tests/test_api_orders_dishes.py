@@ -866,6 +866,44 @@ def test_order_dispatch__resolving_waits_for_active_firing_remediation(client, m
     mock_db_session.add.assert_not_called()
 
 
+def test_order_dispatch__active_suppression_discards_backlog(client, mock_db_session):
+    order = _make_order(status="new")
+    order.dishes = []
+    suppression = SimpleNamespace(id=5, name="upgrade in progress", scope="all")
+
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            ScalarResult(first=order),  # order
+        ]
+    )
+
+    with (
+        patch(
+            "api.api.orders.get_settings",
+            return_value=SimpleNamespace(
+                catch_all_recipe_name="fallback-recipe",
+                suppressions_enabled=True,
+            ),
+        ),
+        patch(
+            "api.api.orders.find_first_matching_suppression",
+            new=AsyncMock(return_value=suppression),
+        ),
+        patch("api.api.orders.global_policy_configured", new=AsyncMock()) as global_policy,
+    ):
+        response = client.post("/api/v1/orders/1/dispatch")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "skipped"
+    assert body["order_id"] == 1
+    assert "active suppression 5" in body["reason"]
+    assert order.processing_status == "canceled"
+    assert order.is_active is False
+    global_policy.assert_not_awaited()
+    mock_db_session.add.assert_not_called()
+
+
 def test_order_dispatch__without_group_recipe__uses_fallback_recipe(client, mock_db_session):
     order = _make_order(status="new")
     fallback_recipe = SimpleNamespace(id=22, name="fallback-recipe", recipe_ingredients=[])

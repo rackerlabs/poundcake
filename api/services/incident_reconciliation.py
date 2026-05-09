@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import get_settings
 from api.core.logging import get_logger
 from api.core.statuses import DISH_TERMINAL_PROCESSING_STATUSES, can_transition_to_resolving
 from api.models.models import DishIngredient, Order, OrderCommunication
@@ -29,6 +30,10 @@ from api.services.order_communications import (
     refresh_remote_state,
 )
 from api.services.prometheus_service import get_prometheus_client
+from api.services.suppression_service import (
+    discard_order_bakery_backlog,
+    find_first_matching_suppression,
+)
 
 logger = get_logger(__name__)
 
@@ -668,6 +673,34 @@ async def reconcile_order(
         result["status"] = "skipped"
         return result
 
+    now = _now()
+    if getattr(get_settings(), "suppressions_enabled", False) and hasattr(db, "execute"):
+        suppression = await find_first_matching_suppression(db, order.labels or {}, now)
+        if suppression:
+            discarded_backlog = discard_order_bakery_backlog(order, suppression, now=now)
+            order.updated_at = now
+            _sync_legacy_order_fields(order)
+            await db.flush()
+            result.update(
+                {
+                    "status": "skipped",
+                    "reason": "suppressed",
+                    "suppression_id": suppression.id,
+                    "discarded_backlog": discarded_backlog,
+                    "processing_status": order.processing_status,
+                }
+            )
+            logger.info(
+                "Skipped incident reconciliation for suppressed order",
+                extra={
+                    "req_id": req_id,
+                    "order_id": order.id,
+                    "suppression_id": suppression.id,
+                    "discarded_backlog": discarded_backlog,
+                },
+            )
+            return result
+
     previous_processing_status = str(order.processing_status or "").strip().lower()
     previous_alert_status = str(order.alert_status or "").strip().lower()
 
@@ -678,7 +711,6 @@ async def reconcile_order(
         return result
 
     alert_firing = _alert_is_firing(order, alerts)
-    now = _now()
     result["observed_alert_status"] = "firing" if alert_firing else "resolved"
     refired_existing_incident = alert_firing and (
         previous_processing_status in {"resolving", "waiting_ticket_close"}

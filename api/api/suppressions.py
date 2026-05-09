@@ -53,6 +53,7 @@ from api.schemas.schemas import (
 from api.services.suppression_service import (
     compute_suppression_stats,
     count_active_suppressions,
+    discard_suppressed_bakery_backlog,
     finalize_expired_suppressions,
     get_suppression,
     list_suppression_activity,
@@ -164,12 +165,19 @@ async def create_suppression(
     refreshed = await get_suppression(db, suppression.id)
     if not refreshed:
         raise HTTPException(status_code=500, detail="Failed to create suppression")
+    discarded_backlog = await discard_suppressed_bakery_backlog(
+        db,
+        refreshed,
+        req_id=req_id,
+    )
+    await db.commit()
     logger.info(
         "Created suppression",
         extra={
             "req_id": req_id,
             "suppression_id": refreshed.id,
             "suppression_name": refreshed.name,
+            "discarded_backlog": discarded_backlog,
         },
     )
     return _to_suppression_response(refreshed)
@@ -254,7 +262,20 @@ async def patch_suppression(
     refreshed = await get_suppression(db, suppression.id)
     if not refreshed:
         raise HTTPException(status_code=500, detail="Failed to update suppression")
-    logger.info("Updated suppression", extra={"req_id": req_id, "suppression_id": suppression_id})
+    discarded_backlog = await discard_suppressed_bakery_backlog(
+        db,
+        refreshed,
+        req_id=req_id,
+    )
+    await db.commit()
+    logger.info(
+        "Updated suppression",
+        extra={
+            "req_id": req_id,
+            "suppression_id": suppression_id,
+            "discarded_backlog": discarded_backlog,
+        },
+    )
     return _to_suppression_response(refreshed)
 
 

@@ -5,10 +5,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from api.models.models import AlertSuppression, AlertSuppressionMatcher, SuppressionSummary
+from api.models.models import (
+    AlertSuppression,
+    AlertSuppressionMatcher,
+    Dish,
+    DishIngredient,
+    Order,
+    SuppressionSummary,
+)
 from api.services.suppression_service import (
     _matcher_match,
     build_summary_ticket_payload,
+    discard_suppressed_bakery_backlog,
     find_first_matching_suppression,
     suppression_matches,
     suppression_status,
@@ -24,6 +32,9 @@ class ScalarResult:
 
     def all(self):
         return self._rows
+
+    def unique(self):
+        return self
 
 
 def _suppression(scope: str = "matchers", created_offset: int = 0) -> AlertSuppression:
@@ -148,3 +159,129 @@ def test_summary_payload_contains_expected_sections():
     payload = build_summary_ticket_payload(suppression, summary)
     assert "PoundCake Suppression Summary" in payload["title"]
     assert "Total Suppressed: 12" in payload["description"]
+
+
+@pytest.mark.asyncio
+async def test_discard_suppressed_bakery_backlog_cancels_matching_order_backlog():
+    now = datetime.now(timezone.utc)
+    suppression = _suppression(scope="all")
+    order = Order(
+        id=42,
+        req_id="REQ-42",
+        fingerprint="fp-42",
+        alert_status="firing",
+        processing_status="processing",
+        is_active=True,
+        remediation_outcome="pending",
+        clear_timeout_sec=None,
+        clear_deadline_at=None,
+        clear_timed_out_at=None,
+        auto_close_eligible=False,
+        alert_group_name="group",
+        severity="critical",
+        instance="host1",
+        counter=1,
+        bakery_ticket_state=None,
+        bakery_permanent_failure=False,
+        bakery_last_error=None,
+        labels={"alertname": "DiskFull"},
+        annotations={},
+        raw_data={},
+        starts_at=now,
+        ends_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    dish = Dish(
+        id=7,
+        req_id="REQ-42",
+        order_id=order.id,
+        recipe_id=1,
+        run_phase="firing",
+        processing_status="processing",
+        execution_status=None,
+        expected_duration_sec=30,
+        actual_duration_sec=None,
+        execution_ref=None,
+        started_at=now,
+        completed_at=None,
+        result=None,
+        error_message=None,
+        retry_attempt=0,
+        created_at=now,
+        updated_at=now,
+    )
+    bakery_step = DishIngredient(
+        id=11,
+        dish_id=dish.id,
+        recipe_ingredient_id=101,
+        task_key="step_1_notify",
+        execution_engine="bakery",
+        execution_target="rackspace_core",
+        destination_target="CloudBuilders Support",
+        execution_ref=None,
+        execution_payload={},
+        execution_parameters={"operation": "open"},
+        expected_duration_sec=30,
+        timeout_duration_sec=120,
+        retry_count=0,
+        retry_delay=0,
+        on_failure="stop",
+        attempt=0,
+        execution_status="pending",
+        started_at=None,
+        completed_at=None,
+        canceled_at=None,
+        result=None,
+        error_message=None,
+        deleted=False,
+        deleted_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    stackstorm_step = DishIngredient(
+        id=12,
+        dish_id=dish.id,
+        recipe_ingredient_id=102,
+        task_key="step_2_remediate",
+        execution_engine="stackstorm",
+        execution_target="core.local",
+        destination_target="",
+        execution_ref=None,
+        execution_payload={},
+        execution_parameters={},
+        expected_duration_sec=30,
+        timeout_duration_sec=120,
+        retry_count=0,
+        retry_delay=0,
+        on_failure="stop",
+        attempt=0,
+        execution_status="pending",
+        started_at=None,
+        completed_at=None,
+        canceled_at=None,
+        result=None,
+        error_message=None,
+        deleted=False,
+        deleted_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    dish.dish_ingredients = [bakery_step, stackstorm_step]
+    order.dishes = [dish]
+
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=ScalarResult([order]))
+    db.flush = AsyncMock()
+
+    discarded = await discard_suppressed_bakery_backlog(db, suppression, now=now)
+
+    assert discarded == 1
+    assert order.processing_status == "canceled"
+    assert order.is_active is False
+    assert dish.processing_status == "canceled"
+    assert bakery_step.execution_status == "canceled"
+    assert bakery_step.canceled_at == now
+    assert bakery_step.result["suppression_id"] == suppression.id
+    assert stackstorm_step.execution_status == "pending"
+    db.flush.assert_awaited_once()

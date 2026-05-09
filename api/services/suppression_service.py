@@ -24,6 +24,7 @@ from api.core.metrics import (
 from api.models.models import (
     AlertSuppression,
     AlertSuppressionMatcher,
+    Dish,
     Order,
     SuppressedEvent,
     SuppressionSummary,
@@ -31,6 +32,9 @@ from api.models.models import (
 from api.services.bakery_client import close_ticket, create_ticket, poll_operation
 
 logger = get_logger(__name__)
+
+BACKLOG_DISH_STATUSES = {"new", "processing", "finalizing"}
+BACKLOG_INGREDIENT_STATUSES = {None, "pending", "queued", "processing", "running"}
 
 
 def _utc_now() -> datetime:
@@ -100,6 +104,110 @@ def suppression_matches(suppression: AlertSuppression, labels: dict[str, Any]) -
     if not suppression.matchers:
         return False
     return all(_matcher_match(matcher, labels) for matcher in suppression.matchers)
+
+
+def _suppression_discard_payload(suppression: AlertSuppression) -> dict[str, Any]:
+    return {
+        "skipped": True,
+        "reason": "Discarded because an active alert suppression matched this order.",
+        "suppression_id": suppression.id,
+        "suppression_name": suppression.name,
+    }
+
+
+def discard_order_bakery_backlog(
+    order: Order,
+    suppression: AlertSuppression,
+    *,
+    now: datetime | None = None,
+) -> int:
+    """Discard pending Bakery execution already queued for a suppressed order."""
+    if not suppression_matches(suppression, order.labels or {}):
+        return 0
+
+    discarded = 0
+    current = now or _utc_now()
+    payload = _suppression_discard_payload(suppression)
+    for dish in list(order.dishes or []):
+        dish_status = str(dish.processing_status or "").strip().lower()
+        if dish_status not in BACKLOG_DISH_STATUSES:
+            continue
+        dish.processing_status = "canceled"
+        dish.execution_status = "canceled"
+        dish.completed_at = dish.completed_at or current
+        dish.result = payload
+        dish.error_message = None
+        dish.updated_at = current
+        for step in list(dish.dish_ingredients or []):
+            if str(step.execution_engine or "").strip().lower() != "bakery":
+                continue
+            step_status = (
+                None
+                if step.execution_status is None
+                else str(step.execution_status).strip().lower()
+            )
+            if step_status not in BACKLOG_INGREDIENT_STATUSES:
+                continue
+            step.execution_status = "canceled"
+            step.completed_at = step.completed_at or current
+            step.canceled_at = step.canceled_at or current
+            step.result = payload
+            step.error_message = None
+            step.updated_at = current
+            discarded += 1
+
+    order.processing_status = "canceled"
+    order.remediation_outcome = "none"
+    order.is_active = False
+    order.auto_close_eligible = False
+    order.clear_deadline_at = None
+    order.clear_timed_out_at = None
+    order.updated_at = current
+    return discarded
+
+
+async def discard_suppressed_bakery_backlog(
+    db: AsyncSession,
+    suppression: AlertSuppression,
+    *,
+    req_id: str | None = None,
+    now: datetime | None = None,
+) -> int:
+    """Discard matching active order Bakery backlog after a suppression becomes active."""
+    current = now or _utc_now()
+    if not suppression.enabled or suppression_status(suppression, now=current) != "active":
+        return 0
+
+    result = await db.execute(
+        select(Order)
+        .options(
+            selectinload(Order.dishes).selectinload(Dish.dish_ingredients),
+        )
+        .where(
+            Order.processing_status.not_in(("complete", "failed", "canceled")),
+        )
+    )
+    orders = result.unique().scalars().all()
+    discarded = 0
+    matched_orders = 0
+    for order in orders:
+        if not suppression_matches(suppression, order.labels or {}):
+            continue
+        matched_orders += 1
+        discarded += discard_order_bakery_backlog(order, suppression, now=current)
+
+    if matched_orders:
+        await db.flush()
+        logger.info(
+            "Discarded suppressed Bakery backlog",
+            extra={
+                "req_id": req_id,
+                "suppression_id": suppression.id,
+                "matched_orders": matched_orders,
+                "discarded_ingredients": discarded,
+            },
+        )
+    return discarded
 
 
 def _payload_hash(alert_data: dict[str, Any], req_id: str) -> str:

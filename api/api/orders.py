@@ -39,6 +39,10 @@ from api.services.communications_policy import (
 from api.services.fallback_recipe import ensure_fallback_recipe
 from api.services.incident_reconciliation import reconcile_order
 from api.services.dish_planner import expected_duration_for_phase, seed_dish_ingredients_for_phase
+from api.services.suppression_service import (
+    discard_order_bakery_backlog,
+    find_first_matching_suppression,
+)
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -291,14 +295,16 @@ async def dispatch_order(
 
     response: OrderDispatchResponse | None = None
     async with db.begin():
-        global_policy_is_configured = await global_policy_configured(db)
         result = await db.execute(
             select(Order)
-            .options(joinedload(Order.communications))
+            .options(
+                joinedload(Order.communications),
+                joinedload(Order.dishes).joinedload(Dish.dish_ingredients),
+            )
             .where(Order.id == order_id)
             .with_for_update()
         )
-        order = result.scalars().first()
+        order = result.unique().scalars().first()
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
@@ -336,6 +342,24 @@ async def dispatch_order(
                 detail=f"Order is not dispatchable (status={order.processing_status})",
             )
 
+        if getattr(settings, "suppressions_enabled", False):
+            suppression = await find_first_matching_suppression(db, order.labels or {}, now)
+            if suppression:
+                discarded_backlog = discard_order_bakery_backlog(
+                    order,
+                    suppression,
+                    now=now,
+                )
+                response = OrderDispatchResponse(
+                    status="skipped",
+                    order_id=order.id,
+                    reason=(
+                        f"Order matched active suppression {suppression.id}; "
+                        f"discarded {discarded_backlog} Bakery backlog item(s)"
+                    ),
+                )
+                return response
+
         if run_phase == "resolving" and (order.remediation_outcome or "").lower() == "pending":
             active_firing_result = await db.execute(
                 select(Dish.id)
@@ -356,6 +380,7 @@ async def dispatch_order(
                 order.updated_at = now
                 return response
 
+        global_policy_is_configured = await global_policy_configured(db)
         recipe_result = await db.execute(
             select(Recipe)
             .options(joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient))

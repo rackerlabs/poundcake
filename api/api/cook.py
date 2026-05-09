@@ -7,10 +7,12 @@
 """Cook router for execution orchestration and StackStorm tooling."""
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.logging import get_logger
 from api.core.config import get_settings
 from api.core.database import get_db
+from api.models.models import Order
 from api.schemas.schemas import (
     ExecuteRequest,
     ExecutionEnvelopeResponse,
@@ -30,6 +32,7 @@ from api.services.communications import (
 )
 from api.services.communication_canonical import build_canonical_communication_context
 from api.services.order_communications import apply_execution_result, prepare_communication_context
+from api.services.suppression_service import find_first_matching_suppression
 from api.services.stackstorm_service import (
     StackStormActionManager,
     StackStormError,
@@ -106,6 +109,41 @@ async def execute_ingredient(
         order = None
 
         if payload.execution_engine == "bakery" and order_id is not None:
+            if getattr(get_settings(), "suppressions_enabled", False):
+                result = await db.execute(select(Order).where(Order.id == order_id))
+                suppressed_order = result.scalars().first()
+                if suppressed_order is not None:
+                    suppression = await find_first_matching_suppression(
+                        db,
+                        suppressed_order.labels or {},
+                    )
+                    if suppression:
+                        skipped = {
+                            "skipped": True,
+                            "reason": (
+                                "Discarded because an active alert suppression matched this order."
+                            ),
+                            "suppression_id": suppression.id,
+                            "suppression_name": suppression.name,
+                        }
+                        logger.info(
+                            "Skipped Bakery execution for suppressed order",
+                            extra={
+                                "req_id": req_id,
+                                "order_id": order_id,
+                                "suppression_id": suppression.id,
+                                "execution_target": payload.execution_target,
+                            },
+                        )
+                        return ExecutionEnvelopeResponse(
+                            execution_ref=None,
+                            engine="bakery",
+                            status="succeeded",
+                            result=skipped,
+                            raw=skipped,
+                            attempts=0,
+                        )
+
             async with db.begin():
                 order, communication = await prepare_communication_context(
                     db,

@@ -336,7 +336,13 @@ def test_order_dispatch__resolving_phase__seeds_phase_ingredients(client, mock_d
         ]
     )
 
-    with patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=False)):
+    with (
+        patch("api.api.orders.global_policy_configured", new=AsyncMock(return_value=False)),
+        patch(
+            "api.api.orders.find_first_matching_suppression",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
         response = client.post("/api/v1/orders/1/dispatch")
     assert response.status_code == 200
     body = response.json()
