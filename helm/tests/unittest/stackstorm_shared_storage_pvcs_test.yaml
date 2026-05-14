@@ -4,6 +4,7 @@ templates:
 tests:
   - it: renders shared third-party pack pvc objects when enabled
     set:
+      database.mode: embedded
       persistence.stackstormSharedStorage.enabled: true
       persistence.stackstormSharedStorage.storageClassName: longhorn-rwx
       stackstorm.bootstrap.packs.kubernetes.enabled: true

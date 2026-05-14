@@ -3,6 +3,8 @@ templates:
   - templates/poundcake-infra-deployments.yaml
 tests:
   - it: renders mariadb probes and default writable infra security context
+    set:
+      database.mode: embedded
     asserts:
       - equal:
           path: metadata.name
@@ -28,6 +30,8 @@ tests:
         documentIndex: 0
 
   - it: applies infra log-streaming labels
+    set:
+      database.mode: embedded
     asserts:
       - equal:
           path: spec.template.metadata.labels["poundcake.io/log-group"]
@@ -43,6 +47,8 @@ tests:
         documentIndex: 1
 
   - it: defaults infra deployments to worker nodes
+    set:
+      database.mode: embedded
     asserts:
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/worker"]
@@ -54,6 +60,8 @@ tests:
         documentIndex: 3
 
   - it: renders mongodb with writable root filesystem by default
+    set:
+      database.mode: embedded
     asserts:
       - equal:
           path: metadata.name
@@ -69,6 +77,8 @@ tests:
         documentIndex: 1
 
   - it: uses Recreate strategy for pvc-backed infra deployments
+    set:
+      database.mode: embedded
     asserts:
       - equal:
           path: spec.strategy.type
@@ -88,6 +98,8 @@ tests:
         documentIndex: 3
 
   - it: fixes rabbitmq data directory ownership before startup
+    set:
+      database.mode: embedded
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].name
@@ -126,6 +138,7 @@ tests:
 
   - it: applies configurable podSecurityContext to infra deployments
     set:
+      database.mode: embedded
       podSecurityContext.runAsUser: 2001
       podSecurityContext.fsGroup: 2001
     asserts:
@@ -151,6 +164,7 @@ tests:
 
   - it: allows overriding mongodb container security context
     set:
+      database.mode: embedded
       infraSecurityContext.mongodb.readOnlyRootFilesystem: true
       infraSecurityContext.mongodb.runAsUser: 999
     asserts:
@@ -165,6 +179,7 @@ tests:
 
   - it: does not render pull secrets from poundcakeImage settings
     set:
+      database.mode: embedded
       poundcakeImage.pullSecrets[0]: ghcr-pull
     asserts:
       - isNull:

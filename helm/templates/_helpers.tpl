@@ -271,6 +271,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $mode := $database.mode | default "embedded" -}}
 {{- if eq $mode "shared_operator" -}}
 shared_operator
+{{- else if eq $mode "auto" -}}
+{{- $detect := lookup "v1" "ConfigMap" .Release.Namespace "poundcake-database-mode" -}}
+{{- if and $detect (hasKey $detect.data "mode") -}}
+{{- $detectMode := $detect.data.mode -}}
+{{- if eq $detectMode "shared_operator" -}}
+shared_operator
+{{- else -}}
+embedded
+{{- end -}}
+{{- else -}}
+{{- $operatorEnabled := .Values.mariadbOperator.enabled | default false -}}
+{{- if $operatorEnabled -}}
+shared_operator
+{{- else -}}
+embedded
+{{- end -}}
+{{- end -}}
 {{- else -}}
 embedded
 {{- end -}}

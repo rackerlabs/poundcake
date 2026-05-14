@@ -3,6 +3,8 @@ templates:
   - templates/poundcake-poddisruptionbudgets.yaml
 tests:
   - it: renders PDBs by default with maxUnavailable policy
+    set:
+      database.mode: embedded
     asserts:
       - hasDocuments:
           count: 6

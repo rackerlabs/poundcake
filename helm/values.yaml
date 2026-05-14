@@ -676,9 +676,10 @@ auth:
 # Database configuration (MySQL/MariaDB) for PoundCake API only.
 database:
   # Database deployment mode for PoundCake:
+  # - auto: try to use mariadb-operator; if no operator CRDs found, fall back to embedded Deployment
   # - embedded: deploy in-chart poundcake-mariadb Deployment/Service/PVC
   # - shared_operator: use an existing MariaDB operator server and create PoundCake DB/User/Grant CRs
-  mode: embedded
+  mode: auto
 
   sharedOperator:
     # MariaDB server/service name used when mode=shared_operator.

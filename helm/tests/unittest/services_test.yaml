@@ -3,6 +3,8 @@ templates:
   - templates/poundcake-services.yaml
 tests:
   - it: renders required default services only
+    set:
+      database.mode: embedded
     asserts:
       - hasDocuments:
           count: 9
@@ -29,6 +31,7 @@ tests:
 
   - it: renders poundcake-api service with values-driven type and port
     set:
+      database.mode: embedded
       services.api.type: NodePort
       services.api.port: 9000
     asserts:
@@ -51,6 +54,7 @@ tests:
 
   - it: allows overriding poundcake-api publishNotReadyAddresses
     set:
+      database.mode: embedded
       services.api.publishNotReadyAddresses: false
     asserts:
       - equal:
@@ -60,6 +64,7 @@ tests:
 
   - it: renders stackstorm-web service on expected target port
     set:
+      database.mode: embedded
       stackstormServices.web.enabled: true
     asserts:
       - equal:
@@ -73,6 +78,7 @@ tests:
 
   - it: applies overrides for stackstorm edge service ports and types
     set:
+      database.mode: embedded
       services.stackstormApi.type: NodePort
       services.stackstormApi.port: 19101
       services.stackstormAuth.type: LoadBalancer
@@ -110,6 +116,7 @@ tests:
 
   - it: applies UI targetPort override from uiImage.containerPort
     set:
+      database.mode: embedded
       uiImage.containerPort: 18080
     asserts:
       - equal:

@@ -3,6 +3,8 @@ templates:
   - templates/poundcake-pvcs.yaml
 tests:
   - it: renders all required PVCs
+    set:
+      database.mode: embedded
     asserts:
       - hasDocuments:
           count: 4
@@ -17,6 +19,7 @@ tests:
 
   - it: applies storageClass values from global and per-pvc settings
     set:
+      database.mode: embedded
       persistence.storageClassName: standard
       persistence.mongo.storageClassName: fast-mongo
     asserts:
@@ -35,6 +38,7 @@ tests:
 
   - it: omits storageClassName when all storage class values are empty
     set:
+      database.mode: embedded
       persistence.storageClassName: ""
       persistence.mariadb.storageClassName: ""
       persistence.mongo.storageClassName: ""
