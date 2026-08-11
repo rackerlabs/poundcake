@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from api.core.logging import get_logger
 from api.core.config import get_settings
 from api.core.database import get_db
-from api.models.models import Dish, Order
+from api.models.models import Dish, Order, OrderCommunication
 from api.schemas.schemas import (
     ExecuteRequest,
     ExecutionEnvelopeResponse,
@@ -110,7 +110,8 @@ async def execute_ingredient(
             or ((execution_payload.get("context") or {}).get("destination_target"))
         )
         operation = normalize_communication_operation(execution_parameters.get("operation"))
-        order = None
+        order: Order | None = None
+        communication: OrderCommunication | None = None
 
         if payload.execution_engine == "bakery" and order_id is not None:
             if getattr(get_settings(), "suppressions_enabled", False):
@@ -183,10 +184,6 @@ async def execute_ingredient(
             )
             payload_context["provider_type"] = payload.execution_target
             payload_context["destination_target"] = destination_target
-            try:
-                communication
-            except NameError:
-                communication = None
             if communication is not None:
                 reconcile_metadata = dict(communication.reconcile_metadata or {})
                 if reconcile_metadata:
