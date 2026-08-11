@@ -177,6 +177,9 @@ async def execute_ingredient(
                 context["communication_reuse_mode"] = (
                     "reopen" if communication.reopenable else "reuse"
                 )
+                reconcile_metadata = dict(communication.reconcile_metadata or {})
+                if reconcile_metadata:
+                    payload_context["poundcake_policy"] = reconcile_metadata
 
             raw_payload_context = execution_payload.get("context")
             payload_context = (
