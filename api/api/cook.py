@@ -177,16 +177,20 @@ async def execute_ingredient(
                 context["communication_reuse_mode"] = (
                     "reopen" if communication.reopenable else "reuse"
                 )
-                reconcile_metadata = dict(communication.reconcile_metadata or {})
-                if reconcile_metadata:
-                    payload_context["poundcake_policy"] = reconcile_metadata
-
             raw_payload_context = execution_payload.get("context")
             payload_context = (
                 dict(raw_payload_context) if isinstance(raw_payload_context, dict) else {}
             )
             payload_context["provider_type"] = payload.execution_target
             payload_context["destination_target"] = destination_target
+            try:
+                communication
+            except NameError:
+                communication = None
+            if communication is not None:
+                reconcile_metadata = dict(communication.reconcile_metadata or {})
+                if reconcile_metadata:
+                    payload_context["poundcake_policy"] = reconcile_metadata
             if order is not None:
                 payload_context["_canonical"] = build_canonical_communication_context(
                     order=order,
