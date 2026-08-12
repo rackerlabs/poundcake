@@ -37,6 +37,7 @@ from api.services.suppression_service import (
     discard_order_bakery_backlog,
     find_first_matching_suppression,
 )
+from api.services.communications_policy import POLICY_METADATA_KEY
 from api.services.stackstorm_service import (
     StackStormActionManager,
     StackStormError,
@@ -112,6 +113,29 @@ async def execute_ingredient(
         operation = normalize_communication_operation(execution_parameters.get("operation"))
         order: Order | None = None
         communication: OrderCommunication | None = None
+
+        if payload.execution_engine == "bakery" and order_id is None:
+            _ctx = execution_payload.get("context")
+            if not isinstance(_ctx, dict):
+                _ctx = {}
+            payload_context = dict(_ctx)
+            payload_context["provider_type"] = payload.execution_target
+            payload_context["destination_target"] = destination_target
+            for key in ("scope", "owner_key", "route_id", "label", "route_label"):
+                if key in _ctx and isinstance(_ctx[key], str):
+                    payload_context.setdefault(key, _ctx[key])
+            if (
+                payload_context.get("scope")
+                and payload_context.get("owner_key")
+                and payload_context.get("route_id")
+            ):
+                payload_context[POLICY_METADATA_KEY] = {
+                    "scope": payload_context["scope"],
+                    "owner_key": payload_context["owner_key"],
+                    "route_id": payload_context["route_id"],
+                }
+            payload_context["source"] = "poundcake_system"
+            execution_payload["context"] = payload_context
 
         if payload.execution_engine == "bakery" and order_id is not None:
             if getattr(get_settings(), "suppressions_enabled", False):
