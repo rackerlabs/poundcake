@@ -87,15 +87,27 @@ LEGACY_ORDERS_BAKERY="$(has_column orders bakery_comms_id)"
 LEGACY_RECIPE_ING="$(has_column recipe_ingredients execution_payload_override)"
 LEGACY_OC_TABLE="$(has_table order_communications)"
 LEGACY_BMS_TABLE="$(has_table bakery_monitor_state)"
+# The alert_suppressions table predates the plugin rewrite but gained 5
+# source-tracking columns the new code SELECTs (source, source_service_type,
+# source_ref, source_payload, last_synced_at). A DB migrated by an OLDER build
+# of this script (or any pre-rewrite DB) will be missing them. The legacy
+# marker here is the ABSENCE of `source`: LEGACY_SUPPRESSION="yes" means there
+# is work to do (columns still missing). It flips to "no" once source exists.
+if [ "$(has_column alert_suppressions source)" = "yes" ]; then
+  LEGACY_SUPPRESSION="no"
+else
+  LEGACY_SUPPRESSION="yes"
+fi
 
 if [ "${LEGACY_DI}" = "no" ] && [ "${LEGACY_DISH}" = "no" ] && [ "${LEGACY_ING}" = "no" ] \
    && [ "${LEGACY_ORDERS_BAKERY}" = "no" ] && [ "${LEGACY_RECIPE_ING}" = "no" ] \
+   && [ "${LEGACY_SUPPRESSION}" = "no" ] \
    && [ "${LEGACY_OC_TABLE}" = "no" ] && [ "${LEGACY_BMS_TABLE}" = "no" ]; then
   log "no legacy schema detected (fresh or already migrated) - nothing to do"
   exit 0
 fi
 
-log "legacy schema detected (DI=${LEGACY_DI} dish=${LEGACY_DISH} ing=${LEGACY_ING} orders_bakery=${LEGACY_ORDERS_BAKERY} recipe_ing=${LEGACY_RECIPE_ING} order_communications=${LEGACY_OC_TABLE} bakery_monitor_state=${LEGACY_BMS_TABLE})"
+log "legacy schema detected (DI=${LEGACY_DI} dish=${LEGACY_DISH} ing=${LEGACY_ING} orders_bakery=${LEGACY_ORDERS_BAKERY} recipe_ing=${LEGACY_RECIPE_ING} suppression=${LEGACY_SUPPRESSION} order_communications=${LEGACY_OC_TABLE} bakery_monitor_state=${LEGACY_BMS_TABLE})"
 
 # ---------------------------------------------------------------------------
 # Step 0: self-backup (before any destructive step). Skipped when no legacy
@@ -354,6 +366,31 @@ if [ "${LEGACY_ORDERS_BAKERY}" = "yes" ]; then
       sql "ALTER TABLE orders DROP COLUMN ${drop};"
     fi
   done
+fi
+
+# ===== 5b. alert_suppressions: add the 5 source-tracking columns the new code
+# SELECTs. This table is NOT part of the plugin-rewrite 5-table set (it pre-existed
+# with its old columns intact) but the new AlertSuppression model adds these.
+# Idempotent: each column is only added when absent. `source` is NOT NULL with a
+# default, so an ADD COLUMN ... DEFAULT 'local' backfills existing rows safely.
+# ===== 5b. alert_suppressions: add source-tracking columns =====
+if [ "${LEGACY_SUPPRESSION}" = "yes" ]; then
+  log "migrating alert_suppressions (adding source-tracking columns)"
+  for add in \
+    "source VARCHAR(32) NOT NULL DEFAULT 'local'" \
+    "source_service_type VARCHAR(50) NULL" \
+    "source_ref VARCHAR(255) NULL" \
+    "source_payload JSON NULL" \
+    "last_synced_at DATETIME NULL"; do
+    colname="${add%% *}"
+    if [ "$(has_column alert_suppressions "${colname}")" = "no" ]; then
+      sql "ALTER TABLE alert_suppressions ADD COLUMN ${add};"
+    fi
+  done
+  # source is the identifying column for the new code's sync path; index it.
+  sql "ALTER TABLE alert_suppressions ADD INDEX ix_alert_suppressions_source (source);" 2>/dev/null || true
+else
+  log "alert_suppressions already has source columns - skip"
 fi
 
 sql "SET SESSION foreign_key_checks=1;"
