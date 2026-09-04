@@ -8,4 +8,6 @@ metadata:
 data:
   mariadb-init.sh: |
 {{ .Files.Get "files/mariadb-init/01-create-databases.sh" | indent 4 }}
+  legacy-schema-migrate.sh: |
+{{ .Files.Get "files/mariadb-init/20-legacy-schema-migrate.sh" | indent 4 }}
 {{- end }}

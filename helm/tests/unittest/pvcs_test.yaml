@@ -2,14 +2,18 @@ suite: pvcs
 templates:
   - templates/poundcake-pvcs.yaml
 tests:
-  - it: renders the embedded database PVC
+  - it: renders the embedded database PVC and the legacy backup PVC
     asserts:
       - hasDocuments:
-          count: 1
+          count: 2
       - equal:
           path: metadata.name
           value: poundcake-mariadb
         documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: poundcake-legacy-backup
+        documentIndex: 1
 
   - it: applies storageClass values from global settings
     set:
@@ -27,4 +31,27 @@ tests:
     asserts:
       - notExists:
           path: spec.storageClassName
+        documentIndex: 0
+
+  - it: sizes and access-modes the legacy backup PVC
+    asserts:
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi
+        documentIndex: 1
+      - equal:
+          path: spec.accessModes
+          value:
+            - ReadWriteOnce
+        documentIndex: 1
+
+  - it: disables the legacy backup PVC via values
+    set:
+      persistence.legacyBackup.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: poundcake-mariadb
         documentIndex: 0

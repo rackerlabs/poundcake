@@ -16,3 +16,10 @@ tests:
       - isNotNull:
           path: data["mariadb-init.sh"]
         documentIndex: 0
+      - isNotNull:
+          path: data["legacy-schema-migrate.sh"]
+        documentIndex: 0
+      - matchRegex:
+          path: data["legacy-schema-migrate.sh"]
+          pattern: '^#!/bin/bash\nset -euo pipefail'
+        documentIndex: 0

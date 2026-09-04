@@ -5,7 +5,7 @@ tests:
   - it: renders the PoundCake startup job sequence
     asserts:
       - hasDocuments:
-          count: 7
+          count: 8
       - equal:
           path: metadata.name
           value: poundcake-mariadb-ready
@@ -16,24 +16,28 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.name
-          value: poundcake-bootstrap-schema
+          value: poundcake-legacy-schema-migrate
         documentIndex: 2
       - equal:
           path: metadata.name
-          value: poundcake-mariadb-grants
+          value: poundcake-bootstrap-schema
         documentIndex: 3
       - equal:
           path: metadata.name
-          value: poundcake-bootstrap-plugin-registry
+          value: poundcake-mariadb-grants
         documentIndex: 4
       - equal:
           path: metadata.name
-          value: poundcake-bootstrap-service-identity
+          value: poundcake-bootstrap-plugin-registry
         documentIndex: 5
       - equal:
           path: metadata.name
-          value: poundcake-bootstrap-adapter-credentials
+          value: poundcake-bootstrap-service-identity
         documentIndex: 6
+      - equal:
+          path: metadata.name
+          value: poundcake-bootstrap-adapter-credentials
+        documentIndex: 7
       - equal:
           path: spec.ttlSecondsAfterFinished
           value: 300
@@ -41,7 +45,7 @@ tests:
       - equal:
           path: spec.ttlSecondsAfterFinished
           value: 300
-        documentIndex: 3
+        documentIndex: 2
       - equal:
           path: spec.ttlSecondsAfterFinished
           value: 300
@@ -54,6 +58,40 @@ tests:
           path: spec.ttlSecondsAfterFinished
           value: 300
         documentIndex: 6
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 300
+        documentIndex: 7
+
+  - it: runs the legacy schema migration stage between users and bootstrap-schema
+    documentSelector:
+      path: metadata.name
+      value: poundcake-legacy-schema-migrate
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "23"
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value:
+            - /bin/bash
+            - /scripts/legacy-schema-migrate.sh
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LEGACY_BACKUP_DIR
+            value: /backup
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: legacy-backup
+            mountPath: /backup
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: legacy-backup
+            persistentVolumeClaim:
+              claimName: poundcake-legacy-backup
 
   - it: runs the schema bootstrap stage with its isolated persona
     documentSelector:
@@ -129,6 +167,10 @@ tests:
           path: spec.template.spec.enableServiceLinks
           value: false
         documentIndex: 6
+      - equal:
+          path: spec.template.spec.enableServiceLinks
+          value: false
+        documentIndex: 7
 
   - it: applies startup image and pull-secret wiring to the schema job
     set:
@@ -158,7 +200,7 @@ tests:
       - equal:
           path: spec.ttlSecondsAfterFinished
           value: 60
-        documentIndex: 3
+        documentIndex: 2
       - equal:
           path: spec.ttlSecondsAfterFinished
           value: 60
@@ -170,7 +212,7 @@ tests:
       - equal:
           path: spec.ttlSecondsAfterFinished
           value: 60
-        documentIndex: 6
+        documentIndex: 7
 
   - it: injects monitoring backend urls only into plugin-registry and adapter-credential bootstrap stages
     set:
@@ -184,37 +226,37 @@ tests:
           content:
             name: POUNDCAKE_PROMETHEUS_URL
             value: http://prometheus.example.test:9090
-        documentIndex: 4
+        documentIndex: 5
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_ALERTMANAGER_URL
             value: http://alertmanager.example.test:9093
-        documentIndex: 4
+        documentIndex: 5
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
             value: monitoring
-        documentIndex: 4
+        documentIndex: 5
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PROMETHEUS_URL
             value: http://prometheus.example.test:9090
-        documentIndex: 6
+        documentIndex: 7
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_ALERTMANAGER_URL
             value: http://alertmanager.example.test:9093
-        documentIndex: 6
+        documentIndex: 7
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PROMETHEUS_CRD_NAMESPACE
             value: monitoring
-        documentIndex: 6
+        documentIndex: 7
 
   - it: isolates bootstrap encryption keys and startup database users by stage
     asserts:
@@ -226,17 +268,17 @@ tests:
               secretKeyRef:
                 name: poundcake-secrets
                 key: DB_PLUGIN_REGISTRY_USER
-        documentIndex: 4
+        documentIndex: 5
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PLUGIN_CREDENTIAL_ENCRYPTION_KEY
-        documentIndex: 4
+        documentIndex: 5
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_SERVICE_IDENTITY_CREDENTIAL_ENCRYPTION_KEY
-        documentIndex: 4
+        documentIndex: 5
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -245,7 +287,7 @@ tests:
               secretKeyRef:
                 name: poundcake-secrets
                 key: DB_SERVICE_IDENTITY_MANAGER_USER
-        documentIndex: 5
+        documentIndex: 6
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -254,12 +296,12 @@ tests:
               secretKeyRef:
                 name: poundcake-secrets
                 key: SERVICE_IDENTITY_CREDENTIAL_ENCRYPTION_KEY
-        documentIndex: 5
+        documentIndex: 6
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_PLUGIN_CREDENTIAL_ENCRYPTION_KEY
-        documentIndex: 5
+        documentIndex: 6
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -268,7 +310,7 @@ tests:
               secretKeyRef:
                 name: poundcake-secrets
                 key: DB_CREDENTIAL_MANAGER_USER
-        documentIndex: 6
+        documentIndex: 7
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -277,9 +319,9 @@ tests:
               secretKeyRef:
                 name: poundcake-secrets
                 key: PLUGIN_CREDENTIAL_ENCRYPTION_KEY
-        documentIndex: 6
+        documentIndex: 7
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: POUNDCAKE_SERVICE_IDENTITY_CREDENTIAL_ENCRYPTION_KEY
-        documentIndex: 6
+        documentIndex: 7

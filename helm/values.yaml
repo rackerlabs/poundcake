@@ -119,6 +119,17 @@ persistence:
     size: 10Gi
     accessMode: ReadWriteOnce
     storageClassName: ""
+  # Self-backup PVC used by the poundcake-legacy-schema-migrate hook. The hook
+  # writes a mariadb-dump of the legacy tables here before reshaping them.
+  # Default size matches the embedded mariadb PVC; raise it if a target env's
+  # DB is large. dropSupersededTables=false tombstones order_communications and
+  # bakery_monitor_state by renaming to *_legacy_<date> (keeps the data).
+  legacyBackup:
+    enabled: true
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClassName: ""
+    dropSupersededTables: false
 longhorn:
   rwxStorageClass:
     create: false

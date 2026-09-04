@@ -11,7 +11,21 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.mariadb.size }}
-  {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.mariadb.storageClassName) | nindent 2 }}
+   {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.mariadb.storageClassName) | nindent 2 }}
 ---
+{{- if .Values.persistence.legacyBackup.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "poundcake.name" . }}-legacy-backup
+  labels:
+    {{- include "poundcake.labels" . | nindent 4 }}
+spec:
+  accessModes: ["{{ .Values.persistence.legacyBackup.accessMode | default "ReadWriteOnce" }}"]
+  resources:
+    requests:
+      storage: {{ .Values.persistence.legacyBackup.size }}
+  {{- include "poundcake.pvcStorageClass" (dict "root" . "pvcStorageClass" .Values.persistence.legacyBackup.storageClassName) | nindent 2 }}
+{{- end }}
 {{- end }}
 {{- end }}
