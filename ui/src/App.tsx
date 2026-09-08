@@ -60,7 +60,9 @@ import type {
   DishIngredientStatusRecord,
   DishStatusRecord,
   HealthResponse,
+  CommunicationActivityRecord,
   IncidentTimelineEvent,
+  IncidentTimelineOrderRecord,
   IncidentTimelineResponse,
   IngredientRecord,
   ObservabilityOverviewResponse,
@@ -134,6 +136,41 @@ interface ToastMessage {
 }
 
 type AlertRuleEditorRecord = PrometheusRuleRecord & { key: string };
+
+const INCIDENT_STATUS_FILTERS = [
+  { value: "new", label: "New" },
+  { value: "processing", label: "Processing" },
+  { value: "resolving", label: "Resolving" },
+  { value: "waiting_clear", label: "Waiting clear" },
+  { value: "waiting_ticket_close", label: "Waiting ticket close" },
+  { value: "escalation", label: "Escalation" },
+  { value: "complete", label: "Complete" },
+  { value: "failed", label: "Failed" },
+  { value: "errored", label: "Errored" },
+  { value: "timeout", label: "Timeout" },
+  { value: "canceled", label: "Canceled" },
+];
+
+const INCIDENT_VISIBLE_LABEL_KEYS = [
+  "alertname",
+  "namespace",
+  "horizontalpodautoscaler",
+  "deployment",
+  "statefulset",
+  "daemonset",
+  "workload",
+  "pod",
+  "container",
+  "service",
+  "job",
+  "endpoint",
+  "affected_node",
+  "node_hostname",
+  "instance",
+  "cluster",
+];
+
+const TICKETING_CHANNELS = new Set(["rackspace_core", "jira", "servicenow", "github", "pagerduty"]);
 
 const workflowStepSchema = z.object({
   ingredient_id: z.coerce.number().min(1, "Choose an ingredient template"),
@@ -287,19 +324,26 @@ function SessionGate() {
             <Route element={<ShellLayout />}>
               <Route path="/" element={<Navigate to="/overview" replace />} />
               <Route path="/overview" element={<OverviewPage />} />
-              <Route path="/orders" element={<OrdersPage />} />
-              <Route path="/orders/:orderId" element={<OrdersPage />} />
-              <Route path="/communication-routes" element={<CommunicationRoutesPage />} />
+              <Route path="/incidents" element={<OrdersPage />} />
+              <Route path="/incidents/:orderId" element={<OrdersPage />} />
+              <Route path="/orders" element={<RedirectPreserveQuery to="/incidents" />} />
+              <Route path="/orders/:orderId" element={<RedirectIncidentFromOrder />} />
+              <Route path="/communications" element={<CommunicationRoutesPage />} />
+              <Route path="/communication-routes" element={<RedirectPreserveQuery to="/communications" />} />
               <Route path="/suppressions" element={<SuppressionsPage />} />
               <Route path="/operator-audit" element={<OperatorAuditPage />} />
               <Route path="/execution-activity" element={<ExecutionActivityPage />} />
               <Route path="/system-activity" element={<SystemActivityPage />} />
-              <Route path="/config/alerts" element={<AlertRulesPage />} />
+              <Route path="/config/alert-rules" element={<AlertRulesPage />} />
+              <Route path="/config/alerts" element={<RedirectPreserveQuery to="/config/alert-rules" />} />
               <Route path="/config/plugins" element={<PluginsPage />} />
               <Route path="/config/plugins/:serviceType" element={<PluginsPage />} />
-              <Route path="/config/communication-policy" element={<CommunicationPolicyPage />} />
-              <Route path="/config/recipes" element={<RecipesPage />} />
-              <Route path="/config/ingredient-templates" element={<IngredientTemplatesPage />} />
+              <Route path="/config/communications" element={<CommunicationPolicyPage />} />
+              <Route path="/config/communication-policy" element={<RedirectPreserveQuery to="/config/communications" />} />
+              <Route path="/config/workflows" element={<RecipesPage />} />
+              <Route path="/config/recipes" element={<RedirectPreserveQuery to="/config/workflows" />} />
+              <Route path="/config/actions" element={<IngredientTemplatesPage />} />
+              <Route path="/config/ingredient-templates" element={<RedirectPreserveQuery to="/config/actions" />} />
               <Route path="/config/access" element={<AccessPage />} />
               <Route path="*" element={<Navigate to="/overview" replace />} />
             </Route>
@@ -432,9 +476,9 @@ function LoginPage() {
       <div className="login-layout">
         <section className="login-hero-panel">
           <div className="eyebrow">PoundCake</div>
-          <h1>See orders, communication routes, ticket state, and plugin health in one place.</h1>
+          <h1>See incidents, communications, ticket state, and plugin health in one place.</h1>
           <p>
-            PoundCake&apos;s monitoring console is built for fast triage. Sign in to drill into live orders,
+            PoundCake&apos;s monitoring console is built for fast triage. Sign in to drill into live incidents,
             verify whether tickets were created, and confirm Teams or Discord updates were delivered.
           </p>
 
@@ -607,8 +651,8 @@ function ShellLayout() {
             title="Operations"
             items={[
               { to: "/overview", label: "Overview" },
-              { to: "/orders", label: "Orders" },
-              { to: "/communication-routes", label: "Communication Routes" },
+              { to: "/incidents", label: "Incidents" },
+              { to: "/communications", label: "Communications" },
               { to: "/suppressions", label: "Suppressions" },
               { to: "/operator-audit", label: "Operator Audit" },
               { to: "/execution-activity", label: "Work Execution Activity" },
@@ -618,11 +662,11 @@ function ShellLayout() {
           <NavGroup
             title="Configuration"
             items={[
-              { to: "/config/alerts", label: "Alerts" },
+              { to: "/config/alert-rules", label: "Alert Rules" },
               { to: "/config/plugins", label: "Plugins" },
-              { to: "/config/communication-policy", label: "Communication Policy" },
-              { to: "/config/recipes", label: "Recipes" },
-              { to: "/config/ingredient-templates", label: "Ingredient Templates" },
+              { to: "/config/communications", label: "Global Communications" },
+              { to: "/config/workflows", label: "Workflows" },
+              { to: "/config/actions", label: "Actions" },
               ...(canManageAccess(principal) ? [{ to: "/config/access", label: "RBAC" }] : []),
             ]}
           />
@@ -658,7 +702,9 @@ function ShellLayout() {
 
 function OverviewPage() {
   const principal = usePrincipal();
+  const settings = useSettings();
   const servicePlugins = useServicePlugins();
+  const k8sPlugin = servicePlugins.find((plugin) => plugin.service_type === "k8s");
   const dataQuery = useQuery({
     queryKey: ["overview-dashboard"],
     refetchInterval: 15_000,
@@ -677,6 +723,16 @@ function OverviewPage() {
         ]);
       return { health, overview, activity, incidents, dishes, communications, suppressions };
     },
+  });
+  const alertRulesQuery = useQuery({
+    queryKey: ["overview-alert-rules", settings.prometheus_crd_namespace],
+    enabled: Boolean(k8sPlugin),
+    refetchInterval: 60_000,
+    queryFn: () =>
+      apiGet(
+        `/api/v1/plugins/k8s/prometheus-rules?namespace=${encodeURIComponent(settings.prometheus_crd_namespace || "monitoring")}`,
+        prometheusRuleListResponseSchema,
+      ),
   });
 
   if (dataQuery.isLoading) {
@@ -703,26 +759,36 @@ function OverviewPage() {
           <div className="eyebrow">Operations overview</div>
           <h3>What needs attention right now</h3>
           <p>
-            Use this workspace to jump from system health to active orders, outbound communication routes,
+            Use this workspace to jump from system health to active incidents, outbound communications,
             and recent dish work execution activity. Your current RBAC role controls which actions are available.
           </p>
         </div>
         <div className="hero-strip">
           <MetricPill label="Your RBAC role" value={rbacRoleLabel(principal)} />
-          <MetricPill label="Open orders" value={String(activeOrders.length)} />
+          <MetricPill label="Open incidents" value={String(activeOrders.length)} />
           <MetricPill label="Failed dishes" value={String(overview.failures.dishes_failed)} />
           <MetricPill label="Platform" value={health.status} />
         </div>
       </section>
 
       <div className="status-grid">
-        <Link className="metric-card-link" to="/config/alerts">
-          <MetricCard title="Alerts" value="Pending" tone="unknown">
-            Prometheus CRD integration
+        <Link className="metric-card-link" to="/config/alert-rules">
+          <MetricCard
+            title="Alert Rules"
+            value={
+              !k8sPlugin
+                ? "Not configured"
+                : alertRulesQuery.isError
+                  ? "Unavailable"
+                  : String(alertRulesQuery.data?.alert_count ?? "…")
+            }
+            tone={!k8sPlugin || alertRulesQuery.isError ? "unknown" : "healthy"}
+          >
+            {k8sPlugin ? "Live PrometheusRule alerts" : "Kubernetes plugin is not registered"}
           </MetricCard>
         </Link>
-        <Link className="metric-card-link" to="/communication-routes">
-          <MetricCard title="Communication Routes" value={String(communications.length)} tone={failedCommunications.length ? "failed" : "healthy"}>
+        <Link className="metric-card-link" to="/communications">
+          <MetricCard title="Communications" value={String(communications.length)} tone={failedCommunications.length ? "failed" : "healthy"}>
             Failed routes: {failedCommunications.length}
           </MetricCard>
         </Link>
@@ -739,11 +805,11 @@ function OverviewPage() {
       </div>
 
       <div className="overview-grid">
-        <Panel title="Active Orders" subtitle="Click any order to open its full drilldown.">
+        <Panel title="Active Incidents" subtitle="Click any incident to open its full drilldown.">
           <div className="list-stack">
             {activeOrders.length ? (
               activeOrders.map((incident) => (
-                <Link className="feed-row" to={`/orders/${incident.id}`} key={incident.id}>
+                <Link className="feed-row" to={`/incidents/${incident.id}`} key={incident.id}>
                   <div>
                     <strong>{incident.alert_group_name}</strong>
                     <p>
@@ -755,7 +821,7 @@ function OverviewPage() {
                 </Link>
               ))
             ) : (
-              <EmptyState message="No active orders right now." />
+              <EmptyState message="No active incidents right now." />
             )}
           </div>
         </Panel>
@@ -780,10 +846,10 @@ function OverviewPage() {
           </div>
         </Panel>
 
-        <Panel title="Communication Routes" subtitle="Track ticketable routes and chat notifications in one feed.">
+        <Panel title="Communications" subtitle="Track ticketable routes and chat notifications in one feed.">
           <div className="list-stack">
             {communications.slice(0, 6).map((item) => (
-              <Link className="feed-row" key={item.communication_id} to={item.reference_type === "incident" ? `/orders/${item.reference_id}` : "/communication-routes"}>
+              <Link className="feed-row" key={item.communication_id} to={item.reference_type === "incident" ? `/incidents/${item.reference_id}` : "/communications"}>
                 <div>
                   <strong>{item.reference_name || item.reference_id}</strong>
                   <p>
@@ -2172,13 +2238,13 @@ function OrdersPage() {
   useEffect(() => {
     if (!selectedId && activeSelection) {
       startTransition(() => {
-        navigate(`/orders/${activeSelection.id}`, { replace: true });
+        navigate(`/incidents/${activeSelection.id}`, { replace: true });
       });
     }
   }, [activeSelection, navigate, selectedId]);
 
   if (incidentsQuery.isLoading) {
-    return <PageLoading message="Loading orders and current dish state." />;
+    return <PageLoading message="Loading incidents and current workflow state." />;
   }
 
   if (incidentsQuery.isError || !incidentsQuery.data) {
@@ -2188,8 +2254,8 @@ function OrdersPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Orders"
-        description="Track alert-based and system-scheduled orders, then drill into dish execution and communication routes."
+        title="Incidents"
+        description="Track live alert incidents, drill into workflow progress, and see every communication route tied to the incident."
       />
 
       <div className="toolbar">
@@ -2197,11 +2263,9 @@ function OrdersPage() {
           Lifecycle
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option value="">All</option>
-            <option value="new">New</option>
-            <option value="processing">Processing</option>
-            <option value="complete">Complete</option>
-            <option value="failed">Failed</option>
-            <option value="canceled">Canceled</option>
+            {INCIDENT_STATUS_FILTERS.map((status) => (
+              <option key={status.value} value={status.value}>{status.label}</option>
+            ))}
           </select>
         </label>
         <label>
@@ -2224,7 +2288,7 @@ function OrdersPage() {
       </div>
 
       <div className="master-detail">
-        <Panel title="Order Queue" subtitle={`${filtered.length} orders in view.`}>
+        <Panel title="Incident queue" subtitle={`${filtered.length} incidents in view.`}>
           <div className="list-stack incident-list">
             {filtered.length ? (
               filtered.map((incident) => (
@@ -2232,7 +2296,7 @@ function OrdersPage() {
                   className={`incident-row ${timelineTargetId === incident.id ? "active" : ""}`}
                   key={incident.id}
                   type="button"
-                  onClick={() => startTransition(() => navigate(`/orders/${incident.id}`))}
+                  onClick={() => startTransition(() => navigate(`/incidents/${incident.id}`))}
                 >
                   <div>
                     <strong>{incident.alert_group_name}</strong>
@@ -2248,16 +2312,16 @@ function OrdersPage() {
                 </button>
               ))
             ) : (
-              <EmptyState message="No orders match the current filters." />
+              <EmptyState message="No incidents match the current filters." />
             )}
           </div>
         </Panel>
 
-        <Panel title="Order Drilldown" subtitle="Status, ticketing, chat routes, and full timeline in one place.">
+        <Panel title="Incident drilldown" subtitle="Status, ticketing, chat routes, and full timeline in one place.">
           {!timelineTargetId ? (
-            <EmptyState message="Select an order to inspect its current state." />
+            <EmptyState message="Select an incident to inspect its current state." />
           ) : timelineQuery.isLoading || selectedIncidentQuery.isLoading ? (
-            <EmptyState message="Select an order to inspect its current state." />
+            <EmptyState message="Select an incident to inspect its current state." />
           ) : timelineQuery.isError || selectedIncidentQuery.isError || !timelineQuery.data ? (
             <PageError message={getErrorMessage(timelineQuery.error || selectedIncidentQuery.error)} compact />
           ) : (
@@ -2286,16 +2350,32 @@ function IncidentDetail({
   const navigate = useNavigate();
   const principal = usePrincipal();
   const canEditSuppressions = canManageSuppressions(principal);
+  const commsQuery = useQuery({
+    queryKey: ["incident-communications", order.id],
+    queryFn: () =>
+      apiGet("/api/v1/communications/activity?limit=200", communicationActivityRecordArraySchema),
+  });
+  const routes = (commsQuery.data || []).filter(
+    (item) => item.reference_type === "incident" && item.reference_id === String(order.id),
+  );
+  const ticketRoutes = routes.filter((item) => isTicketingChannel(item.channel));
+  const notificationRoutes = routes.filter((item) => !isTicketingChannel(item.channel));
+  const summary = incidentSummary(order);
+  const description = incidentDescription(order);
+  const resource = incidentPrimaryResource(order);
+  const scopeFields = incidentScopeFields(order);
+  const detailLinks = incidentLinks(order);
+  const labelEntries = incidentVisibleLabelEntries(order);
   const orderLabels = Object.entries(order.labels || {}).filter(([, value]) => value !== null && value !== "");
 
   return (
     <div className="detail-stack">
       <section className="detail-hero">
         <div>
-          <div className="eyebrow">Order #{order.id}</div>
+          <div className="eyebrow">Incident #{order.id}</div>
           <h3>{order.alert_group_name}</h3>
           <p>
-            {order.instance || "No instance"} • {order.severity || "unknown severity"} • started{" "}
+            {resource} • {order.severity || "unknown severity"} • started{" "}
             {formatLongDate(order.starts_at)}
           </p>
         </div>
@@ -2303,24 +2383,107 @@ function IncidentDetail({
           <StatusListItem label="Source" value={titleize(order.order_type)} />
           <StatusListItem label="Lifecycle" value={order.processing_status} />
           <StatusListItem label="Alert state" value={order.alert_status} />
-          <StatusListItem label="Lifetime" value={order.order_lifetime_secs === null || order.order_lifetime_secs === undefined ? "Running" : `${order.order_lifetime_secs}s`} />
-          <StatusListItem label="Recipe outcome" value={order.remediation_outcome} />
-          <StatusListItem label="Routes" value={String(order.communication_route_count)} />
+          <StatusListItem label="Workflow" value={order.remediation_outcome} />
+          <StatusListItem label="Routes" value={String(routes.length || order.communication_route_count)} />
         </div>
       </section>
 
       <div className="kv-grid">
         <KeyValue label="Request ID" value={order.req_id} />
-        <KeyValue label="Order source" value={titleize(order.order_type)} />
         <KeyValue label="Counter" value={String(order.counter)} />
-        <KeyValue label="Order lifetime" value={order.order_lifetime_secs === null || order.order_lifetime_secs === undefined ? "Running" : `${order.order_lifetime_secs}s`} />
         <KeyValue label="Auto-close eligible" value={String(order.auto_close_eligible)} />
         <KeyValue label="Clear deadline" value={formatLongDate(order.clear_deadline_at)} />
       </div>
 
+      {order.processing_status === "waiting_clear" ? (
+        <div className="helper-card">
+          <strong>Alert is still firing</strong>
+          <p>
+            PoundCake is waiting for Alertmanager to report this incident as cleared. Use the
+            alert details below to investigate the affected resource.
+          </p>
+        </div>
+      ) : null}
+
+      <section className="alert-context">
+        <div className="section-heading">
+          <h4>Alert details</h4>
+          <p>Prometheus labels, annotations, and source links carried by the incident.</p>
+        </div>
+        <div className="alert-context-grid">
+          <div className="alert-context-main">
+            <strong>{summary}</strong>
+            <p>{description || "No alert description was provided by the source alert."}</p>
+          </div>
+          <div className="scope-grid">
+            {scopeFields.map((field) => (
+              <KeyValue key={field.label} label={field.label} value={field.value} />
+            ))}
+          </div>
+        </div>
+        {detailLinks.length ? (
+          <div className="link-list">
+            {detailLinks.map((link) => (
+              <a href={link.url} key={`${link.label}-${link.url}`} rel="noreferrer" target="_blank">
+                {link.label}
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {labelEntries.length ? (
+          <div className="label-chip-list">
+            {labelEntries.map((entry) => (
+              <span className="label-chip" key={entry.key}>
+                <span>{entry.key}</span>
+                <strong>{entry.value}</strong>
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
       <section>
         <div className="section-heading">
-          <h4>Alert Labels</h4>
+          <h4>Communication routes</h4>
+          <p>Ticketing and chat delivery status for this incident.</p>
+        </div>
+        {order.processing_status === "waiting_ticket_close" ? (
+          <div className="helper-card">
+            <strong>Incident closure is waiting on ticketing routes</strong>
+            <p>
+              PoundCake only uses ticketing routes to decide whether this incident is still waiting
+              for close confirmation. Chat and notification routes stay visible here, but they do
+              not block incident completion.
+            </p>
+          </div>
+        ) : null}
+        {commsQuery.isLoading ? (
+          <EmptyState message="Loading communication routes." />
+        ) : routes.length ? (
+          <div className="route-sections">
+            <CommunicationRouteSection
+              emptyMessage="No ticketing routes are tracked for this incident."
+              highlightedCommunicationId={highlightedCommunicationId}
+              routes={ticketRoutes}
+              subtitle="These routes can keep the incident open until the external ticket is closed."
+              title="Ticketing routes"
+            />
+            <CommunicationRouteSection
+              emptyMessage="No chat or notification routes are tracked for this incident."
+              highlightedCommunicationId={highlightedCommunicationId}
+              routes={notificationRoutes}
+              subtitle="These routes are tracked for delivery history and debugging, but they do not block incident completion."
+              title="Chat / notification routes"
+            />
+          </div>
+        ) : (
+          <EmptyState message="No communication routes are tracked for this incident yet." />
+        )}
+      </section>
+
+      <section>
+        <div className="section-heading">
+          <h4>Alert labels</h4>
           <p>
             These source labels can be copied into suppression matchers to cover related alerts, such as a host or cluster during planned maintenance.
           </p>
@@ -2344,7 +2507,7 @@ function IncidentDetail({
                       next.set("name", `${order.alert_group_name} (${key})`);
                       next.set(
                         "reason",
-                        `Suppression prepared from order #${order.id} using label ${key}=${String(value)}`,
+                        `Suppression prepared from incident #${order.id} using label ${key}=${String(value)}`,
                       );
                       navigate(`/suppressions?${next.toString()}`);
                     }}
@@ -2356,19 +2519,19 @@ function IncidentDetail({
             ))}
           </div>
         ) : (
-          <EmptyState message="This order did not include alert labels." />
+          <EmptyState message="This incident did not include alert labels." />
         )}
       </section>
 
       <section>
         <div className="section-heading">
           <h4>Timeline</h4>
-          <p>Dish steps, communication updates, and order state transitions in chronological order.</p>
+          <p>Workflow tasks, communication updates, and order state transitions in chronological order.</p>
         </div>
         {highlightedDishId ? (
           <div className="helper-card">
-            <strong>Selected dish execution</strong>
-            <p>Timeline events related to dish #{highlightedDishId} are highlighted below.</p>
+            <strong>Selected workflow run</strong>
+            <p>Timeline events related to workflow run #{highlightedDishId} are highlighted below.</p>
           </div>
         ) : null}
         <div className="timeline">
@@ -2409,11 +2572,11 @@ function CommunicationRoutesPage() {
   const deferredSearch = useDeferredValue(search);
 
   const query = useQuery({
-    queryKey: ["communications-activity-status"],
+    queryKey: ["communications-activity"],
     queryFn: () =>
       apiGet(
-        "/api/v1/communications/activity/status?limit=200",
-        communicationActivityStatusRecordArraySchema,
+        "/api/v1/communications/activity?limit=200",
+        communicationActivityRecordArraySchema,
       ),
   });
 
@@ -2443,6 +2606,10 @@ function CommunicationRoutesPage() {
       item.reference_type,
       item.remote_state,
       item.lifecycle_state,
+      item.ticket_id,
+      item.provider_reference_id,
+      item.operation_id,
+      item.last_error,
     ]
       .filter(Boolean)
       .join(" ")
@@ -2456,8 +2623,8 @@ function CommunicationRoutesPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Communication Routes"
-        description="Reader-safe outbound history for ticketing and chat channels, with channel, destination, and latest delivery state."
+        title="Communications"
+        description="Outbound history for ticketing and chat channels, including ticket numbers, provider references, and last errors."
       />
       <div className="toolbar">
         <label>
@@ -2484,7 +2651,7 @@ function CommunicationRoutesPage() {
         </label>
         <label className="toolbar-search">
           Search
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Destination, ticket number, order" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Destination, ticket number, incident" />
         </label>
       </div>
 
@@ -2516,7 +2683,7 @@ function CommunicationRoutesPage() {
           </div>
         </Panel>
 
-        <Panel title="Selected route" subtitle="Current reader-safe status and last observed delivery state.">
+        <Panel title="Selected route" subtitle="Current status, provider references, and last known error.">
           {selected ? (
             <div className="detail-stack">
               <DetailList>
@@ -2525,9 +2692,18 @@ function CommunicationRoutesPage() {
                 <DetailRow label="Reference ID" value={selected.reference_id} />
                 <DetailRow label="Channel" value={titleize(selected.channel)} />
                 <DetailRow label="Destination" value={selected.destination || "-"} />
+                <DetailRow label="Route kind" value={isTicketingChannel(selected.channel) ? "Ticketing" : "Notification"} />
+                <DetailRow
+                  label={isTicketingChannel(selected.channel) ? "Ticket number" : "Provider reference"}
+                  value={communicationActivityReferenceValue(selected)}
+                />
+                <DetailRow label="Operation ID" value={selected.operation_id || "-"} />
                 <DetailRow label="Lifecycle state" value={selected.lifecycle_state || "-"} />
                 <DetailRow label="Remote state" value={selected.remote_state || "-"} />
+                <DetailRow label="Writable" value={selected.writable === null || selected.writable === undefined ? "-" : String(selected.writable)} />
+                <DetailRow label="Reopenable" value={selected.reopenable === null || selected.reopenable === undefined ? "-" : String(selected.reopenable)} />
                 <DetailRow label="Last update" value={formatLongDate(selected.updated_at)} />
+                <DetailRow label="Last error" value={selected.last_error || "-"} />
               </DetailList>
             </div>
           ) : (
@@ -3297,7 +3473,7 @@ function ExecutionActivityPage() {
 
               <div className="form-actions">
                 {selected.order_id ? (
-                  <Link className="primary-button" to={`/orders/${selected.order_id}?dish=${selected.id}`}>
+                  <Link className="primary-button" to={`/incidents/${selected.order_id}?dish=${selected.id}`}>
                     Open order drilldown
                   </Link>
                 ) : null}
@@ -3520,7 +3696,7 @@ function SystemActivityPage() {
                   </div>
                   <div className="feed-meta">
                     <StatusBadge status={order.processing_status}>{order.processing_status}</StatusBadge>
-                    <Link className="ghost-button" to={`/orders/${order.id}`}>
+                    <Link className="ghost-button" to={`/incidents/${order.id}`}>
                       Open order
                     </Link>
                   </div>
@@ -3551,7 +3727,7 @@ function SystemActivityPage() {
                   </StatusBadge>
                   <Link
                     className="ghost-button"
-                    to={dish.order_id ? `/orders/${dish.order_id}?dish=${dish.id}` : `/execution-activity?dish=${dish.id}`}
+                    to={dish.order_id ? `/incidents/${dish.order_id}?dish=${dish.id}` : `/execution-activity?dish=${dish.id}`}
                   >
                     Open execution
                   </Link>
@@ -3741,7 +3917,7 @@ function AlertRulesPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Alerts"
+        title="Alert Rules"
         description="Edit live PrometheusRule entries through the k8s plugin, then export Genestack-managed updates through a separate PR flow."
       />
 
@@ -4197,7 +4373,7 @@ function CommunicationPolicyPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Communication Policy"
+        title="Global Communications"
         description="Define the communication routes inherited by recipes that do not supply a recipe-specific override."
       />
       <div className="editor-grid">
@@ -4673,12 +4849,12 @@ function RecipesPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Recipes"
-        description="Build reusable remediation and utility recipes, then choose whether they inherit the communication policy or define recipe-specific routes."
+        title="Workflows"
+        description="Build reusable remediation and utility workflows, then choose whether they inherit the global communications policy or define workflow-specific routes."
       />
       <Panel
-        title="Recipe Inventory"
-        subtitle={`${recipesQuery.data.length} recipes loaded. Select a recipe to edit it or remove it when it is no longer used.`}
+        title="Workflow Inventory"
+        subtitle={`${recipesQuery.data.length} workflows loaded. Select a workflow to edit it or remove it when it is no longer used.`}
         actions={
           <button
             className="primary-button"
@@ -5182,11 +5358,11 @@ function IngredientTemplatesPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Ingredient Templates"
-        description="Plugin-provided ingredient templates for recipe steps. Manage templates through plugin manifest registration. Communication routes live in the communication policy and recipe communication sections."
+        title="Actions"
+        description="Plugin-provided action templates for workflow steps. Templates are registered by plugins; pick one in a workflow and fill its payload (for example a StackStorm action_ref). Communication routes live in Global Communications and the workflow communications section."
       />
       <Panel
-        title="Ingredient Template Inventory"
+        title="Action Inventory"
         subtitle={`${actionsQuery.data.length} ingredient templates loaded. Recipes use these as reusable step capabilities. Templates are managed through plugin manifest registration.`}
       >
         <div className="table-wrap">
@@ -6378,19 +6554,255 @@ function canManageAccess(principal: AuthMeRecord) {
 }
 
 function getRouteName(pathname: string): string {
-  if (pathname.startsWith("/orders")) return "Orders";
-  if (pathname.startsWith("/communication-routes")) return "Communication Routes";
+  if (pathname.startsWith("/incidents") || pathname.startsWith("/orders")) return "Incidents";
+  if (pathname.startsWith("/communications") || pathname.startsWith("/communication-routes")) return "Communications";
   if (pathname.startsWith("/suppressions")) return "Suppressions";
   if (pathname.startsWith("/operator-audit")) return "Operator Audit";
   if (pathname.startsWith("/execution-activity")) return "Work Execution Activity";
   if (pathname.startsWith("/system-activity")) return "System Activity";
-  if (pathname.startsWith("/config/alerts")) return "Alerts";
+  if (pathname.startsWith("/config/alert-rules") || pathname.startsWith("/config/alerts")) return "Alert Rules";
   if (pathname.startsWith("/config/plugins")) return "Plugins";
-  if (pathname.startsWith("/config/communication-policy")) return "Communication Policy";
-  if (pathname.startsWith("/config/recipes")) return "Recipes";
-  if (pathname.startsWith("/config/ingredient-templates")) return "Ingredient Templates";
+  if (pathname.startsWith("/config/communications") || pathname.startsWith("/config/communication-policy")) return "Global Communications";
+  if (pathname.startsWith("/config/workflows") || pathname.startsWith("/config/recipes")) return "Workflows";
+  if (pathname.startsWith("/config/actions") || pathname.startsWith("/config/ingredient-templates")) return "Actions";
   if (pathname.startsWith("/config/access")) return "RBAC";
   return "Overview";
+}
+
+function RedirectPreserveQuery({ to }: { to: string }) {
+  const [searchParams] = useSearchParams();
+  const suffix = searchParams.toString();
+  return <Navigate to={suffix ? `${to}?${suffix}` : to} replace />;
+}
+
+function RedirectIncidentFromOrder() {
+  const { orderId } = useParams();
+  const [searchParams] = useSearchParams();
+  const suffix = searchParams.toString();
+  const target = orderId ? `/incidents/${orderId}` : "/incidents";
+  return <Navigate to={suffix ? `${target}?${suffix}` : target} replace />;
+}
+
+function isTicketingChannel(channel: string): boolean {
+  return TICKETING_CHANNELS.has(channel);
+}
+
+function RouteKindBadge({ routeKind }: { routeKind: string }) {
+  const isTicketing = routeKind === "ticketing";
+  return (
+    <span className={`status-badge tone-${isTicketing ? "good" : "neutral"}`}>
+      {isTicketing ? "Ticketing" : "Notification"}
+    </span>
+  );
+}
+
+function asUnknownRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function textFromUnknown(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function firstRecordText(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = textFromUnknown(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function scopedResource(namespace: string, resource: string): string {
+  if (!resource) {
+    return "";
+  }
+  if (!namespace || resource.includes("/")) {
+    return resource;
+  }
+  return `${namespace}/${resource}`;
+}
+
+function incidentSummary(order: IncidentTimelineOrderRecord): string {
+  const annotations = asUnknownRecord(order.annotations);
+  return firstRecordText(annotations, ["summary", "headline"]) || order.alert_group_name;
+}
+
+function incidentDescription(order: IncidentTimelineOrderRecord): string {
+  const annotations = asUnknownRecord(order.annotations);
+  return firstRecordText(annotations, ["description", "impact", "message"]);
+}
+
+function incidentPrimaryResource(order: IncidentTimelineOrderRecord): string {
+  const labels = asUnknownRecord(order.labels);
+  const namespace = firstRecordText(labels, ["namespace", "kubernetes_namespace"]);
+  const namespacedResource = firstRecordText(labels, [
+    "horizontalpodautoscaler",
+    "hpa",
+    "deployment",
+    "statefulset",
+    "daemonset",
+    "replicaset",
+    "workload",
+    "pod",
+    "persistentvolumeclaim",
+    "service",
+    "job_name",
+    "cronjob",
+  ]);
+  if (namespacedResource) {
+    return scopedResource(namespace, namespacedResource);
+  }
+  return firstRecordText(labels, [
+    "affected_node",
+    "k8s_node_name",
+    "node_hostname",
+    "node",
+    "host_name",
+    "hostname",
+    "instance",
+  ]) || order.instance || "No resource";
+}
+
+function incidentScopeFields(order: IncidentTimelineOrderRecord): Array<{ label: string; value: string }> {
+  const labels = asUnknownRecord(order.labels);
+  const fields: Array<{ label: string; value: string }> = [];
+  const add = (label: string, value: string) => {
+    if (!value || fields.some((field) => field.label === label)) {
+      return;
+    }
+    fields.push({ label, value });
+  };
+
+  const resource = incidentPrimaryResource(order);
+  add("Resource", resource === "No resource" ? "" : resource);
+  add("Namespace", firstRecordText(labels, ["namespace", "kubernetes_namespace"]));
+  add("Horizontal Pod Autoscaler", firstRecordText(labels, ["horizontalpodautoscaler", "hpa"]));
+  add("Workload", firstRecordText(labels, ["workload", "deployment", "statefulset", "daemonset", "replicaset", "job_name", "cronjob"]));
+  add("Pod", firstRecordText(labels, ["pod", "pod_name", "kubernetes_pod_name"]));
+  add("Container", firstRecordText(labels, ["container", "container_name"]));
+  add("Node", firstRecordText(labels, ["affected_node", "k8s_node_name", "node_hostname", "node", "host_name", "hostname"]));
+  add("Instance", order.instance || firstRecordText(labels, ["instance"]));
+  add("Service", firstRecordText(labels, ["service"]));
+  add("Job", firstRecordText(labels, ["job"]));
+  add("Endpoint", firstRecordText(labels, ["endpoint"]));
+  add("Cluster", firstRecordText(labels, ["cluster"]));
+  add("Alert rule", firstRecordText(labels, ["alertname"]) || order.alert_group_name);
+  add("Fingerprint", order.fingerprint_when_active || order.fingerprint);
+  return fields;
+}
+
+function usefulHttpUrl(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : "";
+}
+
+function incidentLinks(order: IncidentTimelineOrderRecord): Array<{ label: string; url: string }> {
+  const annotations = asUnknownRecord(order.annotations);
+  const rawData = asUnknownRecord(order.raw_data);
+  const links: Array<{ label: string; url: string }> = [];
+  const add = (label: string, value: string) => {
+    const url = usefulHttpUrl(value);
+    if (!url || links.some((link) => link.url === url)) {
+      return;
+    }
+    links.push({ label, url });
+  };
+
+  add("Source", firstRecordText(rawData, ["generatorURL", "generator_url", "externalURL"]));
+  add("Runbook", firstRecordText(annotations, ["runbook_url"]));
+  add("Dashboard", firstRecordText(annotations, ["dashboard_url"]));
+  add("Playbook", firstRecordText(annotations, ["playbook_url"]));
+  add("Investigation", firstRecordText(annotations, ["investigation_url"]));
+  return links;
+}
+
+function incidentVisibleLabelEntries(order: IncidentTimelineOrderRecord): Array<{ key: string; value: string }> {
+  const labels = asUnknownRecord(order.labels);
+  const entries: Array<{ key: string; value: string }> = [];
+  for (const key of INCIDENT_VISIBLE_LABEL_KEYS) {
+    const value = textFromUnknown(labels[key]);
+    if (value && !entries.some((entry) => entry.key === key)) {
+      entries.push({ key, value });
+    }
+  }
+  return entries;
+}
+
+function communicationActivityReferenceValue(item: CommunicationActivityRecord): string {
+  if (isTicketingChannel(item.channel)) {
+    return item.ticket_id || "Pending ticket reference";
+  }
+  return item.provider_reference_id || "Pending provider reference";
+}
+
+function CommunicationRouteSection({
+  title,
+  subtitle,
+  routes,
+  highlightedCommunicationId,
+  emptyMessage,
+}: {
+  title: string;
+  subtitle: string;
+  routes: CommunicationActivityRecord[];
+  highlightedCommunicationId?: string;
+  emptyMessage: string;
+}) {
+  return (
+    <div className="route-section">
+      <div className="section-heading">
+        <h4>{title}</h4>
+        <p>{subtitle}</p>
+      </div>
+      {routes.length ? (
+        <div className="route-grid">
+          {routes.map((route) => (
+            <div
+              className={`route-card ${
+                highlightedCommunicationId === String(route.communication_id) ? "highlighted" : ""
+              }`}
+              key={route.communication_id}
+            >
+              <div className="route-card-head">
+                <div className="route-card-labels">
+                  <strong>{titleize(route.channel)}</strong>
+                  <RouteKindBadge routeKind={isTicketingChannel(route.channel) ? "ticketing" : "notification"} />
+                </div>
+                <StatusBadge status={route.remote_state || route.lifecycle_state}>
+                  {route.remote_state || route.lifecycle_state}
+                </StatusBadge>
+              </div>
+              <KeyValue label="Destination" value={route.destination || route.channel} />
+              <KeyValue
+                label={isTicketingChannel(route.channel) ? "Ticket number" : "Provider reference"}
+                value={communicationActivityReferenceValue(route)}
+              />
+              <KeyValue label="Operation ID" value={route.operation_id || "-"} />
+              <KeyValue label="Writable" value={route.writable === null || route.writable === undefined ? "-" : String(route.writable)} />
+              <KeyValue label="Reopenable" value={route.reopenable === null || route.reopenable === undefined ? "-" : String(route.reopenable)} />
+              <KeyValue label="Last update" value={formatLongDate(route.updated_at)} />
+              <KeyValue label="Last error" value={route.last_error || "-"} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState message={emptyMessage} />
+      )}
+    </div>
+  );
 }
 
 function isLoginPath(pathname: string): boolean {

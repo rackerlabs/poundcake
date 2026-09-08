@@ -936,6 +936,90 @@ pre {
   color: var(--text-1);
 }
 
+.alert-context {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.alert-context-grid,
+.scope-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.alert-context-grid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
+}
+
+.alert-context-main {
+  min-width: 0;
+}
+
+.alert-context-main strong {
+  display: block;
+  font-size: 17px;
+}
+
+.alert-context-main p {
+  margin: 8px 0 0;
+  line-height: 1.55;
+}
+
+.scope-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.route-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.route-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.route-card-labels {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.link-list,
+.label-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.link-list a,
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(143, 163, 168, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.link-list a {
+  color: #96f0d3;
+}
+
+.label-chip span {
+  color: var(--text-muted);
+}
+
+.label-chip strong {
+  overflow-wrap: anywhere;
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;

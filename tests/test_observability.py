@@ -58,3 +58,49 @@ async def test_communication_activity_keeps_health_check_comms_rows() -> None:
         )
     )
     assert "plugin-health-check" not in compiled
+
+
+def test_timeline_order_includes_alert_context() -> None:
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from api.api.orders import _serialize_timeline_order
+
+    now = datetime(2026, 7, 8, tzinfo=timezone.utc)
+    order = SimpleNamespace(
+        id=88,
+        req_id="req-88",
+        raw_data={"order_type": "webhook_alert", "generatorURL": "https://prom.example/graph"},
+        alert_status="firing",
+        alert_group_name="NodeDown",
+        processing_status="resolving",
+        is_active=True,
+        remediation_outcome="pending",
+        clear_timeout_sec=300,
+        clear_deadline_at=None,
+        clear_timed_out_at=None,
+        auto_close_eligible=False,
+        severity="critical",
+        instance="compute-1",
+        correlation_key="node:compute-1",
+        counter=1,
+        starts_at=now,
+        ends_at=None,
+        order_lifetime_secs=None,
+        communications=[],
+        created_at=now,
+        updated_at=now,
+        labels={"instance": "compute-1", "namespace": "openstack"},
+        annotations={
+            "summary": "Node compute-1 is down",
+            "runbook_url": "https://runbooks.example/node",
+        },
+        fingerprint="fp-88",
+        fingerprint_when_active="fp-88",
+    )
+
+    payload = _serialize_timeline_order(order)  # type: ignore[arg-type]
+    assert payload.fingerprint == "fp-88"
+    assert payload.annotations["summary"] == "Node compute-1 is down"
+    assert payload.raw_data["generatorURL"] == "https://prom.example/graph"
+    assert payload.labels["namespace"] == "openstack"

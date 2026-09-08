@@ -204,6 +204,10 @@ def _serialize_order_status(order: Order) -> OrderStatusResponse:
 def _serialize_timeline_order(order: Order) -> IncidentTimelineOrderResponse:
     payload = _serialize_order_status(order).model_dump(mode="json")
     payload["labels"] = order.labels if isinstance(order.labels, dict) else {}
+    payload["annotations"] = order.annotations if isinstance(order.annotations, dict) else {}
+    payload["raw_data"] = order.raw_data if isinstance(order.raw_data, dict) else {}
+    payload["fingerprint"] = order.fingerprint or ""
+    payload["fingerprint_when_active"] = order.fingerprint_when_active
     return IncidentTimelineOrderResponse.model_validate(payload)
 
 

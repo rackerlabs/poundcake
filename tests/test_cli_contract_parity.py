@@ -509,6 +509,12 @@ def _order_timeline_payload() -> dict[str, object]:
                 "instance": "compute-1",
                 "cluster": "region-a",
             },
+            "annotations": {
+                "summary": "Node compute-1 is down",
+            },
+            "raw_data": {},
+            "fingerprint": "fp-88",
+            "fingerprint_when_active": "fp-88",
         },
         "events": [],
     }
@@ -1531,6 +1537,15 @@ def test_extended_operator_routes_have_typed_cli_commands(
     assert result_dish_ingredients.exit_code == 0
     assert "Dish Ingredients" in result_dish_ingredients.output
     assert result_dish_history.exit_code == 0
+
+
+def test_cli_keeps_operator_noun_aliases(runner: CliRunner) -> None:
+    result = runner.invoke(cli, ["--help"])
+    assert result.exit_code == 0
+    assert "incidents" in result.output
+    assert "workflows" in result.output
+    assert "actions" in result.output
+    assert "global-communications" in result.output
 
 
 def test_suppressions_from_order_builds_matchers_from_timeline_labels(

@@ -992,9 +992,13 @@ class OrderStatusResponse(BaseModel):
 
 
 class IncidentTimelineOrderResponse(OrderStatusResponse):
-    """Reader-safe order timeline summary with alert labels for suppression decisions."""
+    """Incident drilldown payload: status fields plus alert context for operators."""
 
     labels: JSONObject = Field(default_factory=dict)
+    annotations: JSONObject = Field(default_factory=dict)
+    raw_data: JSONObject = Field(default_factory=dict)
+    fingerprint: str = ""
+    fingerprint_when_active: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 

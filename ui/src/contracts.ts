@@ -487,6 +487,10 @@ export type IncidentTimelineEvent = z.infer<typeof incidentTimelineEventSchema>;
 
 export const incidentTimelineOrderSchema = orderStatusRecordSchema.extend({
   labels: unknownRecordSchema,
+  annotations: unknownRecordSchema,
+  raw_data: unknownRecordSchema,
+  fingerprint: z.string(),
+  fingerprint_when_active: z.string().nullable().optional(),
 });
 export type IncidentTimelineOrderRecord = z.infer<typeof incidentTimelineOrderSchema>;
 
