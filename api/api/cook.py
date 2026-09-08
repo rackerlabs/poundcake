@@ -49,6 +49,7 @@ from api.schemas.schemas import (
     CookSegmentMetadata,
     OrderDispatchResponse,
 )
+from api.services.order_types import order_is_subject_to_alert_suppressions
 from api.services.suppression_service import (
     find_first_matching_suppression,
     normalize_utc_datetime,
@@ -136,6 +137,8 @@ async def _complete_suppressed_dish_if_matched(
     if (dish.run_phase or "").lower() != "firing":
         return None
     if (order.alert_status or "").lower() != "firing":
+        return None
+    if not order_is_subject_to_alert_suppressions(order.raw_data):
         return None
     labels = order.labels if isinstance(order.labels, dict) else {}
     suppression = await find_first_matching_suppression(

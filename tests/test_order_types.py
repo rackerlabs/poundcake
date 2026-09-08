@@ -11,6 +11,7 @@ from api.models.models import Dish, Order
 from api.services.order_types import (
     ensure_raw_data_order_type,
     normalize_order_type,
+    order_is_subject_to_alert_suppressions,
     require_order_type,
 )
 from api.types import (
@@ -52,6 +53,20 @@ def test_order_type_normalization_rejects_unknown_values() -> None:
     assert normalize_order_type("plugin-health-check") is None
     with pytest.raises(ValueError):
         ensure_raw_data_order_type({"order_type": "plugin-health-check"}, MANUAL_ORDER_TYPE)
+
+
+def test_alert_suppressions_apply_only_to_webhook_orders() -> None:
+    assert order_is_subject_to_alert_suppressions({"order_type": WEBHOOK_ALERT_ORDER_TYPE})
+    assert order_is_subject_to_alert_suppressions({})
+    assert not order_is_subject_to_alert_suppressions({"order_type": MANUAL_ORDER_TYPE})
+    assert not order_is_subject_to_alert_suppressions({"order_type": SCHEDULED_TASK_ORDER_TYPE})
+    assert not order_is_subject_to_alert_suppressions(
+        {
+            "order_type": MANUAL_ORDER_TYPE,
+            "operator_action": True,
+            "recipe_name": "operator-action:alertmanager:expire-suppression",
+        }
+    )
 
 
 def test_order_scope_filters_split_operator_and_system_orders() -> None:

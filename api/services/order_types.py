@@ -6,8 +6,11 @@ from typing import Any
 
 from api.types import (
     ALL_ORDER_TYPES,
+    MANUAL_ORDER_TYPE,
     OPERATOR_ORDER_TYPES,
+    SCHEDULED_TASK_ORDER_TYPE,
     SYSTEM_ORDER_TYPES,
+    WEBHOOK_ALERT_ORDER_TYPE,
     OrderScope,
     OrderType,
 )
@@ -28,6 +31,22 @@ def require_order_type(raw_data: Any) -> OrderType:
     if explicit is None:
         raise ValueError("order_type must be present in raw_data")
     return explicit
+
+
+def order_is_subject_to_alert_suppressions(raw_data: Any) -> bool:
+    """Return whether alert suppressions may short-circuit this order.
+
+    Catch-all silences match any ``alertname``. Operator-action and scheduled
+    orders reuse that label for the recipe/task name, so applying suppressions
+    to them would cancel their own expire/export work.
+    """
+    raw = raw_data if isinstance(raw_data, dict) else {}
+    if raw.get("operator_action") is True:
+        return False
+    order_type = normalize_order_type(raw.get("order_type"))
+    if order_type in {MANUAL_ORDER_TYPE, SCHEDULED_TASK_ORDER_TYPE}:
+        return False
+    return order_type in {WEBHOOK_ALERT_ORDER_TYPE, None}
 
 
 def order_scope_types(scope: OrderScope | None) -> frozenset[OrderType]:

@@ -144,6 +144,39 @@ def test_cook_does_not_own_downstream_cascade_reconciliation() -> None:
     assert "blocked_by_prior_group_failure" not in source
 
 
+@pytest.mark.asyncio
+async def test_complete_suppressed_dish_skips_operator_action_orders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"n": 0}
+
+    async def _must_not_match(**_kwargs: Any) -> object:
+        called["n"] += 1
+        raise AssertionError("operator-action orders must not be matched against suppressions")
+
+    monkeypatch.setattr(cook_api, "find_first_matching_suppression", _must_not_match)
+    order = SimpleNamespace(
+        alert_status="firing",
+        labels={"alertname": "operator-action:alertmanager:expire-suppression"},
+        raw_data={
+            "order_type": "manual",
+            "operator_action": True,
+            "recipe_name": "operator-action:alertmanager:expire-suppression",
+        },
+    )
+    dish = SimpleNamespace(id=9, order=order, run_phase="firing")
+    db = _DispatchDb([[dish]])
+
+    result = await cook_api._complete_suppressed_dish_if_matched(
+        dish_id=9,
+        req_id="req-expire",
+        db=db,  # type: ignore[arg-type]
+    )
+
+    assert result is None
+    assert called["n"] == 0
+
+
 def test_cook_lifecycle_logs_cover_order_to_runtime_handoffs() -> None:
     source = inspect.getsource(cook_api)
 
