@@ -12,6 +12,22 @@ from api.models.models import AlertSuppression, AlertSuppressionMatcher
 from api.types import JSONObject
 
 
+def _suppression_scope(item: JSONObject) -> str:
+    raw = str(item.get("scope") or "").strip().lower()
+    if raw in {"all", "matchers"}:
+        return raw
+    matchers = item.get("matchers") or []
+    if isinstance(matchers, list) and len(matchers) == 1 and isinstance(matchers[0], dict):
+        matcher = matchers[0]
+        if (
+            str(matcher.get("label_key") or "") == "alertname"
+            and str(matcher.get("operator") or "") == "regex"
+            and str(matcher.get("value") or "") == ".+"
+        ):
+            return "all"
+    return "matchers"
+
+
 def _parse_time(value: object, fallback: datetime) -> datetime:
     if isinstance(value, datetime):
         return value
@@ -71,7 +87,7 @@ async def upsert_plugin_suppressions(
         ends_at = _parse_time(item.get("ends_at"), starts_at)
         row.name = str(item.get("name") or row.name)
         row.reason = str(item.get("reason") or "") or None
-        row.scope = "matchers"
+        row.scope = _suppression_scope(item)
         compare_ends_at, compare_now = align_datetime_pair(ends_at, now)
         row.enabled = status in {"active", "pending"} and compare_ends_at > compare_now
         row.starts_at = starts_at

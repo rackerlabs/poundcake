@@ -17,6 +17,7 @@ from api.api.suppressions import (
 from api.models.models import AlertSuppression, AlertSuppressionMatcher
 from api.schemas.schemas import SuppressionCreate, SuppressionUpdate
 from api.services.alertmanager_suppressions import create_alertmanager_suppression
+from api.services.suppression_sync import _suppression_scope
 
 
 def _request(path: str) -> Request:
@@ -195,6 +196,17 @@ async def test_alertmanager_create_injects_catchall_matcher_for_all_scope(
     await create_alertmanager_suppression(db=_Db(), req_id="req", payload=payload)  # type: ignore[arg-type]
     matchers = captured["service_payload"]["matchers"]  # type: ignore[index]
     assert matchers == [{"label_key": "alertname", "operator": "regex", "value": ".+"}]
+    assert captured["service_payload"]["scope"] == "all"  # type: ignore[index]
+
+
+def test_suppression_scope_infers_all_from_catchall_matcher() -> None:
+    assert (
+        _suppression_scope(
+            {"matchers": [{"label_key": "alertname", "operator": "regex", "value": ".+"}]}
+        )
+        == "all"
+    )
+    assert _suppression_scope({"scope": "matchers", "matchers": []}) == "matchers"
 
 
 @pytest.mark.asyncio

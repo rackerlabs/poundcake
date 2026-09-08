@@ -42,6 +42,20 @@ class WorkflowRepoSyncError(RuntimeError):
     """Raised when workflow Git sync cannot complete."""
 
 
+_SYSTEM_WORKFLOW_PREFIXES = (
+    "operator-action:",
+    "plugin-health-check:",
+    "plugin-content-sync:",
+    "plugin-",
+    "alertmanager-sync-",
+)
+
+
+def is_system_workflow_recipe(recipe: Recipe) -> bool:
+    name = str(getattr(recipe, "name", "") or "")
+    return name.startswith(_SYSTEM_WORKFLOW_PREFIXES)
+
+
 def _normalize_repo_directory(value: str, *, label: str) -> str:
     raw = str(value or "").strip()
     if not raw:
@@ -163,6 +177,24 @@ def _document_to_create_payload(
     )
 
 
+def collect_workflow_export_files(
+    recipes: list[Recipe],
+    *,
+    directory: str,
+) -> tuple[dict[str, str], list[str]]:
+    """Serialize exportable recipes; skip recipes that have no usable steps."""
+    files: dict[str, str] = {}
+    skipped: list[str] = []
+    for recipe in recipes:
+        try:
+            document = _recipe_to_document(recipe)
+        except (WorkflowRepoSyncError, ValueError) as exc:
+            skipped.append(f"{recipe.name}: {exc}")
+            continue
+        files[f"{directory}/{workflow_filename(recipe.name)}"] = dump_workflow_document(document)
+    return files, skipped
+
+
 async def _github_client() -> GitHubClient:
     client = GitHubClient()
     credential = await read_adapter_credential_with_policy(
@@ -186,11 +218,12 @@ async def export_workflows(db: AsyncSession) -> RepoSyncResponse:
             joinedload(Recipe.recipe_ingredients).joinedload(RecipeIngredient.ingredient)
         )
     )
-    recipes = [row for row in result.unique().scalars().all() if not is_hidden_workflow_recipe(row)]
-    files: dict[str, str] = {}
-    for recipe in recipes:
-        document = _recipe_to_document(recipe)
-        files[f"{directory}/{workflow_filename(recipe.name)}"] = dump_workflow_document(document)
+    recipes = [
+        row
+        for row in result.unique().scalars().all()
+        if not is_hidden_workflow_recipe(row) and not is_system_workflow_recipe(row)
+    ]
+    files, skipped = collect_workflow_export_files(recipes, directory=directory)
     if not files:
         raise WorkflowRepoSyncError("no user-facing workflows to export")
     client = await _github_client()
@@ -213,12 +246,17 @@ async def export_workflows(db: AsyncSession) -> RepoSyncResponse:
             number=pull_request.get("number"),
             url=pull_request.get("url") or pull_request.get("html_url"),
         )
+    message = f"Exported {len(files)} workflow file(s)."
+    if skipped:
+        message += f" Skipped {len(skipped)} workflow(s) without exportable steps."
     return RepoSyncResponse(
         status="exported",
-        message=f"Exported {len(files)} workflow file(s).",
+        message=message,
         branch=branch,
         pull_request=pr_payload,
-        exported={"files": len(files), "workflows": len(recipes)},
+        exported={"files": len(files), "workflows": len(files)},
+        skipped={"workflows": len(skipped)},
+        warnings=skipped or None,
     )
 
 

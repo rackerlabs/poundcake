@@ -67,6 +67,7 @@ ALERTMANAGER_SUPPRESSION_PAYLOAD_SCHEMA: JSONObject = {
         "ends_at": {"type": "string"},
         "created_by": {"type": ["string", "null"]},
         "summary_ticket_enabled": {"type": "boolean"},
+        "scope": {"type": "string", "enum": ["matchers", "all"]},
         "matchers": {
             "type": "array",
             "items": {

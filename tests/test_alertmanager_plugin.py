@@ -12,7 +12,7 @@ from api.plugins.alertmanager.templates import (
     ALERTMANAGER_RECIPE_TEMPLATES,
     ALERTMANAGER_SCHEDULED_TASKS,
 )
-from api.plugins.contract import validate_payload_schema
+from api.plugins.contract import validate_payload_schema, validate_service_payload_for_operation
 from api.plugins.manifest import validate_service_plugin
 from api.plugins.transport import PluginHttpTransportConfig
 from api.plugins.types import ExecutionContext
@@ -122,6 +122,25 @@ def test_alertmanager_templates_are_valid_service_plugin_templates() -> None:
     assert guard_template["service_exec_expected_outcome_default"] == {"is_firing": True}
     assert guard_template["is_blocking"] is True
     assert guard_template["on_failure"] == "stop"
+
+
+def test_create_suppression_schema_allows_scope_all() -> None:
+    template = next(
+        item
+        for item in ALERTMANAGER_INGREDIENT_TEMPLATES
+        if item["task_key_template"] == "alertmanager-create-suppression"
+    )
+    validate_service_payload_for_operation(
+        {
+            "name": "Global maintenance",
+            "starts_at": "2026-09-08T00:00:00Z",
+            "ends_at": "2099-12-31T23:59:59Z",
+            "scope": "all",
+            "matchers": [{"label_key": "alertname", "operator": "regex", "value": ".+"}],
+        },
+        template["payload_schema"],
+        template["service_exec_parameters"],
+    )
 
 
 def test_alertmanager_adapter_requires_url() -> None:
