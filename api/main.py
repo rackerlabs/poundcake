@@ -33,6 +33,7 @@ from api.api.auth import require_auth_if_enabled
 from api.api.settings import router as settings_router
 from api.api.service_registry import router as service_registry_router
 from api.api.plugins import router as plugins_router
+from api.api.repo_sync import router as repo_sync_router
 from api.api.scheduled_tasks import router as scheduled_tasks_router
 from api.api.communications_policy import router as communications_policy_router
 from api.api.webhook import router as webhook_router
@@ -139,6 +140,7 @@ app.include_router(cook_router, prefix="/api/v1", tags=["infrastructure"])
 app.include_router(expediter_router, prefix="/api/v1", tags=["infrastructure"])
 app.include_router(service_registry_router, prefix="/api/v1", tags=["infrastructure"])
 app.include_router(plugins_router, prefix="/api/v1", tags=["infrastructure"])
+app.include_router(repo_sync_router, prefix="/api/v1", tags=["infrastructure"])
 app.include_router(scheduled_tasks_router, prefix="/api/v1", tags=["infrastructure"])
 
 # Business Logic

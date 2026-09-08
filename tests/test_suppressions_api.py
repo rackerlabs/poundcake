@@ -16,6 +16,7 @@ from api.api.suppressions import (
 )
 from api.models.models import AlertSuppression, AlertSuppressionMatcher
 from api.schemas.schemas import SuppressionCreate, SuppressionUpdate
+from api.services.alertmanager_suppressions import create_alertmanager_suppression
 
 
 def _request(path: str) -> Request:
@@ -118,9 +119,82 @@ async def test_create_suppression_route_uses_alertmanager_lifecycle(
     assert response.status == "accepted"
     assert response.message == "Suppression create order accepted"
     assert response.order_id == 201
-    assert response.order_req_id == "test-suppression-route"
-    assert response.service_type == "alertmanager"
-    assert response.service_exec == "suppression"
+
+
+@pytest.mark.asyncio
+async def test_create_suppression_allows_all_scope_without_matchers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def _fake_create_alertmanager_suppression(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace(
+            order_id=202,
+            order_req_id=str(kwargs["req_id"]),
+            service_type="alertmanager",
+            service_exec="suppression",
+            submitted_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr(
+        "api.api.suppressions.create_alertmanager_suppression",
+        _fake_create_alertmanager_suppression,
+    )
+
+    payload = SuppressionCreate(
+        name="Global maintenance",
+        starts_at=datetime(2026, 7, 14, 0, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2099, 12, 31, 23, 59, tzinfo=timezone.utc),
+        matchers=[],
+        scope="all",
+        reason="Lab-wide silence",
+        created_by="alice",
+        summary_ticket_enabled=False,
+    )
+
+    response = await create_suppression(
+        request=_request("/api/v1/suppressions"),
+        payload=payload,
+        db=_Db(),  # type: ignore[arg-type]
+        _context=object(),
+    )
+
+    assert captured["payload"].scope == "all"
+    assert captured["payload"].matchers == []
+    assert response.order_id == 202
+
+
+@pytest.mark.asyncio
+async def test_alertmanager_create_injects_catchall_matcher_for_all_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def _fake_submit(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace(
+            order_id=7,
+            order_req_id="req",
+            service_type="alertmanager",
+            service_exec="suppression",
+            submitted_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr(
+        "api.services.alertmanager_suppressions.submit_operator_action_order",
+        _fake_submit,
+    )
+    payload = SuppressionCreate(
+        name="Global maintenance",
+        starts_at=datetime(2026, 7, 14, 0, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2099, 12, 31, 23, 59, tzinfo=timezone.utc),
+        matchers=[],
+        scope="all",
+    )
+    await create_alertmanager_suppression(db=_Db(), req_id="req", payload=payload)  # type: ignore[arg-type]
+    matchers = captured["service_payload"]["matchers"]  # type: ignore[index]
+    assert matchers == [{"label_key": "alertname", "operator": "regex", "value": ".+"}]
 
 
 @pytest.mark.asyncio

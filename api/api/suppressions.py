@@ -231,7 +231,7 @@ async def create_suppression(
     req_id = request.state.req_id
     if payload.ends_at <= payload.starts_at:
         raise HTTPException(status_code=400, detail="ends_at must be greater than starts_at")
-    if not payload.matchers:
+    if payload.scope == "matchers" and not payload.matchers:
         raise HTTPException(status_code=400, detail="matchers are required")
 
     try:

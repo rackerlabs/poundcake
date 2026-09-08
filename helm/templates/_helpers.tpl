@@ -59,6 +59,35 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end -}}
 
+{{- define "poundcake.gitEnv" -}}
+{{- if or .Values.git.repoUrl .Values.git.existingSecret }}
+- name: POUNDCAKE_GIT_REPO_URL
+  value: {{ default "" .Values.git.repoUrl | quote }}
+- name: POUNDCAKE_GIT_BRANCH
+  value: {{ default "main" .Values.git.branch | quote }}
+- name: POUNDCAKE_GIT_RULES_PATH
+  value: {{ default "prometheus/rules" .Values.git.rulesPath | quote }}
+- name: POUNDCAKE_GIT_WORKFLOWS_PATH
+  value: {{ default "poundcake/workflows" .Values.git.workflowsPath | quote }}
+- name: POUNDCAKE_GIT_ACTIONS_PATH
+  value: {{ default "poundcake/actions" .Values.git.actionsPath | quote }}
+- name: POUNDCAKE_GIT_USER_NAME
+  value: {{ default "PoundCake" .Values.git.userName | quote }}
+- name: POUNDCAKE_GIT_USER_EMAIL
+  value: {{ default "poundcake@localhost" .Values.git.userEmail | quote }}
+- name: POUNDCAKE_GIT_PROVIDER
+  value: {{ default "github" .Values.git.provider | quote }}
+{{- if .Values.git.existingSecret }}
+- name: POUNDCAKE_GIT_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.git.existingSecret }}
+      key: {{ default "git-token" .Values.git.secretKeys.gitToken }}
+      optional: true
+{{- end }}
+{{- end }}
+{{- end -}}
+
 {{- define "poundcake.stackstormEnv" -}}
 {{- if .Values.stackstorm.url }}
 - name: POUNDCAKE_STACKSTORM_URL

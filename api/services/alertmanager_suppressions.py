@@ -34,7 +34,16 @@ async def create_alertmanager_suppression(
 ) -> OperatorActionOrderSubmission:
     """Submit an Alertmanager suppression create order."""
 
-    if not payload.matchers:
+    matchers = [matcher.model_dump() for matcher in payload.matchers]
+    if payload.scope == "all" and not matchers:
+        matchers = [
+            {
+                "label_key": "alertname",
+                "operator": "regex",
+                "value": ".+",
+            }
+        ]
+    if not matchers:
         raise SuppressionLifecycleError("matchers are required", status_code=400)
 
     return await submit_operator_action_order(
@@ -51,7 +60,8 @@ async def create_alertmanager_suppression(
             "ends_at": payload.ends_at.isoformat(),
             "created_by": payload.created_by,
             "summary_ticket_enabled": payload.summary_ticket_enabled,
-            "matchers": [matcher.model_dump() for matcher in payload.matchers],
+            "scope": payload.scope,
+            "matchers": matchers,
         },
     )
 

@@ -701,6 +701,90 @@ async def create_kubernetes_prometheus_rule_rule(
     )
 
 
+@router.delete(
+    "/plugins/k8s/prometheus-rules/{crd_name}/rules/{rule_name}",
+    response_model=OperatorActionAcceptedResponse,
+    status_code=202,
+)
+async def delete_kubernetes_prometheus_rule_rule(
+    crd_name: str,
+    rule_name: str,
+    request: Request,
+    group_name: str = Query(..., min_length=1, max_length=255),
+    namespace: str | None = Query(default=None, min_length=1, max_length=255),
+    db: AsyncSession = Depends(get_db),
+    _context: object = Depends(require_operator),
+) -> OperatorActionAcceptedResponse:
+    row, _plugin, adapter = await _external_plugin_row_or_404(db, "k8s")
+    config = _plugin_config_from_row(row, adapter)
+    if namespace is not None:
+        config["namespace"] = namespace.strip()
+    configured_adapter = adapter.with_operator_config(_normalize_plugin_config(adapter, config))
+    helper = _resolved_adapter_helper(configured_adapter)
+    if helper is None or not hasattr(helper, "get_prometheus_rule"):
+        raise HTTPException(status_code=500, detail="Kubernetes PrometheusRule helper unavailable")
+    existing_crd = await helper.get_prometheus_rule(crd_name.strip())
+    if existing_crd is None or not isinstance(existing_crd, dict):
+        raise HTTPException(status_code=404, detail=f"PrometheusRule CRD not found: {crd_name}")
+    existing_rule = _rule_from_crd(
+        existing_crd,
+        group_name=group_name.strip(),
+        rule_name=rule_name.strip(),
+    )
+    if existing_rule is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Rule '{rule_name}' not found in group '{group_name}' within CRD '{crd_name}'",
+        )
+    service_payload = {
+        "crd_name": crd_name.strip(),
+        "group_name": group_name.strip(),
+        "rule_name": rule_name.strip(),
+    }
+    if namespace is not None:
+        service_payload["namespace"] = namespace.strip()
+    submission = await submit_operator_action_order(
+        db=db,
+        req_id=getattr(request.state, "req_id", "plugin-k8s-prometheus-rule-delete"),
+        recipe_name="operator-action:k8s:prometheus-rule-delete",
+        service_type="k8s",
+        service_exec="prometheus_rule",
+        task_key_template="k8s-prometheus-rule",
+        service_payload=service_payload,
+    )
+    return _operator_action_accepted_response(
+        submission,
+        message="PrometheusRule delete order accepted",
+    )
+
+
+@router.post(
+    "/plugins/genestack_monitoring/sync-content",
+    response_model=OperatorActionAcceptedResponse,
+    status_code=202,
+)
+async def sync_genestack_monitoring_content(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _context: object = Depends(require_operator),
+) -> OperatorActionAcceptedResponse:
+    await _external_plugin_row_or_404(db, "genestack_monitoring")
+    req_id = getattr(request.state, "req_id", "plugin-genestack-sync-content")
+    submission = await submit_operator_action_order(
+        db=db,
+        req_id=req_id,
+        recipe_name="operator-action:genestack-monitoring:sync-content",
+        service_type="genestack_monitoring",
+        service_exec="content_sync",
+        task_key_template="genestack-monitoring-content-sync",
+        service_payload={},
+    )
+    return _operator_action_accepted_response(
+        submission,
+        message="Genestack content sync order accepted",
+    )
+
+
 @router.post(
     "/plugins/genestack_monitoring/export-alert-updates",
     response_model=OperatorActionAcceptedResponse,

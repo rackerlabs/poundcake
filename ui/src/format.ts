@@ -42,6 +42,35 @@ export function compactJson(value: unknown): string {
   return JSON.stringify(value ?? {}, null, 2);
 }
 
+export function localDatetimeInputValue(value?: Date): string {
+  const date = value || new Date();
+  const pad = (item: number) => String(item).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function datetimeLocalToUtcIso(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toISOString();
+}
+
+export function isPermanentSuppressionEnd(value?: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getUTCFullYear() >= 2099;
+}
+
+export function formatSuppressionEndsAt(value?: string | null): string {
+  if (isPermanentSuppressionEnd(value)) {
+    return "Until canceled";
+  }
+  return formatDate(value);
+}
+
 export function statusTone(value?: string | null): string {
   const normalized = String(value || "unknown").toLowerCase();
   if (["healthy", "complete", "success", "succeeded", "delivered", "active", "sent"].includes(normalized)) {

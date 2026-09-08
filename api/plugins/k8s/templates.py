@@ -917,6 +917,41 @@ K8S_RECIPE_TEMPLATES: tuple[JSONObject, ...] = (
             }
         ],
     },
+    {
+        "name": "operator-action:k8s:prometheus-rule-delete",
+        "description": "Operator-requested PrometheusRule rule delete.",
+        "enabled": True,
+        "recipe_ingredients": [
+            {
+                "service_type": "k8s",
+                "service_exec": "prometheus_rule",
+                "destination_target": "kubernetes",
+                "task_key_template": "k8s-prometheus-rule",
+                "step_order": 1,
+                "service_payload": {},
+                "service_payload_from_order": True,
+                "service_exec_parameters_override": {
+                    "operation": "delete",
+                    "allowed_operations": ["delete"],
+                    "operation_metadata": {
+                        "delete": {
+                            "label": "Delete",
+                            "description": "Delete an alert rule.",
+                            "payload_schema": _schema(
+                                _PROMETHEUS_RULE_PROPS,
+                                required=["rule_name", "group_name", "crd_name"],
+                            ),
+                        },
+                    },
+                },
+                "service_exec_expected_secs": 5,
+                "service_exec_timeout": 60,
+                "service_exec_expected_outcome": {"success": True},
+                "run_phase": "firing",
+                "run_condition": "always",
+            }
+        ],
+    },
 )
 
 

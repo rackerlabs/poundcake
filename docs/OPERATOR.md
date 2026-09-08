@@ -123,6 +123,11 @@ defaults unless you inject the variable.
 | Secure cookie | `POUNDCAKE_FORCE_SECURE_COOKIE` | `true` |
 | Fallback recipe | `POUNDCAKE_CATCH_ALL_RECIPE_NAME` | `fallback-recipe` |
 
+Git plugin values can be set in Helm as `git.*`. When `git.repoUrl` or
+`git.existingSecret` is set, the chart emits `POUNDCAKE_GIT_*` for the
+git/github plugins. Plugin credentials configured in the UI still take
+precedence for private-repo writes.
+
 Git plugin deployment defaults. Per-credential operator config set through the
 UI or credentials API overrides these:
 
@@ -143,7 +148,8 @@ UI or credentials API overrides these:
 `suppressions.*`, `mappings.*`, and `bootstrap.*` (including `remoteSyncEnabled`,
 `rulesRepoUrl`, and `rulesPath`) remain in `helm/values.yaml` for compatibility
 but are not consumed by the chart templates. Do not rely on them; use the
-Helm-wired or env-only settings above.
+Helm-wired or env-only settings above. The restored `git.*` block *is*
+consumed when `repoUrl` or `existingSecret` is set.
 
 ## Bakery Credential
 

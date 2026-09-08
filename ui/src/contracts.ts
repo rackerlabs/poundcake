@@ -967,10 +967,22 @@ export const suppressionCreateRequestSchema = strictObject({
   starts_at: z.string().min(1),
   ends_at: z.string().min(1),
   matchers: z.array(suppressionMatcherSchema),
+  scope: z.enum(["matchers", "all"]).optional(),
   reason: z.string().nullable().optional(),
   created_by: z.string().nullable().optional(),
   summary_ticket_enabled: z.boolean(),
 });
+
+export const operatorActionAcceptedResponseSchema = strictObject({
+  status: z.string(),
+  message: z.string(),
+  order_id: z.number().int(),
+  order_req_id: z.string(),
+  service_type: z.string(),
+  service_exec: z.string(),
+  submitted_at: z.string(),
+});
+export type OperatorActionAcceptedResponse = z.infer<typeof operatorActionAcceptedResponseSchema>;
 
 export const recipeStepRequestSchema = strictObject({
   ingredient_id: z.number().int().positive(),

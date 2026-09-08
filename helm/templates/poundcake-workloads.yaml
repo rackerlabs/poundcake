@@ -112,6 +112,7 @@ spec:
             {{- include "poundcake.monitoringEnv" . | nindent 12 }}
             {{- include "poundcake.stackstormEnv" . | nindent 12 }}
             {{- include "poundcake.bakeryEnv" . | nindent 12 }}
+            {{- include "poundcake.gitEnv" . | nindent 12 }}
             - name: POUNDCAKE_WEBHOOK_BEARER_TOKEN
               valueFrom:
                 secretKeyRef:

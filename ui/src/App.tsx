@@ -43,8 +43,11 @@ import {
 } from "./api";
 import {
   compactJson,
+  datetimeLocalToUtcIso,
   formatDate,
   formatLongDate,
+  formatSuppressionEndsAt,
+  localDatetimeInputValue,
   statusTone,
   titleize,
 } from "./format";
@@ -99,6 +102,7 @@ import {
   observabilityActivityStatusRecordArraySchema,
   operatorAuditRecordArraySchema,
   observabilityOverviewResponseSchema,
+  operatorActionAcceptedResponseSchema,
   orderStatusRecordArraySchema,
   orderStatusRecordSchema,
   prometheusRuleListResponseSchema,
@@ -205,15 +209,38 @@ const workflowSchema = z.object({
   communications_routes: z.array(communicationRouteSchema),
 });
 
+const PERMANENT_SUPPRESSION_ENDS_AT = "2099-12-31T23:59:59.000Z";
+
+function emptySuppressionMatcher(prefill?: { matcher_key?: string; matcher_value?: string }) {
+  return {
+    label_key: prefill?.matcher_key || "alertname",
+    operator: "eq",
+    value: prefill?.matcher_value || "",
+  };
+}
+
 const suppressionSchema = z.object({
   name: z.string().min(1, "Suppression name is required"),
   reason: z.string().optional(),
   starts_at: z.string().min(1, "Start time is required"),
-  ends_at: z.string().min(1, "End time is required"),
+  ends_mode: z.enum(["at_time", "until_canceled"]),
+  ends_at: z.string().optional(),
+  scope: z.enum(["matchers", "all"]),
   summary_ticket_enabled: z.boolean(),
-  matcher_key: z.string().optional(),
-  matcher_operator: z.string().min(1),
-  matcher_value: z.string().optional(),
+  matchers: z.array(
+    z.object({
+      label_key: z.string().min(1, "Matcher key is required"),
+      operator: z.string().min(1),
+      value: z.string().optional(),
+    }),
+  ),
+}).superRefine((values, ctx) => {
+  if (values.ends_mode === "at_time" && !values.ends_at) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End time is required.", path: ["ends_at"] });
+  }
+  if (values.scope === "matchers" && values.matchers.length < 1) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Add at least one matcher.", path: ["matchers"] });
+  }
 });
 
 function suppressionFormDefaults(prefill?: {
@@ -225,12 +252,12 @@ function suppressionFormDefaults(prefill?: {
   return {
     name: prefill?.name || "",
     reason: prefill?.reason || "",
-    starts_at: "",
+    starts_at: localDatetimeInputValue(),
+    ends_mode: "at_time" as const,
     ends_at: "",
+    scope: "matchers" as const,
     summary_ticket_enabled: true,
-    matcher_key: prefill?.matcher_key || "alertname",
-    matcher_operator: "eq",
-    matcher_value: prefill?.matcher_value || "",
+    matchers: [emptySuppressionMatcher(prefill)],
   };
 }
 
@@ -2746,8 +2773,12 @@ function SuppressionsPage() {
       matcher_value: prefillMatcherValue,
     }),
   });
-  const matcherKey = form.watch("matcher_key");
-  const matcherOperator = form.watch("matcher_operator");
+  const matcherFields = useFieldArray({
+    control: form.control,
+    name: "matchers",
+  });
+  const suppressionScope = form.watch("scope");
+  const suppressionEndsMode = form.watch("ends_mode");
   const recipeNameOptions = (recipesQuery.data || [])
     .map((recipe) => recipe.name)
     .filter(Boolean)
@@ -2769,22 +2800,22 @@ function SuppressionsPage() {
       const request = suppressionCreateRequestSchema.parse({
         name: values.name,
         reason: values.reason || null,
-        starts_at: values.starts_at,
-        ends_at: values.ends_at,
+        starts_at: datetimeLocalToUtcIso(values.starts_at),
+        ends_at: values.ends_mode === "until_canceled"
+          ? PERMANENT_SUPPRESSION_ENDS_AT
+          : datetimeLocalToUtcIso(values.ends_at || ""),
+        scope: values.scope,
         created_by: "ui-v2",
         summary_ticket_enabled: values.summary_ticket_enabled,
-        matchers:
-          values.matcher_key
-            ? [
-                {
-                  label_key: values.matcher_key,
-                  operator: values.matcher_operator,
-                  value: values.matcher_value || null,
-                },
-              ]
-            : [],
+        matchers: values.scope === "matchers"
+          ? values.matchers.map((matcher) => ({
+              label_key: matcher.label_key,
+              operator: matcher.operator,
+              value: matcher.value || null,
+            }))
+          : [],
       });
-      return apiPost("/api/v1/suppressions", suppressionRecordSchema, request);
+      return apiPost("/api/v1/suppressions", operatorActionAcceptedResponseSchema, request);
     },
     onSuccess: async () => {
       notify("success", "Suppression created.");
@@ -2895,19 +2926,45 @@ function SuppressionsPage() {
             <FormField label="Reason" help="Explain why alerts are being suppressed and who requested it.">
               <textarea {...form.register("reason")} rows={3} />
             </FormField>
-            <div className="grid-two">
+            <div className="suppression-schedule-grid">
               <FormField label="Starts at" help="Start of the suppression window in local time.">
                 <input type="datetime-local" {...form.register("starts_at")} />
                 <FieldError message={form.formState.errors.starts_at?.message} />
               </FormField>
-              <FormField label="Ends at" help="End of the suppression window in local time.">
-                <input type="datetime-local" {...form.register("ends_at")} />
+              <FormField label="Ends at" help="End of the suppression window in local time. Choose until canceled for standing suppressions.">
+                <input
+                  disabled={suppressionEndsMode === "until_canceled"}
+                  type="datetime-local"
+                  {...form.register("ends_at")}
+                />
                 <FieldError message={form.formState.errors.ends_at?.message} />
               </FormField>
+              <div className="form-field">
+                <span className="field-label">Duration</span>
+                <label className="toggle-row checkbox-card">
+                  <input
+                    checked={suppressionEndsMode === "until_canceled"}
+                    type="checkbox"
+                    onChange={(event) => {
+                      form.setValue("ends_mode", event.target.checked ? "until_canceled" : "at_time", {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                      if (event.target.checked) {
+                        form.clearErrors("ends_at");
+                      }
+                    }}
+                  />
+                  <span>Until canceled</span>
+                </label>
+              </div>
             </div>
             <div className="grid-two">
-              <FormField label="Suppression source" help="Operator-created suppressions are stored as Alertmanager silences and reconciled back into PoundCake.">
-                <input value="Alertmanager" disabled />
+              <FormField label="Scope" help="Matcher scope targets alerts by label. All suppresses every alert for the window.">
+                <select {...form.register("scope")}>
+                  <option value="matchers">Matchers</option>
+                  <option value="all">All</option>
+                </select>
               </FormField>
               <FormField label="Summary communication" help="Enable this when you want the suppression lifecycle summarized into a ticket.">
                 <label className="toggle-row">
@@ -2916,9 +2973,47 @@ function SuppressionsPage() {
                 </label>
               </FormField>
             </div>
-            <div className="grid-three">
-              <FormField label="Matcher key" help="The alert label to match, such as alertname or cluster.">
-                <input {...form.register("matcher_key")} list="suppression-matcher-key-options" />
+            {suppressionScope === "matchers" ? (
+              <div className="form-stack">
+                <div className="section-heading">
+                  <h4>Matchers</h4>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => matcherFields.append(emptySuppressionMatcher())}
+                  >
+                    Add matcher
+                  </button>
+                </div>
+                {matcherFields.fields.map((field, index) => (
+                  <div className="matcher-row" key={field.id}>
+                    <FormField label="Matcher key" help="The alert label to match, such as alertname or cluster.">
+                      <input {...form.register(`matchers.${index}.label_key` as const)} list="suppression-matcher-key-options" />
+                      <FieldError message={form.formState.errors.matchers?.[index]?.label_key?.message} />
+                    </FormField>
+                    <FormField label="Operator" help="eq matches exact values; regex allows pattern matching. Multiple rows are combined with AND.">
+                      <select {...form.register(`matchers.${index}.operator` as const)}>
+                        <option value="eq">eq</option>
+                        <option value="neq">neq</option>
+                        <option value="regex">regex</option>
+                        <option value="nregex">nregex</option>
+                        <option value="exists">exists</option>
+                        <option value="not_exists">not_exists</option>
+                      </select>
+                    </FormField>
+                    <SuppressionMatcherValueField
+                      form={form}
+                      index={index}
+                      matcherKey={form.watch(`matchers.${index}.label_key`)}
+                      matcherOperator={form.watch(`matchers.${index}.operator`)}
+                      recipeNames={recipeNameOptions}
+                      recipesLoading={recipesQuery.isLoading}
+                    />
+                    <button className="danger-button" type="button" onClick={() => matcherFields.remove(index)}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
                 <datalist id="suppression-matcher-key-options">
                   <option value="alertname" />
                   <option value="recipe.name" />
@@ -2927,25 +3022,14 @@ function SuppressionsPage() {
                   <option value="instance" />
                   <option value="severity" />
                 </datalist>
-              </FormField>
-              <FormField label="Operator" help="eq matches exact values; regex allows pattern matching.">
-                <select {...form.register("matcher_operator")}>
-                  <option value="eq">eq</option>
-                  <option value="neq">neq</option>
-                  <option value="regex">regex</option>
-                  <option value="nregex">nregex</option>
-                  <option value="exists">exists</option>
-                  <option value="not_exists">not_exists</option>
-                </select>
-              </FormField>
-              <SuppressionMatcherValueField
-                form={form}
-                matcherKey={matcherKey}
-                matcherOperator={matcherOperator}
-                recipeNames={recipeNameOptions}
-                recipesLoading={recipesQuery.isLoading}
-              />
-            </div>
+                <FieldError message={form.formState.errors.matchers?.message} />
+              </div>
+            ) : (
+              <div className="helper-card">
+                <strong>Global suppression scope</strong>
+                <p>All alerts are suppressed for this window. Switch back to matcher scope to target specific alert labels.</p>
+              </div>
+            )}
             <div className="form-actions">
               <button className="primary-button" disabled={createMutation.isPending} type="submit">
                 {createMutation.isPending ? "Creating..." : "Create suppression"}
@@ -2982,7 +3066,7 @@ function SuppressionsPage() {
                       </div>
                       <p>{item.reason || "No reason provided."}</p>
                       <div className="suppression-meta-grid">
-                        <span>{formatDate(item.starts_at)} to {formatDate(item.ends_at)}</span>
+                        <span>{formatDate(item.starts_at)} to {formatSuppressionEndsAt(item.ends_at)}</span>
                         <span>
                           Source: {item.source_service_type || item.source}
                           {item.source_ref ? ` • Silence ${item.source_ref}` : ""}
@@ -3031,7 +3115,7 @@ function SuppressionsPage() {
                       </div>
                       <p>{item.reason || "No reason provided."}</p>
                       <div className="suppression-meta-grid">
-                        <span>{formatDate(item.starts_at)} to {formatDate(item.ends_at)}</span>
+                        <span>{formatDate(item.starts_at)} to {formatSuppressionEndsAt(item.ends_at)}</span>
                         <span>
                           Source: {item.source_service_type || item.source}
                           {item.source_ref ? ` • Silence ${item.source_ref}` : ""}
@@ -3094,12 +3178,14 @@ function SuppressionsPage() {
 
 function SuppressionMatcherValueField({
   form,
+  index,
   matcherKey,
   matcherOperator,
   recipeNames,
   recipesLoading,
 }: {
   form: ReturnType<typeof useForm<z.infer<typeof suppressionSchema>>>;
+  index: number;
   matcherKey?: string;
   matcherOperator?: string;
   recipeNames: string[];
@@ -3108,12 +3194,13 @@ function SuppressionMatcherValueField({
   const usesRecipeName = matcherKey === "recipe.name";
   const valueNotUsed = matcherOperator === "exists" || matcherOperator === "not_exists";
   const exactRecipeMatch = usesRecipeName && (matcherOperator === "eq" || matcherOperator === "neq");
+  const fieldName = `matchers.${index}.value` as const;
 
   useEffect(() => {
-    if (exactRecipeMatch && recipeNames.length === 1 && !form.getValues("matcher_value")) {
-      form.setValue("matcher_value", recipeNames[0]);
+    if (exactRecipeMatch && recipeNames.length === 1 && !form.getValues(fieldName)) {
+      form.setValue(fieldName, recipeNames[0]);
     }
-  }, [exactRecipeMatch, form, recipeNames]);
+  }, [exactRecipeMatch, fieldName, form, recipeNames]);
 
   if (valueNotUsed) {
     return (
@@ -3126,7 +3213,7 @@ function SuppressionMatcherValueField({
   if (exactRecipeMatch) {
     return (
       <FormField label="Matcher value" help="Choose the recipe name this suppression should target.">
-        <select {...form.register("matcher_value")} disabled={recipesLoading || !recipeNames.length}>
+        <select {...form.register(fieldName)} disabled={recipesLoading || !recipeNames.length}>
           <option value="">{recipesLoading ? "Loading recipes..." : "Choose a recipe"}</option>
           {recipeNames.map((name) => (
             <option key={name} value={name}>
@@ -3141,7 +3228,7 @@ function SuppressionMatcherValueField({
   if (usesRecipeName) {
     return (
       <FormField label="Matcher value" help="Use a recipe name or pattern. Known recipes are available as autocomplete suggestions.">
-        <input {...form.register("matcher_value")} list="suppression-recipe-name-options" />
+        <input {...form.register(fieldName)} list="suppression-recipe-name-options" />
         <datalist id="suppression-recipe-name-options">
           {recipeNames.map((name) => (
             <option key={name} value={name} />
@@ -3153,7 +3240,7 @@ function SuppressionMatcherValueField({
 
   return (
     <FormField label="Matcher value" help="Leave value blank for exists and not_exists operators.">
-      <input {...form.register("matcher_value")} />
+      <input {...form.register(fieldName)} />
     </FormField>
   );
 }
@@ -3793,7 +3880,7 @@ function AlertRulesPage() {
       });
       return apiPut(
         `/api/v1/plugins/k8s/prometheus-rules/${encodeURIComponent(payload.crdName)}/rules/${encodeURIComponent(payload.ruleName)}?namespace=${encodeURIComponent(namespace)}`,
-        prometheusRuleRecordSchema,
+        operatorActionAcceptedResponseSchema,
         {
           group_name: payload.groupName,
           rule_data: payload.ruleData,
@@ -3809,9 +3896,10 @@ function AlertRulesPage() {
         details: {
           group_name: payload.groupName,
           namespace,
+          order_id: result.order_id,
         },
       });
-      notify("success", `Saved live rule ${result.rule_name}. Verify Alerts or any active Orders affected by this rule.`);
+      notify("success", `Saved live rule ${payload.ruleName} as order ${result.order_id}. Verify Alerts or any active Orders affected by this rule.`);
       setPendingRuleSave(null);
       await queryClient.invalidateQueries({ queryKey: ["prometheus-rules", namespace] });
     },
@@ -3837,13 +3925,32 @@ function AlertRulesPage() {
       groupName: string;
       ruleName: string;
     }) =>
-      apiPost("/api/v1/plugins/genestack_monitoring/export-alert-updates", repoSyncResponseSchema, {
+      apiPost("/api/v1/plugins/genestack_monitoring/export-alert-updates", operatorActionAcceptedResponseSchema, {
         namespace,
         crd_name: payload.crdName,
         group_name: payload.groupName,
         rule_name: payload.ruleName,
       }),
-    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onSuccess: (result) => notify("success", `Export order ${result.order_id} accepted. ${result.message}`),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+  const deleteRuleMutation = useMutation({
+    mutationFn: async (payload: { crdName: string; groupName: string; ruleName: string }) =>
+      apiDelete(
+        `/api/v1/plugins/k8s/prometheus-rules/${encodeURIComponent(payload.crdName)}/rules/${encodeURIComponent(payload.ruleName)}?namespace=${encodeURIComponent(namespace)}&group_name=${encodeURIComponent(payload.groupName)}`,
+        operatorActionAcceptedResponseSchema,
+      ),
+    onSuccess: async (result, payload) => {
+      notify("success", `Delete order ${result.order_id} accepted for ${payload.ruleName}.`);
+      setPendingRuleSave(null);
+      await queryClient.invalidateQueries({ queryKey: ["prometheus-rules", namespace] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+  const syncContentMutation = useMutation({
+    mutationFn: () =>
+      apiPost("/api/v1/plugins/genestack_monitoring/sync-content", operatorActionAcceptedResponseSchema, {}),
+    onSuccess: (result) => notify("success", `Catalog sync order ${result.order_id} accepted. ${result.message}`),
     onError: (error) => notify("error", getErrorMessage(error)),
   });
 
@@ -3921,6 +4028,25 @@ function AlertRulesPage() {
         description="Edit live PrometheusRule entries through the k8s plugin, then export Genestack-managed updates through a separate PR flow."
       />
 
+      <Panel
+        title="Git catalog"
+        subtitle="Sync the Genestack monitoring catalog into PoundCake, or export one live rule as a reviewable pull request."
+      >
+        <div className="form-actions">
+          <button
+            className="ghost-button"
+            disabled={!canEdit || syncContentMutation.isPending || !servicePlugins.some((plugin) => plugin.service_type === "genestack_monitoring")}
+            type="button"
+            onClick={() => syncContentMutation.mutate()}
+          >
+            {syncContentMutation.isPending ? "Syncing..." : "Sync catalog"}
+          </button>
+          <p className="login-note">
+            Export on a selected rule opens a GitHub PR. Leave that PR unmerged unless the rule change should land in genestack-monitoring.
+          </p>
+        </div>
+      </Panel>
+
       <div className="toolbar">
         <label>
           Namespace
@@ -3995,8 +4121,19 @@ function AlertRulesPage() {
             <PrometheusRuleDetail
               item={selected}
               canEdit={canEdit}
+              isDeleting={deleteRuleMutation.isPending}
               isExporting={exportRuleMutation.isPending}
               isSaving={saveRuleMutation.isPending}
+              onDelete={() => {
+                if (!selectedRule) {
+                  return;
+                }
+                void deleteRuleMutation.mutateAsync({
+                  crdName: selected.name,
+                  groupName: selectedRule.group_name,
+                  ruleName: selectedRule.rule_name,
+                });
+              }}
               onEditorChange={setRuleEditorText}
               onExport={handleExportRule}
               onRuleSelect={setSelectedRuleKey}
@@ -4060,8 +4197,10 @@ function PrometheusRuleDetail({
   onEditorChange,
   onSave,
   onExport,
+  onDelete,
   isSaving,
   isExporting,
+  isDeleting,
   canEdit,
 }: {
   item: PrometheusRuleResourceRecord;
@@ -4071,8 +4210,10 @@ function PrometheusRuleDetail({
   onEditorChange: (value: string) => void;
   onSave: () => void;
   onExport: () => void;
+  onDelete: () => void;
   isSaving: boolean;
   isExporting: boolean;
+  isDeleting: boolean;
   canEdit: boolean;
 }) {
   const rules = extractPrometheusRules(item);
@@ -4151,33 +4292,18 @@ function PrometheusRuleDetail({
       <section className="detail-section">
         <h4>Live rule editor</h4>
         {selectedRule ? (
-          <div className="form-stack">
-            <div className="helper-card">
-              <strong>{selectedRule.rule_name}</strong>
-              <p>
-                {selectedRule.group_name} • {selectedRule.rule_kind} • {String(selectedRule.source?.file || "no source annotation")}
-              </p>
-            </div>
-            <textarea
-              disabled={!canEdit || isSaving}
-              rows={14}
-              value={ruleEditorText}
-              onChange={(event) => onEditorChange(event.target.value)}
-            />
-            <div className="form-actions">
-              <button type="button" disabled={!canEdit || isSaving} onClick={onSave}>
-                {isSaving ? "Saving..." : "Save live rule"}
-              </button>
-              <button type="button" className="ghost-button" disabled={!canEdit || isExporting || !selectedRule.source} onClick={onExport}>
-                {isExporting ? "Exporting..." : "Export to Genestack"}
-              </button>
-            </div>
-            {!selectedRule.source ? (
-              <div className="login-note">
-                Export is available only for rules with Genestack source annotations.
-              </div>
-            ) : null}
-          </div>
+          <PrometheusRuleForm
+            canEdit={canEdit}
+            isDeleting={isDeleting}
+            isExporting={isExporting}
+            isSaving={isSaving}
+            onDelete={onDelete}
+            onEditorChange={onEditorChange}
+            onExport={onExport}
+            onSave={onSave}
+            ruleEditorText={ruleEditorText}
+            selectedRule={selectedRule}
+          />
         ) : (
           <EmptyState message="Select one rule to edit." />
         )}
@@ -4192,6 +4318,137 @@ function PrometheusRuleDetail({
         <h4>Raw CRD</h4>
         <pre className="json-block">{compactJson(item.raw)}</pre>
       </section>
+    </div>
+  );
+}
+
+function PrometheusRuleForm({
+  selectedRule,
+  ruleEditorText,
+  onEditorChange,
+  onSave,
+  onExport,
+  onDelete,
+  isSaving,
+  isExporting,
+  isDeleting,
+  canEdit,
+}: {
+  selectedRule: AlertRuleEditorRecord;
+  ruleEditorText: string;
+  onEditorChange: (value: string) => void;
+  onSave: () => void;
+  onExport: () => void;
+  onDelete: () => void;
+  isSaving: boolean;
+  isExporting: boolean;
+  isDeleting: boolean;
+  canEdit: boolean;
+}) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  let parsed: Record<string, unknown> = selectedRule.rule_data;
+  try {
+    const candidate = JSON.parse(ruleEditorText);
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      parsed = candidate as Record<string, unknown>;
+    }
+  } catch {
+    parsed = selectedRule.rule_data;
+  }
+  const expr = String(parsed.expr || "");
+  const duration = String(parsed.for || parsed.duration || "");
+  const labelsText = compactJson(parsed.labels || {});
+  const annotationsText = compactJson(parsed.annotations || {});
+
+  function patchRule(patch: Record<string, unknown>) {
+    onEditorChange(compactJson({ ...parsed, ...patch }));
+  }
+
+  return (
+    <div className="form-stack">
+      <div className="helper-card">
+        <strong>{selectedRule.rule_name}</strong>
+        <p>
+          {selectedRule.group_name} • {selectedRule.rule_kind} • {String(selectedRule.source?.file || "no source annotation")}
+        </p>
+      </div>
+      <FormField label="Expression" help="PromQL expression that drives the alert condition.">
+        <textarea
+          disabled={!canEdit || isSaving}
+          rows={5}
+          value={expr}
+          onChange={(event) => patchRule({ expr: event.target.value })}
+        />
+      </FormField>
+      <FormField label="For duration" help="How long the expression must be true before the alert fires.">
+        <input
+          disabled={!canEdit || isSaving}
+          value={duration}
+          onChange={(event) => patchRule({ for: event.target.value })}
+          placeholder="5m"
+        />
+      </FormField>
+      <FormField label="Labels (JSON)" help="Use labels for routing, grouping, and severity.">
+        <textarea
+          disabled={!canEdit || isSaving}
+          rows={4}
+          value={labelsText}
+          onChange={(event) => {
+            try {
+              const labels = JSON.parse(event.target.value);
+              if (labels && typeof labels === "object" && !Array.isArray(labels)) {
+                patchRule({ labels });
+              }
+            } catch {
+              return;
+            }
+          }}
+        />
+      </FormField>
+      <FormField label="Annotations (JSON)" help="Annotations become the operator-facing description and runbook context.">
+        <textarea
+          disabled={!canEdit || isSaving}
+          rows={4}
+          value={annotationsText}
+          onChange={(event) => {
+            try {
+              const annotations = JSON.parse(event.target.value);
+              if (annotations && typeof annotations === "object" && !Array.isArray(annotations)) {
+                patchRule({ annotations });
+              }
+            } catch {
+              return;
+            }
+          }}
+        />
+      </FormField>
+      <button className="ghost-button" type="button" onClick={() => setShowAdvanced((current) => !current)}>
+        {showAdvanced ? "Hide advanced JSON" : "Show advanced JSON"}
+      </button>
+      {showAdvanced ? (
+        <textarea
+          disabled={!canEdit || isSaving}
+          rows={14}
+          value={ruleEditorText}
+          onChange={(event) => onEditorChange(event.target.value)}
+        />
+      ) : null}
+      <div className="form-actions">
+        <button type="button" disabled={!canEdit || isSaving} onClick={onSave}>
+          {isSaving ? "Saving..." : "Save live rule"}
+        </button>
+        <button type="button" className="ghost-button" disabled={!canEdit || isExporting || !selectedRule.source} onClick={onExport}>
+          {isExporting ? "Exporting..." : "Export to Genestack"}
+        </button>
+        <button type="button" className="danger-button" disabled={!canEdit || isDeleting} onClick={onDelete}>
+          {isDeleting ? "Deleting..." : "Delete live rule"}
+        </button>
+      </div>
+      {!selectedRule.source ? (
+        <div className="login-note">
+          Export is available only for rules with Genestack source annotations.
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -4567,6 +4824,7 @@ function RecipesPage() {
   const [pendingWorkflowValues, setPendingWorkflowValues] = useState<z.infer<typeof workflowSchema> | null>(null);
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const canEdit = canManageWorkflows(principal);
+  const canClear = canManageAccess(principal);
 
   const recipesQuery = useQuery({
     queryKey: ["workflows"],
@@ -4579,6 +4837,27 @@ function RecipesPage() {
   const policyQuery = useQuery({
     queryKey: ["communications-policy"],
     queryFn: () => apiGet("/api/v1/communications/policy", communicationPolicyRecordSchema),
+  });
+  const exportWorkflowsMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflows/export", repoSyncResponseSchema),
+    onSuccess: (result) => notify("success", formatRepoSyncMessage(result)),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+  const importWorkflowsMutation = useMutation({
+    mutationFn: () => apiPost("/api/v1/repo-sync/workflows/import", repoSyncResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", formatRepoSyncMessage(result));
+      await queryClient.invalidateQueries({ queryKey: ["workflows"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
+  const clearWorkflowsMutation = useMutation({
+    mutationFn: () => apiDelete("/api/v1/repo-sync/workflows", deleteResponseSchema),
+    onSuccess: async (result) => {
+      notify("success", result.message || "User-facing workflows disabled.");
+      await queryClient.invalidateQueries({ queryKey: ["workflows"] });
+    },
+    onError: (error) => notify("error", getErrorMessage(error)),
   });
 
   const form = useForm<z.infer<typeof workflowSchema>>({
@@ -4852,6 +5131,23 @@ function RecipesPage() {
         title="Workflows"
         description="Build reusable remediation and utility workflows, then choose whether they inherit the global communications policy or define workflow-specific routes."
       />
+      <Panel
+        title="Repo sync"
+        subtitle="Export user-facing workflows as YAML and open a GitHub PR. Import resolves steps against plugin ingredient templates; it does not create actions."
+      >
+        <div className="form-actions">
+          <button className="ghost-button" disabled={!canEdit || exportWorkflowsMutation.isPending} type="button" onClick={() => exportWorkflowsMutation.mutate()}>
+            {exportWorkflowsMutation.isPending ? "Exporting..." : "Export to repo"}
+          </button>
+          <button className="ghost-button" disabled={!canEdit || importWorkflowsMutation.isPending} type="button" onClick={() => importWorkflowsMutation.mutate()}>
+            {importWorkflowsMutation.isPending ? "Importing..." : "Import from repo"}
+          </button>
+          <button className="danger-button" disabled={!canClear || clearWorkflowsMutation.isPending} type="button" onClick={() => clearWorkflowsMutation.mutate()}>
+            {clearWorkflowsMutation.isPending ? "Disabling..." : "Disable user workflows"}
+          </button>
+        </div>
+        <p className="login-note">Repo path: {settings.git_workflows_path || "poundcake/workflows"} on {settings.git_repo_url || "the configured GitHub repository"}.</p>
+      </Panel>
       <Panel
         title="Workflow Inventory"
         subtitle={`${recipesQuery.data.length} workflows loaded. Select a workflow to edit it or remove it when it is no longer used.`}
@@ -5363,34 +5659,50 @@ function IngredientTemplatesPage() {
       />
       <Panel
         title="Action Inventory"
-        subtitle={`${actionsQuery.data.length} ingredient templates loaded. Recipes use these as reusable step capabilities. Templates are managed through plugin manifest registration.`}
+        subtitle={`${actionsQuery.data.length} plugin templates loaded. Use one in a workflow; custom StackStorm work is a stackstorm-action-execution step with action_ref.`}
       >
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Target</th>
-                <th>Engine</th>
-                <th>Purpose</th>
-                <th>Blocking</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {actionsQuery.data.map((action) => (
-                <tr key={action.id}>
-                  <td>{action.task_key_template}</td>
-                  <td>{action.destination_target ? `${action.execution_target}:${action.destination_target}` : action.execution_target}</td>
-                  <td>{action.execution_engine}</td>
-                  <td>{action.execution_purpose}</td>
-                  <td>{String(action.is_blocking)}</td>
-                  <td>{formatDate(action.updated_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {Object.entries(
+          actionsQuery.data.reduce<Record<string, typeof actionsQuery.data>>((groups, action) => {
+            const key = action.service_type || action.execution_target || "other";
+            groups[key] = groups[key] ? [...groups[key], action] : [action];
+            return groups;
+          }, {}),
+        ).map(([plugin, actions]) => (
+          <div className="form-stack" key={plugin}>
+            <div className="section-heading">
+              <h4>{titleize(plugin)}</h4>
+              <span className="login-note">{actions.length} template(s)</span>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Template</th>
+                    <th>Exec</th>
+                    <th>Purpose</th>
+                    <th>Blocking</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {actions.map((action) => (
+                    <tr key={action.id}>
+                      <td>{action.task_key_template}</td>
+                      <td>{action.service_exec || action.execution_engine}</td>
+                      <td>{action.execution_purpose || action.ingredient_purpose}</td>
+                      <td>{String(action.is_blocking)}</td>
+                      <td>
+                        <Link className="ghost-button" to={`/config/workflows?ingredient=${action.id}`}>
+                          Use in workflow
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </Panel>
     </div>
   );

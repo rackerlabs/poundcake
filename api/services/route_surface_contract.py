@@ -43,6 +43,7 @@ GUARDED_ROUTE_PREFIXES: tuple[str, ...] = (
     "/api/v1/observability",
     "/api/v1/communications",
     "/api/v1/plugins",
+    "/api/v1/repo-sync",
     "/api/v1/suppressions",
     "/api/v1/activity",
     "/api/v1/ui",
@@ -206,10 +207,40 @@ ROUTE_SURFACE_ENTRIES: tuple[RouteSurfaceEntry, ...] = (
         "operator",
     ),
     RouteSurfaceEntry(
+        "DELETE",
+        "/api/v1/plugins/k8s/prometheus-rules/{crd_name}/rules/{rule_name}",
+        RouteSurface.CONFIGURATION_EDITOR,
+        "operator",
+    ),
+    RouteSurfaceEntry(
         "POST",
         "/api/v1/plugins/genestack_monitoring/export-alert-updates",
         RouteSurface.CONFIGURATION_EDITOR,
         "operator",
+    ),
+    RouteSurfaceEntry(
+        "POST",
+        "/api/v1/plugins/genestack_monitoring/sync-content",
+        RouteSurface.CONFIGURATION_EDITOR,
+        "operator",
+    ),
+    RouteSurfaceEntry(
+        "POST",
+        "/api/v1/repo-sync/workflows/export",
+        RouteSurface.CONFIGURATION_EDITOR,
+        "operator",
+    ),
+    RouteSurfaceEntry(
+        "POST",
+        "/api/v1/repo-sync/workflows/import",
+        RouteSurface.CONFIGURATION_EDITOR,
+        "operator",
+    ),
+    RouteSurfaceEntry(
+        "DELETE",
+        "/api/v1/repo-sync/workflows",
+        RouteSurface.CONFIGURATION_EDITOR,
+        "admin",
     ),
     RouteSurfaceEntry(
         "POST",

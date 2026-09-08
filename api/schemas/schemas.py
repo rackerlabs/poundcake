@@ -1148,6 +1148,7 @@ class SuppressionCreate(BaseModel):
     starts_at: datetime
     ends_at: datetime
     matchers: List[SuppressionMatcher] = Field(default_factory=list)
+    scope: SuppressionScope = "matchers"
     reason: Optional[str] = Field(default=None, max_length=1000)
     created_by: Optional[str] = Field(default=None, max_length=255)
     summary_ticket_enabled: bool = True

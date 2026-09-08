@@ -784,6 +784,7 @@ def test_k8s_templates_are_valid_service_plugin_templates() -> None:
     assert {recipe["name"] for recipe in K8S_RECIPE_TEMPLATES} == {
         "plugin-health-check:k8s",
         "operator-action:k8s:prometheus-rule-apply",
+        "operator-action:k8s:prometheus-rule-delete",
     }
     assert {task["task_key"] for task in K8S_SCHEDULED_TASKS} == {"plugin-health-check:k8s"}
     for template in K8S_INGREDIENT_TEMPLATES:

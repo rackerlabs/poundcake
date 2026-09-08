@@ -1020,6 +1020,24 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.matcher-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.7fr) minmax(240px, 1.2fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(143, 163, 168, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.suppression-schedule-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(190px, 1fr) minmax(170px, 0.7fr);
+  gap: 18px;
+  align-items: start;
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;

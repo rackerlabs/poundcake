@@ -112,6 +112,22 @@ config:
   # their endpoint and credential settings are provided by an override layer.
   enabledPlugins: "dummy"
 
+# Compatibility shim for pre-plugin-rewrite Git overrides. When repoUrl or
+# existingSecret is set, the chart emits POUNDCAKE_GIT_* for the git/github
+# plugins. Prefer plugin credentials in the UI when both are available.
+git:
+  repoUrl: ""
+  branch: main
+  rulesPath: prometheus/rules
+  workflowsPath: poundcake/workflows
+  actionsPath: poundcake/actions
+  userName: PoundCake
+  userEmail: poundcake@localhost
+  provider: github
+  existingSecret: ""
+  secretKeys:
+    gitToken: git-token
+
 # Persistence for the embedded MariaDB volume.
 persistence:
   storageClassName: ""

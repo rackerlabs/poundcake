@@ -1591,11 +1591,17 @@ def _operator_plugin_runtime_path(path: str, method: str) -> bool:
         return False
     if method == "PATCH":
         return True
-    if path.startswith("/api/v1/plugins/k8s/prometheus-rules/") and method in {"POST", "PUT"}:
+    if path.startswith("/api/v1/plugins/k8s/prometheus-rules/") and method in {
+        "POST",
+        "PUT",
+        "DELETE",
+    }:
         return True
     if path == "/api/v1/plugins/prometheus/reload" and method == "POST":
         return True
     if path == "/api/v1/plugins/genestack_monitoring/export-alert-updates" and method == "POST":
+        return True
+    if path == "/api/v1/plugins/genestack_monitoring/sync-content" and method == "POST":
         return True
     if path.endswith("/configuration") and method in {"GET", "PUT"}:
         return True
@@ -1749,6 +1755,12 @@ def request_role_requirement(path: str, method: str) -> AuthRole | None:
 
     if _path_is(path, "/api/v1/suppressions") and normalized_method != "GET":
         return "operator"
+
+    if path.startswith("/api/v1/repo-sync/workflows") and normalized_method == "POST":
+        return "operator"
+
+    if path == "/api/v1/repo-sync/workflows" and normalized_method == "DELETE":
+        return "admin"
 
     if normalized_method == "GET":
         return "reader"

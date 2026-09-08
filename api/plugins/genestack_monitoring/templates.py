@@ -179,6 +179,30 @@ GENESTACK_MONITORING_RECIPE_TEMPLATES: tuple[JSONObject, ...] = (
             }
         ],
     },
+    {
+        "name": "operator-action:genestack-monitoring:sync-content",
+        "description": "Operator-requested Genestack Monitoring catalog sync.",
+        "enabled": True,
+        "recipe_ingredients": [
+            {
+                "service_type": "genestack_monitoring",
+                "service_exec": "content_sync",
+                "destination_target": "genestack-monitoring",
+                "task_key_template": "genestack-monitoring-content-sync",
+                "step_order": 1,
+                "on_success": "continue",
+                "parallel_group": 0,
+                "depth": 0,
+                "service_payload": {},
+                "service_exec_parameters_override": GENESTACK_MONITORING_CONTENT_SYNC_PARAMETERS,
+                "service_exec_expected_secs": 30,
+                "service_exec_timeout": 180,
+                "service_exec_expected_outcome": {"success": True},
+                "run_phase": "firing",
+                "run_condition": "always",
+            }
+        ],
+    },
 )
 
 

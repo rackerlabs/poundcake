@@ -570,7 +570,7 @@ def test_ui_plugin_connection_test_uses_only_saved_adapter_state() -> None:
     assert "/api/v1/scheduled-tasks/${task.id}/run-now" in run_now_mutation
     assert "scheduledTaskStatusRecordSchema" in run_now_mutation
     assert "/test-connection" not in app_source
-    assert "/sync-content" not in app_source
+    assert "/sync-content" not in run_now_mutation
     assert "serializeUiConfig(operatorConfigInput)" not in run_now_mutation
     assert "operatorCredentialInput" not in run_now_mutation
     assert "operatorCredentialKeyIdInput" not in run_now_mutation

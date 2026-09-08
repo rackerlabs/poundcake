@@ -371,6 +371,19 @@ tests:
           value: RELEASE-NAME-poundcake
         documentIndex: 1
 
+  - it: wires git repo settings into the api deployment
+    set:
+      git.repoUrl: https://github.com/example/monitoring.git
+      git.branch: main
+      git.existingSecret: poundcake-git
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_GIT_REPO_URL
+            value: https://github.com/example/monitoring.git
+        documentIndex: 0
+
   - it: defaults PoundCake workload image tag to chart appVersion when unset
     set:
       poundcakeImage.tag: ""
