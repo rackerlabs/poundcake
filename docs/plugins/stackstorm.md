@@ -3,7 +3,7 @@
 ## Status
 
 - Service type: `stackstorm`
-- Tier: `community`
+- Tier: `supported`
 - External service: StackStorm
 
 ## Purpose
@@ -34,10 +34,31 @@ Credential payloads may include `api_key`, `st2_api_key`, or `auth_token`.
 
 ## Operator configuration
 
-The operator config requires:
+Helm is the durable way to point PoundCake at StackStorm. Setting `stackstorm.url`
+appends `stackstorm` to `enabledPlugins` automatically (same pattern as Bakery):
+
+```yaml
+stackstorm:
+  url: http://stackstorm-api.stackstorm.svc.cluster.local:9101
+  verifySsl: false
+```
+
+The operator config stored on the plugin still requires:
 
 - `url`: StackStorm API URL
 - `verify_ssl`: whether PoundCake verifies the StackStorm API certificate
+
+The StackStorm API key is **not** imported from environment variables. After
+deploy, an admin sets `stackstorm_api_key` in Plugins or:
+
+```bash
+cakectl plugins credentials set stackstorm \
+  --credential-type stackstorm_api_key \
+  --payload-json '{"api_key":"<st2-api-key>"}'
+```
+
+Live health: Plugins → **Run now** on `plugin-health-check:stackstorm`, or
+`cakectl plugins test-connection stackstorm`.
 
 ## Enabled behavior
 

@@ -116,6 +116,24 @@ tests:
             name: POUNDCAKE_ENABLED_PLUGINS
             value: dummy
 
+  - it: appends stackstorm to enabled plugins when stackstorm.url is set
+    set:
+      stackstorm.url: http://stackstorm-api.stackstorm.svc.cluster.local:9101
+    documentSelector:
+      path: metadata.name
+      value: poundcake-bootstrap-plugin-registry
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_ENABLED_PLUGINS
+            value: dummy,stackstorm
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POUNDCAKE_STACKSTORM_URL
+            value: http://stackstorm-api.stackstorm.svc.cluster.local:9101
+
   - it: runs the service identity bootstrap stage with its isolated persona
     documentSelector:
       path: metadata.name

@@ -207,7 +207,8 @@ bakery:
     pollTimeoutSeconds: 60
     pluginId: "poundcake/bakery-plugin"
     # Default Rackspace Core account number applied to communications when a
-    # route's provider_config does not already specify one.
+    # route's provider_config does not already specify one. Helm-only; the
+    # Plugins UI and CLI cannot persist this as adapter configuration.
     accountNumber: ""
     monitor:
       id: ""

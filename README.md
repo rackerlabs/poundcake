@@ -56,13 +56,18 @@ PoundCake now installs only PoundCake:
 ```
 
 If you need communications, deploy Bakery separately from its standalone repo,
-enable the `bakery` plugin, apply the Bakery bootstrap Secret, and point
-`bakery.client.*` at the remote Bakery URL. See
-[docs/REMOTE_BAKERY.md](docs/REMOTE_BAKERY.md):
+apply the Bakery bootstrap Secret in the PoundCake namespace, and set the
+remote client. Helm appends `bakery` to `enabledPlugins` when the client is
+enabled. See [docs/REMOTE_BAKERY.md](docs/REMOTE_BAKERY.md):
 
 ```yaml
-config:
-  enabledPlugins: dummy,k8s,git,github,prometheus,alertmanager,bakery,stackstorm,genestack_monitoring
+bakery:
+  client:
+    enabled: true
+    baseUrl: https://bakery.example.com
+    auth:
+      existingSecret: bakery-monitor-bootstrap
+    accountNumber: "<core-account-number>"
 ```
 
 The corresponding Bakery deployment and install flow live in

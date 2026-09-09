@@ -137,7 +137,8 @@ def test_stackstorm_manifest_validates() -> None:
     validated = validate_service_plugin(plugin, directory_name="stackstorm")
 
     assert validated.service_type == "stackstorm"
-    assert validated.plugin_tier == "community"
+    assert validated.plugin_tier == "supported"
+    assert validated.plugin_log_key == "stackstorm"
     assert validated.helper_factory is None
     assert validated.helper_capabilities == ()
     assert validated.required_helper_capabilities is None

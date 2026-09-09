@@ -706,6 +706,35 @@ def prometheus_rule_set(
         raise click.Abort() from exc
 
 
+@k8s_rule_group.command("delete")
+@click.option("--crd-name", required=True)
+@click.option("--group-name", required=True)
+@click.option("--rule-name", required=True)
+@click.option("--namespace", default=None)
+@click.pass_context
+def prometheus_rule_delete(
+    ctx: click.Context,
+    crd_name: str,
+    group_name: str,
+    rule_name: str,
+    namespace: str | None,
+) -> None:
+    """Delete one rule inside an existing PrometheusRule CRD."""
+    client = get_client(ctx)
+    output_format = get_output_format(ctx)
+    try:
+        response = client.delete_prometheus_rule_rule(
+            crd_name=crd_name,
+            group_name=group_name,
+            rule_name=rule_name,
+            namespace=namespace,
+        )
+        print_output(response, output_format, table_renderer=_plugin_action_table)
+    except PoundCakeClientError as exc:
+        print_error(f"Failed to delete Prometheus rule {rule_name}: {exc}")
+        raise click.Abort() from exc
+
+
 @k8s_rule_group.command("add")
 @click.option("--crd-name", required=True)
 @click.option("--group-name", required=True)
@@ -747,6 +776,20 @@ def prometheus_rule_add(
 @plugins.group("genestack-monitoring")
 def genestack_monitoring_group() -> None:
     """Genestack Monitoring helper surfaces."""
+
+
+@genestack_monitoring_group.command("sync-content")
+@click.pass_context
+def sync_content(ctx: click.Context) -> None:
+    """Sync Genestack monitoring catalog content into PoundCake."""
+    client = get_client(ctx)
+    output_format = get_output_format(ctx)
+    try:
+        response = client.sync_genestack_monitoring_content()
+        print_output(response, output_format, table_renderer=_plugin_action_table)
+    except PoundCakeClientError as exc:
+        print_error(f"Failed to sync Genestack monitoring content: {exc}")
+        raise click.Abort() from exc
 
 
 @genestack_monitoring_group.command("export-alert-updates")

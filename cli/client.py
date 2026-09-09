@@ -1324,6 +1324,40 @@ class PoundCakeClient:
             "Unexpected Prometheus rule create response format",
         )
 
+    def delete_prometheus_rule_rule(
+        self,
+        *,
+        crd_name: str,
+        group_name: str,
+        rule_name: str,
+        namespace: str | None = None,
+    ) -> OperatorActionAcceptedResponse:
+        params: JSONObject = {"group_name": group_name}
+        if namespace:
+            params["namespace"] = namespace
+        payload = self._request(
+            "DELETE",
+            f"/api/v1/plugins/k8s/prometheus-rules/{crd_name}/rules/{rule_name}",
+            params=params,
+        )
+        return self._validate_model(
+            payload,
+            OperatorActionAcceptedResponse,
+            "Unexpected Prometheus rule delete response format",
+        )
+
+    def sync_genestack_monitoring_content(self) -> OperatorActionAcceptedResponse:
+        payload = self._request(
+            "POST",
+            "/api/v1/plugins/genestack_monitoring/sync-content",
+            json={},
+        )
+        return self._validate_model(
+            payload,
+            OperatorActionAcceptedResponse,
+            "Unexpected Genestack content sync response format",
+        )
+
     def export_genestack_alert_updates(
         self,
         *,

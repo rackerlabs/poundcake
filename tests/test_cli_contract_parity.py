@@ -748,8 +748,22 @@ def test_plugins_credentials_test_connection_and_prometheus_rules(
             assert kwargs["params"] == {"namespace": "monitoring"}
             return _json_response(method, url, 200, _prometheus_rule_detail_payload())
         if url.endswith("/api/v1/plugins/k8s/prometheus-rules/api-rules/rules/DemoAlert"):
+            params = kwargs.get("params") or {}
+            if method == "DELETE":
+                assert params["group_name"] == "demo"
+                assert params["namespace"] == "monitoring"
+                return _json_response(
+                    method,
+                    url,
+                    202,
+                    {
+                        **_plugin_action_payload(),
+                        "service_type": "k8s",
+                        "service_exec": "prometheus_rule",
+                        "message": "PrometheusRule delete order accepted",
+                    },
+                )
             if method == "GET":
-                params = kwargs.get("params") or {}
                 assert params["group_name"] == "demo"
                 return _json_response(method, url, 200, _prometheus_rule_record_payload())
             assert kwargs["json"] == {
@@ -779,6 +793,18 @@ def test_plugins_credentials_test_connection_and_prometheus_rules(
                     **_prometheus_rule_record_payload(),
                     "rule_name": "NewAlert",
                     "rule_data": {"alert": "NewAlert", "expr": "vector(1)"},
+                },
+            )
+        if url.endswith("/api/v1/plugins/genestack_monitoring/sync-content"):
+            return _json_response(
+                method,
+                url,
+                202,
+                {
+                    **_plugin_action_payload(),
+                    "service_type": "genestack_monitoring",
+                    "service_exec": "content_sync",
+                    "message": "Genestack content sync order accepted",
                 },
             )
         if url.endswith("/api/v1/plugins/genestack_monitoring/export-alert-updates"):
@@ -958,6 +984,43 @@ def test_plugins_credentials_test_connection_and_prometheus_rules(
             "monitoring",
         ],
     )
+    result_rule_delete = runner.invoke(
+        cli,
+        [
+            "--url",
+            "http://example.test",
+            "--token",
+            "session-123",
+            "--format",
+            "json",
+            "plugins",
+            "k8s",
+            "rule",
+            "delete",
+            "--crd-name",
+            "api-rules",
+            "--group-name",
+            "demo",
+            "--rule-name",
+            "DemoAlert",
+            "--namespace",
+            "monitoring",
+        ],
+    )
+    result_sync = runner.invoke(
+        cli,
+        [
+            "--url",
+            "http://example.test",
+            "--token",
+            "session-123",
+            "--format",
+            "json",
+            "plugins",
+            "genestack-monitoring",
+            "sync-content",
+        ],
+    )
     result_export = runner.invoke(
         cli,
         [
@@ -989,6 +1052,8 @@ def test_plugins_credentials_test_connection_and_prometheus_rules(
     assert result_rule_show.exit_code == 0
     assert result_rule_set.exit_code == 0
     assert result_rule_add.exit_code == 0
+    assert result_rule_delete.exit_code == 0
+    assert result_sync.exit_code == 0
     assert result_export.exit_code == 0
 
 

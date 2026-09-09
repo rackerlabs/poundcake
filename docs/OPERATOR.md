@@ -67,7 +67,7 @@ gateway:
       pathPrefix: /
 
 config:
-  enabledPlugins: dummy,k8s,git,github,prometheus,alertmanager,bakery,stackstorm,genestack_monitoring
+  enabledPlugins: dummy,k8s,git,github,prometheus,alertmanager,stackstorm,genestack_monitoring
 
 auth:
   allowedOrigins:
@@ -75,10 +75,27 @@ auth:
     - https://ui.poundcake.example.com
 ```
 
-After enabling `bakery`, apply the Secret printed by Bakery's
-`create-monitor-bootstrap.sh` and point `bakery.client.auth.existingSecret` at
-it. The bakery plugin registers with Bakery and stores the issued monitor HMAC
-as adapter-managed state. See [REMOTE_BAKERY.md](REMOTE_BAKERY.md).
+Remote Bakery is optional. When you want PoundCake to register with a remote
+Bakery, apply the Secret printed by Bakery's `create-monitor-bootstrap.sh` and
+set the client values. Helm appends `bakery` to `enabledPlugins` automatically:
+
+```yaml
+bakery:
+  client:
+    enabled: true
+    baseUrl: https://bakery.example.com
+    auth:
+      existingSecret: bakery-monitor-bootstrap
+    # Set only when the minted monitor ID is not <namespace>/<release>.
+    # monitor:
+    #   id: example-cluster/poundcake
+    # Required for Core tickets when routes do not carry an account number.
+    # accountNumber: "<core-account-number>"
+```
+
+The Plugins UI and `cakectl plugins` manage health, connection settings, and
+recovery credentials. They do not replace these Helm values. See
+[REMOTE_BAKERY.md](REMOTE_BAKERY.md).
 
 ## Feature Toggles
 
@@ -93,10 +110,12 @@ defaults unless you inject the variable on the `poundcake-api` deployment.
 | Area | Helm value | Effect |
 |---|---|---|
 | Plugins | `config.enabledPlugins` | Comma-separated plugin list enabled at bootstrap. `bakery` is appended automatically when `bakery.client.enabled=true`. Default `dummy`. |
+| Remote Bakery | `bakery.client.enabled`, `bakery.client.baseUrl`, `bakery.client.auth.existingSecret` | Required to register with a remote Bakery. See [REMOTE_BAKERY.md](REMOTE_BAKERY.md). |
+| Bakery Core account | `bakery.client.accountNumber` | Default Rackspace Core account injected when a communication route has none. Helm-only; not a UI/CLI plugin config field. |
 | Logging | `config.logLevel` | `POUNDCAKE_LOG_LEVEL` for API/UI/workers. |
 | Monitoring | `monitoring.enabled`, `monitoring.prometheus.url`, `monitoring.prometheus.crdNamespace`, `monitoring.alertmanager.url` | Sets `POUNDCAKE_PROMETHEUS_URL`, `POUNDCAKE_PROMETHEUS_CRD_NAMESPACE`, `POUNDCAKE_ALERTMANAGER_URL` when `monitoring.enabled=true`. |
-| StackStorm | `stackstorm.url`, `stackstorm.verifySsl` | Sets `POUNDCAKE_STACKSTORM_URL`, `POUNDCAKE_STACKSTORM_VERIFY_SSL` when `stackstorm.url` is set. |
-| Remote Bakery | `bakery.client.*`, `bakery.config.activeProvider` | See [REMOTE_BAKERY.md](REMOTE_BAKERY.md). |
+| StackStorm | `stackstorm.url`, `stackstorm.verifySsl` | Sets `POUNDCAKE_STACKSTORM_URL`, `POUNDCAKE_STACKSTORM_VERIFY_SSL` when `stackstorm.url` is set. Helm appends `stackstorm` to `enabledPlugins` automatically when `stackstorm.url` is set. |
+| Remote Bakery extras | `bakery.client.monitor.*`, `bakery.config.activeProvider` | Optional monitor metadata and active provider. Monitor ID defaults to `<namespace>/<release>`. |
 | Auth | `auth.*` | See [AUTH_RBAC.md](AUTH_RBAC.md). |
 | Database | `database.mode`, `database.sharedOperator.*` | See [DATABASE.md](DATABASE.md). |
 | Plugin RBAC | `servicePluginRbac.prometheusRules`, `servicePluginRbac.podActions`, `servicePluginRbac.workloadTriage`, `servicePluginRbac.nodeTriage` | Grants the PoundCake service account bounded cluster API access for the k8s/prometheus plugins. |

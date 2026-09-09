@@ -16,8 +16,12 @@ provider-native ticket and notification behavior.
 
 - A reachable Bakery deployment.
 - A Bakery-issued bootstrap HMAC Secret applied in the PoundCake namespace.
-- `bakery.client.enabled=true`, `bakery.client.baseUrl`, and
-  `bakery.client.auth.existingSecret` set in Helm values.
+- Helm `bakery.client.enabled=true`, `bakery.client.baseUrl`, and
+  `bakery.client.auth.existingSecret`. The chart appends `bakery` to
+  `config.enabledPlugins` when the client is enabled.
+- Matching monitor ID: `bakery.client.monitor.id` or `<namespace>/<release>`.
+- `bakery.client.accountNumber` when Core tickets should use a default account.
+  That value is Helm-only; it is not a Plugins UI or CLI configuration field.
 - After registration, a `bakery_monitor_hmac` credential row with
   `credential_key_id=default` stored by the bakery plugin.
 
@@ -25,11 +29,14 @@ provider-native ticket and notification behavior.
 
 Production Bakery setup is documented in
 [`REMOTE_BAKERY.md`](../REMOTE_BAKERY.md). Mint the bootstrap credential with
-Bakery's `create-monitor-bootstrap.sh`, apply the printed Secret, and enable
-the remote client. The bakery plugin registers with Bakery and writes the
-issued monitor HMAC through credential-manager. Do not seed Bakery credentials
-with direct SQL. The Plugins UI remains a recovery path for an already-issued
-monitor HMAC.
+Bakery's `create-monitor-bootstrap.sh`, apply the printed Secret, and set the
+remote client Helm values. The bakery plugin registers with Bakery and writes
+the issued monitor HMAC through credential-manager. Do not seed Bakery
+credentials with direct SQL.
+
+The Plugins UI and `cakectl plugins` can inspect health, edit non-secret
+connection settings, write a recovery HMAC, and run a connection test. They
+cannot replace Helm for bootstrap registration or the default Core account.
 
 ## Enabled behavior
 

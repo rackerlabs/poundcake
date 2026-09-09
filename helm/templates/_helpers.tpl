@@ -169,12 +169,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "poundcake.enabledPlugins" -}}
-{{- $configured := .Values.config.enabledPlugins | default "dummy" -}}
-{{- if and .Values.bakery.client.enabled (not (has "bakery" (splitList "," $configured))) -}}
-{{- printf "%s,bakery" $configured -}}
-{{- else -}}
-{{- $configured -}}
+{{- $plugins := compact (splitList "," (.Values.config.enabledPlugins | default "dummy")) -}}
+{{- if and .Values.bakery.client.enabled (not (has "bakery" $plugins)) -}}
+{{- $plugins = append $plugins "bakery" -}}
 {{- end -}}
+{{- if and .Values.stackstorm.url (not (has "stackstorm" $plugins)) -}}
+{{- $plugins = append $plugins "stackstorm" -}}
+{{- end -}}
+{{- join "," $plugins -}}
 {{- end -}}
 
 {{- define "poundcake.databaseMode" -}}

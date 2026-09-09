@@ -44,6 +44,7 @@ PLUGIN_TIERS = {"community", "supported"}
 SUPPORTED_PLUGIN_TYPES = {
     "bakery",
     "dummy",
+    "stackstorm",
 }
 HELPER_CAPABILITY_RE = re.compile(r"[a-z0-9][a-z0-9_]*(\.[a-z0-9][a-z0-9_]*)+")
 INGREDIENT_TEMPLATE_CONTROL_PLANE_FIELDS = {

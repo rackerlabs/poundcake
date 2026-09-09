@@ -10,9 +10,9 @@ operators must satisfy before enabling each one.
 - `community`: shipped with PoundCake, but not yet promoted to the supported
   tier.
 
-The current supported-tier plugins are `bakery` and `dummy`. The current
-promotion candidates are `k8s`, `prometheus`, `alertmanager`, `stackstorm`,
-`git`, and `github` once their support test coverage is complete.
+The current supported-tier plugins are `bakery`, `dummy`, and `stackstorm`. The
+current promotion candidates are `k8s`, `prometheus`, `alertmanager`, `git`,
+and `github` once their support test coverage is complete.
 
 ## Contract Boundary
 
@@ -48,7 +48,7 @@ notes live in [SERVICE_PLUGIN_CONTRACT.md](../SERVICE_PLUGIN_CONTRACT.md).
 | [`k8s`](k8s.md) | community | Kubernetes diagnostics and scoped remediation primitives. | Kubernetes API access; narrow RBAC for enabled k8s ingredients. |
 | [`prometheus`](prometheus.md) | community | Prometheus API read/reload operations, rule helpers, and PrometheusRule lifecycle. | Prometheus HTTP endpoint; optional HTTP auth; monitoring rule ownership wiring. |
 | [`alertmanager`](alertmanager.md) | community | Alertmanager API inspection and silence sync. | Alertmanager HTTP endpoint; optional HTTP auth. |
-| [`stackstorm`](stackstorm.md) | community | StackStorm action/workflow execution and content sync. | StackStorm API URL, API key/auth token, StackStorm pack content. |
+| [`stackstorm`](stackstorm.md) | supported | StackStorm action/workflow execution and content sync. | StackStorm API URL, API key/auth token, StackStorm pack content. |
 | [`git`](git.md) | community | Portable Git repository reads and writes. | Repository URL/default branch; credentials for private or write operations. |
 | [`github`](github.md) | community | GitHub repository reads, commits, and pull requests. | GitHub API config; token for private or write operations. |
 | [`genestack_monitoring`](genestack_monitoring.md) | community | Genestack monitoring alert catalog bootstrap/sync. | `github` and `prometheus` helpers enabled. |

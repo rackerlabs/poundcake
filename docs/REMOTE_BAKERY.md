@@ -12,8 +12,7 @@ The operator registration path is the same as before the service-plugin rewrite:
 1. Deploy Bakery and publish it at an HTTPS URL.
 2. Mint a bootstrap credential in Bakery for this PoundCake monitor ID.
 3. Apply that bootstrap Secret in the PoundCake namespace.
-4. Enable the `bakery` plugin and point `bakery.client.*` at Bakery plus the
-   bootstrap Secret.
+4. Set the remote Bakery client Helm values and point them at that Secret.
 5. PoundCake registers itself with Bakery and stores the issued monitor HMAC in
    credential-manager.
 
@@ -57,36 +56,65 @@ script also emits `monitor-encryption-key`; that value belongs on Bakery's
 
 ## PoundCake Helm Values
 
-Enable `bakery` in `config.enabledPlugins` and turn on the remote client:
+The chart default is `bakery.client.enabled: false`. Turning the client on is
+enough to enable the `bakery` plugin: Helm appends `bakery` to
+`config.enabledPlugins` automatically. You do not need a full plugin list just
+to talk to Bakery.
+
+Helm requires these three settings when the client is enabled. Apply the
+bootstrap Secret in the PoundCake namespace first.
 
 ```yaml
-config:
-  enabledPlugins: dummy,k8s,git,github,prometheus,alertmanager,bakery,stackstorm,genestack_monitoring
-
 bakery:
-  config:
-    activeProvider: rackspace_core
   client:
     enabled: true
     baseUrl: https://bakery.example.com
-    pluginId: poundcake/bakery-plugin
-    monitor:
-      id: rackspace/poundcake
-      environmentLabel: production
-      region: DFW
-      clusterName: dfw3
-      tags:
-        - production
     auth:
       existingSecret: bakery-monitor-bootstrap
 ```
+
+The Secret keys PoundCake mounts are `bootstrap-key-id` and `bootstrap-key`.
+Override `bakery.client.auth.secretKeys.*` only if the Secret uses different
+key names.
+
+Monitor ID defaults to `<namespace>/<release>`. Set it only when the bootstrap
+credential was minted for a different value:
+
+```yaml
+bakery:
+  client:
+    monitor:
+      id: example-cluster/poundcake
+```
+
+Do not reuse the same monitor ID across independent clusters.
+
+`pluginId`, `activeProvider`, TLS verify, timeouts, and monitor metadata
+(`environmentLabel`, `region`, `clusterName`, `tags`) all have chart defaults.
+Set them only when the environment needs something other than those defaults.
+
+### Default Core account
+
+Registration does not need an account number. Opening Rackspace Core tickets
+does. Manifest-driven communication routes do not store `account_number`, and a
+UI or CLI edit of the route is not durable. Set the account on the Helm
+client so PoundCake injects it at request time when a route has none:
+
+```yaml
+bakery:
+  client:
+    accountNumber: "<core-account-number>"
+```
+
+Use the Core account Bakery should ticket against. Do not put that value in
+plugin configuration, the Plugins UI, or `cakectl plugins config`.
 
 Install or upgrade PoundCake, then restart the API if the Secret was applied
 after the first install:
 
 ```bash
 ./install/install-poundcake-helm.sh
-kubectl -n rackspace rollout restart deploy/poundcake-api
+kubectl -n <poundcake-namespace> rollout restart deploy/poundcake-api
 ```
 
 On startup the bakery plugin:
@@ -124,13 +152,33 @@ path, not the normal new-monitor flow. The stored payload is:
 
 Non-secret connection settings (URL, TLS, retries, plugin identity, monitor
 metadata) can also be saved through `/api/v1/plugins/bakery/configuration`.
+That path does not set the Core account; keep `bakery.client.accountNumber` in
+Helm.
+
+## Operator UI And CLI
+
+Helm owns Bakery registration and the default Core account. Everything else an
+operator does against the PoundCake API for this plugin is available in both
+the Plugins UI (`/config/plugins/bakery`) and `cakectl`.
+
+| Need | UI | CLI |
+|---|---|---|
+| Inspect plugin and stored health | Plugins | `cakectl plugins show bakery` / `cakectl plugins health bakery` |
+| Enable, disable, or change health cadence | Plugins controls | `cakectl plugins update bakery --enabled` / `--disabled` |
+| Edit URL, TLS, and timeouts | Plugins → Adapter connection | `cakectl plugins config show bakery` / `cakectl plugins config set bakery --config-file ...` |
+| Recovery monitor HMAC | Plugins → Adapter connection (admin) | `cakectl plugins credentials set bakery --credential-type bakery_monitor_hmac --payload-file ...` |
+| Live connection test | Plugins → scheduled task **Run now** on `plugin-health-check:bakery` | `cakectl plugins test-connection bakery` |
+
+The UI does not call `/test-connection` directly. Running the bakery health
+scheduled task is the same operator action: it submits a health-check order
+against the saved adapter state.
 
 ## Verify
 
 ```bash
-kubectl -n rackspace exec deploy/poundcake-api -- printenv | grep '^POUNDCAKE_BAKERY_'
-curl -fsS https://poundcake.example.com/api/v1/plugins
-curl -fsS https://poundcake.example.com/api/v1/plugins/bakery/health
+kubectl -n <poundcake-namespace> exec deploy/poundcake-api -- printenv | grep '^POUNDCAKE_BAKERY_'
+cakectl --url https://poundcake.example.com plugins show bakery
+cakectl --url https://poundcake.example.com plugins health bakery
 ```
 
 Expected runtime shape:
@@ -139,9 +187,11 @@ Expected runtime shape:
 - `POUNDCAKE_BAKERY_BASE_URL=https://bakery.example.com`
 - `POUNDCAKE_BAKERY_MONITOR_ID=<explicit monitor id or namespace/release>`
 - `POUNDCAKE_BAKERY_BOOTSTRAP_HMAC_KEY_ID=<bootstrap key id>`
+- `POUNDCAKE_BAKERY_ACCOUNT_NUMBER` set when Core tickets should use a default account
 
-The bakery plugin should move from `initializing` to `healthy` or `degraded`
-after the scheduled health order succeeds.
+The bakery plugin should move from `initializing` to `healthy` after API
+startup registration or a bakery health-check order succeeds. The Plugins UI
+and `cakectl plugins health bakery` both read that stored registry state.
 
 ## Plugin Bootstrap And Health
 
@@ -161,17 +211,20 @@ the same workflow as every other PoundCake order.
 
 If the Bakery plugin does not become healthy:
 
-- confirm `bakery` is included in `config.enabledPlugins`
 - confirm `bakery.client.enabled=true` and `bakery.client.baseUrl` is HTTPS
-- confirm the bootstrap Secret exists and uses `bootstrap-key-id` / `bootstrap-key`
+- confirm the bootstrap Secret exists in the PoundCake namespace and uses
+  `bootstrap-key-id` / `bootstrap-key`
 - confirm the Secret's monitor ID matches `bakery.client.monitor.id` or
   `<namespace>/<release>`
 - confirm Bakery has a bootstrap credential for that same monitor ID
 - check `poundcake-api` logs for Bakery monitor registration errors
-- check `/api/v1/plugins/bakery/health` for `health_message` and `health_error_code`
+- check Plugins or `cakectl plugins health bakery` for `health_message` and
+  `health_error_code`
 
 If communication actions fail but health checks pass:
 
+- confirm `bakery.client.accountNumber` is set when Core tickets need a default
+  account
 - confirm the Bakery communication route destination matches a provider
   configured in Bakery
 - confirm Bakery provider credentials are valid

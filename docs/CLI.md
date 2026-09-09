@@ -44,7 +44,7 @@ cakectl --url http://localhost:8080 orders list --processing-status processing
 - `suppressions`: suppression management
 - `comm-policy`: communication policy management
 - `ingredients`: read-only ingredient template inspection
-- `plugins`: plugin inventory, health, configuration, credentials, connection tests, and Kubernetes PrometheusRule inspection
+- `plugins`: plugin inventory, health, configuration, credentials, connection tests, Kubernetes PrometheusRule edit/delete, Prometheus reload, and Genestack catalog sync/export
 - `scheduled-tasks`: typed scheduled task CRUD, status, and run-now controls
 - `api`: low-level authenticated API wrapper for E2E and debugging
 - `webhook`: post alerts via the webhook endpoint (POST /webhook)
@@ -137,12 +137,24 @@ cakectl --url http://localhost:8080 plugins credentials set stackstorm \
   --credential-type stackstorm_api_key \
   --payload-json '{"api_key":"example"}'
 
-# Run a control-plane connection test
-cakectl --url http://localhost:8080 plugins test-connection bakery --credential-key-id default
+# Run a Bakery connection test (same operator action as Plugins → Run now
+# on plugin-health-check:bakery)
+cakectl --url http://localhost:8080 plugins test-connection bakery
 
-# Inspect PrometheusRule CRDs through the Kubernetes plugin
+# Inspect and delete PrometheusRule entries through the Kubernetes plugin
 cakectl --url http://localhost:8080 plugins k8s prometheus-rules --namespace monitoring
+cakectl --url http://localhost:8080 plugins k8s rule delete \
+  --crd-name api-rules --group-name demo --rule-name DemoAlert --namespace monitoring
+
+# Sync the Genestack alert catalog (same action as Alert Rules → Sync catalog)
+cakectl --url http://localhost:8080 plugins genestack-monitoring sync-content
+
+# Reload Prometheus (same action as Alert Rules → Reload Prometheus)
+cakectl --url http://localhost:8080 plugins prometheus reload
 ```
+
+Bakery bootstrap registration and the default Core account are Helm values,
+not CLI plugin config. See [REMOTE_BAKERY.md](REMOTE_BAKERY.md).
 
 ## Scheduled Task Commands
 

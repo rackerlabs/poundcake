@@ -33,7 +33,10 @@ Outstanding issues:
 - Define the promotion bar from `community` to `supported`, including required
   RBAC review, e2e coverage, and operator guidance for each enabled mutation.
 
-### 2. `stackstorm` (`community`) - high priority
+### 2. `stackstorm` (`supported`) - keep operationally hardened
+
+StackStorm is a supported plugin. Remaining work is live e2e hardening, not
+tier promotion.
 
 Contract fit today:
 
@@ -51,8 +54,6 @@ Outstanding issues:
   workflow-based integrations so StackStorm remains the multi-step/workflow adapter, not
   the default home for work that should be native in `k8s` or other domain
   adapters.
-- Define supported-tier promotion criteria and required operational hardening
-  for the remote StackStorm dependency.
 
 ### 3. `alertmanager` (`community`) - medium-high priority
 

@@ -3953,6 +3953,12 @@ function AlertRulesPage() {
     onSuccess: (result) => notify("success", `Catalog sync order ${result.order_id} accepted. ${result.message}`),
     onError: (error) => notify("error", getErrorMessage(error)),
   });
+  const reloadPrometheusMutation = useMutation({
+    mutationFn: () =>
+      apiPost("/api/v1/plugins/prometheus/reload", operatorActionAcceptedResponseSchema, {}),
+    onSuccess: (result) => notify("success", `Prometheus reload order ${result.order_id} accepted. ${result.message}`),
+    onError: (error) => notify("error", getErrorMessage(error)),
+  });
 
   if (!k8sPlugin) {
     return <PageError message="The Kubernetes service plugin is not registered." />;
@@ -4062,6 +4068,17 @@ function AlertRulesPage() {
         </label>
         <button type="button" onClick={() => query.refetch()} disabled={query.isFetching}>
           {query.isFetching ? "Refreshing..." : "Refresh"}
+        </button>
+        <button
+          type="button"
+          disabled={
+            !canEdit ||
+            reloadPrometheusMutation.isPending ||
+            !servicePlugins.some((plugin) => plugin.service_type === "prometheus")
+          }
+          onClick={() => reloadPrometheusMutation.mutate()}
+        >
+          {reloadPrometheusMutation.isPending ? "Reloading..." : "Reload Prometheus"}
         </button>
       </div>
 

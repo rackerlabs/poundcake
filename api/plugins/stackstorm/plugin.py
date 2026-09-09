@@ -32,4 +32,6 @@ def get_plugin() -> ServicePlugin:
         recipe_templates=STACKSTORM_RECIPE_TEMPLATES,
         scheduled_tasks=STACKSTORM_SCHEDULED_TASKS,
         capability_templates=load_stackstorm_capability_templates(),
+        plugin_tier="supported",
+        plugin_log_key="stackstorm",
     )

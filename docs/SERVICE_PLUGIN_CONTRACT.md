@@ -341,7 +341,7 @@ Scheduled task controls are bounded operator runtime knobs. Operators may inspec
 
 ## Built-In Bakery Plugin
 
-Bakery is a supported communication plugin for remote provider ticketing and notifications. Production deployments enable it through `config.enabledPlugins`, apply a Bakery bootstrap HMAC Secret, and set `bakery.client.*` so the plugin can register itself; see [REMOTE_BAKERY.md](REMOTE_BAKERY.md) and [plugins/bakery.md](plugins/bakery.md).
+Bakery is a supported communication plugin for remote provider ticketing and notifications. Production deployments apply a Bakery bootstrap HMAC Secret, set `bakery.client.enabled`, `bakery.client.baseUrl`, and `bakery.client.auth.existingSecret`, and set `bakery.client.accountNumber` when Core tickets need a default account. Helm appends `bakery` to `config.enabledPlugins` when the client is enabled. See [REMOTE_BAKERY.md](REMOTE_BAKERY.md) and [plugins/bakery.md](plugins/bakery.md).
 
 ## Built-In Alertmanager Plugin
 
@@ -357,7 +357,7 @@ Recipes opt into inhibition context by adding the `alertmanager-inspect` ingredi
 
 Kubernetes is a community-tier infrastructure plugin until its supported-tier test coverage is in place. It owns Prometheus Operator `PrometheusRule` CRD management through the normal plugin adapter and order workflow. Core Prometheus rule APIs must not patch CRDs directly; CRD apply/delete/list/get operations are represented as `service_type=k8s`, `service_exec=prometheus_rule` executions. See [plugins/k8s.md](plugins/k8s.md).
 
-The intended supported-tier promotion candidates are `k8s`, `prometheus`, `alertmanager`, `stackstorm`, `git`, and `github` once their support test coverage is in place.
+The intended supported-tier promotion candidates are `k8s`, `prometheus`, `alertmanager`, `git`, and `github` once their support test coverage is in place. `stackstorm` is a supported plugin.
 
 ## Reference Development Plugin
 
