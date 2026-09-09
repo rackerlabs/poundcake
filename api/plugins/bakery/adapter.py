@@ -527,7 +527,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                 service_type=self.service_type,
                 status="initializing",
                 message="Bakery plugin credential registration is still initializing",
-                error_code=exc.__class__.__name__,
+                error_code="credential_registration_initializing",
                 details={
                     "bootstrap_status": "pending",
                     "credential_status": "pending",

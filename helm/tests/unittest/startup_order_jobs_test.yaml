@@ -242,6 +242,15 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
+            name: DB_CREDENTIAL_MANAGER_USER
+            valueFrom:
+              secretKeyRef:
+                name: poundcake-secrets
+                key: DB_CREDENTIAL_MANAGER_USER
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
             name: POUNDCAKE_PROMETHEUS_URL
             value: http://prometheus.example.test:9090
         documentIndex: 7

@@ -595,6 +595,7 @@ spec:
             - -ec
             - |
               export POUNDCAKE_DATABASE_URL="mysql+pymysql://${DB_PLUGIN_REGISTRY_USER}:${DB_PLUGIN_REGISTRY_PASSWORD}@{{ include "poundcake.databaseHost" . }}:3306/${DB_NAME}"
+              export POUNDCAKE_CREDENTIAL_MANAGER_DATABASE_URL="mysql+pymysql://${DB_CREDENTIAL_MANAGER_USER}:${DB_CREDENTIAL_MANAGER_PASSWORD}@{{ include "poundcake.databaseHost" . }}:3306/${DB_NAME}"
               python3 -m api.scripts.bootstrap_plugin_registry
           env:
             - name: PYTHONPATH
@@ -614,6 +615,16 @@ spec:
                 secretKeyRef:
                   name: poundcake-secrets
                   key: DB_PLUGIN_REGISTRY_PASSWORD
+            - name: DB_CREDENTIAL_MANAGER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: poundcake-secrets
+                  key: DB_CREDENTIAL_MANAGER_USER
+            - name: DB_CREDENTIAL_MANAGER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: poundcake-secrets
+                  key: DB_CREDENTIAL_MANAGER_PASSWORD
             - name: POUNDCAKE_ENABLED_PLUGINS
               value: {{ include "poundcake.enabledPlugins" . | quote }}
             {{- include "poundcake.monitoringEnv" . | nindent 12 }}

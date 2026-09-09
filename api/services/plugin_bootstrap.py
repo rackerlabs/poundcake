@@ -60,7 +60,10 @@ from api.services.ingredient_registry import (
 from api.plugins.types import PluginHealthResult
 from api.types import JSONObject
 
-_INCOMPLETE_HEALTH_ERROR_CODES = {"event_loop_active"}
+_INCOMPLETE_HEALTH_ERROR_CODES = {
+    "event_loop_active",
+    "credential_registration_initializing",
+}
 
 PLUGIN_BOOTSTRAP_MARKER_FILE = "/app/config/poundcake_bootstrap_ready"
 PLUGIN_SHORT_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz23456789"
@@ -524,7 +527,16 @@ def _seed_plugin_operator_config(row: ServicePlugin, adapter: object) -> dict[st
             default = dict(raw)
     current = dict(row.plugin_config) if isinstance(row.plugin_config, dict) else {}
     if current:
-        return current
+        merged = dict(current)
+        changed = False
+        for key, value in default.items():
+            existing = merged.get(key)
+            if existing in (None, "") and value not in (None, ""):
+                merged[key] = value
+                changed = True
+        if changed:
+            row.plugin_config = merged
+        return merged
     if default:
         row.plugin_config = default
         return default

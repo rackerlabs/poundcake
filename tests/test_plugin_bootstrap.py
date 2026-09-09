@@ -613,6 +613,46 @@ async def test_incomplete_bootstrap_health_does_not_clobber_existing_status(
 
 
 @pytest.mark.asyncio
+async def test_incomplete_credential_bootstrap_does_not_clobber_existing_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Adapter:
+        def health_check(self) -> PluginHealthResult:
+            return PluginHealthResult(
+                service_type="bakery",
+                status="initializing",
+                message="Bakery plugin credential registration is still initializing",
+                error_code="credential_registration_initializing",
+            )
+
+    plugin = ServicePluginManifest(
+        service_type="bakery",
+        adapter_factory=lambda: _Adapter(),
+        ingredient_templates=({"service_type": "bakery"},),
+        recipe_templates=(),
+    )
+    row = ServicePlugin(
+        service_type="bakery",
+        plugin_short_id="bakestable",
+        enabled=True,
+        health_status="healthy",
+        health_message="Bakery API reachable",
+        registered_ingredient_count=0,
+        registered_recipe_count=0,
+    )
+
+    async def short_id(_db: object) -> str:
+        return "bakestable"
+
+    monkeypatch.setattr(plugin_bootstrap, "_new_unique_plugin_short_id", short_id)
+    db = _FakeDb(row)
+    await plugin_bootstrap._register_service_plugins(db, [plugin])  # type: ignore[arg-type]
+
+    assert row.health_status == "healthy"
+    assert row.health_message == "Bakery API reachable"
+
+
+@pytest.mark.asyncio
 async def test_service_plugin_registry_seeds_operator_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -652,6 +692,57 @@ async def test_service_plugin_registry_seeds_operator_config(
         "url": "http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093"
     }
     assert db.added[0].health_status == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_service_plugin_registry_repairs_empty_operator_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Adapter:
+        def default_operator_config(self) -> dict[str, object]:
+            return {
+                "url": "http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093",
+                "verify_ssl": True,
+            }
+
+        def health_check(self) -> PluginHealthResult:
+            return PluginHealthResult(
+                service_type="alertmanager",
+                status="healthy",
+                message="Alertmanager API reachable",
+                details={"url": self.default_operator_config()["url"]},
+            )
+
+        def with_operator_config(self, config: dict[str, object] | None) -> "_Adapter":
+            assert config is not None
+            assert config["url"].startswith("http://")
+            return self
+
+    plugin = ServicePluginManifest(
+        service_type="alertmanager",
+        adapter_factory=lambda: _Adapter(),
+        ingredient_templates=({"service_type": "alertmanager"},),
+        recipe_templates=(),
+    )
+    row = ServicePlugin(
+        service_type="alertmanager",
+        plugin_short_id="alrtmgr01",
+        enabled=True,
+        health_status="degraded",
+        plugin_config={"url": "", "verify_ssl": True, "timeout_seconds": 10.0},
+        registered_ingredient_count=0,
+        registered_recipe_count=0,
+    )
+
+    async def short_id(_db: object) -> str:
+        return "alrtmgr01"
+
+    monkeypatch.setattr(plugin_bootstrap, "_new_unique_plugin_short_id", short_id)
+    db = _FakeDb(row)
+    await plugin_bootstrap._register_service_plugins(db, [plugin])  # type: ignore[arg-type]
+
+    assert str(row.plugin_config["url"]).startswith("http://")
+    assert row.health_status == "healthy"
 
 
 @pytest.mark.asyncio
