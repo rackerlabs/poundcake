@@ -198,6 +198,24 @@ helm upgrade --install poundcake <poundcake-chart> \
 
 For private registries, configure pull secrets with `poundcakeImage.pullSecrets` and ensure the namespace has the referenced Docker registry secret.
 
+## Connect a supported StackStorm runtime
+
+Install StackStorm from [rackerlabs/poundcake-stackstorm](https://github.com/rackerlabs/poundcake-stackstorm),
+then point this chart at it. Details and the verified lab commands are in
+[plugins/stackstorm.md](plugins/stackstorm.md#install-stackstorm-and-connect-poundcake).
+
+Minimum PoundCake values after ST2 is up:
+
+```yaml
+stackstorm:
+  url: http://stackstorm-api.stackstorm.svc.cluster.local:9101
+  verifySsl: false
+```
+
+Then import `stackstorm-apikeys/st2_api_key` with
+`helm/devstack/configure-stackstorm-adapter.sh` (set `POUNDCAKE_NAMESPACE` and
+`STACKSTORM_NAMESPACE`) or `cakectl plugins credentials set stackstorm`.
+
 ## Optional StackStorm Packs
 
 The chart can install StackStorm `kubernetes` and `openstack` packs during startup. These are opt-in and should be configured through secured operator override files.

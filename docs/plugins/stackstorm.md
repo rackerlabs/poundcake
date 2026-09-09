@@ -60,6 +60,59 @@ cakectl plugins credentials set stackstorm \
 Live health: Plugins → **Run now** on `plugin-health-check:stackstorm`, or
 `cakectl plugins test-connection stackstorm`.
 
+## Install StackStorm and connect PoundCake
+
+StackStorm is a **separate Helm release** from PoundCake (`rackerlabs/poundcake-stackstorm`).
+PoundCake does not start ST2 for you.
+
+The short path that was verified in lab:
+
+1. Install StackStorm into namespace `stackstorm`:
+
+```bash
+git clone git@github.com:rackerlabs/poundcake-stackstorm.git /opt/poundcake-stackstorm
+cd /opt/poundcake-stackstorm
+./bin/install-poundcake-stackstorm.sh
+```
+
+Wait until `stackstorm-bootstrap` is `Complete` and `stackstorm-api` is `1/1 Running`.
+The bootstrap job writes secret `stackstorm-apikeys` with key `st2_api_key`.
+
+2. Point PoundCake at that API. Setting `stackstorm.url` appends `stackstorm` to
+`enabledPlugins`:
+
+```yaml
+stackstorm:
+  url: http://stackstorm-api.stackstorm.svc.cluster.local:9101
+  verifySsl: false
+```
+
+Apply with the PoundCake installer (same override directory as other PoundCake
+values). In-cluster HTTP is allowed; use HTTPS plus `verifySsl: true` when the
+API is remote.
+
+3. After PoundCake rolls, import the ST2 API key. The plugin will not read it
+from environment variables. From a host with `kubectl` to both namespaces:
+
+```bash
+POUNDCAKE_NAMESPACE=rackspace \
+STACKSTORM_NAMESPACE=stackstorm \
+  ./helm/devstack/configure-stackstorm-adapter.sh
+```
+
+Or set the key yourself (admin):
+
+```bash
+cakectl plugins credentials set stackstorm \
+  --credential-type stackstorm_api_key \
+  --payload-json '{"api_key":"<st2-api-key>"}'
+cakectl plugins test-connection stackstorm
+```
+
+Expected result: Plugins shows `stackstorm` as `supported`, `healthy`,
+`credential_status=ready`. A recipe step with `service_type=stackstorm` and
+`service_exec=action_execution` can run pack actions such as `core.local`.
+
 ## Enabled behavior
 
 - `health_check`
