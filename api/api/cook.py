@@ -40,6 +40,7 @@ from api.plugins.state import (
     PLUGIN_RUN_STATE_HEALTHY,
     TERMINAL_EXECUTION_STATUSES,
     normalize_plugin_run_state,
+    plugin_health_probe_is_incomplete,
     runtime_seconds,
 )
 from api.schemas.schemas import (
@@ -691,6 +692,18 @@ async def _apply_plugin_health_result(
     if plugin is None:
         return
     now = row.service_exec_completed_time or utc_now_db()
+    details = outcome.get("details") if isinstance(outcome.get("details"), dict) else outcome
+    if plugin_health_probe_is_incomplete(
+        status=str(outcome.get("status") or ""),
+        error_code=str(outcome.get("error_code") or "") or None,
+        message=str(outcome.get("message") or row.service_exec_error or "") or None,
+        details=details,
+    ):
+        plugin.health_check_state = "idle"
+        plugin.health_check_started_at = None
+        plugin.health_check_grace_until = None
+        plugin.updated_at = now
+        return
     if row.service_exec_status in {"failed", "errored", "timeout", "canceled"}:
         status = PLUGIN_RUN_STATE_FAILED
     else:
@@ -711,7 +724,6 @@ async def _apply_plugin_health_result(
     plugin.health_latency_ms = (
         int(outcome["latency_ms"]) if isinstance(outcome.get("latency_ms"), int) else None
     )
-    details = outcome.get("details") if isinstance(outcome.get("details"), dict) else outcome
     plugin.health_details = details
     plugin.last_health_check_at = now
     if status in PLUGIN_CALLABLE_RUN_STATES:

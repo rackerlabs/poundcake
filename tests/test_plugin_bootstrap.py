@@ -9,9 +9,31 @@ import pytest
 
 from api.models.models import Ingredient, ServiceIdentityCredential, ServicePlugin
 from api.plugins.manifest import ServicePlugin as ServicePluginManifest
+from api.plugins.state import plugin_health_probe_is_incomplete
 from api.plugins.types import PluginHealthResult
-from api.services.ingredient_registry import ingredient_contract_from_row
 from api.services import plugin_bootstrap
+from api.services.ingredient_registry import ingredient_contract_from_row
+
+
+def test_plugin_health_probe_is_incomplete_for_missing_encryption_key() -> None:
+    assert plugin_health_probe_is_incomplete(
+        status="failed",
+        error_code="ServicePluginCredentialError",
+        message="Bakery plugin credential configuration is invalid",
+        details={
+            "credential_check": {
+                "details": {
+                    "error": "POUNDCAKE_PLUGIN_CREDENTIAL_ENCRYPTION_KEY is required for plugin credentials"
+                }
+            }
+        },
+    )
+    assert not plugin_health_probe_is_incomplete(
+        status="failed",
+        error_code="ServicePluginCredentialError",
+        message="Bakery plugin credential configuration is invalid",
+        details={"error": "monitor HMAC is malformed"},
+    )
 
 
 def _ingredient() -> Ingredient:
@@ -623,6 +645,56 @@ async def test_incomplete_credential_bootstrap_does_not_clobber_existing_status(
                 status="initializing",
                 message="Bakery plugin credential registration is still initializing",
                 error_code="credential_registration_initializing",
+            )
+
+    plugin = ServicePluginManifest(
+        service_type="bakery",
+        adapter_factory=lambda: _Adapter(),
+        ingredient_templates=({"service_type": "bakery"},),
+        recipe_templates=(),
+    )
+    row = ServicePlugin(
+        service_type="bakery",
+        plugin_short_id="bakestable",
+        enabled=True,
+        health_status="healthy",
+        health_message="Bakery API reachable",
+        registered_ingredient_count=0,
+        registered_recipe_count=0,
+    )
+
+    async def short_id(_db: object) -> str:
+        return "bakestable"
+
+    monkeypatch.setattr(plugin_bootstrap, "_new_unique_plugin_short_id", short_id)
+    db = _FakeDb(row)
+    await plugin_bootstrap._register_service_plugins(db, [plugin])  # type: ignore[arg-type]
+
+    assert row.health_status == "healthy"
+    assert row.health_message == "Bakery API reachable"
+
+
+@pytest.mark.asyncio
+async def test_missing_encryption_key_health_does_not_clobber_existing_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Adapter:
+        def health_check(self) -> PluginHealthResult:
+            return PluginHealthResult(
+                service_type="bakery",
+                status="failed",
+                message="Bakery plugin credential configuration is invalid",
+                error_code="ServicePluginCredentialError",
+                details={
+                    "credential_check": {
+                        "details": {
+                            "error": (
+                                "POUNDCAKE_PLUGIN_CREDENTIAL_ENCRYPTION_KEY is required "
+                                "for plugin credentials"
+                            )
+                        }
+                    }
+                },
             )
 
     plugin = ServicePluginManifest(

@@ -42,6 +42,59 @@ PLUGIN_BLOCKED_RUN_STATES: frozenset[PluginHealthStatus] = frozenset(
         PLUGIN_RUN_STATE_DISABLED,
     }
 )
+INCOMPLETE_HEALTH_ERROR_CODES = frozenset(
+    {
+        "event_loop_active",
+        "credential_registration_initializing",
+    }
+)
+_INCOMPLETE_HEALTH_MARKERS = (
+    "event_loop_active",
+    "POUNDCAKE_PLUGIN_CREDENTIAL_ENCRYPTION_KEY is required",
+    "POUNDCAKE_CREDENTIAL_MANAGER_DATABASE_URL is required",
+)
+
+
+def _health_probe_text(message: str | None, error_code: str | None, details: Any) -> str:
+    parts: list[str] = [str(message or ""), str(error_code or "")]
+
+    def _walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for item in value.values():
+                _walk(item)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                _walk(item)
+            return
+        if value is not None:
+            parts.append(str(value))
+
+    _walk(details)
+    return "\n".join(parts)
+
+
+def plugin_health_probe_is_incomplete(
+    *,
+    status: str | None = None,
+    error_code: str | None = None,
+    message: str | None = None,
+    details: Any = None,
+) -> bool:
+    """Return True when a probe cannot finish in this process and must not clobber health."""
+    del status
+    code = str(error_code or "").strip()
+    if code in INCOMPLETE_HEALTH_ERROR_CODES:
+        return True
+    if code == "UnsupportedProtocol":
+        url = ""
+        if isinstance(details, dict):
+            url = str(details.get("url") or "").strip()
+        if not url:
+            return True
+    blob = _health_probe_text(message, error_code, details)
+    return any(marker in blob for marker in _INCOMPLETE_HEALTH_MARKERS)
+
 
 NON_TERMINAL_EXECUTION_STATUSES: set[CanonicalExecutionStatus] = set(
     EXECUTION_NON_TERMINAL_STATUSES

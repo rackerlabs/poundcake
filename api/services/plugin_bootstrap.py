@@ -16,6 +16,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from api.models.models import (
     Ingredient,
@@ -49,6 +50,7 @@ from api.plugins.state import (
     PLUGIN_RUN_STATE_HEALTHY,
     PLUGIN_RUN_STATE_INITIALIZING,
     PLUGIN_RUN_STATE_UNKNOWN,
+    plugin_health_probe_is_incomplete,
 )
 from api.schemas.schemas import IngredientTemplateRegistration, ScheduledTaskCreate
 from api.services.recipe_ingredient_cleanup import delete_recipe_ingredients_safely
@@ -59,11 +61,6 @@ from api.services.ingredient_registry import (
 )
 from api.plugins.types import PluginHealthResult
 from api.types import JSONObject
-
-_INCOMPLETE_HEALTH_ERROR_CODES = {
-    "event_loop_active",
-    "credential_registration_initializing",
-}
 
 PLUGIN_BOOTSTRAP_MARKER_FILE = "/app/config/poundcake_bootstrap_ready"
 PLUGIN_SHORT_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz23456789"
@@ -515,6 +512,20 @@ async def _register_plugin_recipes(
     }
 
 
+def _plugin_config_dict(row: ServicePlugin) -> dict[str, object]:
+    raw = row.plugin_config
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            return dict(parsed)
+    return {}
+
+
 def _seed_plugin_operator_config(row: ServicePlugin, adapter: object) -> dict[str, object]:
     default: dict[str, object] = {}
     getter = getattr(adapter, "default_operator_config", None)
@@ -525,7 +536,7 @@ def _seed_plugin_operator_config(row: ServicePlugin, adapter: object) -> dict[st
             raw = None
         if isinstance(raw, dict):
             default = dict(raw)
-    current = dict(row.plugin_config) if isinstance(row.plugin_config, dict) else {}
+    current = _plugin_config_dict(row)
     if current:
         merged = dict(current)
         changed = False
@@ -536,19 +547,22 @@ def _seed_plugin_operator_config(row: ServicePlugin, adapter: object) -> dict[st
                 changed = True
         if changed:
             row.plugin_config = merged
+            flag_modified(row, "plugin_config")
         return merged
     if default:
         row.plugin_config = default
+        flag_modified(row, "plugin_config")
         return default
     return {}
 
 
 def _health_result_is_incomplete(result: PluginHealthResult) -> bool:
-    if str(result.error_code or "").strip() in _INCOMPLETE_HEALTH_ERROR_CODES:
-        return True
-    details = result.details if isinstance(result.details, dict) else {}
-    url = str(details.get("url") or "").strip()
-    return str(result.error_code or "") == "UnsupportedProtocol" and not url
+    return plugin_health_probe_is_incomplete(
+        status=result.status,
+        error_code=result.error_code,
+        message=result.message,
+        details=result.details,
+    )
 
 
 async def _probe_adapter_health(adapter: object) -> PluginHealthResult | None:
