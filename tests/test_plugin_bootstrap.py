@@ -532,6 +532,129 @@ async def test_service_plugin_registry_seeds_initial_health_from_adapter(
 
 
 @pytest.mark.asyncio
+async def test_service_plugin_registry_prefers_async_test_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Adapter:
+        def health_check(self) -> PluginHealthResult:
+            return PluginHealthResult(
+                service_type="dummy",
+                status="initializing",
+                message="sync fallback",
+                error_code="event_loop_active",
+            )
+
+        async def test_connection(
+            self, *, credential_key_id: str = "default"
+        ) -> PluginHealthResult:
+            del credential_key_id
+            return PluginHealthResult(
+                service_type="dummy",
+                status="healthy",
+                message="async bakery-style probe",
+            )
+
+    plugin = ServicePluginManifest(
+        service_type="dummy",
+        adapter_factory=lambda: _Adapter(),
+        ingredient_templates=({"service_type": "dummy"},),
+        recipe_templates=(),
+    )
+
+    async def short_id(_db: object) -> str:
+        return "dum7x2p9"
+
+    monkeypatch.setattr(plugin_bootstrap, "_new_unique_plugin_short_id", short_id)
+    db = _FakeDb()
+    await plugin_bootstrap._register_service_plugins(db, [plugin])  # type: ignore[arg-type]
+
+    assert db.added[0].health_status == "healthy"
+    assert db.added[0].health_message == "async bakery-style probe"
+
+
+@pytest.mark.asyncio
+async def test_incomplete_bootstrap_health_does_not_clobber_existing_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Adapter:
+        def health_check(self) -> PluginHealthResult:
+            return PluginHealthResult(
+                service_type="dummy",
+                status="initializing",
+                message="Bakery health is checked by scheduled plugin execution",
+                error_code="event_loop_active",
+            )
+
+    plugin = ServicePluginManifest(
+        service_type="dummy",
+        adapter_factory=lambda: _Adapter(),
+        ingredient_templates=({"service_type": "dummy"},),
+        recipe_templates=(),
+    )
+    row = ServicePlugin(
+        service_type="dummy",
+        plugin_short_id="dumstable",
+        enabled=True,
+        health_status="healthy",
+        health_message="Dummy plugin configured",
+        registered_ingredient_count=0,
+        registered_recipe_count=0,
+    )
+
+    async def short_id(_db: object) -> str:
+        return "dum7x2p9"
+
+    monkeypatch.setattr(plugin_bootstrap, "_new_unique_plugin_short_id", short_id)
+    db = _FakeDb(row)
+    await plugin_bootstrap._register_service_plugins(db, [plugin])  # type: ignore[arg-type]
+
+    assert row.health_status == "healthy"
+    assert row.health_message == "Dummy plugin configured"
+
+
+@pytest.mark.asyncio
+async def test_service_plugin_registry_seeds_operator_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Adapter:
+        def default_operator_config(self) -> dict[str, object]:
+            return {
+                "url": "http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093"
+            }
+
+        def health_check(self) -> PluginHealthResult:
+            return PluginHealthResult(
+                service_type="alertmanager",
+                status="healthy",
+                message="Alertmanager API reachable",
+                details={"url": self.default_operator_config()["url"]},
+            )
+
+        def with_operator_config(self, config: dict[str, object] | None) -> "_Adapter":
+            del config
+            return self
+
+    plugin = ServicePluginManifest(
+        service_type="alertmanager",
+        adapter_factory=lambda: _Adapter(),
+        ingredient_templates=({"service_type": "alertmanager"},),
+        recipe_templates=(),
+    )
+
+    async def short_id(_db: object) -> str:
+        return "alrtmgr01"
+
+    monkeypatch.setattr(plugin_bootstrap, "_new_unique_plugin_short_id", short_id)
+    db = _FakeDb()
+    await plugin_bootstrap._register_service_plugins(db, [plugin])  # type: ignore[arg-type]
+
+    assert db.added[0].plugin_config == {
+        "url": "http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093"
+    }
+    assert db.added[0].health_status == "healthy"
+
+
+@pytest.mark.asyncio
 async def test_external_service_plugins_do_not_register_hmac_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

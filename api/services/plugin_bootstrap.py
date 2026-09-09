@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -56,7 +57,10 @@ from api.services.ingredient_registry import (
     ingredient_identity_map,
     register_ingredient_templates,
 )
+from api.plugins.types import PluginHealthResult
 from api.types import JSONObject
+
+_INCOMPLETE_HEALTH_ERROR_CODES = {"event_loop_active"}
 
 PLUGIN_BOOTSTRAP_MARKER_FILE = "/app/config/poundcake_bootstrap_ready"
 PLUGIN_SHORT_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz23456789"
@@ -508,6 +512,51 @@ async def _register_plugin_recipes(
     }
 
 
+def _seed_plugin_operator_config(row: ServicePlugin, adapter: object) -> dict[str, object]:
+    default: dict[str, object] = {}
+    getter = getattr(adapter, "default_operator_config", None)
+    if callable(getter):
+        try:
+            raw = getter()
+        except Exception:  # noqa: BLE001
+            raw = None
+        if isinstance(raw, dict):
+            default = dict(raw)
+    current = dict(row.plugin_config) if isinstance(row.plugin_config, dict) else {}
+    if current:
+        return current
+    if default:
+        row.plugin_config = default
+        return default
+    return {}
+
+
+def _health_result_is_incomplete(result: PluginHealthResult) -> bool:
+    if str(result.error_code or "").strip() in _INCOMPLETE_HEALTH_ERROR_CODES:
+        return True
+    details = result.details if isinstance(result.details, dict) else {}
+    url = str(details.get("url") or "").strip()
+    return str(result.error_code or "") == "UnsupportedProtocol" and not url
+
+
+async def _probe_adapter_health(adapter: object) -> PluginHealthResult | None:
+    for method_name in ("test_connection", "health_check"):
+        method = getattr(adapter, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            raw = method()
+            if inspect.isawaitable(raw):
+                raw = await raw
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(raw, PluginHealthResult):
+            if _health_result_is_incomplete(raw):
+                return None
+            return raw
+    return None
+
+
 async def _register_service_plugins(
     db: AsyncSession,
     plugins: list[ServicePluginManifest],
@@ -520,11 +569,10 @@ async def _register_service_plugins(
         start = time.perf_counter()
         processed += 1
         service_type = plugin.service_type.strip().lower()
-        health_result = None
         try:
-            health_result = plugin.adapter_factory().health_check()
+            adapter: object = plugin.adapter_factory()
         except Exception:  # noqa: BLE001
-            health_result = None
+            adapter = object()
         logger.info(
             "Service plugin metadata registration start",
             extra=_plugin_log_extra(plugin, bootstrap_stage="service_plugin_registration"),
@@ -578,6 +626,15 @@ async def _register_service_plugins(
             row.updated_at = now
             updated += 1
             action = "updated"
+        operator_config = _seed_plugin_operator_config(row, adapter)
+        configured = adapter
+        with_config = getattr(adapter, "with_operator_config", None)
+        if operator_config and callable(with_config):
+            try:
+                configured = with_config(operator_config)
+            except Exception:  # noqa: BLE001
+                configured = adapter
+        health_result = await _probe_adapter_health(configured)
         if health_result is not None:
             status = str(health_result.status or "").strip().lower()
             if status:

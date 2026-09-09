@@ -772,6 +772,49 @@ class BakeryExecutionAdapter(ExecutionAdapter):
         finally:
             reset_bakery_client_config(token)
 
+    def _plugin_health_from_execution(
+        self, result: ExecutionResult, *, start: float
+    ) -> PluginHealthResult:
+        outcome = result.result if isinstance(result.result, dict) else {}
+        status = str(outcome.get("status") or "unknown").strip().lower()
+        try:
+            status = normalize_plugin_run_state(status)
+        except ValueError:
+            status = PLUGIN_RUN_STATE_DEGRADED
+        error_code = outcome.get("error_code")
+        return PluginHealthResult(
+            service_type=self.service_type,
+            status=status,  # type: ignore[arg-type]
+            message=str(outcome.get("message") or "Bakery plugin health checked"),
+            error_code=str(error_code) if error_code else None,
+            latency_ms=int((time.time() - start) * 1000),
+            details=(
+                outcome.get("details") if isinstance(outcome.get("details"), dict) else outcome
+            ),
+        )
+
+    async def test_connection(self, *, credential_key_id: str = "default") -> PluginHealthResult:
+        del credential_key_id
+        start = time.time()
+        try:
+            result = await self._execute_health_check(
+                ExecutionContext(
+                    service_type=self.service_type,
+                    service_exec="health_check",
+                    req_id="SYSTEM-PLUGIN-HEALTH",
+                )
+            )
+            return self._plugin_health_from_execution(result, start=start)
+        except Exception as exc:  # noqa: BLE001
+            return PluginHealthResult(
+                service_type=self.service_type,
+                status=PLUGIN_RUN_STATE_FAILED,
+                message="Bakery API health check failed",
+                error_code=exc.__class__.__name__,
+                latency_ms=int((time.time() - start) * 1000),
+                details={"error": _safe_error_message(exc)},
+            )
+
     def health_check(self) -> PluginHealthResult:
         token = self._activate_config()
         start = time.time()
@@ -805,21 +848,7 @@ class BakeryExecutionAdapter(ExecutionAdapter):
                     error_code="event_loop_active",
                     latency_ms=int((time.time() - start) * 1000),
                 )
-            outcome = result.result if isinstance(result.result, dict) else {}
-            status = str(outcome.get("status") or "unknown").strip().lower()
-            try:
-                status = normalize_plugin_run_state(status)
-            except ValueError:
-                status = PLUGIN_RUN_STATE_DEGRADED
-            return PluginHealthResult(
-                service_type=self.service_type,
-                status=status,  # type: ignore[arg-type]
-                message=str(outcome.get("message") or "Bakery plugin health checked"),
-                latency_ms=int((time.time() - start) * 1000),
-                details=(
-                    outcome.get("details") if isinstance(outcome.get("details"), dict) else outcome
-                ),
-            )
+            return self._plugin_health_from_execution(result, start=start)
         except Exception as exc:  # noqa: BLE001
             return PluginHealthResult(
                 service_type=self.service_type,

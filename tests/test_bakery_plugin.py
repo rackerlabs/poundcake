@@ -722,6 +722,30 @@ async def test_bakery_health_execution_bootstraps_before_remote_health(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_bakery_test_connection_runs_inside_active_event_loop(monkeypatch) -> None:
+    async def ensure(*, force: bool = False) -> BakeryMonitorCredential:
+        del force
+        return BakeryMonitorCredential(
+            monitor_uuid="monitor-1",
+            monitor_id="poundcake",
+            hmac_key_id="key-1",
+            hmac_secret="secret",
+        )
+
+    async def health() -> BakeryHealth:
+        return BakeryHealth(status="healthy", version="unit")
+
+    monkeypatch.setattr("api.plugins.bakery.adapter.bootstrap_monitor_credential", ensure)
+    monkeypatch.setattr("api.plugins.bakery.adapter.get_health", health)
+
+    result = await BakeryExecutionAdapter().test_connection()
+
+    assert result.status == "healthy"
+    assert result.error_code is None
+    assert result.message == "Bakery plugin health checked"
+
+
+@pytest.mark.asyncio
 async def test_bakery_adapter_bootstrap_uses_credential_manager_boundary(monkeypatch) -> None:
     """Verify adapter goes through credential-manager boundary (writer_service_type removed)."""
     writers: list[bool] = []
