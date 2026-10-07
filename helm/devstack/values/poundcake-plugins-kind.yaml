@@ -67,3 +67,7 @@ auth:
 
 dishwasher:
   interval: 5
+
+persistence:
+  legacyBackup:
+    enabled: false
