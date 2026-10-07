@@ -17,7 +17,7 @@ greenlet==3.5.3
 alembic==1.18.5
 pymysql==1.2.0
 aiomysql==0.3.2
-cryptography==46.0.7
+cryptography==50.0.0
 
 # Data Validation
 jsonschema==4.26.0
