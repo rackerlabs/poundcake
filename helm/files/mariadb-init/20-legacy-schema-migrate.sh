@@ -93,7 +93,10 @@ LEGACY_BMS_TABLE="$(has_table bakery_monitor_state)"
 # of this script (or any pre-rewrite DB) will be missing them. The legacy
 # marker here is the ABSENCE of `source`: LEGACY_SUPPRESSION="yes" means there
 # is work to do (columns still missing). It flips to "no" once source exists.
-if [ "$(has_column alert_suppressions source)" = "yes" ]; then
+# On a fresh install the table does not exist yet; that is NOT a legacy marker.
+if [ "$(has_table alert_suppressions)" = "no" ]; then
+  LEGACY_SUPPRESSION="no"
+elif [ "$(has_column alert_suppressions source)" = "yes" ]; then
   LEGACY_SUPPRESSION="no"
 else
   LEGACY_SUPPRESSION="yes"

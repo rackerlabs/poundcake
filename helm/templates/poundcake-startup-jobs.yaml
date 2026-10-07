@@ -287,24 +287,30 @@ spec:
                 secretKeyRef:
                   name: poundcake-secrets
                   key: DB_NAME
+            {{- if .Values.persistence.legacyBackup.enabled }}
             - name: LEGACY_BACKUP_DIR
               value: /backup
+            {{- end }}
             - name: MIGRATE_DROP_SUPERSEDED_TABLES
               value: {{ .Values.persistence.legacyBackup.dropSupersededTables | quote }}
           volumeMounts:
             - name: scripts
               mountPath: /scripts/legacy-schema-migrate.sh
               subPath: legacy-schema-migrate.sh
+            {{- if .Values.persistence.legacyBackup.enabled }}
             - name: legacy-backup
               mountPath: /backup
+            {{- end }}
       volumes:
         - name: scripts
           configMap:
             name: poundcake-scripts
             defaultMode: 0755
+        {{- if .Values.persistence.legacyBackup.enabled }}
         - name: legacy-backup
           persistentVolumeClaim:
             claimName: {{ include "poundcake.name" . }}-legacy-backup
+        {{- end }}
 ---
 apiVersion: batch/v1
 kind: Job
